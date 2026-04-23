@@ -1,0 +1,245 @@
+:root {
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #edf2f7;
+  background: #07111f;
+  line-height: 1.5;
+  font-weight: 400;
+  --bg: linear-gradient(135deg, #07111f, #0f1d34 55%, #0a1322);
+  --card: rgba(255, 255, 255, 0.08);
+  --card-border: rgba(255, 255, 255, 0.14);
+  --text-soft: #b9c6d6;
+  --accent: #6ea8fe;
+  --accent-2: #8ef0da;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+a { color: inherit; text-decoration: none; }
+button, input, textarea {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 2rem;
+  backdrop-filter: blur(18px);
+  background: rgba(7, 17, 31, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.topbar p {
+  margin: 0.1rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.topnav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.topnav a, .ghost-btn {
+  padding: 0.65rem 0.95rem;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #f8fbff;
+}
+
+.topnav a.active {
+  background: rgba(110, 168, 254, 0.16);
+  border-color: rgba(110, 168, 254, 0.4);
+}
+
+.ghost-btn, .text-btn, .primary-btn, .actions button {
+  cursor: pointer;
+}
+
+.page-wrap {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.hero-card, .post-card, .panel, .auth-card, .empty-state {
+  border: 1px solid var(--card-border);
+  background: var(--card);
+  backdrop-filter: blur(18px);
+  border-radius: 24px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.22);
+}
+
+.hero-card {
+  padding: 1.4rem;
+  margin-bottom: 1.5rem;
+}
+
+.eyebrow, .tag {
+  display: inline-flex;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(142, 240, 218, 0.14);
+  color: var(--accent-2);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+
+.feed-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.post-card {
+  padding: 1.2rem;
+}
+
+.post-card h2 {
+  margin: 0.9rem 0 0.6rem;
+  font-size: 1.2rem;
+}
+
+.post-card p {
+  color: var(--text-soft);
+}
+
+.post-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.actions button, .primary-btn, .ghost-btn {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  padding: 0.7rem 1rem;
+  border-radius: 14px;
+}
+
+.primary-btn {
+  background: linear-gradient(135deg, var(--accent), #92b9ff);
+  color: #07111f;
+  font-weight: 700;
+  border: none;
+}
+
+.text-btn {
+  border: none;
+  background: transparent;
+  color: var(--accent-2);
+}
+
+.auth-shell {
+  display: grid;
+  place-items: center;
+  min-height: 70vh;
+}
+
+.auth-card, .panel {
+  width: min(560px, 100%);
+  padding: 1.4rem;
+}
+
+.auth-card form,
+.create-form {
+  display: grid;
+}
+
+.auth-card input,
+.create-form input,
+.create-form textarea {
+  width: 100%;
+  margin: 0.55rem 0;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+}
+
+.create-form textarea {
+  resize: vertical;
+}
+
+.status {
+  color: var(--text-soft);
+}
+
+.status.error {
+  color: #ff9d9d;
+}
+
+.profile-box {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #07111f;
+}
+
+.section-title {
+  margin-top: 0;
+}
+
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 1rem;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-wrap {
+    width: min(100% - 1rem, 1180px);
+  }
+
+  .post-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
