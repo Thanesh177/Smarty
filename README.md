@@ -1,4 +1,4 @@
-# EduScroll Web Extension
+# Smarty Web Extension
 
 A React + Vite web extension for an educational short-form content app. This frontend is structured to plug into the same backend/API used by a mobile app and is ready for AWS hosting.
 
