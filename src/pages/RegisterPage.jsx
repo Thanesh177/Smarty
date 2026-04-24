@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import './RegisterPage.css';
 
 export default function RegisterPage() {
   const { user, register, confirmRegistration } = useAuth();
 
-  const [step, setStep] = useState('register'); // register | confirm
+  const [step, setStep] = useState('register');
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -18,23 +19,8 @@ export default function RegisterPage() {
 
   if (user) return <Navigate to="/feed" replace />;
 
-  const handleRegister = async () => {
-    const result = await register(form.name, form.email, form.password);
-
-    if (result?.isSignUpComplete) {
-      setMessage('Account created successfully. You can log in now.');
-      setStep('register');
-      return;
-    }
-
-    setMessage('Verification code sent to your email. Enter it below.');
-    setStep('confirm');
-  };
-
-  const handleConfirm = async () => {
-    await confirmRegistration(form.email, form.code);
-    setMessage('Account verified successfully. You can log in now.');
-    setStep('done');
+  const updateField = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleSubmit = async (event) => {
@@ -45,30 +31,44 @@ export default function RegisterPage() {
 
     try {
       if (step === 'register') {
-        await handleRegister();
-      } else if (step === 'confirm') {
-        await handleConfirm();
+        const result = await register(form.name, form.email, form.password);
+
+        if (result?.isSignUpComplete) {
+          setMessage('Account created. You can log in now.');
+          setStep('done');
+        } else {
+          setMessage('Verification code sent to your email.');
+          setStep('confirm');
+        }
+      }
+
+      if (step === 'confirm') {
+        await confirmRegistration(form.email, form.code);
+        setMessage('Account verified. You can log in now.');
+        setStep('done');
       }
     } catch (err) {
-      setError(err?.message || 'Registration failed. Check your Cognito configuration.');
+      setError(err?.message || 'Registration failed.');
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <section className="auth-shell">
-      <form className="auth-card" onSubmit={handleSubmit}>
-        <h2>
+    <main className="register-page">
+      <form className="register-card" onSubmit={handleSubmit}>
+        <span className="register-logo">Smarty</span>
+
+        <h1>
           {step === 'register' && 'Create account'}
-          {step === 'confirm' && 'Confirm your email'}
+          {step === 'confirm' && 'Verify email'}
           {step === 'done' && 'Account ready'}
-        </h2>
+        </h1>
 
         <p>
-          {step === 'register' && 'Start publishing educational content.'}
-          {step === 'confirm' && 'Enter the verification code sent to your email.'}
-          {step === 'done' && 'Your account has been verified successfully.'}
+          {step === 'register' && 'Start sharing educational content.'}
+          {step === 'confirm' && 'Enter the code sent to your email.'}
+          {step === 'done' && 'Your email has been confirmed.'}
         </p>
 
         {step === 'register' && (
@@ -76,21 +76,21 @@ export default function RegisterPage() {
             <input
               placeholder="Name"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => updateField('name', e.target.value)}
             />
 
             <input
               placeholder="Email"
               type="email"
               value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onChange={(e) => updateField('email', e.target.value)}
             />
 
             <input
               placeholder="Password"
               type="password"
               value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              onChange={(e) => updateField('password', e.target.value)}
             />
           </>
         )}
@@ -101,13 +101,13 @@ export default function RegisterPage() {
               placeholder="Email"
               type="email"
               value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              onChange={(e) => updateField('email', e.target.value)}
             />
 
             <input
               placeholder="Verification code"
               value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              onChange={(e) => updateField('code', e.target.value)}
             />
           </>
         )}
@@ -121,7 +121,7 @@ export default function RegisterPage() {
               ? 'Please wait...'
               : step === 'register'
               ? 'Register'
-              : 'Confirm account'}
+              : 'Confirm'}
           </button>
         ) : (
           <Link className="primary-btn" to="/login">
@@ -129,12 +129,10 @@ export default function RegisterPage() {
           </Link>
         )}
 
-        {step !== 'done' && (
-          <Link className="text-btn" to="/login">
-            Already have an account? Login
-          </Link>
-        )}
+        <Link className="text-btn" to="/login">
+          Already have an account?
+        </Link>
       </form>
-    </section>
+    </main>
   );
 }

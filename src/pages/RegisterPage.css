@@ -1,0 +1,72 @@
+.register-page {
+  min-height: calc(100vh - 90px);
+  display: grid;
+  place-items: center;
+  padding: 40px 20px;
+}
+
+.register-card {
+  width: min(100%, 440px);
+  display: grid;
+  gap: 18px;
+  padding: 36px;
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: 0 35px 100px rgba(0, 0, 0, 0.22);
+}
+
+.register-logo {
+  color: #9ff6ff;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.register-card h1 {
+  margin: 0;
+  color: white;
+  font-size: 2.2rem;
+  letter-spacing: -0.04em;
+}
+
+.register-card p {
+  margin: 0 0 6px;
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.register-card input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  border-radius: 18px;
+  padding: 16px 17px;
+  background: rgba(238, 244, 255, 0.95);
+  color: #07111f;
+  font-size: 1rem;
+}
+
+.register-card input:focus {
+  box-shadow: 0 0 0 4px rgba(147, 197, 253, 0.22);
+}
+
+.register-card .primary-btn {
+  min-height: 54px;
+  text-decoration: none;
+}
+
+.register-card .text-btn {
+  text-align: center;
+  text-decoration: none;
+}
+
+.status {
+  margin: 0;
+  font-weight: 700;
+}
+
+.status.success {
+  color: #a7f3d0;
+}
+
+.status.error {
+  color: #fca5a5;
+}

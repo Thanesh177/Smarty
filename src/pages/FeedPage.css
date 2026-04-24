@@ -1,0 +1,275 @@
+.snap-feed-page {
+  height: calc(100vh - 72px);
+  width: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(59,130,246,.06), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(20,184,166,.06), transparent 32%),
+    #07111f;
+}
+
+.snap-feed {
+  height: 100%;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  padding: 24px 0 80px;
+}
+
+.snap-feed::-webkit-scrollbar {
+  width: 6px;
+}
+
+.snap-feed::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.08);
+}
+
+.snap-post {
+  width: calc(100% - 48px);
+  max-width: 1500px;
+  margin: 0 auto 26px;
+  min-height: calc(100vh - 130px);
+
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 56px;
+  align-items: center;
+
+  padding: 56px;
+  background: rgba(255,255,255,.025);
+  backdrop-filter: blur(14px);
+
+  transition: transform .22s ease, background .22s ease;
+}
+
+.snap-post:hover {
+  transform: translateY(-4px);
+  background: rgba(255,255,255,.04);
+}
+
+.mini-media {
+  width: 100%;
+  height: 320px;
+  overflow: hidden;
+  background: rgba(255,255,255,.05);
+}
+
+.mini-media img,
+.mini-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 4rem;
+  font-weight: 900;
+  color: white;
+}
+
+.post-content {
+  width: 100%;
+}
+
+.post-topic {
+  display: inline-block;
+  padding: 8px 14px;
+  background: rgba(167,243,208,.10);
+  color: #a7f3d0;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.post-content h1 {
+  margin: 18px 0 0;
+  color: white;
+  font-size: clamp(2.6rem, 4vw, 5rem);
+  line-height: .98;
+  letter-spacing: -.05em;
+}
+
+.post-content p {
+  margin-top: 22px;
+  color: rgba(255,255,255,.88);
+  font-size: 1.08rem;
+  line-height: 1.95;
+  white-space: pre-line;
+}
+
+.post-actions {
+  margin-top: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.post-actions button {
+  border: 0;
+  padding: 12px 18px;
+  cursor: pointer;
+  background: rgba(255,255,255,.08);
+  color: white;
+  font-weight: 800;
+}
+
+.post-actions button:hover {
+  background: white;
+  color: #07111f;
+}
+
+.comment-box {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+.comment-box input {
+  border: 0;
+  padding: 14px 16px;
+  outline: none;
+}
+
+.comment-box button {
+  border: 0;
+  padding: 0 18px;
+  background: #a7f3d0;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.topic-rail {
+  position: fixed;
+  top: 96px;
+  right: 14px;
+  z-index: 50;
+  width: 42px;
+  max-height: calc(100vh - 130px);
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  overflow-y: auto;
+  background: rgba(7,17,31,.42);
+  backdrop-filter: blur(14px);
+  transition: width .22s ease;
+}
+
+.topic-rail:hover {
+  width: 170px;
+}
+
+.topic-pill {
+  height: 34px;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,.66);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 0 10px;
+  overflow: hidden;
+}
+
+.topic-pill strong {
+  opacity: 0;
+  transition: .2s;
+}
+
+.topic-rail:hover .topic-pill strong {
+  opacity: 1;
+}
+
+.topic-pill.active {
+  background: rgba(167,243,208,.95);
+  color: #07111f;
+}
+
+.feed-status {
+  padding: 80px;
+  text-align: center;
+  color: #a7f3d0;
+  font-weight: 800;
+}
+
+.feed-status.error {
+  color: #fca5a5;
+}
+
+/* MOBILE */
+
+@media (max-width: 900px) {
+  .snap-feed-page {
+    height: calc(100vh - 64px);
+  }
+
+  .snap-feed {
+    padding: 14px 0 40px;
+  }
+
+  .snap-post {
+    width: calc(100% - 16px);
+    margin-bottom: 16px;
+    min-height: auto;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 18px;
+  }
+
+.topnav {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  width: 100%;
+  align-items: center;
+  justify-items: center;
+  gap: 10px;
+}
+
+.topnav > * {
+  width: 100%;
+  text-align: center;
+}
+
+  .mini-media {
+    height: 220px;
+  }
+
+  .post-content h1 {
+    font-size: 2rem;
+  }
+
+  .post-content p {
+    font-size: 1rem;
+    line-height: 1.8;
+  }
+
+  .post-actions {
+    display: grid;
+    grid-template-columns: repeat(3,1fr);
+    gap: 8px;
+  }
+
+  .post-actions button {
+    width: 100%;
+    padding: 10px 6px;
+    font-size: .82rem;
+  }
+
+  .topic-rail {
+    display: none;
+  }
+  
+
+  .comment-box {
+    grid-template-columns: 1fr;
+  }
+
+  .comment-box button {
+    min-height: 44px;
+  }
+}
