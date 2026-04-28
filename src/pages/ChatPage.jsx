@@ -278,10 +278,7 @@ useEffect(() => {
   return (
     <main className="chat-page">
       <section className="chat-sidebar">
-        <div className="chat-header">
-          <h1>Private Chat</h1>
-          <p>Search users and start secure private conversations.</p>
-        </div>
+
 
         <form className="chat-search" onSubmit={searchUsers}>
           <input

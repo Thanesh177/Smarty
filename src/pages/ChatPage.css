@@ -42,6 +42,7 @@
 }
 
 .chat-list button {
+  overflow: hidden;
   border: 0;
   cursor: pointer;
   text-align: left;
@@ -364,6 +365,7 @@
 
   .chat-list button {
     min-width: 155px;
+    padding: 20px;
   }
 
   .chat-window-top {
