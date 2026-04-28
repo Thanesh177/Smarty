@@ -1,5 +1,5 @@
 # Smarty Web Extension
-
+Link: https://main.d3qiuefonbp8n9.amplifyapp.com/feed
 A React + Vite web extension for an educational short-form content app. This frontend is structured to plug into the same backend/API used by a mobile app and is ready for AWS hosting.
 
 ## Included
