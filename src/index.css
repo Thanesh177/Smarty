@@ -1,0 +1,306 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Inter, Arial, sans-serif;
+  background: #07111f;
+}
+
+.glass-topbar {
+  background: rgba(7, 17, 31, 0.76);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.fancy-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #a7f3d0, #60a5fa);
+  color: #07111f;
+  font-size: 1.5rem;
+  font-weight: 1000;
+  box-shadow: 0 14px 35px rgba(96,165,250,0.28);
+}
+
+.brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quick-icon-link {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  font-size: 1.2rem;
+}
+
+.quick-icon-link:hover,
+.quick-icon-link.active {
+  background: #a7f3d0;
+}
+
+.logout-pill,
+.login-pill {
+  border: 0;
+  text-decoration: none;
+  padding: 13px 16px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.08);
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.logout-pill:hover,
+.login-pill:hover {
+  background: #a7f3d0;
+  color: #07111f;
+}
+
+.nav-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #ef4444;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.date-divider {
+  margin: 18px auto;
+  width: fit-content;
+  padding: 6px 12px;
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.7);
+  font-size: .78rem;
+}
+
+button {
+  font-family: inherit;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  padding: 16px 22px 14px;
+  background:
+    linear-gradient(180deg, rgba(3, 7, 18, .94), rgba(7, 17, 31, .82)),
+    radial-gradient(circle at top left, rgba(52, 211, 153, .12), transparent 34%),
+    radial-gradient(circle at top right, rgba(96, 165, 250, .12), transparent 28%);
+  backdrop-filter: blur(22px);
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .28);
+}
+
+.topbar-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: white;
+  text-decoration: none;
+}
+
+.logo-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #34d399, #60a5fa, #a78bfa);
+  box-shadow:
+    0 0 18px rgba(52, 211, 153, .65),
+    0 0 34px rgba(96, 165, 250, .35);
+}
+
+.brand-logo h1 {
+  margin: 0;
+  font-size: 1.45rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #f8fafc;
+}
+
+.brand-logo p {
+  margin: 4px 0 0;
+  font-size: .76rem;
+  color: rgba(226, 232, 240, .62);
+  letter-spacing: .02em;
+}
+
+.brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-actions a,
+.brand-actions button {
+  border: 1px solid rgba(255, 255, 255, .08);
+  padding: 10px 15px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .055);
+  color: rgba(248, 250, 252, .9);
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform .22s ease,
+    background .22s ease,
+    color .22s ease,
+    box-shadow .22s ease,
+    border-color .22s ease;
+}
+
+.brand-actions a:hover,
+.brand-actions button:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #a7f3d0, #93c5fd);
+  color: #020617;
+  border-color: transparent;
+  box-shadow: 0 12px 30px rgba(52, 211, 153, .22);
+}
+
+.topnav {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.topnav a {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  padding: 13px 14px;
+  border-radius: 18px;
+  color: rgba(226, 232, 240, .72);
+  background: rgba(255, 255, 255, .045);
+  border: 1px solid rgba(255, 255, 255, .07);
+  text-decoration: none;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  transition:
+    transform .22s ease,
+    color .22s ease,
+    background .22s ease,
+    border-color .22s ease,
+    box-shadow .22s ease;
+}
+
+.topnav a::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(52, 211, 153, .18), rgba(96, 165, 250, .16));
+  opacity: 0;
+  transition: opacity .22s ease;
+}
+
+.topnav a:hover {
+  transform: translateY(-2px);
+  color: #f8fafc;
+  border-color: rgba(167, 243, 208, .28);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .22);
+}
+
+.topnav a:hover::before {
+  opacity: 1;
+}
+
+.topnav a.active {
+  background: linear-gradient(135deg, #a7f3d0, #93c5fd);
+  color: #020617;
+  border-color: transparent;
+  box-shadow:
+    0 12px 30px rgba(52, 211, 153, .22),
+    inset 0 1px 0 rgba(255,255,255,.5);
+}
+
+.topnav a.active::before {
+  opacity: 0;
+}
+
+@media (max-width: 700px) {
+  .topbar {
+    padding: 12px;
+  }
+
+  .topbar-row {
+    gap: 10px;
+  }
+
+  .brand-logo {
+    gap: 10px;
+  }
+
+  .brand-logo h1 {
+    font-size: 1.3rem;
+  }
+
+  .brand-logo p {
+    display: none;
+  }
+
+  .logo-dot {
+    width: 13px;
+    height: 13px;
+  }
+
+  .brand-actions {
+    gap: 6px;
+  }
+
+  .brand-actions a,
+  .brand-actions button {
+    padding: 8px 10px;
+    font-size: 1rem;
+  }
+
+  .topnav {
+    margin-top: 12px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+  }
+
+  .topnav a {
+    padding: 10px 6px;
+    border-radius: 14px;
+    font-size: 1rem;
+  }
+}

@@ -17,4 +17,30 @@ export const endpoints = {
   topics: {
     all: '/topics',
   },
+
+  rooms: {
+  list: '/rooms',
+  create: '/rooms/create',
+  join: '/rooms/join',
+  messages: '/rooms/messages',
+},
+
+  chat: {
+    searchUsers: '/users/search',
+    start: '/chats/start',
+    list: '/chats',
+    messages: '/chats/messages',
+    send: '/chats/message',
+  },
+
+  creator: {
+    profile: '/users/profile',
+    follow: '/users/follow',
+    unfollow: '/users/unfollow',
+    followers: '/users/followers',
+    following: '/users/following',
+    followRequests: '/users/follow-requests',
+    approveRequest: '/users/follow-requests/approve',
+    rejectRequest: '/users/follow-requests/reject',
+  },
 };

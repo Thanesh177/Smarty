@@ -99,20 +99,6 @@ export default function CreatePostPage() {
           </p>
         </div>
 
-        <div className="create-stats">
-          <div>
-            <strong>01</strong>
-            <span>Pick a topic</span>
-          </div>
-          <div>
-            <strong>02</strong>
-            <span>Write clearly</span>
-          </div>
-          <div>
-            <strong>03</strong>
-            <span>Publish instantly</span>
-          </div>
-        </div>
       </section>
 
       <section className="create-layout">

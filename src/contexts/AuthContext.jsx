@@ -12,13 +12,27 @@ import '../lib/cognito';
 const AuthContext = createContext(null);
 
 function mapCognitoUser(currentUser, session) {
-  const idToken = session?.tokens?.idToken?.toString() ?? null;
-  const accessToken = session?.tokens?.accessToken?.toString() ?? null;
+  const idTokenObject = session?.tokens?.idToken;
+  const accessTokenObject = session?.tokens?.accessToken;
+
+  const idToken = idTokenObject?.toString() ?? null;
+  const accessToken = accessTokenObject?.toString() ?? null;
+
+  const payload = idTokenObject?.payload || {};
+  const sub = payload.sub || currentUser?.userId || null;
+  const email =
+    payload.email ||
+    currentUser?.signInDetails?.loginId ||
+    currentUser?.username ||
+    null;
 
   return {
-    id: currentUser?.userId ?? null,
-    username: currentUser?.username ?? null,
-    email: currentUser?.signInDetails?.loginId ?? null,
+    id: sub,
+    userId: sub,
+    sub,
+    username: currentUser?.username || email,
+    email,
+    name: payload.name || email,
     token: idToken,
     accessToken,
   };

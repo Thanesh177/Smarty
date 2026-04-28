@@ -19,7 +19,10 @@ const api = axios.create({
 api.interceptors.request.use(async (config) => {
   try {
     const session = await fetchAuthSession();
-    const token = session?.tokens?.idToken?.toString();
+
+    const token =
+      session?.tokens?.idToken?.toString() ||
+      session?.tokens?.accessToken?.toString();
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -27,6 +30,7 @@ api.interceptors.request.use(async (config) => {
     }
   } catch {
     const token = localStorage.getItem('eduscroll_token');
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -42,12 +46,14 @@ const normalizeList = (data) => {
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(data?.reels)) return data.reels;
   if (Array.isArray(data?.savedReels)) return data.savedReels;
-  if (Array.isArray(data?.body)) return data.body;
+  if (Array.isArray(data?.comments)) return data.comments;
+  if (Array.isArray(data?.users)) return data.users;
+  if (Array.isArray(data?.chats)) return data.chats;
+  if (Array.isArray(data?.messages)) return data.messages;
 
   if (typeof data?.body === 'string') {
     try {
-      const parsed = JSON.parse(data.body);
-      return normalizeList(parsed);
+      return normalizeList(JSON.parse(data.body));
     } catch {
       return [];
     }
@@ -66,6 +72,94 @@ export const authApi = {
   },
 };
 
+export const roomApi = {
+  async getRooms() {
+    const { data } = await api.get(endpoints.rooms.list);
+    return data.rooms || data.items || [];
+  },
+
+  async createRoom(payload) {
+    const { data } = await api.post(endpoints.rooms.create, payload);
+    return data.room || data;
+  },
+
+  async joinRoom(roomId) {
+    const { data } = await api.post(endpoints.rooms.join, { roomId });
+    return data;
+  },
+
+  async getRoomMessages(roomId) {
+    const { data } = await api.get(endpoints.rooms.messages, {
+      params: { roomId },
+    });
+
+    return data.messages || data.items || [];
+  },
+};
+
+export const creatorApi = {
+  async getProfile(userId) {
+    const { data } = await api.get(endpoints.creator.profile, {
+      params: { userId },
+    });
+
+    return data.profile || data;
+  },
+
+async getFollowRequests() {
+  const { data } = await api.get(endpoints.creator.followRequests);
+  return data.requests || data.items || [];
+},
+
+async approveFollowRequest(followerId) {
+  const { data } = await api.post(endpoints.creator.approveRequest, {
+    followerId,
+  });
+
+  return data;
+},
+
+async rejectFollowRequest(followerId) {
+  const { data } = await api.post(endpoints.creator.rejectRequest, {
+    followerId,
+  });
+
+  return data;
+},
+
+  async follow(userId) {
+    const { data } = await api.post(endpoints.creator.follow, {
+      followingId: userId,
+    });
+
+    return data;
+  },
+
+  async unfollow(userId) {
+    const { data } = await api.post(endpoints.creator.unfollow, {
+      followingId: userId,
+    });
+
+    return data;
+  },
+
+  async getFollowers(userId) {
+    const { data } = await api.get(endpoints.creator.followers, {
+      params: { userId },
+    });
+
+    return data.followers || data.items || [];
+  },
+
+  async getFollowing(userId) {
+    const { data } = await api.get(endpoints.creator.following, {
+      params: { userId },
+    });
+
+    return data.following || data.items || [];
+  },
+};
+
 export const postApi = {
   async getFeed() {
     if (USE_MOCK) {
@@ -75,6 +169,36 @@ export const postApi = {
 
     const { data } = await api.get(endpoints.posts.feed);
     return normalizeList(data);
+  },
+
+  async getCreatorPrivatePosts(userId) {
+  const { data } = await api.get('/creator/private-posts', {
+    params: { userId },
+  });
+
+  return data.posts || data.items || [];
+},
+
+  async getPostsByCreator(userId) {
+    if (USE_MOCK) {
+      await delay(250);
+      return mockFeed.filter(
+        (post) =>
+          post.authorId === userId ||
+          post.userId === userId ||
+          post.creatorId === userId
+      );
+    }
+
+    const { data } = await api.get(endpoints.posts.feed);
+    const posts = normalizeList(data);
+
+    return posts.filter(
+      (post) =>
+        post.authorId === userId ||
+        post.userId === userId ||
+        post.creatorId === userId
+    );
   },
 
   async createPost(payload) {
@@ -113,15 +237,7 @@ export const postApi = {
     return data;
   },
 
-  async toggleLike(reelId) {
-    if (USE_MOCK) {
-      await delay(200);
-      return { success: true };
-    }
 
-    const { data } = await api.post(endpoints.posts.like, { reelId });
-    return data;
-  },
 
   async toggleSave(reelId) {
     if (USE_MOCK) {
@@ -129,7 +245,12 @@ export const postApi = {
       return { success: true };
     }
 
-    const { data } = await api.post(endpoints.posts.save, { reelId });
+    const { data } = await api.post(endpoints.posts.save, {
+      reelId,
+      id: reelId,
+      postId: reelId,
+    });
+
     return data;
   },
 
@@ -142,6 +263,28 @@ export const postApi = {
     const { data } = await api.get(endpoints.posts.mine);
     return normalizeList(data);
   },
+
+  async toggleLike(reelId) {
+  const { data } = await api.post(endpoints.posts.like, {
+    reelId,
+    id: reelId,
+    postId: reelId,
+  });
+
+  return data;
+},
+
+async toggleSave(reelId) {
+  const { data } = await api.post(endpoints.posts.save, {
+    reelId,
+    id: reelId,
+    postId: reelId,
+  });
+
+  return data;
+},
+
+  
 
   async getSavedReels() {
     if (USE_MOCK) {
@@ -170,7 +313,11 @@ export const postApi = {
     }
 
     const { data } = await api.get(endpoints.posts.comments, {
-      params: { reelId },
+      params: {
+        reelId,
+        id: reelId,
+        postId: reelId,
+      },
     });
 
     return normalizeList(data);
@@ -182,7 +329,18 @@ export const postApi = {
       return { success: true };
     }
 
-    const { data } = await api.post(endpoints.posts.addComment, payload);
+    const reelId = payload.reelId || payload.id || payload.postId;
+    const text = payload.comment || payload.text || payload.body;
+
+    const { data } = await api.post(endpoints.posts.addComment, {
+      reelId,
+      id: reelId,
+      postId: reelId,
+      comment: text,
+      text,
+      body: text,
+    });
+
     return data;
   },
 
@@ -198,19 +356,22 @@ export const postApi = {
     const { data } = await api.post(endpoints.posts.uploadUrl, payload);
     return data;
   },
+async getSingleReel(reelId) {
+  if (USE_MOCK) {
+    await delay(200);
+    return null;
+  }
 
-  async getSingleReel(reelId) {
-    if (USE_MOCK) {
-      await delay(200);
-      return null;
-    }
+  const { data } = await api.get(endpoints.posts.single, {
+    params: {
+      id: reelId,
+      reelId,
+      postId: reelId,
+    },
+  });
 
-    const { data } = await api.get(endpoints.posts.single, {
-      params: { reelId },
-    });
-
-    return data?.item ?? data?.reel ?? data;
-  },
+  return data?.item ?? data?.reel ?? data;
+},
 };
 
 export const userApi = {
@@ -228,6 +389,68 @@ export const userApi = {
 
     const { data } = await api.get(endpoints.posts.saved);
     return normalizeList(data);
+  },
+};
+
+export const chatApi = {
+  async searchUsers(query) {
+    const { data } = await api.get(endpoints.chat.searchUsers, {
+      params: { query },
+    });
+
+    return normalizeList(data);
+  },
+
+  async blockUser(userId) {
+  const { data } = await api.post('/users/block', {
+    blockedId: userId,
+    userId,
+  });
+
+  return data;
+},
+
+async reportUser(payload) {
+  const { data } = await api.post('/users/report', {
+    reportedUserId: payload.reportedUserId,
+    chatId: payload.chatId,
+    reason: payload.reason,
+  });
+
+  return data;
+},
+
+  async startChat(user) {
+    const { data } = await api.post(endpoints.chat.start, {
+      receiverId: user.userId || user.id || user.sub,
+      receiverEmail: user.email,
+      receiverUsername: user.username,
+    });
+
+    return data;
+  },
+
+  async getChats() {
+    const { data } = await api.get(endpoints.chat.list);
+    return normalizeList(data);
+  },
+
+  async getMessages(chatId) {
+    const { data } = await api.get(endpoints.chat.messages, {
+      params: { chatId },
+    });
+
+    return normalizeList(data);
+  },
+
+  async sendMessage({ chatId, receiverId, text }) {
+    const { data } = await api.post(endpoints.chat.send, {
+      chatId,
+      receiverId,
+      text,
+    });
+
+    return data;
   },
 };
 

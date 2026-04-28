@@ -1,0 +1,186 @@
+.topic-rooms-page {
+  height: calc(100vh - 72px);
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  background: #07111f;
+  color: white;
+}
+
+.rooms-sidebar {
+  padding: 26px;
+  background: rgba(255,255,255,.045);
+  overflow-y: auto;
+}
+
+.rooms-header h1 {
+  margin: 0;
+  font-size: 2.2rem;
+  letter-spacing: -.05em;
+}
+
+.rooms-header p {
+  color: rgba(255,255,255,.65);
+  line-height: 1.6;
+}
+
+.create-room-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin: 22px 0;
+}
+
+.create-room-form input,
+.room-message-form input {
+  border: 0;
+  outline: none;
+  padding: 14px;
+  background: rgba(255,255,255,.94);
+  color: #07111f;
+  font-weight: 700;
+}
+
+.create-room-form button,
+.room-message-form button {
+  border: 0;
+  background: #a7f3d0;
+  color: #07111f;
+  font-weight: 900;
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.rooms-list {
+  display: grid;
+  gap: 10px;
+}
+
+.rooms-list button {
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  padding: 15px;
+  background: rgba(255,255,255,.06);
+  color: white;
+}
+
+.rooms-list button.active,
+.rooms-list button:hover {
+  background: rgba(167,243,208,.16);
+}
+
+.rooms-list strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+.rooms-list span,
+.room-status,
+.room-empty-text {
+  color: rgba(255,255,255,.6);
+}
+
+.room-chat-window {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-width: 0;
+}
+
+.room-top {
+  padding: 24px 30px;
+  background: rgba(255,255,255,.035);
+}
+
+.room-top h2 {
+  margin: 0;
+}
+
+.room-top p {
+  margin: 6px 0 0;
+  color: rgba(255,255,255,.6);
+}
+
+.room-messages {
+  padding: 28px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.room-message {
+  max-width: 68%;
+  align-self: flex-start;
+  padding: 14px 16px;
+  background: rgba(255,255,255,.075);
+}
+
+.room-message.mine {
+  align-self: flex-end;
+  background: rgba(167,243,208,.18);
+}
+
+.room-message strong {
+  color: #a7f3d0;
+  font-size: .86rem;
+}
+
+.room-message p {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.room-message span {
+  font-size: .75rem;
+  color: rgba(255,255,255,.5);
+}
+
+.room-message-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 20px 30px;
+  background: rgba(255,255,255,.035);
+}
+
+.room-empty {
+  height: 100%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+}
+
+.room-empty h2 {
+  margin: 0;
+  font-size: 2.6rem;
+}
+
+.room-empty p {
+  color: rgba(255,255,255,.62);
+}
+
+@media (max-width: 860px) {
+  .topic-rooms-page {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: calc(100vh - 64px);
+  }
+
+  .rooms-sidebar {
+    max-height: 42vh;
+  }
+
+  .room-message {
+    max-width: 88%;
+  }
+
+  .create-room-form,
+  .room-message-form {
+    grid-template-columns: 1fr;
+  }
+
+  .create-room-form button,
+  .room-message-form button {
+    min-height: 44px;
+  }
+}

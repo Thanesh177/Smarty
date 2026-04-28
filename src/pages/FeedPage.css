@@ -8,6 +8,76 @@
     #07111f;
 }
 
+.comment-wrap {
+  margin-top: 16px;
+}
+
+.creator-link {
+  color: var(--primary-color, #007bff);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.creator-link:hover {
+  text-decoration: underline;
+}
+
+.comment-loading {
+  color: rgba(255,255,255,.65);
+  margin-bottom: 12px;
+}
+
+.comment-item {
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  background: rgba(255,255,255,.05);
+}
+
+.comment-item strong {
+  color: #a7f3d0;
+  font-size: .88rem;
+}
+
+.comment-item p {
+  margin: 6px 0 0;
+  color: white;
+  font-size: .95rem;
+  line-height: 1.6;
+}
+
+.success-toast {
+  position: fixed;
+  top: 92px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  padding: 12px 18px;
+  background: #a7f3d0;
+  color: #07111f;
+  font-weight: 900;
+  box-shadow: 0 20px 70px rgba(0,0,0,.28);
+  animation: toastPop 1.8s ease forwards;
+}
+
+@keyframes toastPop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -12px) scale(.96);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(.98);
+  }
+}
+
 .snap-feed {
   height: 100%;
   overflow-y: auto;
@@ -223,11 +293,43 @@
 
 .topnav {
   display: grid !important;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr)) !important;
   width: 100%;
   align-items: center;
   justify-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-actions a,
+.brand-actions button {
+  border: 0;
+  background: rgba(255,255,255,.08);
+  color: white;
+  padding: 10px 14px;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.brand-actions a:hover,
+.brand-actions button:hover {
+  background: #a7f3d0;
+  color: #07111f;
+}
+
+.nav{
+  display: flex;
 }
 
 .topnav > * {

@@ -1,0 +1,148 @@
+.follow-requests-page {
+  min-height: 100vh;
+  padding: 42px 24px;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(20, 184, 166, 0.08), transparent 34%),
+    #07111f;
+  color: white;
+}
+
+.follow-requests-header {
+  max-width: 900px;
+  margin: 0 auto 30px;
+}
+
+.follow-requests-header span {
+  display: inline-block;
+  padding: 8px 14px;
+  background: rgba(167, 243, 208, 0.12);
+  color: #a7f3d0;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.follow-requests-header h1 {
+  margin: 18px 0 10px;
+  font-size: clamp(2.4rem, 6vw, 5rem);
+  line-height: 0.95;
+  letter-spacing: -0.07em;
+}
+
+.follow-requests-header p {
+  margin: 0;
+  color: rgba(255,255,255,.68);
+  line-height: 1.7;
+}
+
+.request-status,
+.request-empty {
+  max-width: 900px;
+  margin: 0 auto 18px;
+  color: #a7f3d0;
+  font-weight: 800;
+}
+
+.request-empty-card {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 34px;
+  background: rgba(255,255,255,.05);
+}
+
+.request-empty-card h2 {
+  margin: 0 0 8px;
+}
+
+.request-empty-card p {
+  color: rgba(255,255,255,.62);
+}
+
+.request-list {
+  max-width: 900px;
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+}
+
+.request-card {
+  display: grid;
+  grid-template-columns: 62px 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px;
+  background: rgba(255,255,255,.055);
+}
+
+.request-avatar {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: white;
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.request-info h3 {
+  margin: 0 0 4px;
+}
+
+.request-info p {
+  margin: 0;
+  color: rgba(255,255,255,.7);
+}
+
+.request-info small {
+  display: block;
+  margin-top: 6px;
+  color: rgba(255,255,255,.45);
+}
+
+.request-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.request-actions button {
+  border: 0;
+  cursor: pointer;
+  padding: 12px 16px;
+  font-weight: 900;
+}
+
+.approve-btn {
+  background: #a7f3d0;
+  color: #07111f;
+}
+
+.reject-btn {
+  background: rgba(255,255,255,.1);
+  color: white;
+}
+
+@media (max-width: 720px) {
+  .follow-requests-page {
+    padding: 28px 14px;
+  }
+
+  .request-card {
+    grid-template-columns: 52px 1fr;
+  }
+
+  .request-avatar {
+    width: 52px;
+    height: 52px;
+  }
+
+  .request-actions {
+    grid-column: 1 / -1;
+  }
+
+  .request-actions button {
+    flex: 1;
+  }
+}
