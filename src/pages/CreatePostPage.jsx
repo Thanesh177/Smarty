@@ -175,8 +175,8 @@ export default function CreatePostPage() {
         <div className="upload-loader">
           <div className="upload-orb-wrap">
             <div className="upload-orb">
-              {uploadStage === 'Success' ? '✓' : '↑'}
-            </div>
+  <span>{uploadStage === 'Success' ? '✓' : '↑'}</span>
+</div>
 
             <div className="orbit orbit-one"></div>
             <div className="orbit orbit-two"></div>

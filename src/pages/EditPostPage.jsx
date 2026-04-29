@@ -212,7 +212,9 @@ export default function EditPostPage() {
       {submitting && (
         <div className="upload-loader">
           <div className="upload-orb-wrap">
-            <div className="upload-orb">{uploadStage === 'Success' ? '✓' : '↑'}</div>
+<div className="upload-orb">
+  <span>{uploadStage === 'Success' ? '✓' : '↑'}</span>
+</div>
             <div className="orbit orbit-one"></div>
             <div className="orbit orbit-two"></div>
           </div>
@@ -282,7 +284,6 @@ export default function EditPostPage() {
 
               <div className="media-scroll-row">
                 <label className="mini-upload-card">
-                  <span>🖼️</span>
                   <small>{imageFile ? imageFile.name : 'New image'}</small>
                   <input
                     type="file"
@@ -292,7 +293,6 @@ export default function EditPostPage() {
                 </label>
 
                 <label className="mini-upload-card">
-                  <span>🎥</span>
                   <small>{videoFile ? videoFile.name : 'New video'}</small>
                   <input
                     type="file"
