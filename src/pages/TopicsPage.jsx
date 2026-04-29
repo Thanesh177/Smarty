@@ -1,7 +1,13 @@
-import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import useFeed from "../hooks/useFeed";
-import "./TopicsPage.css";
+import { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import useFeed from '../hooks/useFeed';
+import './TopicsPage.css';
+
+const slugify = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-');
 
 export default function TopicsPage() {
   const navigate = useNavigate();
@@ -30,7 +36,7 @@ export default function TopicsPage() {
             key={topic}
             type="button"
             className="topic-card"
-            onClick={() => navigate(`/feed/${encodeURIComponent(topic)}`)}
+            onClick={() => navigate(`/feed/${slugify(topic)}`)}
           >
             <span>#</span>
             {topic}

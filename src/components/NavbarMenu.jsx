@@ -30,27 +30,11 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
 
             <NavLink to="/feed" onClick={closeMenu}>Feed</NavLink>
             <NavLink to="/saved" onClick={closeMenu}>Saved</NavLink>
-            <NavLink to="/create" onClick={closeMenu}>Create</NavLink>
             <NavLink to="/topics" onClick={closeMenu}>Topics</NavLink>
             <NavLink to="/creator-dashboard" onClick={closeMenu}>Dashboard</NavLink>
-            <NavLink to="/follow-requests" onClick={closeMenu}>Requests</NavLink>
-            <NavLink to="/rooms" onClick={closeMenu}>Rooms</NavLink>
+            {/*<NavLink to="/rooms" onClick={closeMenu}>Rooms</NavLink>*/}
 
 
-            {user ? (
-              <button
-                type="button"
-                className="menu-logout"
-                onClick={() => {
-                  closeMenu();
-                  logout();
-                }}
-              >
-                Logout
-              </button>
-            ) : (
-              <NavLink to="/login" onClick={closeMenu}>Login</NavLink>
-            )}
           </nav>
         </>
       )}

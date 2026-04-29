@@ -106,14 +106,11 @@ export default function LoginPage() {
               Need an account? Register
             </Link>
 
-            <Link className="text-btn" to="/confirm">
-              Already have a code? Confirm account
-            </Link>
+
           </div>
         </form>
 
         <aside className="login-side">
-          <h3>Why sign in?</h3>
 
           <div className="login-tip">
             <span>Save</span>

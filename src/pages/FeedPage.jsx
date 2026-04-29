@@ -1,13 +1,19 @@
 import { useMemo, useState } from 'react';
-// 1. Import Link from react-router-dom
-import { Link } from 'react-router-dom'; 
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import useFeed from '../hooks/useFeed';
 import { postApi } from '../api/client';
 import './FeedPage.css';
 
-export default function FeedPage() {
-  const { posts, loading, error, likePost, savePost } = useFeed();
+const normalizeTopic = (value) =>
+  String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-');
 
+export default function FeedPage() {
+  const { topic } = useParams();
+  const { posts, loading, error, likePost, savePost } = useFeed();
+const navigate = useNavigate();
   const [selectedTopic, setSelectedTopic] = useState('All');
   const [commentText, setCommentText] = useState({});
   const [commentsOpen, setCommentsOpen] = useState({});
@@ -15,16 +21,48 @@ export default function FeedPage() {
   const [loadingComments, setLoadingComments] = useState({});
   const [toast, setToast] = useState('');
 
-  // ... (useMemo and handlers remain the same)
+const visiblePosts = useMemo(() => {
+  return (posts || [])
+    .filter((post) => {
+      const visibility = String(post.visibility || 'public').toLowerCase();
+
+      return (
+        visibility === 'public' ||
+        visibility === 'published' ||
+        visibility === '' ||
+        visibility === 'null'
+      );
+    })
+    .sort((a, b) => {
+      const timeA = Number(a.createdAt || a.updatedAt || a.timestamp || 0);
+      const timeB = Number(b.createdAt || b.updatedAt || b.timestamp || 0);
+
+      return timeB - timeA;
+    });
+}, [posts]);
+
+  const routeFilteredPosts = useMemo(() => {
+    if (!topic) return visiblePosts;
+
+    return visiblePosts.filter(
+      (post) =>
+        normalizeTopic(post.topic) === normalizeTopic(topic) ||
+        normalizeTopic(post.category) === normalizeTopic(topic)
+    );
+  }, [visiblePosts, topic]);
+
   const topics = useMemo(() => {
-    const list = posts.map((post) => post.topic).filter(Boolean);
+    const list = routeFilteredPosts.map((post) => post.topic).filter(Boolean);
     return ['All', ...new Set(list)];
-  }, [posts]);
+  }, [routeFilteredPosts]);
 
   const filteredPosts = useMemo(() => {
-    if (selectedTopic === 'All') return posts;
-    return posts.filter((post) => post.topic === selectedTopic);
-  }, [posts, selectedTopic]);
+    if (selectedTopic === 'All') return routeFilteredPosts;
+
+    return routeFilteredPosts.filter(
+      (post) => normalizeTopic(post.topic) === normalizeTopic(selectedTopic)
+    );
+  }, [routeFilteredPosts, selectedTopic]);
 
   const showToast = (message) => {
     setToast(message);
@@ -33,8 +71,10 @@ export default function FeedPage() {
 
   const loadComments = async (postId) => {
     setLoadingComments((prev) => ({ ...prev, [postId]: true }));
+
     try {
       const data = await postApi.getComments(postId);
+
       setComments((prev) => ({
         ...prev,
         [postId]: Array.isArray(data) ? data : [],
@@ -49,11 +89,14 @@ export default function FeedPage() {
 
   const toggleComments = async (postId) => {
     const isOpen = commentsOpen[postId];
+
     if (isOpen) {
       setCommentsOpen((prev) => ({ ...prev, [postId]: false }));
       return;
     }
+
     setCommentsOpen((prev) => ({ ...prev, [postId]: true }));
+
     if (!comments[postId]) {
       await loadComments(postId);
     }
@@ -62,6 +105,7 @@ export default function FeedPage() {
   const submitComment = async (postId) => {
     const text = commentText[postId]?.trim();
     if (!text) return;
+
     try {
       await postApi.addComment({
         reelId: postId,
@@ -71,6 +115,7 @@ export default function FeedPage() {
         text,
         body: text,
       });
+
       const newComment = {
         id: crypto.randomUUID(),
         comment: text,
@@ -78,10 +123,12 @@ export default function FeedPage() {
         body: text,
         author: 'You',
       };
+
       setComments((prev) => ({
         ...prev,
         [postId]: [newComment, ...(prev[postId] || [])],
       }));
+
       setCommentText((prev) => ({ ...prev, [postId]: '' }));
       setCommentsOpen((prev) => ({ ...prev, [postId]: true }));
       showToast('Comment posted 💬');
@@ -113,19 +160,26 @@ export default function FeedPage() {
 
   return (
     <main className="snap-feed-page">
+      <button
+  type="button"
+  className="floating-create-btn"
+  onClick={() => navigate('/create')}
+>
+  +
+</button>
       {toast && <div className="success-toast">{toast}</div>}
 
       <aside className="topic-rail">
-        {topics.map((topic) => (
+        {topics.map((item) => (
           <button
-            key={topic}
+            key={item}
             type="button"
-            className={selectedTopic === topic ? 'topic-pill active' : 'topic-pill'}
-            onClick={() => setSelectedTopic(topic)}
-            title={topic}
+            className={selectedTopic === item ? 'topic-pill active' : 'topic-pill'}
+            onClick={() => setSelectedTopic(item)}
+            title={item}
           >
-            <span>{topic[0]}</span>
-            <strong>{topic}</strong>
+            <span>{item[0]}</span>
+            <strong>{item}</strong>
           </button>
         ))}
       </aside>
@@ -139,29 +193,39 @@ export default function FeedPage() {
 
       <section className="snap-feed">
         {filteredPosts.map((post) => {
-          const postId = post.id || post.reelId;
+const postId = post.reelId || post.id;
+          const creatorId = post.authorId || post.userId || post.creatorId;
 
           return (
-            <article className="snap-post" key={postId}>
-              <div className="mini-media">
-                {post.videoUrl ? (
-                  <video src={post.videoUrl} controls playsInline />
-                ) : post.imageUrl ? (
-                  <img src={post.imageUrl} alt={post.title || 'Post media'} />
-                ) : (
-                  <div className="media-placeholder">{post.topic?.[0] || 'S'}</div>
-                )}
-              </div>
+<article
+  className={`snap-post ${!post.imageUrl && !post.videoUrl ? 'no-media' : ''}`}
+  key={postId}
+>              {(post.videoUrl || post.imageUrl) && (
+                <div className="mini-media">
+                  {post.videoUrl ? (
+                    <video src={post.videoUrl} controls playsInline />
+                  ) : (
+                    <img src={post.imageUrl} alt={post.title || 'Post media'} />
+                  )}
+                </div>
+              )}
 
               <div className="post-content">
-                <span className="post-topic">{post.topic || 'Smarty'}</span>
+                <button
+                  type="button"
+                  className="post-topic clickable-topic"
+                  onClick={() => navigate(`/feed/${normalizeTopic(post.topic)}`)}
+                >
+                  {post.topic || 'Smarty'}
+                </button>
 
-                {/* 2. Added Creator Link here */}
-                <div className="post-author">
-                  <Link to={`/creator/${post.authorId}`} className="creator-link">
-                    @{post.author || 'Creator'}
-                  </Link>
-                </div>
+                {creatorId && (
+                  <div className="post-author">
+                    <Link to={`/creator/${creatorId}`} className="creator-link">
+                      @{post.author || post.creatorName || 'Creator'}
+                    </Link>
+                  </div>
+                )}
 
                 <h1>{post.title}</h1>
                 <p>{post.body}</p>
@@ -170,31 +234,44 @@ export default function FeedPage() {
                   <button type="button" onClick={() => handleLike(postId)}>
                     ❤️ {post.likes ?? 0}
                   </button>
+
                   <button type="button" onClick={() => handleSave(postId)}>
                     🔖 Save
                   </button>
+
                   <button type="button" onClick={() => toggleComments(postId)}>
                     💬 Comments
                   </button>
                 </div>
 
-                {/* ... (Comments section remains the same) */}
                 {commentsOpen[postId] && (
                   <div className="comment-wrap">
-                    {loadingComments[postId] && <p className="comment-loading">Loading...</p>}
+                    {loadingComments[postId] && (
+                      <p className="comment-loading">Loading...</p>
+                    )}
+
                     {comments[postId]?.map((item, index) => (
-                      <div className="comment-item" key={item.id || index}>
-                        <strong>{item.author || item.user || 'User'}</strong>
+                      <div className="comment-item" key={item.id || item.commentId || index}>
+                        <strong>{item.author || item.user || item.username || 'User'}</strong>
                         <p>{item.comment || item.text || item.body}</p>
                       </div>
                     ))}
+
                     <div className="comment-box">
                       <input
                         placeholder="Add a comment..."
                         value={commentText[postId] || ''}
-                        onChange={(e) => setCommentText(prev => ({...prev, [postId]: e.target.value}))}
+                        onChange={(e) =>
+                          setCommentText((prev) => ({
+                            ...prev,
+                            [postId]: e.target.value,
+                          }))
+                        }
                       />
-                      <button onClick={() => submitComment(postId)}>Post</button>
+
+                      <button type="button" onClick={() => submitComment(postId)}>
+                        Post
+                      </button>
                     </div>
                   </div>
                 )}

@@ -43,13 +43,6 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const normalizeList = (data) => {
   if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.reels)) return data.reels;
-  if (Array.isArray(data?.savedReels)) return data.savedReels;
-  if (Array.isArray(data?.comments)) return data.comments;
-  if (Array.isArray(data?.users)) return data.users;
-  if (Array.isArray(data?.chats)) return data.chats;
-  if (Array.isArray(data?.messages)) return data.messages;
 
   if (typeof data?.body === 'string') {
     try {
@@ -58,6 +51,17 @@ const normalizeList = (data) => {
       return [];
     }
   }
+
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.reels)) return data.reels;
+  if (Array.isArray(data?.posts)) return data.posts;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.savedReels)) return data.savedReels;
+  if (Array.isArray(data?.comments)) return data.comments;
+  if (Array.isArray(data?.users)) return data.users;
+  if (Array.isArray(data?.chats)) return data.chats;
+  if (Array.isArray(data?.messages)) return data.messages;
+  if (Array.isArray(data?.rooms)) return data.rooms;
 
   return [];
 };
@@ -227,15 +231,14 @@ export const postApi = {
     return data;
   },
 
-  async deletePost(reelId) {
-    if (USE_MOCK) {
-      await delay(200);
-      return { success: true };
-    }
+async deletePost(reelId) {
+  const { data } = await api.post(endpoints.posts.delete, {
+    id: reelId,
+    reelId,
+  });
 
-    const { data } = await api.post(endpoints.posts.delete, { reelId });
-    return data;
-  },
+  return data;
+},
 
 
 
@@ -356,6 +359,7 @@ async toggleSave(reelId) {
     const { data } = await api.post(endpoints.posts.uploadUrl, payload);
     return data;
   },
+  
 async getSingleReel(reelId) {
   if (USE_MOCK) {
     await delay(200);

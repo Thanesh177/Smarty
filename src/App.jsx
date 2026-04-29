@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 import NavbarMenu from './components/NavbarMenu';
-
+import EditPostPage from './pages/EditPostPage';
 import FeedPage from './pages/FeedPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -82,7 +82,7 @@ function Layout() {
           <Route path="/confirm" element={<ConfirmPage />} />
           <Route path="/creator/:userId" element={<CreatorProfilePage />} />
           <Route path="/reel/:reelId" element={<ReelDetailPage />} />
-
+          <Route path="/edit/:reelId" element={ <ProtectedRoute> <EditPostPage /> </ProtectedRoute> }/>
           <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/saved" element={<ProtectedRoute><SavedPage /></ProtectedRoute>} />

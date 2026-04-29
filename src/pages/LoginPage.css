@@ -137,7 +137,7 @@
 .login-side {
   display: grid;
   gap: 18px;
-  padding: 28px;
+  padding: 18px;
   border-radius: 34px;
   background:
     linear-gradient(145deg, rgba(20, 184, 166, 0.12), rgba(59, 130, 246, 0.08)),
@@ -186,8 +186,33 @@
     grid-template-columns: 1fr;
   }
 
+  .login-hero h1{
+    padding: 0 1px;
+  }
+
+  .login-hero p {
+    display: none;
+  }
+
   .login-highlights {
-    grid-template-columns: 1fr;
+    display: none;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .login-highlights div {
+    padding: 14px 10px;
+    border-radius: 18px;
+    text-align: center;
+  }
+
+  .login-highlights strong {
+    font-size: 1.05rem;
+    margin-bottom: 4px;
+  }
+
+  .login-highlights span {
+    font-size: 0.72rem;
   }
 
   .login-page {
@@ -195,8 +220,15 @@
     padding-top: 28px;
   }
 
-  .login-card,
-  .login-side {
+  .login-card{
     padding: 24px;
+
+  }
+  .login-side {
+    display: none;
+  }
+
+  .text-btn{
+    color: #ffffff;
   }
 }

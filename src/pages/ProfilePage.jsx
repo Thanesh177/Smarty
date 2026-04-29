@@ -27,9 +27,11 @@ export default function ProfilePage() {
       const me = await userApi.getMe();
       setProfile(me);
 
+      const userId = me.id || me.userId || me.sub;
+
       const [posts, followingData] = await Promise.all([
         postApi.getMyReels(),
-        creatorApi.getFollowing(me.id || me.userId || me.sub),
+        creatorApi.getFollowing(userId),
       ]);
 
       setMyPosts(Array.isArray(posts) ? posts : []);
@@ -43,12 +45,17 @@ export default function ProfilePage() {
   };
 
   const myPrivatePosts = useMemo(() => {
-    return myPosts.filter(
-      (item) =>
-        item.visibility === 'private' ||
-        item.isPrivate === true ||
-        item.private === true
-    );
+    return myPosts.filter((item) => {
+      const visibility = String(item.visibility || '').toLowerCase();
+      return visibility === 'private' || item.isPrivate === true || item.private === true;
+    });
+  }, [myPosts]);
+
+  const myPublicPosts = useMemo(() => {
+    return myPosts.filter((item) => {
+      const visibility = String(item.visibility || 'public').toLowerCase();
+      return visibility === 'public' || visibility === 'published' || visibility === '';
+    });
   }, [myPosts]);
 
   const initials = useMemo(() => {
@@ -63,7 +70,6 @@ export default function ProfilePage() {
 
   const openApprovedCreator = async (creator) => {
     const creatorId = creator.userId || creator.followingId;
-
     if (!creatorId) return;
 
     try {
@@ -73,7 +79,7 @@ export default function ProfilePage() {
 
       const [creatorProfile, posts] = await Promise.all([
         creatorApi.getProfile(creatorId),
-        postApi.getCreatorPrivatePosts(creatorId)
+        postApi.getCreatorPrivatePosts(creatorId),
       ]);
 
       setSelectedCreator({
@@ -82,12 +88,10 @@ export default function ProfilePage() {
         userId: creatorId,
       });
 
-      const privateOnly = (posts || []).filter(
-        (post) =>
-          post.visibility === 'private' ||
-          post.isPrivate === true ||
-          post.private === true
-      );
+      const privateOnly = (posts || []).filter((post) => {
+        const visibility = String(post.visibility || '').toLowerCase();
+        return visibility === 'private' || post.isPrivate === true || post.private === true;
+      });
 
       setCreatorPrivatePosts(privateOnly);
     } catch (err) {
@@ -96,6 +100,63 @@ export default function ProfilePage() {
     } finally {
       setLoadingCreator(false);
     }
+  };
+
+  const renderOwnPostCard = (post, label) => {
+    const postId = post.id || post.reelId;
+
+    return (
+      <div key={postId} className="private-card profile-post-card">
+        <button
+          className="post-card-main"
+          type="button"
+          onClick={() => navigate(`/reel/${postId}`)}
+        >
+          {post.imageUrl ? (
+            <img src={post.imageUrl} alt={post.title} />
+          ) : (
+            <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
+          )}
+
+          <div className="private-info">
+            <h4>{post.title}</h4>
+            <span>{label}</span>
+          </div>
+        </button>
+
+        <button
+          className="edit-post-btn"
+          type="button"
+          onClick={() => navigate(`/edit/${postId}`)}
+        >
+          Edit
+        </button>
+      </div>
+    );
+  };
+
+  const renderApprovedPostCard = (post) => {
+    const postId = post.id || post.reelId;
+
+    return (
+      <button
+        key={postId}
+        className="private-card"
+        type="button"
+        onClick={() => navigate(`/reel/${postId}`)}
+      >
+        {post.imageUrl ? (
+          <img src={post.imageUrl} alt={post.title} />
+        ) : (
+          <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
+        )}
+
+        <div className="private-info">
+          <h4>{post.title}</h4>
+          <span>🔓 Approved access</span>
+        </div>
+      </button>
+    );
   };
 
   if (loading) {
@@ -130,7 +191,6 @@ export default function ProfilePage() {
             <span className="profile-pill">Your profile</span>
             <h1>{profile.name || profile.email || 'User'}</h1>
             <p className="profile-email">{profile.email}</p>
-
             <p className="profile-bio">
               {profile.bio ||
                 'Curious mind exploring psychology, science, technology, and practical knowledge.'}
@@ -151,17 +211,15 @@ export default function ProfilePage() {
       {status && <p className="status">{status}</p>}
 
       <section className="profile-tabs">
-        <button
-          className={tab === 'overview' ? 'active' : ''}
-          onClick={() => setTab('overview')}
-        >
+        <button className={tab === 'overview' ? 'active' : ''} onClick={() => setTab('overview')}>
           Overview
         </button>
 
-        <button
-          className={tab === 'private' ? 'active' : ''}
-          onClick={() => setTab('private')}
-        >
+        <button className={tab === 'public' ? 'active' : ''} onClick={() => setTab('public')}>
+          My Public Posts
+        </button>
+
+        <button className={tab === 'private' ? 'active' : ''} onClick={() => setTab('private')}>
           My Private Posts
         </button>
 
@@ -169,7 +227,7 @@ export default function ProfilePage() {
           className={tab === 'approved' || tab === 'approved-private' ? 'active' : ''}
           onClick={() => setTab('approved')}
         >
-          Approved Creators
+          Friends
         </button>
       </section>
 
@@ -178,8 +236,8 @@ export default function ProfilePage() {
           <div className="profile-card">
             <h3>About</h3>
             <p>
-              Smarty helps users learn through scrollable educational content.
-              Build your personal feed, save useful reels, and publish ideas worth sharing.
+              Smarty helps users learn through scrollable educational content. Build your personal
+              feed, save useful reels, and publish ideas worth sharing.
             </p>
           </div>
 
@@ -205,10 +263,21 @@ export default function ProfilePage() {
           <div className="profile-card">
             <h3>Creator Tip</h3>
             <p>
-              Short, useful, and memorable content performs best.
-              Teach one strong idea at a time.
+              Short, useful, and memorable content performs best. Teach one strong idea at a time.
             </p>
           </div>
+        </section>
+      )}
+
+      {tab === 'public' && (
+        <section className="profile-private-posts">
+          {myPublicPosts.length === 0 ? (
+            <p className="status">No public posts found.</p>
+          ) : (
+            <div className="private-grid">
+              {myPublicPosts.map((post) => renderOwnPostCard(post, '🌍 Public'))}
+            </div>
+          )}
         </section>
       )}
 
@@ -218,29 +287,7 @@ export default function ProfilePage() {
             <p className="status">No private posts found.</p>
           ) : (
             <div className="private-grid">
-              {myPrivatePosts.map((post) => {
-                const postId = post.id || post.reelId;
-
-                return (
-                  <button
-                    key={postId}
-                    className="private-card"
-                    type="button"
-                    onClick={() => navigate(`/reel/${postId}`)}
-                  >
-                    {post.imageUrl ? (
-                      <img src={post.imageUrl} alt={post.title} />
-                    ) : (
-                      <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
-                    )}
-
-                    <div className="private-info">
-                      <h4>{post.title}</h4>
-                      <span>🔒 Private</span>
-                    </div>
-                  </button>
-                );
-              })}
+              {myPrivatePosts.map((post) => renderOwnPostCard(post, '🔒 Private'))}
             </div>
           )}
         </section>
@@ -283,7 +330,7 @@ export default function ProfilePage() {
       {tab === 'approved-private' && (
         <section className="profile-private-posts">
           <button className="back-link" type="button" onClick={() => setTab('approved')}>
-            ← Back to approved creators
+            ← Back to friends
           </button>
 
           <div className="creator-private-header">
@@ -307,29 +354,7 @@ export default function ProfilePage() {
             <p className="status">No private posts available from this creator.</p>
           ) : (
             <div className="private-grid">
-              {creatorPrivatePosts.map((post) => {
-                const postId = post.id || post.reelId;
-
-                return (
-                  <button
-                    key={postId}
-                    className="private-card"
-                    type="button"
-                    onClick={() => navigate(`/reel/${postId}`)}
-                  >
-                    {post.imageUrl ? (
-                      <img src={post.imageUrl} alt={post.title} />
-                    ) : (
-                      <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
-                    )}
-
-                    <div className="private-info">
-                      <h4>{post.title}</h4>
-                      <span>🔓 Approved access</span>
-                    </div>
-                  </button>
-                );
-              })}
+              {creatorPrivatePosts.map((post) => renderApprovedPostCard(post))}
             </div>
           )}
         </section>
