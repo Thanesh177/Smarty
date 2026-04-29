@@ -1,7 +1,7 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-
+import CommentsPage from './pages/CommentsPage';
 import NavbarMenu from './components/NavbarMenu';
 import EditPostPage from './pages/EditPostPage';
 import FeedPage from './pages/FeedPage';
@@ -73,7 +73,14 @@ function Layout() {
 
       <main className="content">
         <Routes>
-          <Route path="/" element={<Navigate to="/feed" replace />} />
+<Route
+  path="/comments/:reelId"
+  element={
+    <ProtectedRoute>
+      <CommentsPage />
+    </ProtectedRoute>
+  }
+/>          <Route path="/" element={<Navigate to="/feed" replace />} />
           <Route path="/feed" element={<FeedPage />} />
           <Route path="/feed/:topic" element={<FeedPage />} />
           <Route path="/topics" element={<TopicsPage />} />

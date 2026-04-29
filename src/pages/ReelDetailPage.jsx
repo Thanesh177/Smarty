@@ -2,7 +2,17 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { postApi } from '../api/client';
 import './ReelDetailPage.css';
-
+function getPostImage(post) {
+  return (
+    post?.imageUrl ||
+    post?.photoUrl ||
+    post?.thumbnail ||
+    post?.coverImage ||
+    post?.image ||
+    post?.mediaUrl ||
+    ''
+  );
+}
 export default function ReelDetailPage() {
   const { reelId } = useParams();
   const navigate = useNavigate();
@@ -58,6 +68,24 @@ const handleLike = async () => {
 
   }
 
+};
+
+const handleShare = async () => {
+  const currentLink = window.location.href;
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: post?.title || 'Smarty Post',
+        text: post?.title || '',
+        url: currentLink,
+      });
+      return;
+    } catch {}
+  }
+
+  await navigator.clipboard.writeText(currentLink);
+  setStatus('Link copied to clipboard.');
 };
 
 const handleSave = async () => {
@@ -126,16 +154,16 @@ const handleSave = async () => {
 
       <section className="reel-detail-layout">
         <div className="reel-media-panel">
-          {post.videoUrl ? (
-            <video src={post.videoUrl} controls playsInline />
-          ) : post.imageUrl ? (
-            <img src={post.imageUrl} alt={post.title || 'Post'} />
-          ) : (
-            <div className="reel-media-placeholder">
-              {post.topic?.[0] || 'S'}
-            </div>
-          )}
-        </div>
+  {post.videoUrl ? (
+    <video src={post.videoUrl} controls playsInline />
+  ) : getPostImage(post) ? (
+    <img src={getPostImage(post)} alt={post.title || 'Post'} />
+  ) : (
+    <div className="reel-media-placeholder">
+      {post.topic?.[0] || 'S'}
+    </div>
+  )}
+</div>
 
         <div className="reel-content-panel">
           <span className="reel-topic">{post.topic || 'Smarty'}</span>
@@ -153,7 +181,7 @@ const handleSave = async () => {
           <div className="reel-actions">
             <button onClick={handleLike}>❤️ {post.likes || 0}</button>
             <button onClick={handleSave}>🔖 Save</button>
-            <button onClick={() => navigator.clipboard.writeText(window.location.href)}>
+            <button onClick={handleShare}>
               🔗 Share
             </button>
           </div>

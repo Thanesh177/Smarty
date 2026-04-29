@@ -3,7 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { userApi, postApi } from '../api/client';
 import EmptyState from '../components/EmptyState';
 import './SavedPage.css';
-
+function getPostImage(post) {
+  return (
+    post?.imageUrl ||
+    post?.photoUrl ||
+    post?.thumbnail ||
+    post?.coverImage ||
+    post?.image ||
+    post?.mediaUrl ||
+    ''
+  );
+}
 export default function SavedPage() {
   const navigate = useNavigate();
 
@@ -20,9 +30,9 @@ export default function SavedPage() {
   };
 
   useEffect(() => {
-    userApi
-      .getSaved()
-      .then((data) => setPosts(Array.isArray(data) ? data : []))
+    postApi
+  .getSavedReels()
+  .then((data) => setPosts(Array.isArray(data) ? data : []))
       .catch((err) => {
         console.error('Saved reels error:', err);
         setError('Failed to load saved content.');
@@ -159,8 +169,8 @@ export default function SavedPage() {
                   >
                     {post.videoUrl ? (
                       <video src={post.videoUrl} muted playsInline />
-                    ) : post.imageUrl ? (
-                      <img src={post.imageUrl} alt={post.title || 'Saved post'} />
+                    ) : getPostImage(post) ? (
+                      <img src={getPostImage(post)} alt={post.title || 'Saved post'} />
                     ) : (
                       <div className="saved-placeholder">{post.topic?.[0] || 'S'}</div>
                     )}

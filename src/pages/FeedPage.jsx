@@ -239,9 +239,12 @@ const postId = post.reelId || post.id;
                     🔖 Save
                   </button>
 
-                  <button type="button" onClick={() => toggleComments(postId)}>
-                    💬 Comments
-                  </button>
+                  <button
+  type="button"
+  onClick={() => navigate(`/comments/${postId}`)}
+>
+  💬 Comments
+</button>
                 </div>
 
                 {commentsOpen[postId] && (

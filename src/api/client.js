@@ -183,6 +183,26 @@ export const postApi = {
   return data.posts || data.items || [];
 },
 
+async deleteComment(payload) {
+  try {
+    const { data } = await api.post('/comments/delete', payload);
+    return data;
+  } catch (err) {
+    console.error('DELETE COMMENT API ERROR:', err.response?.data || err);
+    throw err;
+  }
+},
+
+async editComment(payload) {
+  try {
+    const { data } = await api.put('/comments/edit', payload);
+    return data.comment || data;
+  } catch (err) {
+    console.error('EDIT COMMENT API ERROR:', err.response?.data || err);
+    throw err;
+  }
+},
+
   async getPostsByCreator(userId) {
     if (USE_MOCK) {
       await delay(250);
@@ -379,21 +399,15 @@ async getSingleReel(reelId) {
 };
 
 export const userApi = {
-  async getMe() {
-    return JSON.parse(localStorage.getItem('eduscroll_user')) || mockUser;
-  },
+  getMe: async () => {
+  const res = await api.get('/users/profile');
+  return res.data.profile || res.data;
+},
 
-  async getSaved() {
-    if (USE_MOCK) {
-      await delay(250);
-      return Array.isArray(mockFeed)
-        ? mockFeed.filter((item) => item.saved)
-        : [];
-    }
-
-    const { data } = await api.get(endpoints.posts.saved);
-    return normalizeList(data);
-  },
+  updateProfile: async (payload) => {
+  const res = await api.put('/users/profile', payload);
+  return res.data.profile || res.data;
+},
 };
 
 export const chatApi = {
