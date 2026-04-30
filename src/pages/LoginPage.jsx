@@ -1,17 +1,23 @@
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
+import { signInWithRedirect } from 'aws-amplify/auth';
 import { useAuth } from '../contexts/AuthContext';
 import './LoginPage.css';
 
 export default function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, loading, login } = useAuth();
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  if (loading) return <p className="status">Loading...</p>;
   if (user) return <Navigate to="/feed" replace />;
+
+  const handleGoogleLogin = () => {
+    signInWithRedirect({ provider: 'Google' });
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -101,17 +107,23 @@ export default function LoginPage() {
             {submitting ? 'Please wait...' : 'Login'}
           </button>
 
+          <button
+            type="button"
+            className="google-login-btn"
+            onClick={handleGoogleLogin}
+          >
+            <span className="google-icon">G</span>
+            Continue with Google
+          </button>
+
           <div className="login-links">
             <Link className="text-btn" to="/register">
               Need an account? Register
             </Link>
-
-
           </div>
         </form>
 
         <aside className="login-side">
-
           <div className="login-tip">
             <span>Save</span>
             <p>Bookmark useful educational content and return to it anytime.</p>

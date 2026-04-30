@@ -1,6 +1,7 @@
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+
 import CommentsPage from './pages/CommentsPage';
 import NavbarMenu from './components/NavbarMenu';
 import EditPostPage from './pages/EditPostPage';
@@ -20,7 +21,10 @@ import TopicRoomsPage from './pages/TopicRoomsPage';
 import ReelDetailPage from './pages/ReelDetailPage';
 
 function ProtectedRoute({ children }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) return <p className="status">Loading...</p>;
+
   return user ? children : <Navigate to="/login" replace />;
 }
 
@@ -28,9 +32,18 @@ function Layout() {
   const { user, logout } = useAuth();
   const [totalUnread, setTotalUnread] = useState(0);
 
+  // reset unread when user changes
   useEffect(() => {
     if (user) setTotalUnread(0);
   }, [user]);
+
+  // ✅ FIX: handle Google redirect safely
+  useEffect(() => {
+    if (window.location.hash.includes('id_token')) {
+      window.history.replaceState(null, '', '/');
+      window.location.reload(); // let Amplify restore session
+    }
+  }, []);
 
   return (
     <div className="app-shell">
@@ -45,13 +58,11 @@ function Layout() {
           </NavLink>
 
           <div className="brand-actions">
-
-
             <NavLink to="/profile" className="quick-icon-link">
               👤
             </NavLink>
 
-                        <NavLink to="/chat" className="quick-icon-link">
+            <NavLink to="/chat" className="quick-icon-link">
               💬
               {totalUnread > 0 && <span className="nav-badge">{totalUnread}</span>}
             </NavLink>
@@ -73,30 +84,98 @@ function Layout() {
 
       <main className="content">
         <Routes>
-<Route
-  path="/comments/:reelId"
-  element={
-    <ProtectedRoute>
-      <CommentsPage />
-    </ProtectedRoute>
-  }
-/>          <Route path="/" element={<Navigate to="/feed" replace />} />
+          <Route
+            path="/comments/:reelId"
+            element={
+              <ProtectedRoute>
+                <CommentsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="/" element={<Navigate to="/feed" replace />} />
           <Route path="/feed" element={<FeedPage />} />
           <Route path="/feed/:topic" element={<FeedPage />} />
           <Route path="/topics" element={<TopicsPage />} />
+
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/confirm" element={<ConfirmPage />} />
+
           <Route path="/creator/:userId" element={<CreatorProfilePage />} />
           <Route path="/reel/:reelId" element={<ReelDetailPage />} />
-          <Route path="/edit/:reelId" element={ <ProtectedRoute> <EditPostPage /> </ProtectedRoute> }/>
-          <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
-          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-          <Route path="/saved" element={<ProtectedRoute><SavedPage /></ProtectedRoute>} />
-          <Route path="/create" element={<ProtectedRoute><CreatePostPage /></ProtectedRoute>} />
-          <Route path="/creator-dashboard" element={<ProtectedRoute><CreatorDashboardPage /></ProtectedRoute>} />
-          <Route path="/follow-requests" element={<ProtectedRoute><FollowRequestsPage /></ProtectedRoute>} />
-          <Route path="/rooms" element={<ProtectedRoute><TopicRoomsPage /></ProtectedRoute>} />
+
+          <Route
+            path="/edit/:reelId"
+            element={
+              <ProtectedRoute>
+                <EditPostPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <ChatPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/saved"
+            element={
+              <ProtectedRoute>
+                <SavedPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/create"
+            element={
+              <ProtectedRoute>
+                <CreatePostPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/creator-dashboard"
+            element={
+              <ProtectedRoute>
+                <CreatorDashboardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/follow-requests"
+            element={
+              <ProtectedRoute>
+                <FollowRequestsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/rooms"
+            element={
+              <ProtectedRoute>
+                <TopicRoomsPage />
+              </ProtectedRoute>
+            }
+          />
 
           <Route path="*" element={<Navigate to="/feed" replace />} />
         </Routes>
