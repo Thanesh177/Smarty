@@ -8,7 +8,6 @@ import {
   sendChatMessage,
 } from '../api/chatSocket';
 import './ChatPage.css';
-
 function getDayLabel(timestamp) {
   const date = new Date(Number(timestamp));
   const today = new Date();
@@ -37,9 +36,13 @@ export default function ChatPage() {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [status, setStatus] = useState('');
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
   const scrollRef = useRef(null);
   const autoStartedRef = useRef(false);
+  const touchStartXRef = useRef(0);
+  const touchStartYRef = useRef(0);
+  const touchEndXRef = useRef(0);
 
   const userId = user?.id || user?.userId || user?.sub;
 
@@ -168,6 +171,7 @@ useEffect(() => {
 
   const openChat = async (chat) => {
     setActiveChat(chat);
+    setMobileChatOpen(true);
     setStatus('');
 
     try {
@@ -196,6 +200,7 @@ useEffect(() => {
       const chat = await chatApi.startChat(selectedUser);
 
       setActiveChat(chat);
+      setMobileChatOpen(true);
       setUsers([]);
       setQuery('');
 
@@ -275,11 +280,42 @@ useEffect(() => {
     }
   };
 
+  const handleTouchStart = (event) => {
+    if (!mobileChatOpen || !activeChat) return;
+
+    const touch = event.touches?.[0];
+    if (!touch) return;
+
+    touchStartXRef.current = touch.clientX;
+    touchStartYRef.current = touch.clientY;
+    touchEndXRef.current = touch.clientX;
+  };
+
+  const handleTouchMove = (event) => {
+    if (!mobileChatOpen || !activeChat) return;
+
+    const touch = event.touches?.[0];
+    if (!touch) return;
+
+    touchEndXRef.current = touch.clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!mobileChatOpen || !activeChat) return;
+
+    const swipeDistance = touchEndXRef.current - touchStartXRef.current;
+    const startedNearLeftEdge = touchStartXRef.current < 70;
+
+    if (startedNearLeftEdge && swipeDistance > 90) {
+      setMobileChatOpen(false);
+      setActiveChat(null);
+      setMessages([]);
+    }
+  };
+
   return (
-    <main className="chat-page">
+<main className={`chat-page ${mobileChatOpen && activeChat ? 'mobile-chat-open' : ''}`}>
       <section className="chat-sidebar">
-
-
         <form className="chat-search" onSubmit={searchUsers}>
           <input
             placeholder="Search users..."
@@ -335,7 +371,12 @@ useEffect(() => {
         </div>
       </section>
 
-      <section className="chat-window">
+      <section
+        className="chat-window"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         {!activeChat ? (
           <div className="chat-empty-state">
             <h2>Select a chat</h2>
@@ -344,6 +385,17 @@ useEffect(() => {
         ) : (
           <>
             <div className="chat-window-top">
+              <button
+                type="button"
+                className="mobile-chat-back-btn"
+                onClick={() => {
+                  setMobileChatOpen(false);
+                  setActiveChat(null);
+                  setMessages([]);
+                }}
+              >
+                ←
+              </button>
               <div className="chat-info">
                 <h2>{activeChat.receiverName || activeChat.receiverEmail || 'Chat'}</h2>
                 {status && <span className="status-msg">{status}</span>}

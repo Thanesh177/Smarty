@@ -46,7 +46,7 @@
   border: 0;
   cursor: pointer;
   text-align: left;
-  padding: 15px;
+  padding: 0 15px;
   background: rgba(255, 255, 255, 0.06);
   color: white;
   transition: all 0.2s;
@@ -263,9 +263,10 @@
   .chat-list {
     margin-top: 12px;
     display: flex;
+    flex-direction: column;
     gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 6px;
+    overflow-y: auto;
+    max-height: 100%;
   }
 
   .chat-list h3 {
@@ -273,7 +274,7 @@
   }
 
   .chat-list button {
-    min-width: 170px;
+    width: 100%;
     padding: 11px 12px;
     border-radius: 16px;
     background: rgba(255,255,255,.055);
@@ -364,8 +365,8 @@
   }
 
   .chat-list button {
-    min-width: 155px;
-    padding: 20px;
+    width: 100%;
+    padding: 14px;
   }
 
   .chat-window-top {
@@ -376,3 +377,73 @@
     max-width: 90%;
   }
 }
+
+.mobile-chat-back-btn {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .chat-page {
+    height: calc(100dvh - 72px);
+    min-height: calc(100dvh - 72px);
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+  }
+
+  .chat-page.mobile-chat-open .chat-sidebar {
+    display: none;
+  }
+
+  .chat-page.mobile-chat-open .chat-window {
+    display: grid;
+    height: 100%;
+  }
+
+  .chat-page:not(.mobile-chat-open) .chat-window {
+    display: none;
+  }
+
+  .chat-sidebar {
+    height: 100%;
+    max-height: none;
+    overflow-y: auto;
+  }
+
+  .chat-window {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .messages {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .message-form {
+    flex-shrink: 0;
+  }
+
+  .mobile-chat-back-btn {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 1.2rem;
+    cursor: pointer;
+  }
+}
+  .chat-sidebar {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .chat-list {
+    flex: 1;
+    overflow-y: auto;
+  }

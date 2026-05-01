@@ -8,9 +8,16 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 const mockFeed = [];
 const mockUser = null;
-
+const BBC_API_BASE_URL = '/bbc-api';
 const api = axios.create({
   baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+const publicApi = axios.create({
+  baseURL: BBC_API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -20,10 +27,8 @@ api.interceptors.request.use(async (config) => {
   try {
     const session = await fetchAuthSession();
 
-    const token =
-      session?.tokens?.idToken?.toString() ||
-      session?.tokens?.accessToken?.toString();
-
+    const token = session?.tokens?.idToken?.toString();
+    console.log('AUTH TOKEN SENT:', Boolean(token), token?.slice(0, 20));
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
       localStorage.setItem('eduscroll_token', token);
@@ -76,28 +81,102 @@ export const authApi = {
   },
 };
 
+export const newsApi = {
+  async getLatestNews(lang = 'english') {
+    const { data } = await publicApi.get('/latest', {
+      params: { lang },
+    });
+
+    if (data?.status !== 200) {
+      throw new Error('Failed to load BBC news.');
+    }
+
+    return data;
+  },
+};
+
 export const roomApi = {
-  async getRooms() {
-    const { data } = await api.get(endpoints.rooms.list);
-    return data.rooms || data.items || [];
+  async getRooms(params = {}) {
+    const { data } = await api.get('/rooms', { params });
+    return data.rooms || data || [];
   },
 
   async createRoom(payload) {
-    const { data } = await api.post(endpoints.rooms.create, payload);
+    const { data } = await api.post('/rooms', payload);
     return data.room || data;
   },
 
-  async joinRoom(roomId) {
-    const { data } = await api.post(endpoints.rooms.join, { roomId });
+  async joinRoom(roomId, joinCode = '') {
+    const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/join`, {
+      joinCode,
+    });
     return data;
   },
 
-  async getRoomMessages(roomId) {
-    const { data } = await api.get(endpoints.rooms.messages, {
-      params: { roomId },
-    });
+  async getRoomMessages(roomId, params = {}) {
+    const { data } = await api.get(
+      `/rooms/${encodeURIComponent(roomId)}/messages`,
+      { params }
+    );
+    return data;
+  },
 
-    return data.messages || data.items || [];
+  async getRoomMembers(roomId) {
+    const { data } = await api.get(
+      `/rooms/${encodeURIComponent(roomId)}/members`
+    );
+    return data.members || data || [];
+  },
+
+  async leaveRoom(roomId) {
+    const { data } = await api.post(
+      `/rooms/${encodeURIComponent(roomId)}/leave`
+    );
+    return data;
+  },
+
+  async requestJoinRoom(roomId) {
+  const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/request`);
+  return data;
+},
+
+async getRoomJoinRequests(roomId) {
+  const { data } = await api.get(`/rooms/${encodeURIComponent(roomId)}/requests`);
+  return data.requests || [];
+},
+
+async getHiddenRooms() {
+  const { data } = await api.get('/rooms/hidden');
+  return data.rooms || [];
+},
+
+async unhideRoom(roomId) {
+  const { data } = await api.post(
+    `/rooms/${encodeURIComponent(roomId)}/unhide`
+  );
+  return data;
+},
+
+async approveRoomJoinRequest(roomId, userId) {
+  const { data } = await api.post(
+    `/rooms/${encodeURIComponent(roomId)}/requests/approve`,
+    { userId }
+  );
+  return data;
+},
+
+  async hideRoom(roomId) {
+    const { data } = await api.post(
+      `/rooms/${encodeURIComponent(roomId)}/hide`
+    );
+    return data;
+  },
+
+  async deleteRoom(roomId) {
+    const { data } = await api.delete(
+      `/rooms/${encodeURIComponent(roomId)}`
+    );
+    return data;
   },
 };
 
@@ -161,6 +240,31 @@ async rejectFollowRequest(followerId) {
     });
 
     return data.following || data.items || [];
+  },
+};
+
+
+export const readBooksApi = {
+  async getBooks(params = {}) {
+    const { data } = await api.get('/books', { params });
+    return data.books || [];
+  },
+
+  
+
+  async getSubjects(params = {}) {
+    const { data } = await api.get('/books/subjects', { params });
+    return data.subjects || [];
+  },
+
+  async getBookById(id) {
+    const { data } = await api.get(`/books/${id}`);
+    return data.book || data;
+  },
+
+  async getBookText(id) {
+    const { data } = await api.get(`/books/${id}/text`);
+    return data.text || '';
   },
 };
 
@@ -262,20 +366,7 @@ async deletePost(reelId) {
 
 
 
-  async toggleSave(reelId) {
-    if (USE_MOCK) {
-      await delay(200);
-      return { success: true };
-    }
 
-    const { data } = await api.post(endpoints.posts.save, {
-      reelId,
-      id: reelId,
-      postId: reelId,
-    });
-
-    return data;
-  },
 
   async getMyReels() {
     if (USE_MOCK) {

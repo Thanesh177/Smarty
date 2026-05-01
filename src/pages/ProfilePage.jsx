@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { userApi, postApi, creatorApi } from '../api/client';
 import './ProfilePage.css';
+
 function getPostImage(post) {
   return (
     post?.imageUrl ||
@@ -232,13 +233,39 @@ async function saveProfile() {
             <p className="profile-email">{profile?.email}</p>
             <p className="profile-bio">Learn. Share. Grow with Smarty.</p>
 
-            <button
-              type="button"
-              className="profile-edit-btn"
-              onClick={() => setEditingProfile((prev) => !prev)}
-            >
-              {editingProfile ? 'Close' : 'Edit Profile'}
-            </button>
+            <div className="profile-action-row">
+              <button
+                type="button"
+                className="profile-edit-btn"
+                onClick={() => setEditingProfile((prev) => !prev)}
+              >
+                {editingProfile ? 'Close' : 'Edit Profile'}
+              </button>
+
+              <button
+                type="button"
+                className="profile-dashboard-btn"
+                onClick={() => navigate('/creator-dashboard')}
+              >
+                Dashboard
+              </button>
+
+              <button
+                type="button"
+                className="profile-saved-btn"
+                onClick={() => navigate('/saved')}
+              >
+                Saved
+              </button>
+
+              <button
+                type="button"
+                className="profile-books-btn"
+                onClick={() => navigate('/bookinfo')}
+              >
+                Books
+              </button>
+            </div>
 
             {editingProfile && (
               <div className="profile-edit-box">

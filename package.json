@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.100.7",
     "amazon-cognito-identity-js": "^6.3.16",
     "aws-amplify": "^6.16.4",
     "axios": "^1.7.2",
