@@ -1,14 +1,36 @@
 import { useEffect, useMemo, useState } from 'react';
+import imageCompression from 'browser-image-compression';
 import { postApi } from '../api/client';
 import './CreatePostPage.css';
 
 const STAGES = [
   'Preparing files',
+  'Compressing image',
   'Uploading image',
   'Uploading video',
   'Publishing post',
   'Success',
 ];
+
+const compressImage = async (file) => {
+  if (!file || !file.type.startsWith('image/')) return file;
+
+  const options = {
+    maxSizeMB: 0.35,
+    maxWidthOrHeight: 800,
+    useWebWorker: true,
+    fileType: 'image/webp',
+    initialQuality: 0.75,
+  };
+
+  const compressedBlob = await imageCompression(file, options);
+
+  return new File(
+    [compressedBlob],
+    file.name.replace(/\.[^/.]+$/, '.webp'),
+    { type: 'image/webp' }
+  );
+};
 
 export default function CreatePostPage() {
   const [topics, setTopics] = useState([]);
@@ -34,7 +56,9 @@ export default function CreatePostPage() {
       const topicList = Array.isArray(data)
         ? data
             .map((item) =>
-              typeof item === 'string' ? item : item.topic || item.name || item.title
+              typeof item === 'string'
+                ? item
+                : item.topic || item.name || item.title
             )
             .filter(Boolean)
         : [];
@@ -52,7 +76,7 @@ export default function CreatePostPage() {
   }, [topicMode, form.customTopic, form.topic]);
 
   const uploadFile = async (file, onProgress) => {
-    if (!file) return '';
+    if (!file) return { url: '', key: '' };
 
     const uploadData = await postApi.getUploadUrl({
       fileName: file.name,
@@ -81,7 +105,10 @@ export default function CreatePostPage() {
       xhr.send(file);
     });
 
-    return uploadData.fileUrl;
+    return {
+      url: uploadData.fileUrl || uploadData.url || '',
+      key: uploadData.key || uploadData.fileKey || uploadData.imageKey || '',
+    };
   };
 
   const resetForm = () => {
@@ -120,18 +147,37 @@ export default function CreatePostPage() {
       setUploadProgress(5);
 
       let imageUrl = '';
+      let imageKey = '';
+      let thumbUrl = '';
+      let thumbKey = '';
       let videoUrl = '';
+      let videoKey = '';
 
       if (imageFile) {
+        setUploadStage('Compressing image');
+        setUploadProgress(10);
+
+        const compressedImage = await compressImage(imageFile);
+
         setUploadStage('Uploading image');
         setUploadProgress(0);
-        imageUrl = await uploadFile(imageFile, setUploadProgress);
+
+        const imageUpload = await uploadFile(compressedImage, setUploadProgress);
+
+        imageUrl = imageUpload.url;
+        imageKey = imageUpload.key;
+        thumbUrl = imageUpload.url;
+        thumbKey = imageUpload.key;
       }
 
       if (videoFile) {
         setUploadStage('Uploading video');
         setUploadProgress(0);
-        videoUrl = await uploadFile(videoFile, setUploadProgress);
+
+        const videoUpload = await uploadFile(videoFile, setUploadProgress);
+
+        videoUrl = videoUpload.url;
+        videoKey = videoUpload.key;
       }
 
       setUploadStage('Publishing post');
@@ -145,7 +191,11 @@ export default function CreatePostPage() {
         likes: 0,
         visibility: form.visibility,
         imageUrl,
+        imageKey,
+        thumbUrl,
+        thumbKey,
         videoUrl,
+        videoKey,
       });
 
       setUploadStage('Success');
@@ -167,16 +217,14 @@ export default function CreatePostPage() {
     }
   };
 
-  const activeStageIndex = STAGES.indexOf(uploadStage);
-
   return (
     <main className="create-page">
       {submitting && (
         <div className="upload-loader">
           <div className="upload-orb-wrap">
             <div className="upload-orb">
-  <span>{uploadStage === 'Success' ? '✓' : '↑'}</span>
-</div>
+              <span>{uploadStage === 'Success' ? '✓' : '↑'}</span>
+            </div>
 
             <div className="orbit orbit-one"></div>
             <div className="orbit orbit-two"></div>
@@ -193,10 +241,10 @@ export default function CreatePostPage() {
 
           <p className="progress-text">{uploadProgress}%</p>
 
-<div className="current-stage-card">
-  <span>{uploadStage === 'Success' ? '✓' : '•'}</span>
-  <strong>{uploadStage || 'Working...'}</strong>
-</div>
+          <div className="current-stage-card">
+            <span>{uploadStage === 'Success' ? '✓' : '•'}</span>
+            <strong>{uploadStage || 'Working...'}</strong>
+          </div>
         </div>
       )}
 
@@ -205,8 +253,8 @@ export default function CreatePostPage() {
           <span className="create-pill">Create reel</span>
           <h1>Share something worth scrolling for.</h1>
           <p>
-            Turn a useful idea, fact, insight, or explanation into a short educational post
-            for the Smarty feed.
+            Turn a useful idea, fact, insight, or explanation into a short
+            educational post for the Smarty feed.
           </p>
         </div>
       </section>
@@ -217,7 +265,10 @@ export default function CreatePostPage() {
             <label>Topic</label>
 
             <div className="topic-row">
-              <select value={topicMode} onChange={(e) => setTopicMode(e.target.value)}>
+              <select
+                value={topicMode}
+                onChange={(e) => setTopicMode(e.target.value)}
+              >
                 <option value="existing">Choose topic</option>
                 <option value="custom">Custom topic</option>
               </select>
@@ -225,7 +276,9 @@ export default function CreatePostPage() {
               {topicMode === 'existing' ? (
                 <select
                   value={form.topic}
-                  onChange={(e) => setForm({ ...form, topic: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, topic: e.target.value })
+                  }
                 >
                   {topics.length === 0 ? (
                     <option value="">No topics found</option>
@@ -241,7 +294,9 @@ export default function CreatePostPage() {
                 <input
                   placeholder="Example: Neuroscience, Space, Finance..."
                   value={form.customTopic}
-                  onChange={(e) => setForm({ ...form, customTopic: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, customTopic: e.target.value })
+                  }
                 />
               )}
             </div>
@@ -272,21 +327,36 @@ export default function CreatePostPage() {
             <div className="media-upload-grid">
               <label className="upload-card">
                 <span>Image</span>
+
                 <input
                   type="file"
                   accept="image/*"
                   onChange={(e) => setImageFile(e.target.files?.[0] || null)}
                 />
-                <small>{imageFile ? imageFile.name : 'Upload image'}</small>
+
+                {imageFile ? (
+                  <>
+                    <small>{imageFile.name}</small>
+                    <img
+                      src={URL.createObjectURL(imageFile)}
+                      alt="Selected preview"
+                      className="image-preview"
+                    />
+                  </>
+                ) : (
+                  <small>Upload image</small>
+                )}
               </label>
 
               <label className="upload-card">
                 <span>Video</span>
+
                 <input
                   type="file"
                   accept="video/*"
                   onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
                 />
+
                 <small>{videoFile ? videoFile.name : 'Upload video'}</small>
               </label>
             </div>
@@ -315,7 +385,11 @@ export default function CreatePostPage() {
               </div>
             </div>
 
-            <button className="primary-btn publish-btn" disabled={submitting} type="submit">
+            <button
+              className="primary-btn publish-btn"
+              disabled={submitting}
+              type="submit"
+            >
               {submitting ? 'Publishing...' : 'Publish reel'}
             </button>
           </div>

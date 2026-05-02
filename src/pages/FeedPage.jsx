@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import useFeed from '../hooks/useFeed';
 import { postApi } from '../api/client';
+import FeedSkeleton from '../components/FeedSkeleton';
+import useFeed from '../hooks/useFeed';
 import './FeedPage.css';
+
 
 const normalizeTopic = (value) =>
   String(value || '')
@@ -12,34 +14,139 @@ const normalizeTopic = (value) =>
 
 export default function FeedPage() {
   const { topic } = useParams();
-  const { posts, loading, error, likePost, savePost } = useFeed();
-const navigate = useNavigate();
-  const [selectedTopic, setSelectedTopic] = useState('All');
-  const [commentText, setCommentText] = useState({});
-  const [commentsOpen, setCommentsOpen] = useState({});
-  const [comments, setComments] = useState({});
-  const [loadingComments, setLoadingComments] = useState({});
-  const [toast, setToast] = useState('');
+  const navigate = useNavigate();
 
-const visiblePosts = useMemo(() => {
-  return (posts || [])
-    .filter((post) => {
+  const {
+    posts,
+    loading,
+    loadingMore,
+    error,
+    nextCursor,
+    loadMore,
+    likePost,
+    savePost,
+  } = useFeed();
+
+  const loadMoreRef = useRef(null);
+  const [translations, setTranslations] = useState({});
+  const [translating, setTranslating] = useState({});
+  const [showTranslated, setShowTranslated] = useState({});
+  const [selectedTopic, setSelectedTopic] = useState('All');
+  const [toast, setToast] = useState('');
+  const [simpleExplanations, setSimpleExplanations] = useState({});
+  const [explaining, setExplaining] = useState({});
+  useEffect(() => {
+    if (!loadMoreRef.current || !nextCursor) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !loadingMore && !loading && nextCursor) {
+        observer.unobserve(entry.target);
+        loadMore();
+      }
+      },
+      {
+        root: null,
+        rootMargin: '300px',
+        threshold: 0,
+      }
+    );
+
+    observer.observe(loadMoreRef.current);
+
+    return () => observer.disconnect();
+  }, [nextCursor, loadingMore, loading, loadMore]);
+
+  const visiblePosts = useMemo(() => {
+    const map = new Map();
+
+    (posts || []).forEach((post) => {
+      const postId = post.reelId || post.id;
+      if (!postId) return;
+
       const visibility = String(post.visibility || 'public').toLowerCase();
 
-      return (
+      const canShow =
         visibility === 'public' ||
         visibility === 'published' ||
         visibility === '' ||
-        visibility === 'null'
-      );
-    })
-    .sort((a, b) => {
+        visibility === 'null';
+
+      if (!canShow) return;
+
+      if (!map.has(postId)) {
+        map.set(postId, post);
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
       const timeA = Number(a.createdAt || a.updatedAt || a.timestamp || 0);
       const timeB = Number(b.createdAt || b.updatedAt || b.timestamp || 0);
 
       return timeB - timeA;
     });
-}, [posts]);
+  }, [posts]);
+
+  const handleTranslate = async (post, lang = 'Hindi') => {
+  const postId = post.reelId || post.id;
+
+  try {
+    setTranslating((prev) => ({ ...prev, [postId]: true }));
+
+    const data = await postApi.translatePost({
+      postId,
+      title: post.title,
+      body: post.body,
+      targetLang: lang,
+    });
+
+    const translation = data?.translation?.trim();
+
+    if (!translation || translation === 'Translation not available right now.') {
+      setTranslations((prev) => {
+        const copy = { ...prev };
+        delete copy[postId];
+        return copy;
+      });
+
+      setShowTranslated((prev) => ({
+        ...prev,
+        [postId]: false,
+      }));
+
+      showToast('Translation failed. Check Lambda logs.');
+      return;
+    }
+
+    setTranslations((prev) => ({
+      ...prev,
+      [postId]: translation,
+    }));
+
+    setShowTranslated((prev) => ({
+      ...prev,
+      [postId]: true,
+    }));
+  } catch (err) {
+    console.error('Translate failed:', err);
+
+    setTranslations((prev) => {
+      const copy = { ...prev };
+      delete copy[postId];
+      return copy;
+    });
+
+    setShowTranslated((prev) => ({
+      ...prev,
+      [postId]: false,
+    }));
+
+    showToast('Translation failed');
+  } finally {
+    setTranslating((prev) => ({ ...prev, [postId]: false }));
+  }
+};
+
 
   const routeFilteredPosts = useMemo(() => {
     if (!topic) return visiblePosts;
@@ -69,75 +176,6 @@ const visiblePosts = useMemo(() => {
     setTimeout(() => setToast(''), 1800);
   };
 
-  const loadComments = async (postId) => {
-    setLoadingComments((prev) => ({ ...prev, [postId]: true }));
-
-    try {
-      const data = await postApi.getComments(postId);
-
-      setComments((prev) => ({
-        ...prev,
-        [postId]: Array.isArray(data) ? data : [],
-      }));
-    } catch (err) {
-      console.error('Load comments failed:', err);
-      showToast('Failed to load comments');
-    } finally {
-      setLoadingComments((prev) => ({ ...prev, [postId]: false }));
-    }
-  };
-
-  const toggleComments = async (postId) => {
-    const isOpen = commentsOpen[postId];
-
-    if (isOpen) {
-      setCommentsOpen((prev) => ({ ...prev, [postId]: false }));
-      return;
-    }
-
-    setCommentsOpen((prev) => ({ ...prev, [postId]: true }));
-
-    if (!comments[postId]) {
-      await loadComments(postId);
-    }
-  };
-
-  const submitComment = async (postId) => {
-    const text = commentText[postId]?.trim();
-    if (!text) return;
-
-    try {
-      await postApi.addComment({
-        reelId: postId,
-        id: postId,
-        postId,
-        comment: text,
-        text,
-        body: text,
-      });
-
-      const newComment = {
-        id: crypto.randomUUID(),
-        comment: text,
-        text,
-        body: text,
-        author: 'You',
-      };
-
-      setComments((prev) => ({
-        ...prev,
-        [postId]: [newComment, ...(prev[postId] || [])],
-      }));
-
-      setCommentText((prev) => ({ ...prev, [postId]: '' }));
-      setCommentsOpen((prev) => ({ ...prev, [postId]: true }));
-      showToast('Comment posted 💬');
-    } catch (err) {
-      console.error('Comment failed:', err);
-      showToast('Comment failed');
-    }
-  };
-
   const handleSave = async (postId) => {
     try {
       await savePost(postId);
@@ -147,7 +185,30 @@ const visiblePosts = useMemo(() => {
       showToast('Save failed');
     }
   };
+const handleExplain = async (post) => {
+  const postId = post.reelId || post.id;
 
+  if (simpleExplanations[postId]) return;
+
+  try {
+    setExplaining((prev) => ({ ...prev, [postId]: true }));
+
+    const data = await postApi.explainPost({
+      title: post.title,
+      body: post.body,
+    });
+
+    setSimpleExplanations((prev) => ({
+      ...prev,
+      [postId]: data.explanation || 'Could not simplify this post.',
+    }));
+  } catch (err) {
+    console.error('Explain failed:', err);
+    showToast('Could not explain right now');
+  } finally {
+    setExplaining((prev) => ({ ...prev, [postId]: false }));
+  }
+};
   const handleLike = async (postId) => {
     try {
       await likePost(postId);
@@ -161,12 +222,13 @@ const visiblePosts = useMemo(() => {
   return (
     <main className="snap-feed-page">
       <button
-  type="button"
-  className="floating-create-btn"
-  onClick={() => navigate('/create')}
->
-  +
-</button>
+        type="button"
+        className="floating-create-btn"
+        onClick={() => navigate('/create')}
+      >
+        +
+      </button>
+
       {toast && <div className="success-toast">{toast}</div>}
 
       <aside className="topic-rail">
@@ -184,7 +246,8 @@ const visiblePosts = useMemo(() => {
         ))}
       </aside>
 
-      {loading && <p className="feed-status">Loading feed...</p>}
+      {loading && filteredPosts.length === 0 && <FeedSkeleton />}
+
       {error && <p className="feed-status error">{error}</p>}
 
       {!loading && !error && filteredPosts.length === 0 && (
@@ -193,19 +256,33 @@ const visiblePosts = useMemo(() => {
 
       <section className="snap-feed">
         {filteredPosts.map((post) => {
-const postId = post.reelId || post.id;
+          const postId = post.reelId || post.id;
           const creatorId = post.authorId || post.userId || post.creatorId;
 
           return (
-<article
-  className={`snap-post ${!post.imageUrl && !post.videoUrl ? 'no-media' : ''}`}
-  key={postId}
->              {(post.videoUrl || post.imageUrl) && (
+            <article
+              className={`snap-post ${
+                !post.imageUrl && !post.videoUrl ? 'no-media' : ''
+              }`}
+              key={`${postId}-${post.createdAt || post.updatedAt || ''}`}
+            >
+              {(post.videoUrl || post.imageUrl) && (
                 <div className="mini-media">
                   {post.videoUrl ? (
-                    <video src={post.videoUrl} controls playsInline />
+                    <video
+                      src={post.videoUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                    />
                   ) : (
-                    <img src={post.imageUrl} alt={post.title || 'Post media'} />
+                    <img
+                      src={post.imageUrl}
+                      alt={post.title || 'Post media'}
+                      loading="lazy"
+                      decoding="async"
+                      className="feed-image"
+                    />
                   )}
                 </div>
               )}
@@ -228,9 +305,14 @@ const postId = post.reelId || post.id;
                 )}
 
                 <h1>{post.title}</h1>
-                <p>{post.body}</p>
+                <p>
+                  {showTranslated[postId] && translations[postId]
+                    ? translations[postId]
+                    : post.body}
+                </p>
 
                 <div className="post-actions">
+
                   <button type="button" onClick={() => handleLike(postId)}>
                     ❤️ {post.likes ?? 0}
                   </button>
@@ -240,42 +322,80 @@ const postId = post.reelId || post.id;
                   </button>
 
                   <button
-  type="button"
-  onClick={() => navigate(`/comments/${postId}`)}
->
-  💬 Comments
-</button>
-                </div>
+                    type="button"
+                    onClick={() => navigate(`/comments/${postId}`)}
+                  >
+                    💬 Comments
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExplain(post)}
+                    disabled={explaining[postId]}
+                  >
+                    {explaining[postId] ? 'Simplifying...' : 'Explain Simply'}
+                  </button>
 
-                {commentsOpen[postId] && (
-                  <div className="comment-wrap">
-                    {loadingComments[postId] && (
-                      <p className="comment-loading">Loading...</p>
+                  <select
+                    onChange={(e) => {
+                      const value = e.target.value;
+
+                      if (value === 'original') {
+                        setShowTranslated((prev) => ({
+                          ...prev,
+                          [postId]: false,
+                        }));
+                        return;
+                      }
+
+                      handleTranslate(post, value);
+                    }}
+                    value={showTranslated[postId] ? 'translated' : ''}
+                    className="translate-dropdown"
+                    disabled={translating[postId]}
+                  >
+                    <option value="" disabled>
+                      🌍 {translating[postId] ? 'Translating...' : 'Translate'}
+                    </option>
+                    {translations[postId] && (
+                      <option value="original">Original</option>
                     )}
+                    {translations[postId] && showTranslated[postId] && (
+                      <option value="translated" disabled>
+                        Translated
+                      </option>
+                    )}
+                    <option value="Hindi">Hindi</option>
+                    <option value="Tamil">Tamil</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="French">French</option>
+                  </select>
 
-                    {comments[postId]?.map((item, index) => (
-                      <div className="comment-item" key={item.id || item.commentId || index}>
-                        <strong>{item.author || item.user || item.username || 'User'}</strong>
-                        <p>{item.comment || item.text || item.body}</p>
-                      </div>
-                    ))}
+                </div>
+                {translating[postId] && (
+                  <div className="ai-loading-box">
+                    <span className="ai-loader-dot"></span>
+                    <p>Translating...</p>
+                  </div>
+                )}
 
-                    <div className="comment-box">
-                      <input
-                        placeholder="Add a comment..."
-                        value={commentText[postId] || ''}
-                        onChange={(e) =>
-                          setCommentText((prev) => ({
-                            ...prev,
-                            [postId]: e.target.value,
-                          }))
-                        }
-                      />
+                {translations[postId] && !translating[postId] && !showTranslated[postId] && (
+                  <div className="translated-box">
+                    <strong>Translation ready</strong>
+                    <p>Select the translated language again to view it, or choose Original to go back.</p>
+                  </div>
+                )}
 
-                      <button type="button" onClick={() => submitComment(postId)}>
-                        Post
-                      </button>
-                    </div>
+                {explaining[postId] && (
+                  <div className="ai-loading-box">
+                    <span className="ai-loader-dot"></span>
+                    <p>Simplifying...</p>
+                  </div>
+                )}
+
+                {simpleExplanations[postId] && !explaining[postId] && (
+                  <div className="simple-explanation">
+                    <strong>Simplify</strong>
+                    <p>{simpleExplanations[postId]}</p>
                   </div>
                 )}
               </div>
@@ -283,6 +403,10 @@ const postId = post.reelId || post.id;
           );
         })}
       </section>
+
+      <div ref={loadMoreRef} className="feed-load-trigger" />
+
+      {loadingMore && <p className="feed-status">Loading more posts...</p>}
     </main>
   );
 }

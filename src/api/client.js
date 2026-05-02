@@ -18,9 +18,8 @@ const api = axios.create({
 
 const publicApi = axios.create({
   baseURL: BBC_API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 5000,
 });
 
 api.interceptors.request.use(async (config) => {
@@ -28,7 +27,6 @@ api.interceptors.request.use(async (config) => {
     const session = await fetchAuthSession();
 
     const token = session?.tokens?.idToken?.toString();
-    console.log('AUTH TOKEN SENT:', Boolean(token), token?.slice(0, 20));
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
       localStorage.setItem('eduscroll_token', token);
@@ -218,6 +216,8 @@ async rejectFollowRequest(followerId) {
     return data;
   },
 
+
+  
   async unfollow(userId) {
     const { data } = await api.post(endpoints.creator.unfollow, {
       followingId: userId,
@@ -269,15 +269,30 @@ export const readBooksApi = {
 };
 
 export const postApi = {
-  async getFeed() {
-    if (USE_MOCK) {
-      await delay(300);
-      return mockFeed;
-    }
+async getFeed({ limit = 10, cursor = null, topic = null } = {}) {
+  if (USE_MOCK) {
+    await delay(300);
+    return {
+      items: mockFeed.slice(0, limit),
+      nextCursor: null,
+      count: mockFeed.length,
+    };
+  }
 
-    const { data } = await api.get(endpoints.posts.feed);
-    return normalizeList(data);
-  },
+  const { data } = await api.get(endpoints.posts.feed, {
+    params: {
+      limit,
+      ...(cursor ? { cursor } : {}),
+      ...(topic ? { topic } : {}),
+    },
+  });
+
+  return {
+    items: normalizeList(data),
+    nextCursor: data?.nextCursor || null,
+    count: data?.count || 0,
+  };
+},
 
   async getCreatorPrivatePosts(userId) {
   const { data } = await api.get('/creator/private-posts', {
@@ -286,7 +301,10 @@ export const postApi = {
 
   return data.posts || data.items || [];
 },
-
+async translatePost(payload) {
+  const { data } = await api.post('/posts/translate', payload);
+  return data;
+},
 async deleteComment(payload) {
   try {
     const { data } = await api.post('/comments/delete', payload);
@@ -305,6 +323,11 @@ async editComment(payload) {
     console.error('EDIT COMMENT API ERROR:', err.response?.data || err);
     throw err;
   }
+},
+
+async explainPost(payload) {
+  const { data } = await api.post('/posts/explain', payload);
+  return data;
 },
 
   async getPostsByCreator(userId) {

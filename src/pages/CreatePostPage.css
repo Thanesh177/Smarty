@@ -85,11 +85,16 @@
 }
 
 .upload-card {
+  overflow: hidden;
   cursor: pointer;
   padding: 16px;
   border-radius: 18px;
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.08);
+
+  display: flex;            /* ✅ control layout */
+  flex-direction: column;
+  gap: 8px;
 }
 
 .upload-card input {
@@ -586,7 +591,25 @@
     border-radius: 22px;
     gap: 18px;
   }
+.image-preview {
 
+  width: 100%;
+
+  max-width: 100%;
+
+  height: auto;
+
+  max-height: 100px;      /* 🔥 keeps it small */
+
+  object-fit: contain;    /* 🔥 no cropping */
+
+  border-radius: 10px;
+
+  margin-top: 8px;
+
+  display: block;
+
+}
   .create-form input,
   .create-form textarea,
   .create-form select {
