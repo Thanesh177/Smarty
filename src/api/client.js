@@ -8,7 +8,6 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 const mockFeed = [];
 const mockUser = null;
-const BBC_API_BASE_URL = '/bbc-api';
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -16,11 +15,25 @@ const api = axios.create({
   },
 });
 
-const publicApi = axios.create({
-  baseURL: BBC_API_BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 5000,
-});
+const NEWS_API_BASE_URL =
+  import.meta.env.VITE_NEWS_API_BASE_URL ||
+  (import.meta.env.PROD
+    ? 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com'
+    : '/bbc-api');
+
+export const newsApi = {
+  async getLatestNews(lang = 'english') {
+    const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
+      params: { lang },
+    });
+
+    if (data?.status && data.status !== 200) {
+      throw new Error(data?.message || 'Failed to load BBC news.');
+    }
+
+    return data;
+  },
+};
 
 api.interceptors.request.use(async (config) => {
   try {
@@ -79,19 +92,6 @@ export const authApi = {
   },
 };
 
-export const newsApi = {
-  async getLatestNews(lang = 'english') {
-    const { data } = await publicApi.get('/latest', {
-      params: { lang },
-    });
-
-    if (data?.status !== 200) {
-      throw new Error('Failed to load BBC news.');
-    }
-
-    return data;
-  },
-};
 
 export const roomApi = {
   async getRooms(params = {}) {

@@ -194,6 +194,7 @@ const handleExplain = async (post) => {
     setExplaining((prev) => ({ ...prev, [postId]: true }));
 
     const data = await postApi.explainPost({
+        postId,
       title: post.title,
       body: post.body,
     });
