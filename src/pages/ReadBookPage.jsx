@@ -189,9 +189,10 @@ export default function ReadBookPage() {
     <section className="read-books-page">
       <div className="read-books-hero">
         <div>
-          <span className="read-books-kicker">Project Gutenberg</span>
+          <span className="read-books-kicker">Books for everyone
+          </span>
           <h1>Read Free Books</h1>
-          <p>Netflix-style public-domain reading library.</p>
+          <p>public-domain reading library.</p>
         </div>
       </div>
 

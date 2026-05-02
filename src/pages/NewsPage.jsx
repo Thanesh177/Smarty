@@ -208,9 +208,9 @@ export default function NewsPage() {
     <section className="news-page">
       <div className="news-hero">
         <div>
-          <span className="news-kicker">BBC News</span>
+          <span className="news-kicker">News</span>
           <h1>Daily Headlines</h1>
-          <p>Latest BBC updates with cached, fast-loading results.</p>
+          <p>Latest updates from all around the world</p>
 
           {lastUpdated && (
             <span className="last-updated">Last updated: {lastUpdated}</span>
