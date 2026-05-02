@@ -333,7 +333,7 @@ const handleExplain = async (post) => {
                     onClick={() => handleExplain(post)}
                     disabled={explaining[postId]}
                   >
-                    {explaining[postId] ? 'Simplifying...' : 'Explain Simply'}
+                    {explaining[postId] ? 'Simplifying...' : 'Simplify'}
                   </button>
 
                   <select
