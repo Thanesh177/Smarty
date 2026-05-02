@@ -1,10 +1,10 @@
 .books-page {
   width: 100%;
-  height: calc(100vh - 72px);
+  min-height: calc(100vh - 72px);
   margin: 0;
   padding: 20px;
   color: #f8fafc;
-  overflow-y: auto;
+  overflow-y: visible;
   box-sizing: border-box;
 }
 
@@ -196,8 +196,10 @@
 
 @media (max-width: 560px) {
   .books-page {
-    width: min(100% - 24px, 760px);
-    padding-top: 24px;
+    width: 100%;
+    padding: 16px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .books-hero > div:first-child,

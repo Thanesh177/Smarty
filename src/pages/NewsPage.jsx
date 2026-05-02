@@ -5,7 +5,7 @@ import './NewsPage.css';
 const CACHE_PREFIX = 'bbc_latest_news_';
 const CACHE_TTL = 1000 * 60 * 15;
 const PAGE_SIZE = 9;
-const LANGUAGES = ['english', 'hindi', 'bengali'];
+const LANGUAGES = ['english'];
 
 function getCacheKey(lang) {
   return `${CACHE_PREFIX}${lang}`;
@@ -101,9 +101,43 @@ export default function NewsPage() {
       setCachedNews(lang, data);
       setLastUpdated(new Date().toLocaleString());
     } catch (err) {
-      if (requestId === requestIdRef.current) {
-        setError(err.message || 'Failed to load BBC news.');
+      if (requestId !== requestIdRef.current) return;
+
+      if (lang !== 'english') {
+        try {
+          const fallbackCached = getCachedNews('english');
+
+          if (fallbackCached && !forceRefresh) {
+            setNews(fallbackCached);
+            setFromCache(true);
+            setSelectedSection('All');
+            setLastUpdated(new Date().toLocaleString());
+            setError(`${lang.toUpperCase()} news is unavailable right now. Showing English news instead.`);
+            return;
+          }
+
+          const fallbackData = await newsApi.getLatestNews('english');
+
+          if (requestId !== requestIdRef.current) return;
+
+          setNews(fallbackData);
+          setCachedNews('english', fallbackData);
+          setFromCache(false);
+          setSelectedSection('All');
+          setLastUpdated(new Date().toLocaleString());
+          setError(`${lang.toUpperCase()} news is unavailable right now. Showing English news instead.`);
+          return;
+        } catch (fallbackErr) {
+          setError(
+            fallbackErr.message ||
+              err.message ||
+              'Failed to load BBC news. Please try again later.'
+          );
+          return;
+        }
       }
+
+      setError(err.message || 'Failed to load BBC news. Please try again later.');
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);
@@ -234,7 +268,13 @@ export default function NewsPage() {
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+        <select
+          value={language}
+          onChange={(e) => {
+            setLanguage(e.target.value);
+            setSelectedSection('All');
+          }}
+        >
           {LANGUAGES.map((lang) => (
             <option key={lang} value={lang}>
               {lang.toUpperCase()}
