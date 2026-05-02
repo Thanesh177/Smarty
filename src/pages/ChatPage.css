@@ -6,7 +6,17 @@
   background: #07111f;
   color: white;
 }
-
+.blocked-banner {
+  margin: 10px 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(239, 68, 68, 0.14);
+  color: #fecaca;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+}
 .chat-sidebar {
   padding: 28px;
   background: rgba(255, 255, 255, 0.045);

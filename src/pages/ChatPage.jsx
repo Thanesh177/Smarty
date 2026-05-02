@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { chatApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -28,7 +28,8 @@ function getDayLabel(timestamp) {
 export default function ChatPage() {
   const { user } = useAuth();
   const location = useLocation();
-
+  const [searchParams] = useSearchParams();
+  const [isBlocked, setIsBlocked] = useState(false);
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState([]);
   const [chats, setChats] = useState([]);
@@ -60,10 +61,39 @@ export default function ChatPage() {
   }, [userId]);
 
   useEffect(() => {
+    return () => {
+      localStorage.removeItem('activeChatId');
+    };
+  }, []);
+
+  useEffect(() => {
     if (!userId) return;
 
     connectChatSocket(userId, (data) => {
       if (data.type !== 'newMessage') return;
+
+      const activeChatId = localStorage.getItem('activeChatId');
+
+      // If message belongs to currently open chat, do not increase unread
+      if (data.message.chatId === activeChatId) {
+        // do not increment unread, proceed to messages logic
+      } else {
+        // Increment unread count for that chat
+        setChats((prev) =>
+          prev.map((chat) =>
+            chat.chatId === data.message.chatId
+              ? { ...chat, unreadCount: (chat.unreadCount || 0) + 1 }
+              : chat
+          )
+        );
+        // Do not append message if chat not open
+        return;
+      }
+
+      // Only append message if chat is open
+      if (data.message.chatId !== activeChatId) {
+        return;
+      }
 
       const msg = data.message;
 
@@ -83,6 +113,7 @@ export default function ChatPage() {
     });
 
     return () => {
+      localStorage.removeItem('activeChatId');
       disconnectChatSocket();
     };
   }, [userId]);
@@ -91,7 +122,6 @@ export default function ChatPage() {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
-
 useEffect(() => {
   const startWithUser = location.state?.startWithUser;
 
@@ -119,9 +149,21 @@ useEffect(() => {
       };
 
       const chat = await chatApi.startChat(normalizedUser);
-      setActiveChat(chat);
 
-      const data = await chatApi.getMessages(chat.chatId);
+      const fixedChat = {
+        ...chat,
+        receiverId: chat.receiverId || targetUserId,
+        receiverName: chat.receiverName || normalizedUser.name,
+        receiverEmail: chat.receiverEmail || normalizedUser.email,
+      };
+
+      setActiveChat(fixedChat);
+      localStorage.setItem('activeChatId', fixedChat.chatId);
+      setIsBlocked(fixedChat?.isBlocked || false);
+      setMobileChatOpen(true);
+
+      const data = await chatApi.getMessages(fixedChat.chatId);
+
       setMessages(
         data.map((msg) => ({
           ...msg,
@@ -169,37 +211,60 @@ useEffect(() => {
     }
   };
 
-  const openChat = async (chat) => {
-    setActiveChat(chat);
-    setMobileChatOpen(true);
-    setStatus('');
+const openChat = async (chat) => {
+  setActiveChat(chat);
+  localStorage.setItem('activeChatId', chat.chatId);
+  setMobileChatOpen(true);
+  setStatus('');
+  setIsBlocked(chat?.isBlocked || false);
 
-    try {
-      const data = await chatApi.getMessages(chat.chatId);
+  // check block status from backend
+  try {
+    const blockStatus = await chatApi.checkBlockStatus(chat.receiverId);
+    setIsBlocked(blockStatus?.isBlocked || false);
+  } catch (e) {
+    console.error('Block status check failed', e);
+  }
 
-      setMessages(
-        data.map((msg) => ({
-          ...msg,
-          isMine: msg.senderId === userId,
-        }))
-      );
+  try {
+    const data = await chatApi.getMessages(chat.chatId);
 
-      setChats((prev) =>
-        prev.map((item) =>
-          item.chatId === chat.chatId ? { ...item, unreadCount: 0 } : item
-        )
-      );
-    } catch (err) {
-      console.error('Could not load messages:', err);
-      setStatus('Could not load messages.');
-    }
-  };
+    setMessages(
+      data.map((msg) => ({
+        ...msg,
+        isMine: msg.senderId === userId,
+      }))
+    );
+
+    setChats((prev) =>
+      prev.map((item) =>
+        item.chatId === chat.chatId ? { ...item, unreadCount: 0 } : item
+      )
+    );
+  } catch (err) {
+    console.error('Could not load messages:', err);
+    setStatus('Could not load messages.');
+  }
+};
+
+useEffect(() => {
+  const chatIdFromUrl = searchParams.get('chatId');
+
+  if (!chatIdFromUrl || chats.length === 0) return;
+
+  const targetChat = chats.find((chat) => chat.chatId === chatIdFromUrl);
+
+  if (targetChat && activeChat?.chatId !== targetChat.chatId) {
+    openChat(targetChat);
+  }
+}, [searchParams, chats, activeChat?.chatId]);
 
   const startChat = async (selectedUser) => {
     try {
       const chat = await chatApi.startChat(selectedUser);
 
       setActiveChat(chat);
+      localStorage.setItem('activeChatId', chat.chatId);
       setMobileChatOpen(true);
       setUsers([]);
       setQuery('');
@@ -212,6 +277,14 @@ useEffect(() => {
         }))
       );
 
+      // check block status from backend
+      try {
+        const blockStatus = await chatApi.checkBlockStatus(chat.receiverId);
+        setIsBlocked(blockStatus?.isBlocked || false);
+      } catch (e) {
+        console.error('Block status check failed', e);
+      }
+
       await loadChats();
     } catch (err) {
       console.error('Could not start chat:', err);
@@ -222,7 +295,7 @@ useEffect(() => {
   const sendMessage = async (e) => {
     e.preventDefault();
 
-    if (!text.trim() || !activeChat) return;
+    if (!text.trim() || !activeChat || isBlocked) return;
 
     try {
       sendChatMessage({
@@ -238,8 +311,17 @@ useEffect(() => {
     }
   };
 
-  const handleBlockUser = async () => {
-    if (!activeChat) return;
+const handleBlockUser = async () => {
+  if (!activeChat) return;
+
+  try {
+    if (isBlocked) {
+      await chatApi.unblockUser(activeChat.receiverId);
+      setIsBlocked(false);
+      setStatus('User unblocked.');
+      await loadChats();
+      return;
+    }
 
     const confirmBlock = window.confirm(
       `Block ${activeChat.receiverName || activeChat.receiverEmail || 'this user'}?`
@@ -247,17 +329,16 @@ useEffect(() => {
 
     if (!confirmBlock) return;
 
-    try {
-      await chatApi.blockUser(activeChat.receiverId);
-      setStatus('User blocked.');
-      setActiveChat(null);
-      setMessages([]);
-      await loadChats();
-    } catch (err) {
-      console.error('Failed to block user:', err);
-      setStatus('Failed to block user.');
-    }
-  };
+    await chatApi.blockUser(activeChat.receiverId);
+    setIsBlocked(true);
+    setStatus('User blocked.');
+    setMessages([]);
+    await loadChats();
+  } catch (err) {
+    console.error('Block toggle failed:', err);
+    setStatus('Block action failed.');
+  }
+};
 
   const handleReportUser = async () => {
     if (!activeChat) return;
@@ -309,6 +390,7 @@ useEffect(() => {
     if (startedNearLeftEdge && swipeDistance > 90) {
       setMobileChatOpen(false);
       setActiveChat(null);
+      localStorage.removeItem('activeChatId');
       setMessages([]);
     }
   };
@@ -391,6 +473,7 @@ useEffect(() => {
                 onClick={() => {
                   setMobileChatOpen(false);
                   setActiveChat(null);
+                  localStorage.removeItem('activeChatId');
                   setMessages([]);
                 }}
               >
@@ -406,7 +489,7 @@ useEffect(() => {
                   Report
                 </button>
                 <button className="btn-block" type="button" onClick={handleBlockUser}>
-                  Block
+                  {isBlocked ? 'Unblock' : 'Block'}
                 </button>
               </div>
             </div>
@@ -442,13 +525,26 @@ useEffect(() => {
               )}
             </div>
 
-            <form className="message-form" onSubmit={sendMessage}>
+              {isBlocked && (
+
+                <div className="blocked-banner">
+
+                  You blocked this user. Unblock them to send messages.
+
+                </div>
+
+              )}
+
+              <form className="message-form" onSubmit={sendMessage}>
               <input
-                placeholder="Type a message..."
+                placeholder={isBlocked ? 'Unblock this user to send messages' : 'Type a message...'}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
+                disabled={isBlocked}
               />
-              <button type="submit">Send</button>
+              <button type="submit" disabled={isBlocked}>
+                Send
+              </button>
             </form>
           </>
         )}

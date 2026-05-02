@@ -3,6 +3,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
 import Booksinfo from './pages/Booksinfo';
+import { notificationApi } from './api/client';
 
 const BooksPage = lazy(() => import('./pages/BooksPage'));
 const CommentsPage = lazy(() => import('./pages/CommentsPage'));
@@ -51,6 +52,16 @@ function Layout() {
       window.location.reload();
     }
   }, []);
+
+  useEffect(() => {
+    async function setupPush() {
+      if (!user) return;
+
+      await notificationApi.initPush(user);
+    }
+
+    setupPush();
+  }, [user]);
 
   return (
     <div className="app-shell">

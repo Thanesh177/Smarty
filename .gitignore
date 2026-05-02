@@ -1,0 +1,53 @@
+# ===== GENERAL =====
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+
+# ===== NODE / REACT =====
+node_modules/
+dist/
+build/
+.vite/
+.env
+.env.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===== AWS / LAMBDA =====
+*.zip
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Python packages (lambda build junk)
+bin/
+lib/
+lib64/
+include/
+*.egg-info/
+
+# ===== FIREBASE / SECRETS =====
+firebase-service-account.json
+serviceAccountKey.json
+*.pem
+*.key
+
+# ===== MAC TRASH / SYSTEM =====
+.Trash/
+.Trashes/
+
+# ===== VSCODE =====
+.vscode/
+.history/
+
+# ===== TEST / CACHE =====
+.cache/
+coverage/
+
+# ===== DOCKER =====
+*.tar
+*.gz

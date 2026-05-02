@@ -5,12 +5,13 @@ import FeedSkeleton from '../components/FeedSkeleton';
 import useFeed from '../hooks/useFeed';
 import './FeedPage.css';
 
-
 const normalizeTopic = (value) =>
   String(value || '')
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '-');
+
+    
 
 export default function FeedPage() {
   const { topic } = useParams();

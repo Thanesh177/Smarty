@@ -59,17 +59,32 @@ export function forceDisconnectChatSocket() {
   }
 }
 
-export function sendChatMessage({ chatId, receiverId, text }) {
+export function sendChatMessage({ chatId, receiverId, text, type = 'sendMessage' }) {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     throw new Error('WebSocket not connected yet');
   }
 
   socket.send(
     JSON.stringify({
-      action: 'sendMessage',
+      action: type,
+      type,
       chatId,
       receiverId,
       text,
+    })
+  );
+}
+
+export function setActiveChat(chatId) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  socket.send(
+    JSON.stringify({
+      action: 'setActiveChat',
+      type: 'setActiveChat',
+      chatId: chatId || null,
     })
   );
 }

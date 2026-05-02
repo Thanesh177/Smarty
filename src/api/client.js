@@ -2,6 +2,7 @@ import axios from 'axios';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { endpoints } from './endpoints';
 import '../lib/cognito';
+import { requestNotificationToken } from '../firebase';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
@@ -39,12 +40,22 @@ api.interceptors.request.use(async (config) => {
   try {
     const session = await fetchAuthSession();
 
-    const token = session?.tokens?.idToken?.toString();
+    let token = session?.tokens?.idToken?.toString();
+
+    // 🔥 fallback (VERY IMPORTANT)
+    if (!token) {
+      token = localStorage.getItem('eduscroll_token');
+    }
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
       localStorage.setItem('eduscroll_token', token);
+    } else {
+      console.warn('⚠️ No auth token found');
     }
-  } catch {
+  } catch (err) {
+    console.warn('⚠️ Auth session failed, using fallback');
+
     const token = localStorage.getItem('eduscroll_token');
 
     if (token) {
@@ -91,6 +102,7 @@ export const authApi = {
     throw new Error('Register is handled by Cognito, not API Gateway.');
   },
 };
+
 
 
 export const roomApi = {
@@ -522,7 +534,18 @@ export const userApi = {
   const res = await api.put('/users/profile', payload);
   return res.data.profile || res.data;
 },
+
+savePushToken: async (token) => {
+  const res = await api.post('/users/push-token', {
+    token,
+    platform: 'web',
+  });
+
+  return res.data;
+},
 };
+
+
 
 export const chatApi = {
   async searchUsers(query) {
@@ -533,13 +556,18 @@ export const chatApi = {
     return normalizeList(data);
   },
 
-  async blockUser(userId) {
-  const { data } = await api.post('/users/block', {
-    blockedId: userId,
-    userId,
-  });
+blockUser: async (blockedId) => {
+  const res = await api.post('/users/block', { blockedId });
+  return res.data;
+},
 
-  return data;
+unblockUser: async (blockedId) => {
+  const res = await api.post('/users/unblock', { blockedId });
+  return res.data;
+},
+checkBlockStatus: async (userId) => {
+  const res = await api.get(`/users/block-status?userId=${encodeURIComponent(userId)}`);
+  return res.data;
 },
 
 async reportUser(payload) {
@@ -584,6 +612,32 @@ async reportUser(payload) {
 
     return data;
   },
+
+  
+};
+
+export const notificationApi = {
+  async initPush(user) {
+    const userId = user?.id || user?.userId || user?.sub;
+
+    if (!userId) return null;
+
+    try {
+      await delay(1500);
+
+      const token = await requestNotificationToken();
+
+      if (!token) return null;
+
+      await userApi.savePushToken(token);
+
+      console.log('✅ Push token saved:', token);
+      return token;
+    } catch (err) {
+      console.error('❌ Push notification setup failed:', err);
+      return null;
+    }
+  }
 };
 
 export default api;
