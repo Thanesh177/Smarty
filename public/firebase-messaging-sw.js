@@ -15,8 +15,27 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
+
   self.registration.showNotification(payload.notification.title, {
+
     body: payload.notification.body,
+
     icon: '/logo192.png',
+
+    data: payload.data || {},
+
   });
+
+});
+
+self.addEventListener('notificationclick', function (event) {
+
+  event.notification.close();
+
+  const data = event.notification.data || {};
+
+  const url = data.url || '/';
+
+  event.waitUntil(clients.openWindow(url));
+
 });

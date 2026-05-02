@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
 import Booksinfo from './pages/Booksinfo';
 import { notificationApi } from './api/client';
+import { listenForForegroundMessages } from './firebase';
 
 const BooksPage = lazy(() => import('./pages/BooksPage'));
 const CommentsPage = lazy(() => import('./pages/CommentsPage'));
@@ -62,6 +63,14 @@ function Layout() {
 
     setupPush();
   }, [user]);
+
+  useEffect(() => {
+    const unsubscribe = listenForForegroundMessages();
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
 
   return (
     <div className="app-shell">
