@@ -4,6 +4,7 @@ import { postApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import useFeed from '../hooks/useFeed';
 import './FeedPage.css';
+import { useLocation } from "react-router-dom";
 
 const normalizeTopic = (value) =>
   String(value || '')
@@ -16,6 +17,7 @@ const normalizeTopic = (value) =>
 export default function FeedPage() {
   const { topic } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const {
     posts,
@@ -57,6 +59,25 @@ export default function FeedPage() {
 
     return () => observer.disconnect();
   }, [nextCursor, loadingMore, loading, loadMore]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const targetPostId = params.get("postId");
+
+    if (!targetPostId) return;
+
+    setTimeout(() => {
+      const el = document.getElementById(`post-${targetPostId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("highlight-post");
+
+        setTimeout(() => {
+          el.classList.remove("highlight-post");
+        }, 2000);
+      }
+    }, 600);
+  }, [location, posts]);
 
   const visiblePosts = useMemo(() => {
     const map = new Map();
@@ -263,6 +284,7 @@ const handleExplain = async (post) => {
 
           return (
             <article
+              id={`post-${postId}`}
               className={`snap-post ${
                 !post.imageUrl && !post.videoUrl ? 'no-media' : ''
               }`}

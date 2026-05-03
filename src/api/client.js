@@ -570,6 +570,11 @@ checkBlockStatus: async (userId) => {
   return res.data;
 },
 
+markAsRead: async (chatId) => {
+  const { data } = await api.post(`/chat/${encodeURIComponent(chatId)}/read`);
+  return data;
+},
+
 async reportUser(payload) {
   const { data } = await api.post('/users/report', {
     reportedUserId: payload.reportedUserId,

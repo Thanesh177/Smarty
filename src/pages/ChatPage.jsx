@@ -61,6 +61,19 @@ export default function ChatPage() {
   }, [userId]);
 
   useEffect(() => {
+  const totalUnread = chats.reduce(
+    (sum, chat) => sum + Number(chat.unreadCount || 0),
+    0
+  );
+
+  window.dispatchEvent(
+    new CustomEvent('chat-unread-update', {
+      detail: { totalUnread },
+    })
+  );
+}, [chats]);
+
+  useEffect(() => {
     return () => {
       localStorage.removeItem('activeChatId');
     };
@@ -217,7 +230,13 @@ const openChat = async (chat) => {
   setMobileChatOpen(true);
   setStatus('');
   setIsBlocked(chat?.isBlocked || false);
-
+try {
+  if (chatApi.markAsRead) {
+    await chatApi.markAsRead(chat.chatId);
+  }
+} catch (e) {
+  console.error('Mark as read failed', e);
+}
   // check block status from backend
   try {
     const blockStatus = await chatApi.checkBlockStatus(chat.receiverId);

@@ -8,7 +8,9 @@ import { listenForForegroundMessages } from './firebase';
 import QuizPage from "./pages/QuizPage";
 import ProgressPage from "./pages/progress/ProgressPage";
 import GameProfile from "./pages/profile/GameProfile";
+import InstallPrompt from "./components/InstallPrompt";
 
+// Lazy imports
 const BooksPage = lazy(() => import('./pages/BooksPage'));
 const CommentsPage = lazy(() => import('./pages/CommentsPage'));
 const EditPostPage = lazy(() => import('./pages/EditPostPage'));
@@ -46,20 +48,45 @@ function Layout() {
   const { user, logout } = useAuth();
   const [totalUnread, setTotalUnread] = useState(0);
 
+  // Reset unread count
   useEffect(() => {
     if (user) setTotalUnread(0);
   }, [user]);
 
   useEffect(() => {
-    if (window.location.hash.includes('id_token')) {
-      window.history.replaceState(null, '', '/');
-      window.location.reload();
-    }
-  }, []);
+  const handler = (event) => {
+    setTotalUnread(Number(event.detail?.totalUnread || 0));
+  };
 
+  window.addEventListener('chat-unread-update', handler);
+
+  return () => {
+    window.removeEventListener('chat-unread-update', handler);
+  };
+}, []);
+
+useEffect(() => {
+  if (!('setAppBadge' in navigator)) return;
+
+  if (totalUnread > 0) {
+    navigator.setAppBadge(totalUnread).catch(() => {});
+  } else if ('clearAppBadge' in navigator) {
+    navigator.clearAppBadge().catch(() => {});
+  }
+}, [totalUnread]);
+
+  // Fix Cognito redirect loop
+
+  // ✅ Push notifications (ONLY after PWA install)
   useEffect(() => {
     async function setupPush() {
       if (!user) return;
+
+      const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone;
+
+      if (!isStandalone) return;
 
       await notificationApi.initPush(user);
     }
@@ -67,154 +94,161 @@ function Layout() {
     setupPush();
   }, [user]);
 
+  // Foreground push listener
   useEffect(() => {
     const unsubscribe = listenForForegroundMessages();
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    return () => unsubscribe && unsubscribe();
   }, []);
 
   return (
-    <div className="app-shell">
-      <header className="topbar glass-topbar">
-        <div className="topbar-row">
-          <NavLink to="/feed" className="brand-logo fancy-brand">
-            <div className="brand-mark">S</div>
-            <div>
-              <h1>Smarty</h1>
-              <p>Learn while you scroll</p>
+    <>
+      {/* Install popup */}
+      <InstallPrompt />
+
+      <div className="app-shell">
+        <header className="topbar glass-topbar">
+          <div className="topbar-row">
+            <NavLink to="/feed" className="brand-logo fancy-brand">
+              <div className="brand-mark">S</div>
+              <div>
+                <h1>Smarty</h1>
+                <p>Learn while you scroll</p>
+              </div>
+            </NavLink>
+
+            <div className="brand-actions">
+              <NavLink to="/profile" className="quick-icon-link">
+                👤
+              </NavLink>
+
+              <NavLink to="/chat" className="quick-icon-link">
+                💬
+                {totalUnread > 0 && (
+                  <span className="nav-badge">{totalUnread}</span>
+                )}
+              </NavLink>
+
+              <NavbarMenu
+                user={user}
+                logout={logout}
+                totalUnread={totalUnread}
+              />
             </div>
-          </NavLink>
-
-          <div className="brand-actions">
-            <NavLink to="/profile" className="quick-icon-link">
-              👤
-            </NavLink>
-
-            <NavLink to="/chat" className="quick-icon-link">
-              💬
-              {totalUnread > 0 && <span className="nav-badge">{totalUnread}</span>}
-            </NavLink>
-
-
-
-            <NavbarMenu user={user} logout={logout} totalUnread={totalUnread} />
           </div>
-        </div>
-      </header>
+        </header>
 
-      <main className="content">
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/feed" replace />} />
-            <Route path="/feed" element={<FeedPage />} />
-            <Route path="/feed/:topic" element={<FeedPage />} />
-            <Route path="/booksinfo" element={<Booksinfo />} />
-            <Route path="/bookinfo" element={<Booksinfo />} />
-            <Route path="/topics" element={<TopicsPage />} />
-            <Route path="/news" element={<NewsPage />} />
-            <Route path="/books" element={<BooksPage />} />
-            <Route path="/read-books" element={<ReadBookPage />} />
-            <Route path="/read-book/:bookId" element={<BookReaderPage />} />
+        <main className="content">
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<Navigate to="/feed" replace />} />
+              <Route path="/feed" element={<FeedPage />} />
+              <Route path="/feed/:topic" element={<FeedPage />} />
 
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/confirm" element={<ConfirmPage />} />
+              <Route path="/booksinfo" element={<Booksinfo />} />
+              <Route path="/bookinfo" element={<Booksinfo />} />
+              <Route path="/topics" element={<TopicsPage />} />
+              <Route path="/news" element={<NewsPage />} />
+              <Route path="/books" element={<BooksPage />} />
+              <Route path="/read-books" element={<ReadBookPage />} />
+              <Route path="/read-book/:bookId" element={<BookReaderPage />} />
 
-            <Route path="/creator/:userId" element={<CreatorProfilePage />} />
-            <Route path="/reel/:reelId" element={<ReelDetailPage />} />
-<Route path="/quiz" element={<QuizPage />} />
-            <Route
-              path="/comments/:reelId"
-              element={
-                <ProtectedRoute>
-                  <CommentsPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/confirm" element={<ConfirmPage />} />
 
-<Route path="/game-profile" element={<GameProfile />} />
+              <Route path="/creator/:userId" element={<CreatorProfilePage />} />
+              <Route path="/reel/:reelId" element={<ReelDetailPage />} />
+              <Route path="/quiz" element={<QuizPage />} />
+              <Route path="/game-profile" element={<GameProfile />} />
+              <Route path="/progress" element={<ProgressPage />} />
 
-            <Route
-              path="/edit/:reelId"
-              element={
-                <ProtectedRoute>
-                  <EditPostPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/comments/:reelId"
+                element={
+                  <ProtectedRoute>
+                    <CommentsPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/chat"
-              element={
-                <ProtectedRoute>
-                  <ChatPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/edit/:reelId"
+                element={
+                  <ProtectedRoute>
+                    <EditPostPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/profile"
-              element={
-                <ProtectedRoute>
-                  <ProfilePage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/chat"
+                element={
+                  <ProtectedRoute>
+                    <ChatPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/saved"
-              element={
-                <ProtectedRoute>
-                  <SavedPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/profile"
+                element={
+                  <ProtectedRoute>
+                    <ProfilePage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/create"
-              element={
-                <ProtectedRoute>
-                  <CreatePostPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/saved"
+                element={
+                  <ProtectedRoute>
+                    <SavedPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route path="/progress" element={<ProgressPage />} />
+              <Route
+                path="/create"
+                element={
+                  <ProtectedRoute>
+                    <CreatePostPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/creator-dashboard"
-              element={
-                <ProtectedRoute>
-                  <CreatorDashboardPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/creator-dashboard"
+                element={
+                  <ProtectedRoute>
+                    <CreatorDashboardPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/follow-requests"
-              element={
-                <ProtectedRoute>
-                  <FollowRequestsPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/follow-requests"
+                element={
+                  <ProtectedRoute>
+                    <FollowRequestsPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route
-              path="/rooms"
-              element={
-                <ProtectedRoute>
-                  <TopicRoomsPage />
-                </ProtectedRoute>
-              }
-            />
+              <Route
+                path="/rooms"
+                element={
+                  <ProtectedRoute>
+                    <TopicRoomsPage />
+                  </ProtectedRoute>
+                }
+              />
 
-            <Route path="*" element={<Navigate to="/feed" replace />} />
-          </Routes>
-        </Suspense>
-      </main>
-    </div>
+              <Route path="*" element={<Navigate to="/feed" replace />} />
+            </Routes>
+          </Suspense>
+        </main>
+      </div>
+    </>
   );
 }
 
