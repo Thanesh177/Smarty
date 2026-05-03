@@ -11,7 +11,6 @@ import GameProfile from "./pages/profile/GameProfile";
 import InstallPrompt from "./components/InstallPrompt";
 
 // Lazy imports
-const BooksPage = lazy(() => import('./pages/BooksPage'));
 const CommentsPage = lazy(() => import('./pages/CommentsPage'));
 const EditPostPage = lazy(() => import('./pages/EditPostPage'));
 const FeedPage = lazy(() => import('./pages/FeedPage'));
@@ -148,7 +147,6 @@ useEffect(() => {
               <Route path="/bookinfo" element={<Booksinfo />} />
               <Route path="/topics" element={<TopicsPage />} />
               <Route path="/news" element={<NewsPage />} />
-              <Route path="/books" element={<BooksPage />} />
               <Route path="/read-books" element={<ReadBookPage />} />
               <Route path="/read-book/:bookId" element={<BookReaderPage />} />
 

@@ -274,26 +274,95 @@ async rejectFollowRequest(followerId) {
 
 
 export const readBooksApi = {
-  async getBooks(params = {}) {
-    const { data } = await api.get('/books', { params });
-    return data.books || [];
+  async getBooks(params = {}, options = {}) {
+    const {
+      search = '',
+      q = '',
+      author = '',
+      year = '',
+      category = '',
+      page = 1,
+      page_size = 24,
+      limit,
+    } = params;
+
+    const rawTerms = [search || q || '', category || '']
+      .map((term) => String(term).trim())
+      .filter(Boolean);
+
+    const uniqueTerms = [...new Set(rawTerms.map((term) => term.toLowerCase()))];
+    const finalQuery = uniqueTerms.join(' ') || 'classic literature';
+
+    const queryParams = new URLSearchParams({
+      page: String(page),
+      limit: String(limit || page_size),
+      fields: 'key,title,author_name,first_publish_year,subject,cover_i',
+      q: finalQuery,
+    });
+
+    if (author) queryParams.set('author', String(author).trim());
+    if (year) queryParams.set('first_publish_year', String(year).trim());
+
+    const { data } = await axios.get(`/openlibrary/search.json?${queryParams.toString()}`, {
+      signal: options.signal,
+    });
+
+    return (data.docs || []).map((book) => ({
+      id: book.key?.replace('/works/', ''),
+      title: book.title || 'Untitled Book',
+      authors: book.author_name || [],
+      author_name: book.author_name || [],
+      author: Array.isArray(book.author_name) ? book.author_name.join(', ') : 'Unknown author',
+      first_publish_year: book.first_publish_year,
+      year: book.first_publish_year,
+      subjects: book.subject || [],
+      cover_i: book.cover_i,
+    }));
   },
 
-  
+  async searchBooks(search, params = {}, options = {}) {
+    return this.getBooks(
+      {
+        ...params,
+        search,
+      },
+      options
+    );
+  },
 
   async getSubjects(params = {}) {
     const { data } = await api.get('/books/subjects', { params });
-    return data.subjects || [];
+
+    if (typeof data?.body === 'string') {
+      try {
+        const parsed = JSON.parse(data.body);
+        return parsed.subjects || parsed.items || parsed.results || parsed.data || [];
+      } catch {
+        return [];
+      }
+    }
+
+    return data.subjects || data.items || data.results || data.data || [];
   },
 
   async getBookById(id) {
-    const { data } = await api.get(`/books/${id}`);
-    return data.book || data;
+    const { data } = await axios.get(`/openlibrary/works/${encodeURIComponent(id)}.json`);
+    return data;
   },
 
   async getBookText(id) {
-    const { data } = await api.get(`/books/${id}/text`);
-    return data.text || '';
+    const { data } = await api.get(`/books/${encodeURIComponent(id)}/text`);
+
+    if (typeof data?.body === 'string') {
+      try {
+        const parsed = JSON.parse(data.body);
+        return parsed.text || parsed.content || '';
+      } catch {
+        return '';
+      }
+    }
+
+    return data.text || data.content || '';
   },
 };
 

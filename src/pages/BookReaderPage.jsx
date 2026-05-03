@@ -45,15 +45,17 @@ function splitIntoChapters(text) {
   return chunks.length ? chunks : ['No readable content available.'];
 }
 
-function addToHistory(bookId) {
+function addToHistory(bookId, title) {
   try {
     const history = JSON.parse(localStorage.getItem('reading_history') || '[]');
-    const exists = history.some((book) => String(book.id) === String(bookId));
+    const cleanTitle = title && !title.startsWith('Book #') ? title : `Book #${bookId}`;
 
-    if (!exists) {
-      const updated = [{ id: bookId, title: `Book #${bookId}` }, ...history].slice(0, 20);
-      localStorage.setItem('reading_history', JSON.stringify(updated));
-    }
+    const updated = [
+      { id: bookId, title: cleanTitle, lastReadAt: Date.now() },
+      ...history.filter((book) => String(book.id) !== String(bookId)),
+    ].slice(0, 20);
+
+    localStorage.setItem('reading_history', JSON.stringify(updated));
   } catch {
     // ignore storage errors
   }
@@ -87,7 +89,21 @@ export default function BookReaderPage() {
     try {
       if (!bookId) throw new Error('Book ID is missing.');
 
-      addToHistory(bookId);
+      let bookTitle = `Book #${bookId}`;
+
+      try {
+        const response = await fetch(`https://openlibrary.org/works/${bookId}.json`);
+
+        if (response.ok) {
+          const data = await response.json();
+          bookTitle = data.title || bookTitle;
+        }
+      } catch {
+        // ignore title fetch errors
+      }
+
+      addToHistory(bookId, bookTitle);
+      localStorage.setItem(`book_${bookId}`, JSON.stringify({ id: bookId, title: bookTitle }));
 
       const fetchedText = await readBooksApi.getBookText(bookId);
       const finalText = fetchedText || 'No content available.';

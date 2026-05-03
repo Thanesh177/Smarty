@@ -1,4 +1,5 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import './Booksinfo.css';
 
 function getReadingHistory() {
@@ -7,6 +8,49 @@ function getReadingHistory() {
   } catch {
     return [];
   }
+}
+
+function getSavedBookTitle(bookId, fallbackBook = {}) {
+  const fallbackTitle = fallbackBook.title || fallbackBook.name;
+
+  if (fallbackTitle && fallbackTitle !== `Book #${bookId}`) {
+    return fallbackTitle;
+  }
+
+  try {
+    const savedBook = JSON.parse(localStorage.getItem(`book_${bookId}`) || '{}');
+
+    if (savedBook.title && savedBook.title !== `Book #${bookId}`) {
+      return savedBook.title;
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const history = getReadingHistory();
+    const historyBook = history.find((book) => String(book.id) === String(bookId));
+
+    if (historyBook?.title && historyBook.title !== `Book #${bookId}`) {
+      return historyBook.title;
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const bookmarks = JSON.parse(localStorage.getItem(`bookmarks_${bookId}`) || '[]');
+    const bookmarkWithTitle = bookmarks.find((bookmark) => bookmark.title || bookmark.bookTitle);
+    const bookmarkTitle = bookmarkWithTitle?.title || bookmarkWithTitle?.bookTitle;
+
+    if (bookmarkTitle && bookmarkTitle !== `Book #${bookId}`) {
+      return bookmarkTitle;
+    }
+  } catch {
+    // ignore
+  }
+
+  return `Book #${bookId}`;
 }
 
 function getAllBookmarkedBooks() {
@@ -22,7 +66,7 @@ function getAllBookmarkedBooks() {
       if (bookmarks.length > 0) {
         items.push({
           id: bookId,
-          title: `Book #${bookId}`,
+          title: getSavedBookTitle(bookId),
           count: bookmarks.length,
         });
       }
@@ -34,11 +78,78 @@ function getAllBookmarkedBooks() {
   return items;
 }
 
-export default function BooksPage() {
+export default function Booksinfo() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  const history = getReadingHistory();
-  const bookmarkedBooks = getAllBookmarkedBooks();
+  useEffect(() => {
+    const refreshBooksInfo = () => setRefreshKey((prev) => prev + 1);
+
+    window.addEventListener('focus', refreshBooksInfo);
+    window.addEventListener('storage', refreshBooksInfo);
+
+    return () => {
+      window.removeEventListener('focus', refreshBooksInfo);
+      window.removeEventListener('storage', refreshBooksInfo);
+    };
+  }, []);
+
+  useEffect(() => {
+    async function fixMissingTitles() {
+      const currentHistory = getReadingHistory();
+      let changed = false;
+
+      const fixedHistory = await Promise.all(
+        currentHistory.map(async (book) => {
+          if (book.title && !book.title.startsWith('Book #')) {
+            return book;
+          }
+
+          if (!book.id) {
+            return book;
+          }
+
+          try {
+            const response = await fetch(`https://openlibrary.org/works/${book.id}.json`);
+
+            if (!response.ok) {
+              return book;
+            }
+
+            const data = await response.json();
+            const title = data.title || book.title;
+
+            if (!title || title.startsWith('Book #')) {
+              return book;
+            }
+
+            changed = true;
+
+            const fixedBook = {
+              ...book,
+              title,
+            };
+
+            localStorage.setItem(`book_${book.id}`, JSON.stringify(fixedBook));
+            return fixedBook;
+          } catch {
+            return book;
+          }
+        })
+      );
+
+      if (changed) {
+        localStorage.setItem('reading_history', JSON.stringify(fixedHistory));
+        setRefreshKey((prev) => prev + 1);
+      }
+    }
+
+    fixMissingTitles();
+  }, [location.pathname]);
+
+  const history = useMemo(() => getReadingHistory(), [refreshKey]);
+  const bookmarkedBooks = useMemo(() => getAllBookmarkedBooks(), [refreshKey]);
 
   return (
     <main className="books-page">
@@ -70,12 +181,6 @@ export default function BooksPage() {
       </section>
 
       <section className="books-grid">
-        <article className="books-card featured">
-          <span>Start reading</span>
-          <h2>Open Library</h2>
-          <p>Search and explore free books from your reader library.</p>
-          <Link to="/read-books">Browse books →</Link>
-        </article>
 
         <article className="books-card">
           <span>Progress</span>
@@ -85,12 +190,12 @@ export default function BooksPage() {
             <p>No recent books yet. Start reading to see them here.</p>
           ) : (
             <div className="mini-book-list">
-              {history.slice(0, 5).map((book) => (
+              {history.map((book) => (
                 <button
                   key={book.id}
                   onClick={() => navigate(`/read-book/${book.id}`)}
                 >
-                  <strong>{book.title || `Book #${book.id}`}</strong>
+                  <strong>{getSavedBookTitle(book.id, book)}</strong>
                   <small>Continue →</small>
                 </button>
               ))}
@@ -106,7 +211,7 @@ export default function BooksPage() {
             <p>No bookmarked books yet. Bookmark a chapter while reading.</p>
           ) : (
             <div className="mini-book-list">
-              {bookmarkedBooks.slice(0, 5).map((book) => (
+              {bookmarkedBooks.map((book) => (
                 <button
                   key={book.id}
                   onClick={() => navigate(`/read-book/${book.id}`)}

@@ -7,7 +7,12 @@
   overflow-y: visible;
   box-sizing: border-box;
 }
-
+.mini-book-list {
+  display: grid;
+  gap: 12px;
+  max-height: none;
+  overflow: visible;
+}
 .books-hero {
   display: grid;
   grid-template-columns: 1.2fr 380px;
