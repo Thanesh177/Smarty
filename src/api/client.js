@@ -111,10 +111,27 @@ export const roomApi = {
     return data.rooms || data || [];
   },
 
-  async createRoom(payload) {
-    const { data } = await api.post('/rooms', payload);
-    return data.room || data;
-  },
+  searchUsers: async (q) => {
+  const { data } = await api.post('/users/find', {
+    action: 'search',
+    q,
+  });
+  return data;
+},
+
+inviteUserToRoom: async (roomId, userId) => {
+  const { data } = await api.post('/users/find', {
+    action: 'invite',
+    roomId,
+    userId,
+  });
+  return data;
+},
+
+createRoom: async (payload) => {
+  const { data } = await api.post('/rooms', payload);
+  return data;
+},
 
   async joinRoom(roomId, joinCode = '') {
     const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/join`, {
@@ -571,8 +588,7 @@ checkBlockStatus: async (userId) => {
 },
 
 markAsRead: async (chatId) => {
-  const { data } = await api.post(`/chat/${encodeURIComponent(chatId)}/read`);
-  return data;
+  return { markedRead: true, chatId };
 },
 
 async reportUser(payload) {

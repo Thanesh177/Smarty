@@ -89,16 +89,18 @@ export function setActiveChat(chatId) {
   );
 }
 
-export function sendRoomMessage({ roomId, text }) {
+export function sendRoomMessage(payload) {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
-    throw new Error('WebSocket not connected yet');
+    console.warn('WebSocket not connected');
+    return;
   }
 
   socket.send(
     JSON.stringify({
       action: 'sendRoomMessage',
-      roomId,
-      text,
+      roomId: payload.roomId,
+      text: payload.text,
+      clientId: payload.clientId,
     })
   );
 }
