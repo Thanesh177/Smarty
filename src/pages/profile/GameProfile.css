@@ -1,0 +1,377 @@
+/* ===== HERO ===== */
+.game-profile-hero {
+  align-items: center;
+}
+
+.game-profile-stat-card {
+  min-width: 240px;
+}
+
+.profile-level-track {
+  margin-top: 10px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.profile-level-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #22c55e);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+/* ===== OVERVIEW ===== */
+.profile-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 20px auto;
+}
+
+.profile-overview-card {
+  padding: 16px;
+  border-radius: 20px;
+  text-align: center;
+  background:
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 40%),
+    rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-overview-card span {
+  font-size: 1.6rem;
+}
+
+.profile-overview-card strong {
+  display: block;
+  font-size: 1.2rem;
+  margin-top: 6px;
+}
+
+.profile-overview-card p {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+/* ===== UNLOCK SECTION ===== */
+.unlock-section {
+  margin: 30px auto;
+}
+
+.section-heading-row {
+  margin-bottom: 14px;
+}
+
+/* ===== GRID ===== */
+.unlock-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 18px;
+}
+
+/* ===== CARD ===== */
+.unlock-card {
+  padding: 18px;
+  border-radius: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* unlocked */
+.unlock-card.unlocked {
+  background:
+    radial-gradient(circle at top, rgba(34, 197, 94, 0.15), transparent 40%),
+    rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+/* locked */
+.unlock-card.locked {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  opacity: 0.75;
+}
+
+/* hover */
+.unlock-card.unlocked:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(34, 197, 94, 0.15);
+}
+
+/* ===== TOP ===== */
+.unlock-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+/* ===== MEMORY GAME PREMIUM ===== */
+
+.memory-palace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.memory-tile {
+  padding: 16px;
+  border-radius: 16px;
+  color: white;
+  font-weight: 800;
+  font-size: 0.9rem;
+  text-align: center;
+  cursor: pointer;
+
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+
+  transition: all 0.2s ease;
+}
+
+/* Hover effect */
+.memory-tile:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Selected state (IMPORTANT) */
+.memory-tile.selected {
+  background: linear-gradient(135deg, #38bdf8, #8b5cf6);
+  border-color: transparent;
+  box-shadow: 0 6px 18px rgba(56, 189, 248, 0.4);
+}
+
+/* Study mode tiles */
+.memory-tile.study {
+  background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(56,189,248,0.15));
+  border: 1px solid rgba(34,197,94,0.25);
+}
+
+/* Animation */
+.memory-tile {
+  animation: tileFadeIn 0.3s ease;
+}
+
+@keyframes tileFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.unlock-card-top span {
+  font-size: 1.6rem;
+}
+
+.unlock-card-top small {
+  font-size: 0.65rem;
+  opacity: 0.6;
+  text-transform: uppercase;
+}
+
+/* ===== TEXT ===== */
+.unlock-card h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.unlock-card p {
+  padding: 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+/* ===== REWARD ===== */
+.unlock-reward {
+  margin-top: 1rem;
+}
+
+.unlock-reward span {
+  font-size: 0.65rem;
+  opacity: 0.6;
+}
+
+.unlock-reward strong {
+  display: block;
+  font-size: 0.85rem;
+}
+
+/* ===== PROGRESS BAR ===== */
+.unlock-mini-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.unlock-mini-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #6366f1);
+  border-radius: 999px;
+}
+
+/* ===== STATUS ===== */
+.unlock-status {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* ===== BUTTON ===== */
+.unlock-action-btn {
+  margin-top: auto;
+  padding: 10px;
+  border-radius: 14px;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s ease;
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  color: white;
+}
+
+.unlock-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.unlock-action-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+/* ===== MOBILE ===== */
+@media (max-width: 700px) {
+  .profile-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .unlock-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .unlock-card {
+    padding: 14px;
+  }
+}
+
+/* ===== Game Profile Page ===== */
+
+
+.unlock-section h2 {
+  margin: 0 0 18px;
+  color: #fff;
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.unlock-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.unlock-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 230px;
+  padding: 22px;
+  border-radius: 28px;
+  color: #fff;
+  background:
+    radial-gradient(circle at top right, rgba(147, 197, 253, 0.13), transparent 34%),
+    linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.62));
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow: 0 22px 65px rgba(0, 0, 0, 0.28);
+  transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease, opacity 0.24s ease;
+}
+
+.unlock-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(147, 197, 253, 0.36);
+}
+
+.unlock-card span {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  margin-bottom: 18px;
+  font-size: 1.9rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.unlock-card h3 {
+  margin: 0 0 10px;
+  font-size: 1.12rem;
+}
+
+.unlock-card p {
+  min-height: 66px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.66);
+  line-height: 1.55;
+}
+
+.unlock-card strong {
+  display: inline-flex;
+  margin-top: 16px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  color: #bfdbfe;
+  background: rgba(147, 197, 253, 0.1);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.unlock-card.unlocked {
+  border-color: rgba(34, 197, 94, 0.38);
+  box-shadow: 0 24px 70px rgba(34, 197, 94, 0.12);
+}
+
+.unlock-card.locked {
+  opacity: 0.58;
+  filter: grayscale(0.35);
+}
+
+.unlock-action-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 950;
+  cursor: pointer;
+  background: linear-gradient(135deg, #38bdf8, #8b5cf6);
+}
+
+.unlock-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1050px) {
+  .unlock-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .unlock-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .unlock-card {
+    min-height: auto;
+  }
+}

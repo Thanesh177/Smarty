@@ -15,8 +15,15 @@ export default function LoginPage() {
   if (loading) return <p className="status">Loading...</p>;
   if (user) return <Navigate to="/feed" replace />;
 
-  const handleGoogleLogin = () => {
-    signInWithRedirect({ provider: 'Google' });
+  const handleGoogleLogin = async () => {
+    setError('');
+    setMessage('');
+
+    try {
+      await signInWithRedirect({ provider: 'Google' });
+    } catch (err) {
+      setError(err?.message || 'Google login failed. Please try again in Chrome or Safari.');
+    }
   };
 
   const handleSubmit = async (event) => {

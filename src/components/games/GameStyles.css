@@ -1,0 +1,692 @@
+/* ===== Shared Game Shell ===== */
+.brain-game {
+  width: min(100%, 760px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px;
+  border-radius: 28px;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.12), transparent 34%),
+    radial-gradient(circle at 100% 12%, rgba(139, 92, 246, 0.14), transparent 36%),
+    rgba(15, 23, 42, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.32);
+}
+.sequence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(90px, 1fr));
+  gap: 14px;
+  max-width: 340px;
+  margin: 12px auto;
+}
+
+.sequence-cell {
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.1), transparent 36%),
+    rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.sequence-cell:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sequence-cell.active {
+  background: linear-gradient(135deg, #38bdf8, #8b5cf6);
+  box-shadow: 0 0 30px rgba(56, 189, 248, 0.42);
+  animation: sequencePulse 0.55s ease both;
+}
+
+.market-survival-game {
+  gap: 18px;
+}
+.boss-stage {
+  width: min(100%, 820px);
+  margin: 0 auto;
+  padding: 22px;
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at top, rgba(251, 191, 36, 0.15), transparent 38%),
+    radial-gradient(circle at bottom right, rgba(139, 92, 246, 0.13), transparent 34%),
+    rgba(2, 6, 23, 0.58);
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+}
+
+.boss-header {
+  margin-bottom: 18px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.14);
+}
+
+.boss-header h2 {
+  margin: 0 0 8px;
+  color: #fde68a;
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  letter-spacing: -0.05em;
+}
+
+.boss-stage .brain-game {
+  box-shadow: none;
+}
+.survival-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 15px;
+  border-radius: 18px;
+  color: white;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.18);
+}
+
+.survival-status span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.survival-status strong {
+  color: #fef3c7;
+}
+
+@keyframes sequencePulse {
+  0% {
+    transform: scale(0.94);
+  }
+
+  55% {
+    transform: scale(1.06);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+.serious-game {
+  animation: gameFadeUp 0.35s ease both;
+}
+
+.game-kicker {
+  margin: 0 0 6px;
+  color: rgba(203, 213, 225, 0.72);
+  font-size: 0.74rem;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.brain-game h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(1.65rem, 4vw, 2.4rem);
+  line-height: 1.04;
+  letter-spacing: -0.055em;
+}
+
+.brain-game h3 {
+  margin: 0;
+  color: #e0f2fe;
+  font-size: 1rem;
+}
+
+.game-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.68);
+  line-height: 1.62;
+  font-size: 0.95rem;
+}
+
+.game-feedback {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.8rem;
+}
+
+.decision-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.decision-btn {
+  min-height: 54px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.065);
+  cursor: pointer;
+  font-weight: 900;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.decision-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(147, 197, 253, 0.28);
+}
+
+.decision-btn.selected {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.92), rgba(139, 92, 246, 0.9));
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 14px 34px rgba(56, 189, 248, 0.24);
+}
+
+.decision-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.game-main-btn {
+  min-height: 54px;
+  padding: 13px 18px;
+  border: 0;
+  border-radius: 18px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  cursor: pointer;
+  font-weight: 950;
+  letter-spacing: -0.01em;
+  box-shadow: 0 16px 36px rgba(34, 197, 94, 0.24);
+  transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+}
+
+.game-main-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 44px rgba(34, 197, 94, 0.3);
+}
+
+.game-main-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ===== Match / Pattern Game ===== */
+.match-game {
+  gap: 18px;
+}
+
+.match-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 4px;
+}
+
+.match-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.match-tile {
+  position: relative;
+  min-height: 58px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.1), transparent 36%),
+    rgba(255, 255, 255, 0.06);
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.match-tile:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(147, 197, 253, 0.28);
+}
+
+.match-tile.active {
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  border-color: transparent;
+  box-shadow: 0 10px 24px rgba(56, 189, 248, 0.32);
+}
+
+.match-tile.matched {
+  background: linear-gradient(135deg, #22c55e, #4ade80);
+  border-color: transparent;
+  box-shadow: 0 10px 24px rgba(34, 197, 94, 0.28);
+}
+
+.match-tile:disabled {
+  cursor: not-allowed;
+}
+
+.match-feedback {
+  padding: 12px 14px;
+  border-radius: 16px;
+  color: rgba(255, 255, 255, 0.74);
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(147, 197, 253, 0.14);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* ===== Premium Memory Palace Game ===== */
+.memory-palace-game {
+  gap: 16px;
+}
+
+.memory-game-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.memory-timer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: #fef3c7;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(251, 191, 36, 0.24);
+  font-weight: 950;
+  box-shadow: 0 10px 28px rgba(245, 158, 11, 0.12);
+}
+
+.memory-timer.recall {
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(147, 197, 253, 0.22);
+}
+
+.memory-palace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 12px;
+  margin: 10px 0 4px;
+}
+
+.memory-tile {
+  position: relative;
+  display: grid;
+  min-height: 78px;
+  place-items: center;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  color: #ffffff;
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 36%),
+    rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 900;
+  text-align: center;
+  animation: memoryTileIn 0.32s ease both;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.memory-tile:hover {
+  transform: translateY(-2px);
+  border-color: rgba(147, 197, 253, 0.32);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.memory-tile.study {
+  cursor: default;
+  background:
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.16), transparent 36%),
+    linear-gradient(145deg, rgba(34, 197, 94, 0.12), rgba(56, 189, 248, 0.08));
+  border-color: rgba(34, 197, 94, 0.22);
+}
+
+.memory-tile.selected {
+  border-color: rgba(125, 211, 252, 0.45);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.85), rgba(139, 92, 246, 0.85));
+  box-shadow: 0 14px 34px rgba(56, 189, 248, 0.24);
+}
+
+.memory-tile span {
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== Word Recall / Sequence Shared ===== */
+.word-list,
+.sequence-row,
+.sequence-display,
+.pattern-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.word-chip,
+.sequence-chip,
+.pattern-chip {
+  padding: 10px 12px;
+  border-radius: 14px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 850;
+}
+
+.sequence-chip.active,
+.pattern-chip.active,
+.word-chip.active {
+  background: linear-gradient(135deg, #38bdf8, #8b5cf6);
+  border-color: transparent;
+}
+
+/* ===== Science Lab Game ===== */
+.science-order-box {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.science-order-box span {
+  padding: 12px;
+  border-radius: 14px;
+  color: white;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(147, 197, 253, 0.16);
+}
+
+/* ===== Trading Sim Game ===== */
+.trading-sim-game {
+  gap: 18px;
+}
+
+.trading-sim-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.trade-badge {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.76rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.trade-badge.win {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.13);
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.market-board {
+  padding: 18px;
+  border-radius: 24px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.14), transparent 36%),
+    rgba(2, 6, 23, 0.42);
+  background-size: 42px 42px, 42px 42px, auto, auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.market-header,
+.market-zones {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.market-header strong {
+  color: #93c5fd;
+}
+
+.upgraded-chart,
+.candle-chart {
+  position: relative;
+  height: 170px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin: 10px 0;
+}
+
+.upgraded-chart::before,
+.upgraded-chart::after,
+.candle-chart::before,
+.candle-chart::after {
+  content: "";
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  height: 1px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.14);
+}
+
+.upgraded-chart::before,
+.candle-chart::before {
+  top: 28%;
+}
+
+.upgraded-chart::after,
+.candle-chart::after {
+  bottom: 28%;
+}
+
+.candle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  border-radius: 7px;
+  animation: candlePop 0.45s ease both;
+}
+
+.candle i {
+  position: absolute;
+  width: 2px;
+  height: calc(100% + 26px);
+  border-radius: 99px;
+  opacity: 0.65;
+}
+
+.candle.green {
+  background: linear-gradient(180deg, #86efac, #22c55e);
+  box-shadow: 0 0 22px rgba(34, 197, 94, 0.25);
+}
+
+.candle.red {
+  background: linear-gradient(180deg, #fca5a5, #ef4444);
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.24);
+}
+
+.candle.green i {
+  background: rgba(134, 239, 172, 0.9);
+}
+
+.candle.red i {
+  background: rgba(252, 165, 165, 0.9);
+}
+
+.candle.small {
+  height: 42px;
+}
+
+.candle.medium {
+  height: 72px;
+}
+
+.candle.tall {
+  height: 108px;
+}
+
+.trade-brief {
+  padding: 14px 15px;
+  border-radius: 18px;
+  background: rgba(59, 130, 246, 0.09);
+  border: 1px solid rgba(147, 197, 253, 0.14);
+}
+
+.trade-brief strong {
+  color: #bfdbfe;
+}
+
+.trade-brief p {
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.55;
+}
+
+.trade-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.trade-actions .decision-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trade-actions .decision-btn span {
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+.trade-feedback {
+  padding: 14px 15px;
+  border-radius: 18px;
+  animation: feedbackSlide 0.35s ease both;
+}
+
+.trade-feedback p {
+  margin: 6px 0 0;
+  line-height: 1.55;
+}
+
+.trade-feedback.success {
+  background: rgba(34, 197, 94, 0.11);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.trade-feedback.wrong {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+/* ===== Animations ===== */
+@keyframes gameFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes memoryTileIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes candlePop {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scaleY(0.6);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+@keyframes feedbackSlide {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 700px) {
+  .brain-game {
+    width: 100%;
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .memory-game-top,
+  .trading-sim-top {
+    flex-direction: column;
+  }
+
+  .match-grid,
+  .trade-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .decision-row {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-palace-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .memory-tile {
+    min-height: 68px;
+    padding: 12px;
+    border-radius: 15px;
+    font-size: 0.86rem;
+  }
+
+  .upgraded-chart,
+  .candle-chart {
+    gap: 12px;
+    height: 140px;
+  }
+
+  .candle {
+    width: 14px;
+  }
+}

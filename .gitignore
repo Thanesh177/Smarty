@@ -18,36 +18,26 @@ yarn-error.log*
 
 # ===== AWS / LAMBDA =====
 *.zip
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Python packages (lambda build junk)
-bin/
-lib/
-lib64/
-include/
-*.egg-info/
+func.zip
+function.zip
 
 # ===== FIREBASE / SECRETS =====
-firebase-service-account.json
+google key
+*.json
 serviceAccountKey.json
 *.pem
 *.key
 
-# ===== MAC TRASH / SYSTEM =====
-.Trash/
-.Trashes/
+# ===== ANDROID / BUILD =====
+*.aab
+*.apk
 
-# ===== VSCODE =====
+# ===== IDE =====
 .vscode/
-.history/
+.idea/
 
-# ===== TEST / CACHE =====
-.cache/
-coverage/
-
-# ===== DOCKER =====
-*.tar
-*.gz
+# ===== PYTHON (if used) =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

@@ -5,6 +5,9 @@ import NavbarMenu from './components/NavbarMenu';
 import Booksinfo from './pages/Booksinfo';
 import { notificationApi } from './api/client';
 import { listenForForegroundMessages } from './firebase';
+import QuizPage from "./pages/QuizPage";
+import ProgressPage from "./pages/progress/ProgressPage";
+import GameProfile from "./pages/profile/GameProfile";
 
 const BooksPage = lazy(() => import('./pages/BooksPage'));
 const CommentsPage = lazy(() => import('./pages/CommentsPage'));
@@ -121,7 +124,7 @@ function Layout() {
 
             <Route path="/creator/:userId" element={<CreatorProfilePage />} />
             <Route path="/reel/:reelId" element={<ReelDetailPage />} />
-
+<Route path="/quiz" element={<QuizPage />} />
             <Route
               path="/comments/:reelId"
               element={
@@ -130,6 +133,8 @@ function Layout() {
                 </ProtectedRoute>
               }
             />
+
+<Route path="/game-profile" element={<GameProfile />} />
 
             <Route
               path="/edit/:reelId"
@@ -175,6 +180,8 @@ function Layout() {
                 </ProtectedRoute>
               }
             />
+
+            <Route path="/progress" element={<ProgressPage />} />
 
             <Route
               path="/creator-dashboard"

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import './NavbarMenu.css';
-
 export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
   const [open, setOpen] = useState(false);
 
@@ -41,6 +40,8 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
               <NavLink to="/booksinfo" onClick={closeMenu}>Books</NavLink>
               <NavLink to="/news" onClick={closeMenu}>News</NavLink>
               <NavLink to="/topics" onClick={closeMenu}>Topics</NavLink>
+              <NavLink to="/quiz" onClick={closeMenu}>Quiz</NavLink>
+              
             </div>
 
             <div className="menu-section">
