@@ -1,3 +1,4 @@
+import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
 
 const splitUrls = (value = '') =>
