@@ -87,11 +87,11 @@ export default function ChatPage() {
     connectChatSocket(userId, (data) => {
       if (data.type !== 'newMessage') return;
 
-      const activeChatId = localStorage.getItem('activeChatId');
+      const activeChatId = activeChat?.chatId;
 
       // If message belongs to currently open chat, do not increase unread
       if (data.message.chatId === activeChatId) {
-        // do not increment unread, proceed to messages logic
+        // skip unread increment
       } else {
         // Increment unread count for that chat
         setChats((prev) =>
@@ -132,7 +132,7 @@ export default function ChatPage() {
       localStorage.removeItem('activeChatId');
       disconnectChatSocket();
     };
-  }, [userId]);
+  }, [userId, activeChat?.chatId]);
 
 const scrollMessagesToBottom = () => {
   window.requestAnimationFrame(() => {

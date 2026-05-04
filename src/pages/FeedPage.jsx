@@ -193,10 +193,28 @@ export default function FeedPage() {
     );
   }, [routeFilteredPosts, selectedTopic]);
 
-  const showToast = (message) => {
+  const toastTimerRef = useRef(null);
+
+  const showToast = (message, duration = 1200) => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+
     setToast(message);
-    setTimeout(() => setToast(''), 1800);
+
+    toastTimerRef.current = setTimeout(() => {
+      setToast('');
+      toastTimerRef.current = null;
+    }, duration);
   };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSave = async (postId) => {
     try {

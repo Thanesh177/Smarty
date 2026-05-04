@@ -24,12 +24,14 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
 
           <nav className="menu-panel" aria-label="Main navigation">
             <div className="menu-header">
-              <div>
+              <button
+                type="button"
+                className="menu-brand-refresh"
+                onClick={() => window.location.reload()}
+                aria-label="Refresh Smarty"
+              >
                 <span>Smarty</span>
                 <h3>Navigation</h3>
-              </div>
-              <button type="button" className="menu-close-btn" onClick={closeMenu}>
-                ×
               </button>
             </div>
 
