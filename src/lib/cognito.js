@@ -1,6 +1,17 @@
 import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
 
+const isAndroidApp = () => {
+  const search = window.location.search || '';
+  const userAgent = window.navigator.userAgent || '';
+
+  return (
+    search.includes('platform=android') ||
+    userAgent.includes('wv') ||
+    Boolean(window.AndroidBridge)
+  );
+};
+
 const splitUrls = (value = '') => {
   const urls = value
     .split(',')
@@ -8,31 +19,29 @@ const splitUrls = (value = '') => {
     .filter(Boolean);
 
   const currentOrigin = window.location.origin;
-
-  // ✅ pick URL matching current environment (localhost / amplify)
-  const currentUrl = urls.find((url) => {
-    if (url.startsWith('http')) {
-      try {
-        return new URL(url).origin === currentOrigin;
-      } catch {
-        return false;
-      }
-    }
-    return false;
-  });
-
-  // Android deep link fallback
   const appUrl = urls.find((url) => url.startsWith('smarty://'));
+
+  const currentUrl = urls.find((url) => {
+    if (!url.startsWith('http')) return false;
+
+    try {
+      return new URL(url).origin === currentOrigin;
+    } catch {
+      return false;
+    }
+  });
 
   const ordered = [];
 
-const isAndroidWebView = window.navigator.userAgent.includes('wv');
+  // Android app must use smarty:// first so Cognito returns to the app.
+  if (isAndroidApp() && appUrl) ordered.push(appUrl);
 
-if (isAndroidWebView && appUrl) ordered.push(appUrl);
-if (currentUrl) ordered.push(currentUrl);
-if (!isAndroidWebView && appUrl) ordered.push(appUrl);
+  // Web/local must use the URL matching the current origin.
+  if (currentUrl) ordered.push(currentUrl);
 
-  // add remaining urls (avoid duplicates)
+  // Non-Android can keep app deep link as fallback.
+  if (!isAndroidApp() && appUrl) ordered.push(appUrl);
+
   urls.forEach((url) => {
     if (!ordered.includes(url)) ordered.push(url);
   });
