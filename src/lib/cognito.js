@@ -28,6 +28,23 @@ const redirectSignOut = isAndroidApp()
   ? 'http://localhost:5173/login'
   : 'https://main.d3qiuefonbp8n9.amplifyapp.com/login';
 
+export const isAndroidCognitoLogin = isAndroidApp;
+
+export const startAndroidGoogleLogin = () => {
+  const domain = (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, '');
+  const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
+
+  const query = new URLSearchParams({
+    identity_provider: 'Google',
+    redirect_uri: 'smarty://callback/',
+    response_type: 'code',
+    client_id: clientId,
+    scope: 'openid email profile',
+  });
+
+  window.location.href = `https://${domain}/oauth2/authorize?${query.toString()}`;
+};
+
 console.log('COGNITO REDIRECT IN:', redirectSignIn);
 console.log('COGNITO REDIRECT OUT:', redirectSignOut);
 
