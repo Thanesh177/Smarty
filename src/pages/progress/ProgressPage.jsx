@@ -25,12 +25,22 @@ const handleRemoveMistake = (topicId, item) => {
 };
 
   return (
-    <main className="quiz-page">
+  <main className="quiz-page progress-page">
 
+      <section className="quiz-hero progress-hero">
+        <div>
+          <p className="quiz-kicker">PROGRESS</p>
+          <h1>Your Learning Dashboard</h1>
+          <p>Track your XP growth, identify weak areas, and improve faster.</p>
+        </div>
+      </section>
 
       <section className="progress-dashboard">
-        <div className="analytics-card">
-          <h3>XP Growth</h3>
+        <div className="analytics-card fade-in">
+          <div className="card-header">
+            <h3>XP Growth</h3>
+            <span>Track your progress across topics</span>
+          </div>
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={chartData}>
               <XAxis dataKey="topic" />
@@ -41,11 +51,17 @@ const handleRemoveMistake = (topicId, item) => {
           </ResponsiveContainer>
         </div>
 
-        <div className="analytics-card">
-          <h3>Weak Questions</h3>
+        <div className="analytics-card fade-in">
+          <div className="card-header">
+            <h3>Weak Areas</h3>
+            <span>Review mistakes and improve</span>
+          </div>
 
           {Object.entries(wrong).length === 0 ? (
-            <p>No weak questions saved yet.</p>
+            <div className="empty-state">
+              <h4>No mistakes yet 🎉</h4>
+              <p>You’re doing great. Keep practicing to see insights here.</p>
+            </div>
           ) : (
             Object.entries(wrong).map(([topicId, items]) => {
               const safeItems = Array.isArray(items) ? items.slice(-5) : [];
@@ -71,7 +87,9 @@ const handleRemoveMistake = (topicId, item) => {
   🗑️
 </button>
 
-                      <span className="mistake-label">Mistake Review</span>
+                      <div className="mistake-header">
+                        <span className="mistake-label">Mistake Review</span>
+                      </div>
 
                       <h4>{item.q || item.question || "Saved mistake"}</h4>
 

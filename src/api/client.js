@@ -278,46 +278,88 @@ export const readBooksApi = {
     const {
       search = '',
       q = '',
+      title = '',
       author = '',
       year = '',
       category = '',
+      subject = '',
       page = 1,
-      page_size = 24,
+      page_size = 12,
       limit,
     } = params;
 
-    const rawTerms = [search || q || '', category || '']
-      .map((term) => String(term).trim())
-      .filter(Boolean);
-
-    const uniqueTerms = [...new Set(rawTerms.map((term) => term.toLowerCase()))];
-    const finalQuery = uniqueTerms.join(' ') || 'classic literature';
+    const mainSearch = String(search || q || title || '').trim();
+    const authorSearch = String(author || '').trim();
+    const subjectSearch = String(category || subject || '').trim();
+    const yearSearch = String(year || '').trim();
 
     const queryParams = new URLSearchParams({
       page: String(page),
       limit: String(limit || page_size),
-      fields: 'key,title,author_name,first_publish_year,subject,cover_i',
-      q: finalQuery,
+      fields:
+  'key,title,author_name,first_publish_year,cover_i,edition_key,has_fulltext,ia,ebook_access,public_scan_b',
     });
 
-    if (author) queryParams.set('author', String(author).trim());
-    if (year) queryParams.set('first_publish_year', String(year).trim());
+    if (mainSearch) {
+      queryParams.set('q', mainSearch);
+    } else if (subjectSearch) {
+      queryParams.set('q', subjectSearch);
+    } else {
+      queryParams.set('q', 'classic literature');
+    }
 
-    const { data } = await axios.get(`/openlibrary/search.json?${queryParams.toString()}`, {
-      signal: options.signal,
+    if (authorSearch) queryParams.set('author', authorSearch);
+    if (subjectSearch) queryParams.set('subject', subjectSearch);
+    if (yearSearch) queryParams.set('first_publish_year', yearSearch);
+
+    const { data } = await axios.get(
+      `/openlibrary/search.json?${queryParams.toString()}`,
+      {
+        signal: options.signal,
+        timeout: 20000,
+      }
+    );
+
+    const docs = Array.isArray(data?.docs) ? data.docs : [];
+
+    return docs.map((book) => {
+      const workId = book.key?.replace('/works/', '') || '';
+      const cover = book.cover_i
+        ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg`
+        : '';
+      const editionKey = Array.isArray(book.edition_key) ? book.edition_key[0] : '';
+      const iaId = Array.isArray(book.ia) ? book.ia[0] : '';
+
+      return {
+        id: workId,
+        key: book.key,
+        title: book.title || 'Untitled Book',
+        authors: book.author_name || [],
+        author_name: book.author_name || [],
+        author: Array.isArray(book.author_name) && book.author_name.length
+          ? book.author_name.join(', ')
+          : 'Unknown author',
+        first_publish_year: book.first_publish_year || '',
+        year: book.first_publish_year || '',
+        subjects: book.subject || [],
+        subject: book.subject || [],
+        cover_i: book.cover_i || null,
+        cover,
+        coverUrl: cover,
+        editionKey,
+        ia: iaId,
+        hasFullText: Boolean(book.has_fulltext),
+        ebookAccess: book.ebook_access || '',
+        publicScan: Boolean(book.public_scan_b),
+        language: book.language || [],
+readable: Boolean(
+  iaId &&
+  (book.ebook_access === 'public' || book.public_scan_b === true)
+),
+        openLibraryUrl: workId ? `https://openlibrary.org/works/${workId}` : '',
+        previewUrl: workId ? `https://openlibrary.org/works/${workId}` : '',
+      };
     });
-
-    return (data.docs || []).map((book) => ({
-      id: book.key?.replace('/works/', ''),
-      title: book.title || 'Untitled Book',
-      authors: book.author_name || [],
-      author_name: book.author_name || [],
-      author: Array.isArray(book.author_name) ? book.author_name.join(', ') : 'Unknown author',
-      first_publish_year: book.first_publish_year,
-      year: book.first_publish_year,
-      subjects: book.subject || [],
-      cover_i: book.cover_i,
-    }));
   },
 
   async searchBooks(search, params = {}, options = {}) {
@@ -346,23 +388,165 @@ export const readBooksApi = {
   },
 
   async getBookById(id) {
-    const { data } = await axios.get(`/openlibrary/works/${encodeURIComponent(id)}.json`);
+    const bookId = String(id || '').trim();
+
+    if (!bookId) {
+      throw new Error('Book ID is missing.');
+    }
+
+    const { data } = await axios.get(
+      `/openlibrary/works/${encodeURIComponent(bookId)}.json`,
+      { timeout: 20000 }
+    );
+
     return data;
   },
 
-  async getBookText(id) {
-    const { data } = await api.get(`/books/${encodeURIComponent(id)}/text`);
+  async getTextFromGutenberg(gutenbergId) {
+    const bookId = String(gutenbergId || '').trim();
+
+    if (!bookId) {
+      throw new Error('Gutenberg book ID is missing.');
+    }
+
+    let data;
+
+    try {
+      const response = await api.get(`/books/${encodeURIComponent(bookId)}/text`);
+      data = response.data;
+    } catch (error) {
+      throw new Error(
+        error.response?.data?.message ||
+          'Readable text is not available for this Gutenberg book.'
+      );
+    }
 
     if (typeof data?.body === 'string') {
       try {
         const parsed = JSON.parse(data.body);
+
+        if (!parsed?.success || (!parsed.text && !parsed.content)) {
+          throw new Error(parsed?.message || 'Readable text is not available for this book.');
+        }
+
         return parsed.text || parsed.content || '';
-      } catch {
-        return '';
+      } catch (error) {
+        throw new Error(error.message || 'Readable text is not available for this book.');
       }
     }
 
+    if (!data?.success || (!data.text && !data.content)) {
+      throw new Error(data?.message || 'Readable text is not available for this book.');
+    }
+
     return data.text || data.content || '';
+  },
+
+  async getTextFromInternetArchive(iaId) {
+    const archiveId = String(iaId || '').trim();
+
+    if (!archiveId) {
+      throw new Error('Internet Archive ID is missing.');
+    }
+
+    let data;
+
+    try {
+      const response = await api.get(`/books/${encodeURIComponent(archiveId)}/text`);
+      data = response.data;
+    } catch (error) {
+      throw new Error(
+        error.response?.data?.message ||
+          'Readable Internet Archive text is not available.'
+      );
+    }
+
+    if (typeof data?.body === 'string') {
+      try {
+        const parsed = JSON.parse(data.body);
+
+        if (!parsed?.success || !parsed.text) {
+          throw new Error(parsed?.message || 'Readable Internet Archive text is not available.');
+        }
+
+        return parsed.text;
+      } catch (error) {
+        throw new Error(error.message || 'Readable Internet Archive text is not available.');
+      }
+    }
+
+    if (!data?.success || !data.text) {
+      throw new Error(data?.message || 'Readable Internet Archive text is not available.');
+    }
+
+    return data.text;
+  },
+
+  async getTextFromOpenLibraryWork(workId) {
+    const cleanWorkId = String(workId || '').trim();
+
+    if (!cleanWorkId) {
+      throw new Error('OpenLibrary work ID is missing.');
+    }
+
+    const { data } = await axios.get(
+      `/openlibrary/works/${encodeURIComponent(cleanWorkId)}/editions.json?limit=50`,
+      { timeout: 20000 }
+    );
+
+    const editions = Array.isArray(data?.entries) ? data.entries : [];
+
+    for (const edition of editions) {
+      const iaId =
+        edition.ocaid ||
+        edition.ia?.[0] ||
+        edition.identifiers?.ia?.[0] ||
+        edition.source_records?.find((record) => String(record).startsWith('ia:'))?.replace('ia:', '') ||
+        '';
+
+      if (iaId) {
+        try {
+          return await this.getTextFromInternetArchive(iaId);
+        } catch (error) {
+          console.info('Internet Archive source unavailable:', error.message);
+        }
+      }
+
+      const gutenbergId =
+        edition.identifiers?.gutenberg?.[0] ||
+        edition.identifiers?.project_gutenberg?.[0] ||
+        '';
+
+      if (gutenbergId) {
+        try {
+          return await this.getTextFromGutenberg(gutenbergId);
+        } catch (error) {
+          console.info('Gutenberg source unavailable:', error.message);
+        }
+      }
+    }
+
+    throw new Error(
+      'Readable text is not available for this OpenLibrary work. View preview on OpenLibrary.'
+    );
+  },
+
+  async getBookText(id) {
+    const bookId = String(id || '').trim();
+
+    if (!bookId) {
+      throw new Error('Book ID is missing.');
+    }
+
+    if (bookId.startsWith('OL') && bookId.endsWith('W')) {
+      return this.getTextFromOpenLibraryWork(bookId);
+    }
+
+    if (/^\d+$/.test(bookId)) {
+      return this.getTextFromGutenberg(bookId);
+    }
+
+    return this.getTextFromInternetArchive(bookId);
   },
 };
 

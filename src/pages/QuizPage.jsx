@@ -9,6 +9,8 @@ import AchievementToast from "../components/achievements/AchievementToast";
 import useSoundFeedback from "../components/audio/useSoundFeedback";
 import XPOrb from "../components/ui/XPOrb";
 
+
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const TOPICS = [
 
@@ -370,6 +372,7 @@ function getTotalXP(progressMap) {
 
 
 export default function QuizPage() {
+const [comboCount, setComboCount] = useState(1);
   const survivalMode = localStorage.getItem("smarty-game-mode") === "survival";
 const SURVIVAL_TIME = 12;
 const [survivalTimeLeft, setSurvivalTimeLeft] = useState(SURVIVAL_TIME);
@@ -377,6 +380,14 @@ const [newAchievements, setNewAchievements] = useState([]);
 const sounds = useSoundFeedback();
 const [bossMode, setBossMode] = useState(false);
 const [xpGained, setXpGained] = useState(0);
+
+const showXPGain = (xp) => {
+  setXpGained(0);
+  requestAnimationFrame(() => {
+    setXpGained(xp);
+  });
+};
+
   const [topic, setTopic] = useState(null);
 
   const [index, setIndex] = useState(0);
@@ -565,6 +576,8 @@ if (bossPractice) {
 
     setXpGained(0);
 
+    setComboCount(1);
+
     loadAIQuestions(item.id);
 
   };
@@ -703,11 +716,13 @@ const submitAnswer = () => {
 
   const isCorrect = selected === current.answer;
 
-  if (isCorrect) {
+if (isCorrect) {
   sounds.correct();
-  setXpGained(10);
+  setComboCount((prev) => prev + 1);
+  showXPGain(10);
 } else {
   sounds.wrong();
+  setComboCount(1);
   setXpGained(0);
 }
 
@@ -769,6 +784,7 @@ const restart = () => {
   setSaveError("");
   setLocked(false);
   setXpGained(0);
+  setComboCount(1);
 };
 
   const finalScore = score;
@@ -795,12 +811,14 @@ if (topic && bossMode && !finished) {
           topicId={topic.id}
           onComplete={(result) => {
             if (result.success) {
-                sounds.correct();
-                setXpGained(10);
-                } else {
-                sounds.wrong();
-                setXpGained(0);
-                }
+  sounds.correct();
+  setComboCount((prev) => prev + 1);
+  showXPGain(10);
+} else {
+  sounds.wrong();
+  setComboCount(1);
+  setXpGained(0);
+}
 
             const bossScore = result.success ? score + 2 : score;
 
@@ -830,7 +848,7 @@ if (topic && bossMode && !finished) {
       </section>
 
       <AchievementToast achievements={newAchievements} />
-      <XPOrb xp={xpGained} />
+<XPOrb xp={xpGained} combo={comboCount} />
     </main>
   );
 }
@@ -860,7 +878,7 @@ if (topic && bossMode && !finished) {
           </div>
         </section>
         <AchievementToast achievements={newAchievements} />
-        <XPOrb xp={xpGained} />
+<XPOrb xp={xpGained} combo={comboCount} />
       </main>
     );
   }
@@ -991,7 +1009,7 @@ startQuiz(item);
 
         </section>
 <AchievementToast achievements={newAchievements} />
-<XPOrb xp={xpGained} />
+<XPOrb xp={xpGained} combo={comboCount} />
       </main>
 
     );
@@ -1132,7 +1150,7 @@ startQuiz(item);
 
         </section>
 <AchievementToast achievements={newAchievements} />
-<XPOrb xp={xpGained} />
+<XPOrb xp={xpGained} combo={comboCount} />
       </main>
 
     );
@@ -1170,11 +1188,13 @@ startQuiz(item);
           game={current}
           topicId={topic.id}
           onComplete={(result) => {
-            if (result.success) {
+if (result.success) {
   sounds.correct();
-  setXpGained(10);
+  setComboCount((prev) => prev + 1);
+  showXPGain(10);
 } else {
   sounds.wrong();
+  setComboCount(1);
   setXpGained(0);
 }
             const nextScore = score + (result.success ? 1 : 0);
@@ -1205,7 +1225,7 @@ startQuiz(item);
         />
       </section>
       <AchievementToast achievements={newAchievements} />
-      <XPOrb xp={xpGained} />
+<XPOrb xp={xpGained} combo={comboCount} />
     </main>
   );
 }
@@ -1287,7 +1307,7 @@ startQuiz(item);
 
       </section>
 <AchievementToast achievements={newAchievements} />
-<XPOrb xp={xpGained} />
+<XPOrb xp={xpGained} combo={comboCount} />
     </main>
 
   );

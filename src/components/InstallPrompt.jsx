@@ -8,7 +8,6 @@ export default function InstallPrompt() {
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    // TEMP TESTING: comment this line while testing
     if (localStorage.getItem(STORAGE_KEY) === "true") return;
 
     const ua = navigator.userAgent.toLowerCase();
@@ -18,20 +17,21 @@ export default function InstallPrompt() {
       window.navigator.standalone === true ||
       window.matchMedia("(display-mode: standalone)").matches;
 
-    if (iosDevice && !isStandalone) {
-      setIsIOS(true);
-    }
+    if (isStandalone) return;
+
+    setIsIOS(iosDevice);
 
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      setShow(true);
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     const timer = setTimeout(() => {
-      if (!isStandalone) setShow(true);
-    }, 1000);
+      if (iosDevice) setShow(true);
+    }, 1200);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -39,15 +39,31 @@ export default function InstallPrompt() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleInstalled = () => {
+      localStorage.setItem(STORAGE_KEY, "true");
+      setShow(false);
+    };
+
+    window.addEventListener("appinstalled", handleInstalled);
+
+    return () => {
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
+
   const installApp = async () => {
-   if (!deferredPrompt) return;
+    if (!deferredPrompt) return;
 
     deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
+    const choice = await deferredPrompt.userChoice;
 
-    localStorage.setItem(STORAGE_KEY, "true");
+    if (choice.outcome === "accepted") {
+      localStorage.setItem(STORAGE_KEY, "true");
+      setShow(false);
+    }
+
     setDeferredPrompt(null);
-    setShow(false);
   };
 
   const closePopup = () => {
@@ -63,22 +79,20 @@ export default function InstallPrompt() {
         <p>{isIOS ? "Install Smarty" : "Install Smarty App"}</p>
         <p>
           {isIOS
-            ? "Tap Share → Add to Home Screen"
+            ? "Tap the Share button at the bottom, then choose Add to Home Screen."
             : "Add Smarty to your home screen for a faster app experience."}
         </p>
       </div>
 
-{!isIOS && deferredPrompt && (
-  <button type="button" onClick={installApp}>
-    Install
-  </button>
-)}
+      {!isIOS && deferredPrompt && (
+        <button type="button" onClick={installApp}>
+          Install
+        </button>
+      )}
 
-{!isIOS && !deferredPrompt && (
-  <p style={{ fontSize: "0.8rem", opacity: 0.7 }}>
-    Use browser menu → Install app
-  </p>
-)}
+      {!isIOS && !deferredPrompt && (
+        <p className="install-hint">Use browser menu → Install app</p>
+      )}
 
       <button type="button" onClick={closePopup}>
         Close

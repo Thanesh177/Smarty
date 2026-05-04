@@ -2,9 +2,8 @@
   min-height: 100vh;
   padding: 34px 24px 80px;
   background:
-    radial-gradient(circle at top left, rgba(59,130,246,.08), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(20,184,166,.08), transparent 34%),
-    #07111f;
+    radial-gradient(circle at top left, rgba(148,163,184,0.08), transparent 32%),
+    #020617;
   color: white;
 }
 
@@ -54,9 +53,12 @@
 
 .saved-summary {
   min-width: 170px;
-  padding: 22px;
-  background: rgba(255,255,255,.055);
+  padding: 20px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.08);
   text-align: center;
+  backdrop-filter: blur(12px);
 }
 
 .saved-summary strong {
@@ -105,8 +107,8 @@
 
 .saved-topics button.active,
 .saved-topics button:hover {
-  background: #a7f3d0;
-  color: #07111f;
+  background: #f8fafc;
+  color: #020617;
 }
 
 .saved-content {
@@ -130,17 +132,21 @@
 }
 
 .saved-card {
-  background: rgba(255,255,255,.055);
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 22px;
   overflow: hidden;
   display: grid;
   grid-template-columns: 140px 1fr;
   min-height: 220px;
-  transition: transform .2s ease, background .2s ease;
+  box-shadow: 0 16px 40px rgba(0,0,0,.28);
+  transition: all 0.22s ease;
 }
 
 .saved-card:hover {
-  transform: translateY(-3px);
-  background: rgba(255,255,255,.075);
+  transform: translateY(-4px);
+  box-shadow: 0 26px 60px rgba(0,0,0,.4);
+  border-color: rgba(255,255,255,.14);
 }
 
 .saved-card-media {
@@ -158,6 +164,16 @@
   height: 100%;
   min-height: 220px;
   object-fit: cover;
+}
+
+.saved-card-media img,
+.saved-card-media video {
+  transition: transform 0.35s ease;
+}
+
+.saved-card:hover .saved-card-media img,
+.saved-card:hover .saved-card-media video {
+  transform: scale(1.05);
 }
 
 .saved-placeholder {
@@ -189,7 +205,7 @@
 }
 
 .saved-title-btn:hover {
-  color: #a7f3d0;
+  color: #e2e8f0;
 }
 
 .saved-card-body p {
@@ -213,17 +229,20 @@
 }
 
 .saved-card-actions button {
-  border: 0;
-  cursor: pointer;
-  padding: 10px 12px;
-  background: rgba(255,255,255,.08);
-  color: white;
+  border-radius: 999px;
+  padding: 9px 14px;
   font-weight: 800;
+  cursor: pointer;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.08);
+  color: #e5e7eb;
+  transition: all 0.18s ease;
 }
 
 .saved-card-actions button:hover {
-  background: #a7f3d0;
-  color: #07111f;
+  transform: translateY(-2px);
+  background: #f8fafc;
+  color: #020617;
 }
 
 .saved-toast {

@@ -150,6 +150,7 @@ useEffect(() => {
               <Route path="/topics" element={<TopicsPage />} />
               <Route path="/news" element={<NewsPage />} />
               <Route path="/read-books" element={<ReadBookPage />} />
+              <Route path="/preview-books" element={<ReadBookPage />} />
               <Route path="/read-book/:bookId" element={<BookReaderPage />} />
 
               <Route path="/login" element={<LoginPage />} />

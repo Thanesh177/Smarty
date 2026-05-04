@@ -8,7 +8,6 @@ export default defineConfig({
 
     VitePWA({
       registerType: 'autoUpdate',
-
       includeAssets: ['icon-192.png', 'icon-512.png'],
 
       manifest: {
@@ -25,16 +24,16 @@ export default defineConfig({
           {
             src: '/icon-192.png',
             sizes: '192x192',
-            type: 'image/png'
+            type: 'image/png',
           },
           {
             src: '/icon-512.png',
             sizes: '512x512',
-            type: 'image/png'
-          }
-        ]
-      }
-    })
+            type: 'image/png',
+          },
+        ],
+      },
+    }),
   ],
 
   server: {
@@ -44,10 +43,20 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/bbc-api/, ''),
       },
+
       '/openlibrary': {
         target: 'https://openlibrary.org',
         changeOrigin: true,
+        secure: true,
+        ws: false,
+        timeout: 30000,
+        proxyTimeout: 30000,
         rewrite: (path) => path.replace(/^\/openlibrary/, ''),
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            console.log('OpenLibrary proxy error:', err.message);
+          });
+        },
       },
     },
   },

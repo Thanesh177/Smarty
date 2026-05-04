@@ -1,116 +1,442 @@
-/* ===== HERO ===== */
-.game-profile-hero {
-  align-items: center;
+/* =========================
+   GAME PROFILE PAGE
+   Matches QuizPage vibe
+========================= */
+
+.quiz-page {
+  width: min(1600px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 5rem clamp(16px, 4vw, 56px) 5rem;
+  color: #fff;
+}
+
+.quiz-kicker {
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #67e8f9;
+}
+
+/* =========================
+   HERO
+========================= */
+
+.quiz-hero.game-profile-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: stretch;
+  gap: 22px;
+  padding: 30px;
+  border-radius: 34px;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.22), transparent 34%),
+    radial-gradient(circle at 88% 8%, rgba(139, 92, 246, 0.2), transparent 34%),
+    linear-gradient(145deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.88));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.quiz-hero.game-profile-hero::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(120deg, transparent, rgba(56, 189, 248, 0.24), transparent);
+  transform: translateX(-100%);
+  animation: heroShimmer 5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.quiz-hero.game-profile-hero::after {
+  content: "";
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  right: -90px;
+  bottom: -100px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(34, 197, 94, 0.2), transparent 68%);
+  filter: blur(2px);
+  animation: softFloat 5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.quiz-hero.game-profile-hero > div {
+  position: relative;
+  z-index: 1;
+}
+
+.quiz-hero.game-profile-hero h1 {
+  margin: 0;
+  max-width: 760px;
+  font-size: clamp(2.35rem, 5vw, 5.2rem);
+  line-height: 0.92;
+  letter-spacing: -0.075em;
+  color: #fff;
+  text-shadow: 0 18px 45px rgba(0, 0, 0, 0.38);
+}
+
+.quiz-hero.game-profile-hero p:not(.quiz-kicker) {
+  max-width: 680px;
+  margin: 18px 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 1rem;
+  line-height: 1.7;
 }
 
 .game-profile-stat-card {
-  min-width: 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 24px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top, rgba(34, 197, 94, 0.17), transparent 42%),
+    linear-gradient(145deg, rgba(15, 23, 42, 0.82), rgba(2, 6, 23, 0.62));
+  border: 1px solid rgba(34, 197, 94, 0.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 22px 50px rgba(0, 0, 0, 0.28);
 }
 
+.game-profile-stat-card h3 {
+  margin: 0;
+  font-size: 2.25rem;
+  letter-spacing: -0.055em;
+}
+
+.game-profile-stat-card p {
+  margin: 8px 0 0 !important;
+  font-size: 0.88rem !important;
+  color: rgba(255, 255, 255, 0.68) !important;
+}
+
+/* =========================
+   ANIMATED XP BAR
+========================= */
+
 .profile-level-track {
-  margin-top: 10px;
-  height: 8px;
+  margin-top: 16px;
+  height: 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.35);
 }
 
 .profile-level-fill {
   height: 100%;
-  background: linear-gradient(90deg, #38bdf8, #22c55e);
   border-radius: 999px;
-  transition: width 0.4s ease;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, #38bdf8, #22c55e, #a3e635);
+  box-shadow: 0 0 22px rgba(34, 197, 94, 0.55);
+  animation: xpPulse 1.7s ease-in-out infinite;
+  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* ===== OVERVIEW ===== */
+.profile-level-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.52) 35%, transparent 70%);
+  animation: xpShine 1.6s linear infinite;
+}
+
+/* =========================
+   OVERVIEW CARDS
+========================= */
+
 .profile-overview-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin: 20px auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin: 24px auto;
 }
 
 .profile-overview-card {
-  padding: 16px;
-  border-radius: 20px;
+  position: relative;
+  overflow: hidden;
+  min-height: 142px;
+  padding: 22px;
+  border-radius: 28px;
   text-align: center;
+  color: #fff;
   background:
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.12), transparent 40%),
-    rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.16), transparent 42%),
+    linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(2, 6, 23, 0.7));
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+  transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
+}
+
+.profile-overview-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.18), transparent 42%);
+  transition: opacity 0.24s ease;
+}
+
+.profile-overview-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(56, 189, 248, 0.34);
+  box-shadow: 0 22px 60px rgba(56, 189, 248, 0.1);
+}
+
+.profile-overview-card:hover::before {
+  opacity: 1;
+}
+
+.profile-overview-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .profile-overview-card span {
-  font-size: 1.6rem;
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 10px;
+  display: grid;
+  place-items: center;
+  border-radius: 19px;
+  font-size: 1.7rem;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .profile-overview-card strong {
   display: block;
+  margin-top: 8px;
   font-size: 1.2rem;
-  margin-top: 6px;
+  color: #fff;
 }
 
 .profile-overview-card p {
-  font-size: 0.8rem;
-  opacity: 0.7;
+  margin: 8px 0 0;
+  font-size: 0.83rem;
+  color: rgba(255, 255, 255, 0.64);
 }
 
-/* ===== UNLOCK SECTION ===== */
+/* =========================
+   SECTIONS
+========================= */
+
 .unlock-section {
-  margin: 30px auto;
+  margin: 42px auto;
 }
 
 .section-heading-row {
-  margin-bottom: 14px;
+  margin-bottom: 18px;
 }
 
-/* ===== GRID ===== */
+.unlock-section h2 {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(1.45rem, 3vw, 2.15rem);
+  letter-spacing: -0.05em;
+}
+
+/* =========================
+   UNLOCK GRID + GLOW CARDS
+========================= */
+
 .unlock-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
 }
 
-/* ===== CARD ===== */
 .unlock-card {
-  padding: 18px;
-  border-radius: 22px;
+  position: relative;
+  overflow: hidden;
+  min-height: 250px;
+  padding: 22px;
+  border-radius: 30px;
+  color: #fff;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: 0.25s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-/* unlocked */
-.unlock-card.unlocked {
   background:
-    radial-gradient(circle at top, rgba(34, 197, 94, 0.15), transparent 40%),
-    rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(34, 197, 94, 0.3);
+    radial-gradient(circle at top right, rgba(147, 197, 253, 0.13), transparent 34%),
+    linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.62));
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  box-shadow: 0 22px 65px rgba(0, 0, 0, 0.28);
+  transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease, opacity 0.24s ease, filter 0.24s ease;
 }
 
-/* locked */
+.unlock-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(56, 189, 248, 0.32), transparent 34%),
+    radial-gradient(circle at 90% 20%, rgba(139, 92, 246, 0.26), transparent 34%);
+  transition: opacity 0.24s ease;
+  pointer-events: none;
+}
+
+.unlock-card::after {
+  content: "";
+  position: absolute;
+  inset: -80px;
+  background: conic-gradient(from 180deg, transparent, rgba(56, 189, 248, 0.18), transparent, rgba(34, 197, 94, 0.18), transparent);
+  opacity: 0;
+  animation: cardGlowSpin 6s linear infinite;
+  pointer-events: none;
+}
+
+.unlock-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(147, 197, 253, 0.36);
+}
+
+.unlock-card:hover::before,
+.unlock-card.unlocked::after {
+  opacity: 1;
+}
+
+.unlock-card.unlocked {
+  border-color: rgba(34, 197, 94, 0.42);
+  box-shadow:
+    0 24px 70px rgba(34, 197, 94, 0.13),
+    0 0 0 1px rgba(34, 197, 94, 0.08);
+}
+
 .unlock-card.locked {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  opacity: 0.75;
+  opacity: 0.62;
+  filter: grayscale(0.32);
 }
 
-/* hover */
-.unlock-card.unlocked:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 16px 40px rgba(34, 197, 94, 0.15);
+.unlock-card.locked:hover {
+  opacity: 0.76;
+  filter: grayscale(0.18);
 }
 
-/* ===== TOP ===== */
+.unlock-card > * {
+  position: relative;
+  z-index: 1;
+}
+
 .unlock-card-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-/* ===== MEMORY GAME PREMIUM ===== */
+
+.unlock-card-top span {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 19px;
+  margin: 0;
+  font-size: 1.9rem;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.unlock-card.unlocked .unlock-card-top span {
+  animation: iconPulse 1.8s ease-in-out infinite;
+  box-shadow:
+    0 0 22px rgba(34, 197, 94, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.unlock-card-top small {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.64rem;
+  font-weight: 950;
+  color: rgba(255, 255, 255, 0.68);
+  background: rgba(255, 255, 255, 0.07);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.unlock-card h3 {
+  margin: 18px 0 6px;
+  font-size: 1.12rem;
+  letter-spacing: -0.025em;
+}
+
+.unlock-card p {
+  min-height: 66px;
+  margin: 0;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.unlock-status {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 10px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  color: #bfdbfe;
+  background: rgba(147, 197, 253, 0.1);
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.unlock-card.unlocked .unlock-status {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.unlock-action-btn {
+  width: 100%;
+  margin-top: auto;
+  padding: 13px 16px;
+  border: 0;
+  border-radius: 999px;
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  font-weight: 950;
+  cursor: pointer;
+  background: linear-gradient(135deg, #38bdf8, #8b5cf6);
+  box-shadow: 0 14px 34px rgba(56, 189, 248, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.unlock-action-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.32), transparent);
+  transform: translateX(-120%);
+  transition: transform 0.4s ease;
+}
+
+.unlock-action-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 44px rgba(139, 92, 246, 0.28);
+}
+
+.unlock-action-btn:not(:disabled):hover::after {
+  transform: translateX(120%);
+}
+
+.unlock-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* =========================
+   MEMORY GAME CSS
+========================= */
 
 .memory-palace-grid {
   display: grid;
@@ -127,35 +453,92 @@
   font-size: 0.9rem;
   text-align: center;
   cursor: pointer;
-
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
-
   transition: all 0.2s ease;
+  animation: tileFadeIn 0.3s ease;
 }
 
-/* Hover effect */
 .memory-tile:hover {
   transform: translateY(-2px);
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* Selected state (IMPORTANT) */
 .memory-tile.selected {
   background: linear-gradient(135deg, #38bdf8, #8b5cf6);
   border-color: transparent;
   box-shadow: 0 6px 18px rgba(56, 189, 248, 0.4);
 }
 
-/* Study mode tiles */
 .memory-tile.study {
-  background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(56,189,248,0.15));
-  border: 1px solid rgba(34,197,94,0.25);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(56, 189, 248, 0.15));
+  border: 1px solid rgba(34, 197, 94, 0.25);
 }
 
-/* Animation */
-.memory-tile {
-  animation: tileFadeIn 0.3s ease;
+/* =========================
+   ANIMATIONS
+========================= */
+
+@keyframes heroShimmer {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 1;
+  }
+  70% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes softFloat {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.72;
+  }
+  50% {
+    transform: translateY(-18px) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes xpPulse {
+  0%, 100% {
+    box-shadow: 0 0 16px rgba(34, 197, 94, 0.38);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(56, 189, 248, 0.65);
+  }
+}
+
+@keyframes xpShine {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes cardGlowSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes iconPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
 }
 
 @keyframes tileFadeIn {
@@ -168,210 +551,104 @@
     transform: translateY(0);
   }
 }
-.unlock-card-top span {
-  font-size: 1.6rem;
-}
 
-.unlock-card-top small {
-  font-size: 0.65rem;
-  opacity: 0.6;
-  text-transform: uppercase;
-}
+/* =========================
+   MOBILE
+========================= */
 
-/* ===== TEXT ===== */
-.unlock-card h3 {
-  font-size: 1rem;
-  margin: 0;
-}
-
-.unlock-card p {
-  padding: 0;
-  font-size: 0.8rem;
-  opacity: 0.7;
-}
-
-/* ===== REWARD ===== */
-.unlock-reward {
-  margin-top: 1rem;
-}
-
-.unlock-reward span {
-  font-size: 0.65rem;
-  opacity: 0.6;
-}
-
-.unlock-reward strong {
-  display: block;
-  font-size: 0.85rem;
-}
-
-/* ===== PROGRESS BAR ===== */
-.unlock-mini-track {
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-  margin-top: 6px;
-}
-
-.unlock-mini-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #38bdf8, #6366f1);
-  border-radius: 999px;
-}
-
-/* ===== STATUS ===== */
-.unlock-status {
-  font-size: 0.75rem;
-  opacity: 0.7;
-}
-
-/* ===== BUTTON ===== */
-.unlock-action-btn {
-  margin-top: auto;
-  padding: 10px;
-  border-radius: 14px;
-  border: none;
-  font-weight: 700;
-  cursor: pointer;
-  transition: 0.2s ease;
-  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
-  color: white;
-}
-
-.unlock-action-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.unlock-action-btn:not(:disabled):hover {
-  transform: translateY(-2px);
-}
-
-/* ===== MOBILE ===== */
-@media (max-width: 700px) {
-  .profile-overview-grid {
-    grid-template-columns: 1fr;
-  }
-
+@media (max-width: 1150px) {
   .unlock-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 950px) {
+  .quiz-hero.game-profile-hero {
     grid-template-columns: 1fr;
   }
 
-  .unlock-card {
-    padding: 14px;
-  }
-}
-
-/* ===== Game Profile Page ===== */
-
-
-.unlock-section h2 {
-  margin: 0 0 18px;
-  color: #fff;
-  font-size: clamp(1.35rem, 3vw, 2rem);
-  letter-spacing: -0.04em;
-}
-
-.unlock-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.unlock-card {
-  position: relative;
-  overflow: hidden;
-  min-height: 230px;
-  padding: 22px;
-  border-radius: 28px;
-  color: #fff;
-  background:
-    radial-gradient(circle at top right, rgba(147, 197, 253, 0.13), transparent 34%),
-    linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.62));
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  box-shadow: 0 22px 65px rgba(0, 0, 0, 0.28);
-  transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease, opacity 0.24s ease;
-}
-
-.unlock-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(147, 197, 253, 0.36);
-}
-
-.unlock-card span {
-  width: 52px;
-  height: 52px;
-  display: grid;
-  place-items: center;
-  border-radius: 18px;
-  margin-bottom: 18px;
-  font-size: 1.9rem;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.unlock-card h3 {
-  margin: 0 0 10px;
-  font-size: 1.12rem;
-}
-
-.unlock-card p {
-  min-height: 66px;
-  margin: 0;
-  color: rgba(255, 255, 255, 0.66);
-  line-height: 1.55;
-}
-
-.unlock-card strong {
-  display: inline-flex;
-  margin-top: 16px;
-  padding: 7px 11px;
-  border-radius: 999px;
-  color: #bfdbfe;
-  background: rgba(147, 197, 253, 0.1);
-  font-size: 0.78rem;
-  font-weight: 950;
-}
-
-.unlock-card.unlocked {
-  border-color: rgba(34, 197, 94, 0.38);
-  box-shadow: 0 24px 70px rgba(34, 197, 94, 0.12);
-}
-
-.unlock-card.locked {
-  opacity: 0.58;
-  filter: grayscale(0.35);
-}
-
-.unlock-action-btn {
-  width: 100%;
-  margin-top: 16px;
-  padding: 12px 16px;
-  border: 0;
-  border-radius: 999px;
-  color: #fff;
-  font-weight: 950;
-  cursor: pointer;
-  background: linear-gradient(135deg, #38bdf8, #8b5cf6);
-}
-
-.unlock-action-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-@media (max-width: 1050px) {
+  .profile-overview-grid,
   .unlock-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 760px) {
+  .quiz-page {
+    width: min(100% - 24px, 1180px);
+    padding: 5.75rem 12px 2.8rem;
+  }
+
+  .quiz-hero.game-profile-hero {
+    padding: 22px;
+    border-radius: 28px;
+  }
+
+  .quiz-hero.game-profile-hero h1 {
+    font-size: 2.45rem;
+  }
+
+  .game-profile-stat-card {
+    width: 100%;
+  }
+
+  .profile-overview-grid {
+    grid-template-columns: repeat(3, minmax(112px, 1fr));
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .profile-overview-card {
+    min-width: 112px;
+    min-height: 120px;
+    padding: 14px 10px;
+    border-radius: 22px;
+    scroll-snap-align: start;
+  }
+
+  .profile-overview-card span {
+    width: 42px;
+    height: 42px;
+    border-radius: 15px;
+    font-size: 1.35rem;
+  }
+
+  .profile-overview-card strong {
+    font-size: 0.95rem;
+  }
+
+  .profile-overview-card p {
+    font-size: 0.72rem;
+  }
+
   .unlock-grid {
     grid-template-columns: 1fr;
   }
 
   .unlock-card {
     min-height: auto;
+    padding: 18px;
+    border-radius: 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quiz-hero.game-profile-hero::before,
+  .quiz-hero.game-profile-hero::after,
+  .profile-level-fill,
+  .profile-level-fill::after,
+  .unlock-card::after,
+  .unlock-card.unlocked .unlock-card-top span,
+  .memory-tile {
+    animation: none;
+  }
+
+  .unlock-card,
+  .profile-overview-card,
+  .unlock-action-btn {
+    transition: none;
   }
 }

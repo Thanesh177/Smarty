@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { readBooksApi } from '../api/client';
 import './ReadBookPage.css';
 
@@ -100,12 +100,38 @@ function saveSavedBooks(books) {
   localStorage.setItem('saved_read_books', JSON.stringify(books));
 }
 
+function getBookCover(book) {
+  return book.cover || book.coverUrl || (book.cover_i ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg` : '');
+}
+
+function isBookReadable(book) {
+  return Boolean(book.readable || book.gutenberg_id || book.book_id);
+}
+
+function matchesAccessFilter(book, filter) {
+  if (filter === 'read') return isBookReadable(book);
+  if (filter === 'preview') return !isBookReadable(book);
+  return true;
+}
+
+function getBookPreviewUrl(book) {
+  const id = getBookId(book);
+  return book.previewUrl || book.openLibraryUrl || (id ? `https://openlibrary.org/works/${id}` : 'https://openlibrary.org');
+}
+
+function getReadBookId(book) {
+  return book.gutenberg_id || book.book_id || book.ia || getBookId(book);
+}
+
 export default function ReadBookPage() {
+  const location = useLocation();
+  const isPreviewPage = location.pathname === '/preview-books';
   const [rows, setRows] = useState({});
   const [query, setQuery] = useState('');
   const [authorFilter, setAuthorFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [accessFilter, setAccessFilter] = useState(isPreviewPage ? 'preview' : 'read');
   const [searchResults, setSearchResults] = useState([]);
   const [searchPage, setSearchPage] = useState(1);
   const [hasMoreSearch, setHasMoreSearch] = useState(false);
@@ -125,10 +151,21 @@ export default function ReadBookPage() {
   const cleanAuthorFilter = authorFilter.trim();
   const cleanYearFilter = yearFilter.trim();
   const activeSearchText = cleanQuery;
-  const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanYearFilter || categoryFilter);
+const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanYearFilter || categoryFilter);
+
+  useEffect(() => {
+    setAccessFilter(isPreviewPage ? 'preview' : 'read');
+  }, [isPreviewPage]);
+
   const readingHistory = useMemo(() => {
     try {
-      return JSON.parse(localStorage.getItem('reading_history') || '[]');
+      const raw = JSON.parse(localStorage.getItem('reading_history') || '[]');
+
+      return raw.filter((book) => {
+        if (!book?.id) return false;
+        if (!book.title || book.title.startsWith('Book #')) return false;
+        return true;
+      });
     } catch {
       return [];
     }
@@ -151,6 +188,42 @@ export default function ReadBookPage() {
       })
       .slice(0, 8);
   }, [allLoadedBooks, cleanQuery]);
+
+  const visibleInstantMatches = useMemo(
+    () => instantMatches.filter((book) => matchesAccessFilter(book, accessFilter)),
+    [accessFilter, instantMatches]
+  );
+
+  const visibleSearchResults = useMemo(
+    () => searchResults.filter((book) => matchesAccessFilter(book, accessFilter)),
+    [accessFilter, searchResults]
+  );
+
+  const visibleBrowseBooks = useMemo(
+    () => browseBooks.filter((book) => matchesAccessFilter(book, accessFilter)),
+    [accessFilter, browseBooks]
+  );
+
+  const visibleSavedBooks = useMemo(
+    () => savedBooks.filter((book) => matchesAccessFilter(book, accessFilter)),
+    [accessFilter, savedBooks]
+  );
+
+  const visibleReadingHistory = useMemo(
+    () => readingHistory.filter((book) => matchesAccessFilter(book, accessFilter)),
+    [accessFilter, readingHistory]
+  );
+
+  const visibleRows = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(rows).map(([title, books]) => [
+          title,
+          books.filter((book) => matchesAccessFilter(book, accessFilter)),
+        ])
+      ),
+    [accessFilter, rows]
+  );
 
   const loadBrowsePage = useCallback(async (pageToLoad = 1) => {
     setLoadingMore(true);
@@ -316,6 +389,7 @@ export default function ReadBookPage() {
   }
 
   function clearSearch() {
+    setAccessFilter(isPreviewPage ? 'preview' : 'read');
     setQuery('');
     setAuthorFilter('');
     setYearFilter('');
@@ -327,8 +401,11 @@ export default function ReadBookPage() {
   }
 
   function runQuickSearch(searchText) {
+    setAccessFilter(isPreviewPage ? 'preview' : 'read');
     setQuery(searchText);
     setCategoryFilter('');
+    setAuthorFilter('');
+    setYearFilter('');
     loadSearchPage(searchText, 1);
   }
 
@@ -351,24 +428,57 @@ export default function ReadBookPage() {
     return savedBooks.some((item) => getBookId(item) === id);
   }
 
+  function applyCategoryFilter(value) {
+    setCategoryFilter(value);
+    setQuery('');
+    setAccessFilter(isPreviewPage ? 'preview' : 'read');
+    setAuthorFilter('');
+    setYearFilter('');
+  }
+
   function BookCard({ book }) {
     const id = getBookId(book);
     const title = getTitle(book);
+    const readId = getReadBookId(book);
     const author = getAuthor(book);
+    const cover = getBookCover(book);
+    const readable = isBookReadable(book);
+    const previewUrl = getBookPreviewUrl(book);
 
     return (
       <article className="read-book-card">
         <div className="book-cover-placeholder">
+          {cover && (
+            <img
+              src={cover}
+              alt={`${title} cover`}
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
+            />
+          )}
           <span>{title.slice(0, 1)}</span>
         </div>
 
         <div className="read-book-body">
           <h3>{title}</h3>
           <p>{author}</p>
-
+          <small>
+            {readable
+              ? 'Readable text available'
+              : 'Preview only · opens externally'}
+          </small>
           <div className="read-book-actions">
-            {id && <Link to={`/read-book/${id}`}>Read</Link>}
-
+            {id && readable ? (
+              <Link to={`/read-book/${readId}`}>Read</Link>
+            ) : id ? (
+              <a href={previewUrl} target="_blank" rel="noreferrer">
+                Preview
+              </a>
+            ) : (
+              <button type="button" disabled>Unavailable</button>
+            )}
             <button type="button" onClick={() => toggleSave(book)}>
               {isSaved(book) ? 'Saved' : 'Save'}
             </button>
@@ -414,9 +524,15 @@ export default function ReadBookPage() {
     <section className="read-books-page">
       <div className="read-books-hero">
         <div>
-          <span className="read-books-kicker">Books for everyone</span>
-          <h1>Read Free Books</h1>
-          <p>Search the full public-domain library and keep scrolling for more books.</p>
+          <span className="read-books-kicker">
+            {isPreviewPage ? 'External previews' : 'Books for everyone'}
+          </span>
+          <h1>{isPreviewPage ? 'Preview Books' : 'Read Free Books'}</h1>
+          <p>
+            {isPreviewPage
+              ? 'These books cannot be fully read inside Smarty. Preview opens on OpenLibrary in a new tab.'
+              : 'Search readable public-domain books and keep scrolling for more.'}
+          </p>
         </div>
       </div>
 
@@ -437,7 +553,7 @@ export default function ReadBookPage() {
           )}
         </div>
 
-        <div className="book-search-filters">
+        <div className="book-filters">
           <input
             type="text"
             placeholder="Author"
@@ -454,7 +570,7 @@ export default function ReadBookPage() {
 
           <select
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            onChange={(e) => applyCategoryFilter(e.target.value)}
           >
             {CATEGORY_FILTERS.map((category) => (
               <option key={category.value || 'all'} value={category.value}>
@@ -462,6 +578,36 @@ export default function ReadBookPage() {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="category-bar" aria-label="Book categories">
+          {CATEGORY_FILTERS.map((category) => (
+            <button
+              type="button"
+              key={category.value || 'all-categories'}
+              className={`category-btn ${categoryFilter === category.value ? 'active' : ''}`}
+              onClick={() => applyCategoryFilter(category.value)}
+            >
+              {category.label.replace('All categories', 'All')}
+            </button>
+          ))}
+        </div>
+
+        <div className="access-filter-bar" aria-label="Reading access filter">
+          {[
+            ['read', 'Read Now'],
+            ['preview', 'Preview Only'],
+            ['all', 'All Books'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={`access-filter-btn ${accessFilter === value ? 'active' : ''}`}
+              onClick={() => setAccessFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         <div className="quick-searches" aria-label="Quick book searches">
@@ -476,13 +622,12 @@ export default function ReadBookPage() {
           ))}
         </div>
       </form>
-
       {error && error !== 'canceled' && error !== 'Canceled' && (
         <p className="read-books-status error">{error}</p>
       )}
 
-      {hasActiveFilters && instantMatches.length > 0 && searchResults.length === 0 && (
-        <BookRow title="Instant matches from your library" books={instantMatches} />
+      {hasActiveFilters && visibleInstantMatches.length > 0 && visibleSearchResults.length === 0 && (
+        <BookRow title="Instant matches from your library" books={visibleInstantMatches} />
       )}
 
       {hasActiveFilters && (
@@ -490,43 +635,43 @@ export default function ReadBookPage() {
           title={
             searching
               ? 'Searching the full library...'
-              : `${searchResults.length} result${searchResults.length === 1 ? '' : 's'} found`
+              : `${visibleSearchResults.length} result${visibleSearchResults.length === 1 ? '' : 's'} found`
           }
-          books={searchResults}
+          books={visibleSearchResults}
         />
       )}
 
-      {hasActiveFilters && !searching && searchResults.length === 0 && !error && (
+      {hasActiveFilters && !searching && visibleSearchResults.length === 0 && !error && (
         <p className="read-books-status">No books found. Try another title, author, or subject.</p>
       )}
 
-      {!hasActiveFilters && readingHistory.length > 0 && (
-        <BookRow title="Continue Reading" books={readingHistory} />
+      {!hasActiveFilters && visibleReadingHistory.length > 0 && (
+        <BookRow title="Continue Reading" books={visibleReadingHistory} />
       )}
 
-      {!hasActiveFilters && savedBooks.length > 0 && (
-        <BookRow title="Saved Books" books={savedBooks} />
+      {!hasActiveFilters && visibleSavedBooks.length > 0 && (
+        <BookRow title="Saved Books" books={visibleSavedBooks} />
       )}
 
       {loadingRows && <p className="read-books-status">Loading books...</p>}
 
       {!loadingRows &&
         !hasActiveFilters &&
-        Object.entries(rows).map(([title, books]) => (
+        Object.entries(visibleRows).map(([title, books]) => (
           <BookRow key={title} title={title} books={books} />
         ))}
 
-      {!hasActiveFilters && <BookGrid title="More Books" books={browseBooks} />}
+      {!hasActiveFilters && <BookGrid title="More Books" books={visibleBrowseBooks} />}
 
       <div ref={loadMoreRef} className="book-load-sentinel" />
 
       {loadingMore && <p className="read-books-status">Loading more books...</p>}
 
-      {!hasActiveFilters && !hasMoreBrowse && browseBooks.length > 0 && (
+      {!hasActiveFilters && !hasMoreBrowse && visibleBrowseBooks.length > 0 && (
         <p className="read-books-status">You have reached the end.</p>
       )}
 
-      {hasActiveFilters && !hasMoreSearch && searchResults.length > 0 && (
+      {hasActiveFilters && !hasMoreSearch && visibleSearchResults.length > 0 && (
         <p className="read-books-status">No more search results.</p>
       )}
     </section>
