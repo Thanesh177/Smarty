@@ -61,7 +61,9 @@ export function AuthProvider({ children }) {
         const params = new URLSearchParams(window.location.search);
         const androidCode = params.get('code');
         const isAndroidReturn = params.get('platform') === 'android';
+console.log('AUTH URL:', window.location.href);
 
+console.log('ANDROID CODE:', androidCode)
         if (isAndroidReturn && androidCode) {
           const tokens = await exchangeAndroidCodeForTokens(androidCode);
           const payload = decodeJwtPayload(tokens.id_token);
