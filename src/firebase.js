@@ -24,6 +24,34 @@ export async function requestNotificationToken() {
       'BKyUg8B4BnFUUE4zMQMJko8Czw71f-TJw6HakyNRp9nZGam42tR7R6N7vwC4SZY3Avs2-PAM117y_2RZ9ZvPp78',
   });
 }
+
+// 🔥 Android WebView push token bridge
+export function setupAndroidPushTokenListener() {
+  window.saveAndroidPushToken = async (token) => {
+    if (!token) return;
+
+    try {
+      const { userApi } = await import('./api/client.js');
+
+      await userApi.savePushToken(token, 'android');
+
+      console.log('✅ Android push token saved:', token);
+    } catch (err) {
+      console.error('❌ Failed to save Android token:', err);
+    }
+  };
+
+  // Token injected early from Android
+  if (window.__ANDROID_FCM_TOKEN__) {
+    window.saveAndroidPushToken(window.__ANDROID_FCM_TOKEN__);
+  }
+
+  // Token fetched via JS bridge
+  if (window.AndroidBridge?.getFcmToken) {
+    const token = window.AndroidBridge.getFcmToken();
+    if (token) window.saveAndroidPushToken(token);
+  }
+}
 export function listenForForegroundMessages() {
   return onMessage(messaging, async (payload) => {
     console.log('Foreground push received:', payload);

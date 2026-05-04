@@ -3,7 +3,11 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
 import { notificationApi } from './api/client';
-import { listenForForegroundMessages } from './firebase';
+import {
+  listenForForegroundMessages,
+  setupAndroidPushTokenListener,
+} from './firebase';
+import AuthRedirectHandler from './components/AuthRedirectHandler';
 import InstallPrompt from "./components/InstallPrompt";
 
 
@@ -54,6 +58,11 @@ function Layout() {
     if (user) setTotalUnread(0);
   }, [user]);
 
+  // Android WebView push token bridge
+  useEffect(() => {
+    setupAndroidPushTokenListener?.();
+  }, []);
+
   useEffect(() => {
   const handler = (event) => {
     setTotalUnread(Number(event.detail?.totalUnread || 0));
@@ -103,6 +112,8 @@ useEffect(() => {
 
   return (
     <>
+      <AuthRedirectHandler />
+
       {/* Install popup */}
       <InstallPrompt />
 
