@@ -3,137 +3,86 @@ import { useEffect, useState } from "react";
 const STORAGE_KEY = "smarty_install_prompt_seen";
 
 export default function InstallPrompt() {
-
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-
   const [show, setShow] = useState(false);
-
-  const [scrollCount, setScrollCount] = useState(0);
-
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-
-    // 🚫 Already seen → never show again
-
+    // TEMP TESTING: comment this line while testing
     if (localStorage.getItem(STORAGE_KEY) === "true") return;
 
     const ua = navigator.userAgent.toLowerCase();
-
-    const isIosDevice = /iphone|ipad|ipod/.test(ua);
+    const iosDevice = /iphone|ipad|ipod/.test(ua);
 
     const isStandalone =
-
-      window.navigator.standalone ||
-
+      window.navigator.standalone === true ||
       window.matchMedia("(display-mode: standalone)").matches;
 
-    if (isIosDevice && !isStandalone) {
-
+    if (iosDevice && !isStandalone) {
       setIsIOS(true);
-
     }
 
-    window.addEventListener("beforeinstallprompt", (e) => {
-
+    const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
-
       setDeferredPrompt(e);
-
-    });
-
-  }, []);
-
-  // track engagement
-
-  useEffect(() => {
-
-    const handleScroll = () => {
-
-      setScrollCount((prev) => prev + 1);
-
     };
 
-    window.addEventListener("scroll", handleScroll);
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
-    return () => window.removeEventListener("scroll", handleScroll);
+    const timer = setTimeout(() => {
+      if (!isStandalone) setShow(true);
+    }, 1000);
 
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      clearTimeout(timer);
+    };
   }, []);
 
-  // show after engagement (only if not seen)
-
-  useEffect(() => {
-
-    if (
-
-      scrollCount > 5 &&
-
-      localStorage.getItem(STORAGE_KEY) !== "true"
-
-    ) {
-
-      setShow(true);
-
-    }
-
-  }, [scrollCount]);
-
   const installApp = async () => {
-
-    if (!deferredPrompt) return;
+   if (!deferredPrompt) return;
 
     deferredPrompt.prompt();
-
     await deferredPrompt.userChoice;
 
-    localStorage.setItem(STORAGE_KEY, "true"); // ✅ remember
-
+    localStorage.setItem(STORAGE_KEY, "true");
     setDeferredPrompt(null);
-
     setShow(false);
-
   };
 
   const closePopup = () => {
-
-    localStorage.setItem(STORAGE_KEY, "true"); // ✅ remember even if closed
-
+    localStorage.setItem(STORAGE_KEY, "true");
     setShow(false);
-
   };
 
   if (!show) return null;
 
   return (
-
     <div className="install-popup">
+      <div>
+        <p>{isIOS ? "Install Smarty" : "Install Smarty App"}</p>
+        <p>
+          {isIOS
+            ? "Tap Share → Add to Home Screen"
+            : "Add Smarty to your home screen for a faster app experience."}
+        </p>
+      </div>
 
-      {isIOS ? (
+{!isIOS && deferredPrompt && (
+  <button type="button" onClick={installApp}>
+    Install
+  </button>
+)}
 
-        <>
+{!isIOS && !deferredPrompt && (
+  <p style={{ fontSize: "0.8rem", opacity: 0.7 }}>
+    Use browser menu → Install app
+  </p>
+)}
 
-          <p>Install Smarty</p>
-
-          <p>Tap Share → Add to Home Screen</p>
-
-        </>
-
-      ) : (
-
-        <>
-
-          <p>Install Smarty App</p>
-
-          <button onClick={installApp}>Install</button>
-
-        </>
-
-      )}
-
-      <button onClick={closePopup}>Close</button>
-
+      <button type="button" onClick={closePopup}>
+        Close
+      </button>
     </div>
-
   );
-
 }

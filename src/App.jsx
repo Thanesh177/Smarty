@@ -2,13 +2,15 @@ import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
-import Booksinfo from './pages/Booksinfo';
 import { notificationApi } from './api/client';
 import { listenForForegroundMessages } from './firebase';
-import QuizPage from "./pages/QuizPage";
-import ProgressPage from "./pages/progress/ProgressPage";
-import GameProfile from "./pages/profile/GameProfile";
 import InstallPrompt from "./components/InstallPrompt";
+
+
+const Booksinfo = lazy(() => import('./pages/Booksinfo'));
+const QuizPage = lazy(() => import('./pages/QuizPage'));
+const ProgressPage = lazy(() => import('./pages/progress/ProgressPage'));
+const GameProfile = lazy(() => import('./pages/profile/GameProfile'));
 
 // Lazy imports
 const CommentsPage = lazy(() => import('./pages/CommentsPage'));

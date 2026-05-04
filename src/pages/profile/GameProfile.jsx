@@ -1,7 +1,6 @@
 import { getAchievements } from "../../lib/progressStore";
 import { getAllAchievements } from "../../components/achievements/achievementEngine";
-import "/Users/thaneshn/Desktop/Smarty/src/pages/profile/GameProfile.css";
-
+import './GameProfile.css';
 function getProgress() {
   return JSON.parse(localStorage.getItem("smarty-topic-progress") || "{}");
 }

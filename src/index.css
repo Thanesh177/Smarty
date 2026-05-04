@@ -4,6 +4,108 @@
   box-sizing: border-box;
 }
 
+
+.install-popup {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  z-index: 9999;
+  transform: translateX(-50%);
+  width: min(92%, 380px);
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #fff;
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  animation: installSlideUp 0.28s ease-out;
+}
+
+.install-popup button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.install-popup button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.install-popup button:not(:disabled):active {
+  transform: scale(0.96);
+}
+.install-popup p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.install-popup p:first-child {
+  font-size: 1rem;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.install-popup p:nth-child(2) {
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 14px;
+}
+
+.install-popup button {
+  border: 0;
+  cursor: pointer;
+  border-radius: 14px;
+  padding: 11px 15px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  transition: 0.2s ease;
+}
+
+.install-popup button:first-of-type {
+  background: linear-gradient(135deg, #38bdf8, #2563eb);
+  color: #fff;
+  margin-right: 10px;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35);
+}
+
+.install-popup button:last-of-type {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.install-popup button:hover {
+  transform: translateY(-1px);
+}
+
+@keyframes installSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (max-width: 480px) {
+  .install-popup {
+    bottom: 14px;
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .install-popup button {
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .install-popup button:first-of-type {
+    margin-right: 0;
+  }
+}
 body {
   font-family: Inter, Arial, sans-serif;
   background: #07111f;
