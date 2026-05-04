@@ -554,19 +554,19 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
         </div>
 
         <div className="book-filters">
-          <input
+          {/* <input
             type="text"
             placeholder="Author"
             value={authorFilter}
             onChange={(e) => setAuthorFilter(e.target.value)}
-          />
+          /> */}
 
-          <input
+          {/* <input
             type="number"
             placeholder="Year"
             value={yearFilter}
             onChange={(e) => setYearFilter(e.target.value)}
-          />
+          /> */}
 
           <select
             value={categoryFilter}
@@ -579,7 +579,7 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
             ))}
           </select>
         </div>
-
+{/* 
         <div className="category-bar" aria-label="Book categories">
           {CATEGORY_FILTERS.map((category) => (
             <button
@@ -591,7 +591,7 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
               {category.label.replace('All categories', 'All')}
             </button>
           ))}
-        </div>
+        </div> */}
 
         <div className="access-filter-bar" aria-label="Reading access filter">
           {[
@@ -610,7 +610,9 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
           ))}
         </div>
 
-        <div className="quick-searches" aria-label="Quick book searches">
+
+        
+{/*         <div className="quick-searches" aria-label="Quick book searches">
           {QUICK_SEARCHES.map((item) => (
             <button
               type="button"
@@ -620,7 +622,7 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
               {item}
             </button>
           ))}
-        </div>
+        </div> */}
       </form>
       {error && error !== 'canceled' && error !== 'Canceled' && (
         <p className="read-books-status error">{error}</p>

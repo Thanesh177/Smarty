@@ -20,7 +20,9 @@ export default function LoginPage() {
     setMessage('');
 
     try {
-      await signInWithRedirect({ provider: 'Google' });
+      await signInWithRedirect({
+  provider: { custom: 'Google' },
+});
     } catch (err) {
       setError(err?.message || 'Google login failed. Please try again in Chrome or Safari.');
     }

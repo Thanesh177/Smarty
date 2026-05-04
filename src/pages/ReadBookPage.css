@@ -6,7 +6,7 @@
   width: 100%;
   min-height: calc(100vh - 72px);
   margin: 0;
-  padding: 6.25rem clamp(14px, 3vw, 48px) 82px;
+  padding: 4.25rem clamp(14px, 3vw, 48px) 82px;
   color: #f8fafc;
   box-sizing: border-box;
   position: relative;
@@ -295,7 +295,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  width: 100%;
+  width: 30%;
   margin: 14px 0 12px;
   padding: 5px;
   border: 1px solid rgba(148, 163, 184, 0.14);

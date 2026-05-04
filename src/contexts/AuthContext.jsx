@@ -7,6 +7,7 @@ import {
   fetchAuthSession,
   confirmSignUp,
 } from 'aws-amplify/auth';
+import { Hub } from 'aws-amplify/utils';
 import '../lib/cognito';
 
 const AuthContext = createContext(null);
@@ -65,6 +66,29 @@ export function AuthProvider({ children }) {
     };
 
     initAuth();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = Hub.listen('auth', async ({ payload }) => {
+      if (payload.event === 'signedIn' || payload.event === 'signInWithRedirect') {
+        try {
+          const currentUser = await getCurrentUser();
+          const session = await fetchAuthSession();
+          const authUser = mapCognitoUser(currentUser, session);
+
+          if (authUser.token) {
+            localStorage.setItem('eduscroll_token', authUser.token);
+          }
+
+          localStorage.setItem('eduscroll_user', JSON.stringify(authUser));
+          setUser(authUser);
+        } catch (err) {
+          console.error('OAuth login failed:', err);
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
 const login = async (email, password) => {
