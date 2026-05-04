@@ -26,8 +26,11 @@ const splitUrls = (value = '') => {
 
   const ordered = [];
 
-  if (currentUrl) ordered.push(currentUrl);
-  if (appUrl) ordered.push(appUrl);
+const isAndroidWebView = window.navigator.userAgent.includes('wv');
+
+if (isAndroidWebView && appUrl) ordered.push(appUrl);
+if (currentUrl) ordered.push(currentUrl);
+if (!isAndroidWebView && appUrl) ordered.push(appUrl);
 
   // add remaining urls (avoid duplicates)
   urls.forEach((url) => {
