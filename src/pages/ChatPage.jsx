@@ -8,6 +8,29 @@ import {
   sendChatMessage,
 } from '../api/chatSocket';
 import './ChatPage.css';
+
+function getUserDisplayName(person) {
+  const candidates = [
+    person?.username,
+    person?.userName,
+    person?.displayName,
+    person?.name,
+    person?.receiverUsername,
+    person?.receiverName,
+  ];
+
+  const realName = candidates
+    .map((value) => String(value || '').trim())
+    .find((value) => value && !value.includes('@') && !(value.includes('-') && value.length > 20));
+
+  if (realName) return realName;
+
+  const email = String(person?.email || person?.receiverEmail || '').trim();
+  if (email.includes('@')) return email.split('@')[0];
+
+  return 'User';
+}
+
 function getDayLabel(timestamp) {
   const date = new Date(Number(timestamp));
   const today = new Date();
@@ -40,6 +63,7 @@ export default function ChatPage() {
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
   const scrollRef = useRef(null);
+  const searchAreaRef = useRef(null);
   const autoStartedRef = useRef(false);
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
@@ -259,6 +283,24 @@ useEffect(() => {
     }));
   }, [messages]);
 
+  useEffect(() => {
+  const closeSearchResults = (event) => {
+    if (!searchAreaRef.current) return;
+
+    if (!searchAreaRef.current.contains(event.target)) {
+      setUsers([]);
+    }
+  };
+
+  document.addEventListener('mousedown', closeSearchResults);
+  document.addEventListener('touchstart', closeSearchResults);
+
+  return () => {
+    document.removeEventListener('mousedown', closeSearchResults);
+    document.removeEventListener('touchstart', closeSearchResults);
+  };
+}, []);
+
   const searchUsers = async (e) => {
     e.preventDefault();
     setStatus('');
@@ -280,6 +322,7 @@ const openChat = async (chat) => {
   setMobileChatOpen(true);
   setStatus('');
   setIsBlocked(chat?.isBlocked || false);
+
   try {
     if (chatApi.markAsRead) {
       await chatApi.markAsRead(chat.chatId);
@@ -287,7 +330,7 @@ const openChat = async (chat) => {
   } catch (e) {
     console.error('Mark as read failed', e);
   }
-  // check block status from backend
+
   try {
     const blockStatus = await chatApi.checkBlockStatus(chat.receiverId);
     setIsBlocked(blockStatus?.isBlocked || false);
@@ -337,7 +380,12 @@ useEffect(() => {
     try {
       const chat = await chatApi.startChat(selectedUser);
 
-      setActiveChat(chat);
+      setActiveChat({
+        ...chat,
+        receiverUsername: chat.receiverUsername || selectedUser.username || selectedUser.userName,
+        receiverName: chat.receiverName || selectedUser.name || selectedUser.username,
+        receiverEmail: chat.receiverEmail || selectedUser.email,
+      });
       localStorage.setItem('activeChatId', chat.chatId);
       setMobileChatOpen(true);
       setUsers([]);
@@ -489,33 +537,36 @@ const handleBlockUser = async () => {
   return (
 <main className={`chat-page ${mobileChatOpen && activeChat ? 'mobile-chat-open' : ''}`}>
       <section className="chat-sidebar">
-        <form className="chat-search" onSubmit={searchUsers}>
-          <input
-            placeholder="Search users by name or mail..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button type="submit">Search</button>
-        </form>
+       <div className="chat-search-wrap" ref={searchAreaRef}>
+  <form className="chat-search" onSubmit={searchUsers}>
+    <input
+      placeholder="Search by username or email..."
+      value={query}
+      onChange={(e) => setQuery(e.target.value)}
+    />
+    <button type="submit">Search</button>
+  </form>
 
-        {status && <p className="chat-status">{status}</p>}
+  {users.length > 0 && (
+    <div className="user-results">
+      <h3>Search results</h3>
+      {users.map((selectedUser) => (
+        <button
+          key={selectedUser.userId || selectedUser.id || selectedUser.email}
+          type="button"
+          data-initial={getUserDisplayName(selectedUser).slice(0, 2).toUpperCase()}
+          onClick={() => startChat(selectedUser)}
+        >
+          <strong>{getUserDisplayName(selectedUser)}</strong>
+          <span>{selectedUser.email || selectedUser.username || ''}</span>
+        </button>
+      ))}
+    </div>
+  )}
+</div>
 
-        {users.length > 0 && (
-          <div className="user-results">
-            <h3>Users</h3>
+{status && <p className="chat-status">{status}</p>}
 
-            {users.map((selectedUser) => (
-              <button
-                key={selectedUser.userId || selectedUser.id || selectedUser.email}
-                type="button"
-                onClick={() => startChat(selectedUser)}
-              >
-                <strong>{selectedUser.name || selectedUser.username || 'User'}</strong>
-                <span>{selectedUser.email || selectedUser.username}</span>
-              </button>
-            ))}
-          </div>
-        )}
 
         <div className="chat-list">
           <h3>Your chats</h3>
@@ -540,7 +591,7 @@ const handleBlockUser = async () => {
       chat.receiverImage ||
       chat.profilePicture ||
       `https://ui-avatars.com/api/?name=${encodeURIComponent(
-        chat.receiverName || chat.receiverEmail || 'User'
+        getUserDisplayName({ username: chat.receiverUsername, name: chat.receiverName, email: chat.receiverEmail })
       )}&background=7dd3fc&color=07111f&bold=true`
     }
     alt=""
@@ -549,7 +600,13 @@ const handleBlockUser = async () => {
   />
 
   <div className="chat-content">
-    <strong>{chat.receiverName || chat.receiverEmail || 'User'}</strong>
+    <strong>
+  {getUserDisplayName({
+    username: chat.receiverUsername,
+    name: chat.receiverName,
+    email: chat.receiverEmail,
+  })}
+</strong>
 
     <div className="chat-preview">
       <span>{chat.lastMessage || 'Open conversation'}</span>
@@ -592,7 +649,14 @@ const handleBlockUser = async () => {
                 ←
               </button>
               <div className="chat-info">
-                <h2>{activeChat.receiverName || activeChat.receiverEmail || 'Chat'}</h2>
+               <h2>
+  {getUserDisplayName({
+    username: activeChat.receiverUsername,
+    name: activeChat.receiverName,
+    email: activeChat.receiverEmail,
+  })}
+</h2>
+
                 {status && <span className="status-msg">{status}</span>}
               </div>
 

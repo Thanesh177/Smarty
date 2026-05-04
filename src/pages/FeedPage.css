@@ -365,19 +365,21 @@
 .post-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 30px;
+  gap: 8px;
+  margin-top: 24px;
 }
 
 .post-actions button {
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 999px;
-  padding: 11px 16px;
+  padding: 8px 12px;
   position: relative;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.065);
   color: #fff;
   font-weight: 850;
+  font-size: 0.78rem;
+  line-height: 1.1;
   cursor: pointer;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
   transition:
@@ -715,14 +717,14 @@
   .post-actions {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    margin-top: 22px;
+    gap: 7px;
+    margin-top: 18px;
   }
 
   .post-actions button {
     width: 100%;
-    padding: 10px 6px;
-    font-size: 0.82rem;
+    padding: 8px 5px;
+    font-size: 0.74rem;
   }
 
   .topic-rail {
@@ -775,7 +777,13 @@
   }
 
   .post-actions {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .post-actions button {
+    padding: 7px 4px;
+    font-size: 0.7rem;
   }
 
   .floating-create-btn {

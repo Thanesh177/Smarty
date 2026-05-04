@@ -833,7 +833,7 @@
 
 @media (max-width: 720px) {
   .profile-page {
-    width: min(100% - 20px, 760px);
+    width: min(100%, 800px);
     padding-bottom: 54px;
   }
 

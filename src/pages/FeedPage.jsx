@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { postApi } from '../api/client';
+import { postApi, creatorApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import useFeed from '../hooks/useFeed';
 import './FeedPage.css';
@@ -11,6 +11,32 @@ const normalizeTopic = (value) =>
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '-');
+
+const getDisplayUsername = (post, creatorProfile = null) => {
+  const profileName =
+    creatorProfile?.username ||
+    creatorProfile?.userName ||
+    creatorProfile?.displayName ||
+    creatorProfile?.name;
+
+  if (profileName && !String(profileName).includes('@')) {
+    return String(profileName).trim();
+  }
+
+  const postName =
+    post.username ||
+    post.userName ||
+    post.displayName ||
+    post.name ||
+    post.creatorName ||
+    post.authorName;
+
+  if (postName && !String(postName).includes('@')) {
+    return String(postName).trim();
+  }
+
+  return 'Creator';
+};
 
     
 
@@ -38,6 +64,7 @@ export default function FeedPage() {
   const [toast, setToast] = useState('');
   const [simpleExplanations, setSimpleExplanations] = useState({});
   const [explaining, setExplaining] = useState({});
+  const [creatorProfiles, setCreatorProfiles] = useState({});
   useEffect(() => {
     if (!loadMoreRef.current || !nextCursor) return;
 
@@ -108,6 +135,47 @@ export default function FeedPage() {
       return timeB - timeA;
     });
   }, [posts]);
+
+  useEffect(() => {
+    const creatorIds = [
+      ...new Set(
+        visiblePosts
+          .map((post) => post.authorId || post.userId || post.creatorId)
+          .filter(Boolean)
+      ),
+    ];
+
+    const missingCreatorIds = creatorIds.filter((id) => !creatorProfiles[id]);
+
+    if (missingCreatorIds.length === 0) return;
+
+    let cancelled = false;
+
+    async function loadCreatorProfiles() {
+      const loadedProfiles = {};
+
+      await Promise.all(
+        missingCreatorIds.map(async (creatorId) => {
+          try {
+            const profile = await creatorApi.getProfile(creatorId);
+            loadedProfiles[creatorId] = profile;
+          } catch (err) {
+            console.error('Could not load creator profile:', creatorId, err);
+          }
+        })
+      );
+
+      if (!cancelled && Object.keys(loadedProfiles).length > 0) {
+        setCreatorProfiles((prev) => ({ ...prev, ...loadedProfiles }));
+      }
+    }
+
+    loadCreatorProfiles();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [visiblePosts, creatorProfiles]);
 
   const handleTranslate = async (post, lang = 'Hindi') => {
   const postId = post.reelId || post.id;
@@ -299,6 +367,7 @@ const handleExplain = async (post) => {
         {filteredPosts.map((post) => {
           const postId = post.reelId || post.id;
           const creatorId = post.authorId || post.userId || post.creatorId;
+          const creatorProfile = creatorId ? creatorProfiles[creatorId] : null;
 
           return (
             <article
@@ -341,7 +410,7 @@ const handleExplain = async (post) => {
                 {creatorId && (
                   <div className="post-author">
                     <Link to={`/creator/${creatorId}`} className="creator-link">
-                      @{post.author || post.creatorName || 'Creator'}
+                      @{getDisplayUsername(post, creatorProfile)}
                     </Link>
                   </div>
                 )}
