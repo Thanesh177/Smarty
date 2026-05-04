@@ -21,6 +21,11 @@ const splitUrls = (value = '') => {
   const currentOrigin = window.location.origin;
   const appUrl = urls.find((url) => url.startsWith('smarty://'));
 
+  // Android app must return ONLY the deep link, otherwise Amplify may choose the web URL.
+  if (isAndroidApp() && appUrl) {
+    return [appUrl];
+  }
+
   const currentUrl = urls.find((url) => {
     if (!url.startsWith('http')) return false;
 
@@ -31,22 +36,7 @@ const splitUrls = (value = '') => {
     }
   });
 
-  const ordered = [];
-
-  // Android app must use smarty:// first so Cognito returns to the app.
-  if (isAndroidApp() && appUrl) ordered.push(appUrl);
-
-  // Web/local must use the URL matching the current origin.
-  if (currentUrl) ordered.push(currentUrl);
-
-  // Non-Android can keep app deep link as fallback.
-  if (!isAndroidApp() && appUrl) ordered.push(appUrl);
-
-  urls.forEach((url) => {
-    if (!ordered.includes(url)) ordered.push(url);
-  });
-
-  return ordered;
+  return currentUrl ? [currentUrl] : urls;
 };
 
 Amplify.configure({

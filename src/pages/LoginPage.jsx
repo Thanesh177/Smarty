@@ -21,8 +21,8 @@ export default function LoginPage() {
 
     try {
       await signInWithRedirect({
-  provider: { custom: 'Google' },
-});
+        provider: 'Google',
+      });
     } catch (err) {
       setError(err?.message || 'Google login failed. Please try again in Chrome or Safari.');
     }

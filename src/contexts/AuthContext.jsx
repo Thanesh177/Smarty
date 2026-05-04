@@ -10,6 +10,8 @@ import {
 import { Hub } from 'aws-amplify/utils';
 import '../lib/cognito';
 
+console.log('AuthContext loaded');
+
 const AuthContext = createContext(null);
 
 function mapCognitoUser(currentUser, session) {
@@ -48,6 +50,7 @@ export function AuthProvider({ children }) {
       try {
         const currentUser = await getCurrentUser();
         const session = await fetchAuthSession();
+        console.log('Session loaded:', session);
 
         const authUser = mapCognitoUser(currentUser, session);
 
@@ -70,8 +73,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = Hub.listen('auth', async ({ payload }) => {
-      if (payload.event === 'signedIn' || payload.event === 'signInWithRedirect') {
+      if (
+        payload.event === 'signedIn' ||
+        payload.event === 'signInWithRedirect' ||
+        payload.event === 'cognitoHostedUI'
+      ) {
         try {
+          console.log('Auth event:', payload.event);
           const currentUser = await getCurrentUser();
           const session = await fetchAuthSession();
           const authUser = mapCognitoUser(currentUser, session);

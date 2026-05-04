@@ -186,7 +186,14 @@ useEffect(() => {
         <main className="content">
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              <Route path="/" element={<Navigate to="/feed" replace />} />
+<Route
+  path="/"
+  element={
+    window.location.search.includes('code=')
+      ? <p className="status">Completing login...</p>
+      : <Navigate to="/feed" replace />
+  }
+/>
               <Route path="/feed" element={<FeedPage />} />
               <Route path="/feed/:topic" element={<FeedPage />} />
 

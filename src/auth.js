@@ -1,17 +1,27 @@
+import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
 
+const isAndroidApp = () => {
+  const search = window.location.search || '';
+  const userAgent = window.navigator.userAgent || '';
+
+  return (
+    search.includes('platform=android') ||
+    userAgent.includes('wv') ||
+    Boolean(window.AndroidBridge)
+  );
+};
+
 const hostname = window.location.hostname;
-
 const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-const isAndroidWebView = window.navigator.userAgent.includes('wv');
 
-const redirectSignIn = isAndroidWebView
+const redirectSignIn = isAndroidApp()
   ? 'smarty://callback/'
   : isLocalhost
   ? 'http://localhost:5173/'
   : 'https://main.d3qiuefonbp8n9.amplifyapp.com/';
 
-const redirectSignOut = isAndroidWebView
+const redirectSignOut = isAndroidApp()
   ? 'smarty://signout/'
   : isLocalhost
   ? 'http://localhost:5173/login'
