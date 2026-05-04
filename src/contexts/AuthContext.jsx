@@ -90,6 +90,7 @@ export function AuthProvider({ children }) {
 
           localStorage.setItem('eduscroll_user', JSON.stringify(authUser));
           setUser(authUser);
+          window.location.replace('/feed');
         } catch (err) {
           console.error('OAuth login failed:', err);
         }
