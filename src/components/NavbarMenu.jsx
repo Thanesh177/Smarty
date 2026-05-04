@@ -8,14 +8,7 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
 
   return (
     <div className="navbar-menu">
-      <button
-        type="button"
-        className="navbar-brand-refresh"
-        onClick={() => window.location.reload()}
-        aria-label="Refresh Smarty"
-      >
-        <span className="navbar-brand-title">Smarty</span>
-      </button>
+
       <button
         type="button"
         className="hamburger-btn"
@@ -32,15 +25,10 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
 
           <nav className="menu-panel" aria-label="Main navigation">
             <div className="menu-header">
-              <button
-                type="button"
-                className="menu-brand-refresh"
-                onClick={() => window.location.reload()}
-                aria-label="Refresh Smarty"
-              >
+              <div className="menu-title">
                 <span>Smarty</span>
                 <h3>Navigation</h3>
-              </button>
+              </div>
             </div>
 
             {/* Profile card removed - starting directly with navigation sections */}

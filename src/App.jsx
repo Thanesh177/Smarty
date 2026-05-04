@@ -154,7 +154,16 @@ useEffect(() => {
       <div className="app-shell">
         <header className="topbar glass-topbar">
           <div className="topbar-row">
-            <NavLink to="/feed" className="brand-logo fancy-brand">
+            <NavLink
+              to="/feed"
+              className="brand-logo fancy-brand"
+              onClick={(event) => {
+                if (window.location.pathname === '/feed') {
+                  event.preventDefault();
+                  window.location.reload();
+                }
+              }}
+            >
               <div className="brand-mark">S</div>
               <div>
                 <h1>Smarty</h1>

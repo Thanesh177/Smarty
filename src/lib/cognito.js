@@ -55,14 +55,18 @@ Amplify.configure({
         oauth: {
           domain: (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, ''),
           scopes: ['openid', 'email', 'profile'],
-          redirectSignIn: pickRedirectUrl(
-            import.meta.env.VITE_REDIRECT_SIGN_IN,
-            DEFAULT_REDIRECT_SIGN_IN
-          ),
-          redirectSignOut: pickRedirectUrl(
-            import.meta.env.VITE_REDIRECT_SIGN_OUT,
-            DEFAULT_REDIRECT_SIGN_OUT
-          ),
+          redirectSignIn: [
+            pickRedirectUrl(
+              import.meta.env.VITE_REDIRECT_SIGN_IN,
+              DEFAULT_REDIRECT_SIGN_IN
+            ),
+          ],
+          redirectSignOut: [
+            pickRedirectUrl(
+              import.meta.env.VITE_REDIRECT_SIGN_OUT,
+              DEFAULT_REDIRECT_SIGN_OUT
+            ),
+          ],
           responseType: 'code',
         },
       },
