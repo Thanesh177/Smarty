@@ -1,12 +1,6 @@
 import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
 
-const DEFAULT_REDIRECT_SIGN_IN =
-  'http://localhost:5173/,https://main.d3qiuefonbp8n9.amplifyapp.com/,smarty://callback/';
-
-const DEFAULT_REDIRECT_SIGN_OUT =
-  'http://localhost:5173/login,https://main.d3qiuefonbp8n9.amplifyapp.com/login,smarty://signout/';
-
 const isAndroidApp = () => {
   const search = window.location.search || '';
   const userAgent = window.navigator.userAgent || '';
@@ -18,32 +12,24 @@ const isAndroidApp = () => {
   );
 };
 
-const pickRedirectUrl = (value = '', fallback = '') => {
-  const urls = (value || fallback)
-    .split(',')
-    .map((url) => url.trim())
-    .filter(Boolean);
+const isLocalhost =
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1';
 
-  const currentOrigin = window.location.origin;
-  const appUrl = urls.find((url) => url.startsWith('smarty://'));
+const redirectSignIn = isAndroidApp()
+  ? 'smarty://callback/'
+  : isLocalhost
+  ? 'http://localhost:5173/'
+  : 'https://main.d3qiuefonbp8n9.amplifyapp.com/';
 
-  // Android app must use only the deep link so Cognito returns to the app.
-  if (isAndroidApp() && appUrl) {
-    return appUrl;
-  }
+const redirectSignOut = isAndroidApp()
+  ? 'smarty://signout/'
+  : isLocalhost
+  ? 'http://localhost:5173/login'
+  : 'https://main.d3qiuefonbp8n9.amplifyapp.com/login';
 
-  const currentUrl = urls.find((url) => {
-    if (!url.startsWith('http')) return false;
-
-    try {
-      return new URL(url).origin === currentOrigin;
-    } catch {
-      return false;
-    }
-  });
-
-  return currentUrl || urls[0] || fallback.split(',')[0];
-};
+console.log('COGNITO REDIRECT IN:', redirectSignIn);
+console.log('COGNITO REDIRECT OUT:', redirectSignOut);
 
 Amplify.configure({
   Auth: {
@@ -55,18 +41,8 @@ Amplify.configure({
         oauth: {
           domain: (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, ''),
           scopes: ['openid', 'email', 'profile'],
-          redirectSignIn: [
-            pickRedirectUrl(
-              import.meta.env.VITE_REDIRECT_SIGN_IN,
-              DEFAULT_REDIRECT_SIGN_IN
-            ),
-          ],
-          redirectSignOut: [
-            pickRedirectUrl(
-              import.meta.env.VITE_REDIRECT_SIGN_OUT,
-              DEFAULT_REDIRECT_SIGN_OUT
-            ),
-          ],
+          redirectSignIn: [redirectSignIn],
+          redirectSignOut: [redirectSignOut],
           responseType: 'code',
         },
       },
