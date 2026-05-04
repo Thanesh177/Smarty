@@ -1,12 +1,19 @@
 import { Amplify } from 'aws-amplify';
 
-const isLocalhost = window.location.hostname === 'localhost';
+const hostname = window.location.hostname;
 
-const redirectSignIn = isLocalhost
+const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+const isAndroidWebView = window.navigator.userAgent.includes('wv');
+
+const redirectSignIn = isAndroidWebView
+  ? 'smarty://callback/'
+  : isLocalhost
   ? 'http://localhost:5173/'
   : 'https://main.d3qiuefonbp8n9.amplifyapp.com/';
 
-const redirectSignOut = isLocalhost
+const redirectSignOut = isAndroidWebView
+  ? 'smarty://signout/'
+  : isLocalhost
   ? 'http://localhost:5173/login'
   : 'https://main.d3qiuefonbp8n9.amplifyapp.com/login';
 
@@ -20,7 +27,7 @@ Amplify.configure({
         email: true,
 
         oauth: {
-          domain: import.meta.env.VITE_COGNITO_DOMAIN,
+          domain: (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, ''),
           scopes: ['email', 'openid', 'profile'],
           redirectSignIn: [redirectSignIn],
           redirectSignOut: [redirectSignOut],

@@ -7,15 +7,34 @@ const splitUrls = (value = '') => {
     .map((url) => url.trim())
     .filter(Boolean);
 
-  // 🔥 Ensure web URL comes first (important for Amplify redirect handling)
-  const webUrl = urls.find((u) => u.startsWith('http'));
-  const appUrl = urls.find((u) => u.startsWith('smarty://'));
+  const currentOrigin = window.location.origin;
+
+  // ✅ pick URL matching current environment (localhost / amplify)
+  const currentUrl = urls.find((url) => {
+    if (url.startsWith('http')) {
+      try {
+        return new URL(url).origin === currentOrigin;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  });
+
+  // Android deep link fallback
+  const appUrl = urls.find((url) => url.startsWith('smarty://'));
 
   const ordered = [];
-  if (webUrl) ordered.push(webUrl);
+
+  if (currentUrl) ordered.push(currentUrl);
   if (appUrl) ordered.push(appUrl);
 
-  return ordered.length ? ordered : urls;
+  // add remaining urls (avoid duplicates)
+  urls.forEach((url) => {
+    if (!ordered.includes(url)) ordered.push(url);
+  });
+
+  return ordered;
 };
 
 Amplify.configure({
