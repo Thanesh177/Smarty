@@ -8,7 +8,8 @@ export default function TopicRoomsPage() {
   const { user } = useAuth();
   const userId = user?.id || user?.userId || user?.sub;
 const [mobileChatOpen, setMobileChatOpen] = useState(false);
-  const activeRoomRef = useRef(null);
+const activeRoomRef = useRef(null);
+const messagesRef = useRef(null);
 const [hiddenRooms, setHiddenRooms] = useState([]);
 const [showHidden, setShowHidden] = useState(false);
   const [rooms, setRooms] = useState([]);
@@ -38,6 +39,34 @@ const [inviteResults, setInviteResults] = useState([]);
   useEffect(() => {
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
+
+const scrollMessagesToBottom = () => {
+  window.requestAnimationFrame(() => {
+    const messagesEl = messagesRef.current;
+    if (!messagesEl) return;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  });
+};
+
+useEffect(() => {
+  scrollMessagesToBottom();
+}, [messages]);
+
+useEffect(() => {
+  if (!activeRoom) return undefined;
+
+  const handleViewportResize = () => {
+    scrollMessagesToBottom();
+  };
+
+  window.visualViewport?.addEventListener('resize', handleViewportResize);
+  window.addEventListener('resize', handleViewportResize);
+
+  return () => {
+    window.visualViewport?.removeEventListener('resize', handleViewportResize);
+    window.removeEventListener('resize', handleViewportResize);
+  };
+}, [activeRoom]);
 
   async function loadRooms(searchValue = roomSearch) {
     try {
@@ -477,8 +506,8 @@ function sendMessage(e) {
     createdAt: Date.now(),
   };
 
-  setMessages((prev) => [...prev, tempMessage]);
-
+setMessages((prev) => [...prev, tempMessage]);
+scrollMessagesToBottom();
   try {
     sendRoomMessage({
       action: 'sendRoomMessage',
@@ -488,6 +517,7 @@ function sendMessage(e) {
     });
 
     setText('');
+scrollMessagesToBottom();
   } catch (err) {
     console.error(err);
     setStatus('Failed to send message');
@@ -508,15 +538,7 @@ function sendMessage(e) {
 
         {status && <p className="room-status">{status}</p>}
 
-        <input
-          className="room-search"
-          placeholder="Search rooms by name..."
-          value={roomSearch}
-          onChange={(e) => setRoomSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') loadRooms(e.currentTarget.value);
-          }}
-        />
+
 
         <button type="button" className="hidden-rooms-btn" onClick={openHiddenRooms}>
   Hidden Groups
@@ -640,8 +662,8 @@ function sendMessage(e) {
 
   <span>{activeRoom.name}</span>
 </div>
-            <div className="messages">
-              {messages.length === 0 ? (
+<div className="messages" ref={messagesRef}>
+                {messages.length === 0 ? (
   <p className="empty">No messages yet</p>
 ) : (
   Array.from(
@@ -661,11 +683,18 @@ function sendMessage(e) {
             </div>
 
             <form className="input" onSubmit={sendMessage}>
-              <input
-                placeholder="Type message..."
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-              />
+<input
+  placeholder="Type message..."
+  value={text}
+  onChange={(e) => {
+    setText(e.target.value);
+    scrollMessagesToBottom();
+  }}
+  onFocus={() => {
+    setTimeout(scrollMessagesToBottom, 120);
+    setTimeout(scrollMessagesToBottom, 320);
+  }}
+/>
 
               <button type="submit">Send</button>
             </form>
@@ -731,7 +760,7 @@ function sendMessage(e) {
   <div className="invite-box">
     <div className="invite-search-row">
       <input
-        placeholder="Search users by email or ID..."
+        placeholder="Search by email or ID..."
         value={inviteSearch}
         onChange={(e) => setInviteSearch(e.target.value)}
         onKeyDown={(e) => {

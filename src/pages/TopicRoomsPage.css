@@ -326,6 +326,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 22px;
   padding-bottom: 16px;
   display: flex;
@@ -371,14 +372,17 @@
 }
 
 .input {
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 9px;
   padding: 12px;
-  background: rgba(15, 23, 42, 0.92);
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: rgba(15, 23, 42, 0.96);
   border-top: 1px solid rgba(255, 255, 255, 0.075);
-  z-index: 5;
+  z-index: 20;
 }
 
 .empty {
@@ -497,9 +501,11 @@
 @media (max-width: 760px) {
   .rooms-page {
     height: calc(100dvh - 54px);
-    min-height: 100dvh;
+    min-height: 0;
+    max-height: calc(100dvh - 54px);
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
   }
 
   .rooms-page.mobile-chat-open .sidebar {
@@ -509,6 +515,7 @@
   .rooms-page.mobile-chat-open .chat {
     display: flex;
     height: 100%;
+    min-height: 0;
   }
 
   .rooms-page:not(.mobile-chat-open) .chat {
@@ -549,6 +556,8 @@
   .chat {
     height: 100%;
     min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
   }
 
   .chat-header {
@@ -570,11 +579,13 @@
   }
 
   .messages {
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 13px;
-    max-height: 77%;
+    padding-bottom: 14px;
+    max-height: none;
   }
 
   .hidden-rooms-btn {
@@ -585,10 +596,52 @@
     max-width: 86%;
   }
 
+  .input input,
+.room-search,
+.invite-box input,
+.create-form input,
+.create-form select {
+  font-size: 16px;
+}
+
+@media (max-width: 760px) {
+  .rooms-page.mobile-chat-open {
+    height: calc(100dvh - 54px);
+    max-height: calc(100dvh - 54px);
+    overflow: hidden;
+  }
+
+  .chat {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .messages {
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: 88px;
+  }
+
   .input {
+    position: relative;
+    bottom: auto;
+    flex-shrink: 0;
+  }
+
+  .input input {
+    font-size: 16px;
+    transform: translateZ(0);
+  }
+}
+
+  .input {
+    flex: 0 0 auto;
+    position: relative;
+    bottom: auto;
     grid-template-columns: minmax(0, 1fr) auto;
     padding: 10px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
     gap: 8px;
+    z-index: 20;
   }
 
   .input input {

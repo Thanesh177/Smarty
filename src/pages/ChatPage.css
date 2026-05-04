@@ -368,6 +368,7 @@
   min-height: 0;
   padding: 30px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -442,12 +443,17 @@
 ========================= */
 
 .message-form {
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   padding: 18px 24px;
-  background: rgba(255, 255, 255, 0.04);
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+  background: rgba(15, 23, 42, 0.96);
   border-top: 1px solid rgba(255, 255, 255, 0.065);
+  z-index: 20;
 }
 
 .message-form button {
@@ -526,9 +532,10 @@
 @media (max-width: 860px) {
   .chat-page {
     height: calc(100dvh - 72px);
-    min-height: calc(100dvh - 72px);
+    min-height: 0;
+    max-height: calc(100dvh - 72px);
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
+    grid-template-rows: minmax(0, 1fr);
     padding: 10px;
     overflow: hidden;
   }
@@ -540,6 +547,7 @@
   .chat-page.mobile-chat-open .chat-window {
     display: grid;
     height: 100%;
+    min-height: 0;
   }
 
   .chat-page:not(.mobile-chat-open) .chat-window {
@@ -606,7 +614,9 @@
 
   .chat-window {
     grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100%;
     min-height: 0;
+    max-height: 100%;
     overflow: hidden;
     border-radius: 26px;
   }
@@ -636,8 +646,10 @@
 
   .messages {
     padding: 14px;
+    padding-bottom: 14px;
     min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .message {
@@ -664,9 +676,14 @@
   }
 
   .message-form {
+    flex: 0 0 auto;
+    position: relative;
+    bottom: auto;
     grid-template-columns: minmax(0, 1fr) auto;
     padding: 10px 12px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
     gap: 8px;
+    z-index: 20;
   }
 
   .message-form button {
@@ -722,9 +739,42 @@
   .message {
     max-width: 90%;
   }
+.message-form input,
+.chat-search input {
+  font-size: 16px;
+}
+
+@media (max-width: 860px) {
+  .chat-page.mobile-chat-open {
+    height: calc(100dvh - 72px);
+    max-height: calc(100dvh - 72px);
+    overflow: hidden;
+  }
+
+  .chat-window {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .messages {
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: 88px;
+  }
 
   .message-form {
+    position: relative;
+    bottom: auto;
+    flex-shrink: 0;
+  }
+
+  .message-form input {
+    font-size: 16px;
+    transform: translateZ(0);
+  }
+}
+  .message-form {
     padding: 9px;
+    padding-bottom: max(13px, env(safe-area-inset-bottom));
   }
 }
 

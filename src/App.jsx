@@ -2,7 +2,7 @@ import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
-import { notificationApi } from './api/client';
+import { notificationApi, chatApi } from './api/client';
 import {
   listenForForegroundMessages,
   setupAndroidPushTokenListener,
@@ -53,9 +53,43 @@ function Layout() {
   const { user, logout } = useAuth();
   const [totalUnread, setTotalUnread] = useState(0);
 
-  // Reset unread count
+  // Keep chat notification badge updated globally, even when user is not on Chat page
   useEffect(() => {
-    if (user) setTotalUnread(0);
+    if (!user) {
+      setTotalUnread(0);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const refreshChatUnread = async () => {
+      try {
+        const chats = await chatApi.getChats();
+        if (cancelled) return;
+
+        const unread = Array.isArray(chats)
+          ? chats.reduce((sum, chat) => sum + Number(chat.unreadCount || 0), 0)
+          : 0;
+
+        setTotalUnread(unread);
+      } catch (error) {
+        console.error('Failed to refresh chat unread count:', error);
+      }
+    };
+
+    refreshChatUnread();
+
+    const intervalId = window.setInterval(refreshChatUnread, 8000);
+
+    window.addEventListener('focus', refreshChatUnread);
+    window.addEventListener('chat-unread-refresh', refreshChatUnread);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshChatUnread);
+      window.removeEventListener('chat-unread-refresh', refreshChatUnread);
+    };
   }, [user]);
 
   // Android WebView push token bridge

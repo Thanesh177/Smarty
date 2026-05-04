@@ -61,17 +61,19 @@ export default function ChatPage() {
   }, [userId]);
 
   useEffect(() => {
-  const totalUnread = chats.reduce(
-    (sum, chat) => sum + Number(chat.unreadCount || 0),
-    0
-  );
+    const totalUnread = chats.reduce(
+      (sum, chat) => sum + Number(chat.unreadCount || 0),
+      0
+    );
 
-  window.dispatchEvent(
-    new CustomEvent('chat-unread-update', {
-      detail: { totalUnread },
-    })
-  );
-}, [chats]);
+    window.dispatchEvent(
+      new CustomEvent('chat-unread-update', {
+        detail: { totalUnread },
+      })
+    );
+
+    window.dispatchEvent(new Event('chat-unread-refresh'));
+  }, [chats]);
 
   useEffect(() => {
     return () => {
@@ -99,6 +101,7 @@ export default function ChatPage() {
               : chat
           )
         );
+        window.dispatchEvent(new Event('chat-unread-refresh'));
         // Do not append message if chat not open
         return;
       }
@@ -131,10 +134,33 @@ export default function ChatPage() {
     };
   }, [userId]);
 
-  useEffect(() => {
+const scrollMessagesToBottom = () => {
+  window.requestAnimationFrame(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+  });
+};
+
+useEffect(() => {
+  scrollMessagesToBottom();
+}, [messages]);
+
+useEffect(() => {
+  if (!activeChat) return undefined;
+
+  const handleViewportResize = () => {
+    scrollMessagesToBottom();
+  };
+
+  window.visualViewport?.addEventListener('resize', handleViewportResize);
+  window.addEventListener('resize', handleViewportResize);
+
+  return () => {
+    window.visualViewport?.removeEventListener('resize', handleViewportResize);
+    window.removeEventListener('resize', handleViewportResize);
+  };
+}, [activeChat]);
+
 useEffect(() => {
   const startWithUser = location.state?.startWithUser;
 
@@ -260,6 +286,8 @@ try {
         item.chatId === chat.chatId ? { ...item, unreadCount: 0 } : item
       )
     );
+
+    window.dispatchEvent(new Event('chat-unread-refresh'));
   } catch (err) {
     console.error('Could not load messages:', err);
     setStatus('Could not load messages.');
@@ -419,7 +447,7 @@ const handleBlockUser = async () => {
       <section className="chat-sidebar">
         <form className="chat-search" onSubmit={searchUsers}>
           <input
-            placeholder="Search users..."
+            placeholder="Search users by name or mail..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -555,12 +583,19 @@ const handleBlockUser = async () => {
               )}
 
               <form className="message-form" onSubmit={sendMessage}>
-              <input
-                placeholder={isBlocked ? 'Unblock this user to send messages' : 'Type a message...'}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                disabled={isBlocked}
-              />
+<input
+  placeholder={isBlocked ? 'Unblock this user to send messages' : 'Type a message...'}
+  value={text}
+  onChange={(e) => {
+    setText(e.target.value);
+    scrollMessagesToBottom();
+  }}
+  onFocus={() => {
+    setTimeout(scrollMessagesToBottom, 120);
+    setTimeout(scrollMessagesToBottom, 320);
+  }}
+  disabled={isBlocked}
+/>
               <button type="submit" disabled={isBlocked}>
                 Send
               </button>
