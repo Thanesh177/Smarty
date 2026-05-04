@@ -37,6 +37,21 @@ const CATEGORY_FILTERS = [
   { label: 'Poetry', value: 'poetry' },
 ];
 
+function BooksLoading({ message = 'Loading books...' }) {
+  return (
+    <div className="books-loading-card" role="status" aria-live="polite">
+      <div className="premium-book-loader" aria-hidden="true">
+        <span />
+      </div>
+
+      <div className="books-loading-copy">
+        <strong>{message}</strong>
+        <p>Curating your next read...</p>
+      </div>
+    </div>
+  );
+}
+
 function getBookId(book) {
   return book.id || book.gutenberg_id || book.book_id || book.formats?.id;
 }
@@ -655,7 +670,7 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
         <BookRow title="Saved Books" books={visibleSavedBooks} />
       )}
 
-      {loadingRows && <p className="read-books-status">Loading books...</p>}
+      {loadingRows && <BooksLoading message="Building your book shelves..." />}
 
       {!loadingRows &&
         !hasActiveFilters &&
@@ -667,7 +682,7 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
 
       <div ref={loadMoreRef} className="book-load-sentinel" />
 
-      {loadingMore && <p className="read-books-status">Loading more books...</p>}
+      {loadingMore && <BooksLoading message="Loading more discoveries..." />}
 
       {!hasActiveFilters && !hasMoreBrowse && visibleBrowseBooks.length > 0 && (
         <p className="read-books-status">You have reached the end.</p>

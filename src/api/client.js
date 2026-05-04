@@ -22,9 +22,8 @@ const NEWS_API_BASE_URL =
     ? 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com'
     : '/bbc-api');
 
-const OPENLIBRARY_BASE_URL = import.meta.env.PROD
-  ? 'https://openlibrary.org'
-  : '/openlibrary';
+const OPENLIBRARY_BASE_URL =
+  import.meta.env.VITE_OPENLIBRARY_BASE_URL || 'https://openlibrary.org';
 
 export const newsApi = {
   async getLatestNews(lang = 'english') {
@@ -800,23 +799,23 @@ async getSingleReel(reelId) {
 
 export const userApi = {
   getMe: async () => {
-  const res = await api.get('/users/profile');
-  return res.data.profile || res.data;
-},
+    const res = await api.get('/users/profile');
+    return res.data.profile || res.data;
+  },
 
   updateProfile: async (payload) => {
-  const res = await api.put('/users/profile', payload);
-  return res.data.profile || res.data;
-},
+    const res = await api.put('/users/profile', payload);
+    return res.data.profile || res.data;
+  },
 
-savePushToken: async (token) => {
-  const res = await api.post('/users/push-token', {
-    token,
-    platform: 'web',
-  });
+  savePushToken: async (token, platform = 'web') => {
+    const res = await api.post('/users/push-token', {
+      token,
+      platform,
+    });
 
-  return res.data;
-},
+    return res.data;
+  },
 };
 
 

@@ -140,6 +140,71 @@
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
+.books-loading-card {
+  width: min(520px, 100%);
+  margin: 30px auto;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(16px);
+  color: #e5edf8;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 20px 48px rgba(2, 6, 23, 0.22);
+}
+
+.premium-book-loader {
+  width: 44px;
+  height: 56px;
+  border-radius: 8px 11px 11px 8px;
+  background: linear-gradient(145deg, #f8fafc, #cbd5e1);
+  position: relative;
+  flex: 0 0 auto;
+  box-shadow: inset 5px 0 0 rgba(15, 23, 42, 0.14);
+  overflow: hidden;
+  animation: premiumBookFloat 1.8s ease-in-out infinite;
+}
+
+.premium-book-loader::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent, rgba(255,255,255,0.72), transparent);
+  transform: translateX(-120%);
+  animation: premiumBookShine 2.1s ease-in-out infinite;
+}
+
+.premium-book-loader span {
+  position: absolute;
+  right: 8px;
+  top: 13px;
+  width: 17px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.22);
+  box-shadow: 0 8px 0 rgba(15, 23, 42, 0.14), 0 16px 0 rgba(15, 23, 42, 0.1);
+}
+
+.books-loading-copy p {
+  margin: 3px 0 0;
+  color: #aebed1;
+  font-size: 0.9rem;
+}
+
+@keyframes premiumBookFloat {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+@keyframes premiumBookShine {
+  54%, 100% {
+    transform: translateX(130%);
+  }
+}
+
 .read-books-search-box:focus-within {
   border-color: rgba(56, 189, 248, 0.46);
   background: rgba(255, 255, 255, 0.075);
@@ -431,7 +496,11 @@
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  padding: 10px;
+  box-sizing: border-box;
+  background: linear-gradient(145deg, #0f172a, #1e293b);
 }
 
 .book-cover-placeholder::after {
@@ -655,7 +724,7 @@
   }
 
   .book-cover-placeholder {
-    height: 178px;
+    height: 210px;
   }
 
   .book-cover-placeholder span {
@@ -698,7 +767,7 @@
   }
 
   .book-results-grid .book-cover-placeholder {
-    height: 220px;
+    height: 260px;
   }
 }
 
