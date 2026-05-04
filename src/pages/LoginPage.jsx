@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import { useAuth } from '../contexts/AuthContext';
+import { isAndroidCognitoLogin, startAndroidGoogleLogin } from '../lib/cognito';
 import './LoginPage.css';
 
 export default function LoginPage() {
@@ -20,6 +21,11 @@ export default function LoginPage() {
     setMessage('');
 
     try {
+      if (isAndroidCognitoLogin()) {
+        startAndroidGoogleLogin();
+        return;
+      }
+
       await signInWithRedirect({
         provider: 'Google',
       });
