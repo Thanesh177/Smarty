@@ -662,18 +662,20 @@
   }
 
   .snap-feed {
-    padding: 14px 0 62px;
-    scroll-snap-type: y mandatory;
+    padding: 14px 0 max(110px, calc(env(safe-area-inset-bottom) + 88px));
+    scroll-snap-type: none;
+    scroll-padding-bottom: 120px;
   }
 
   .snap-post,
   .snap-post:not(.no-media),
   .snap-post.no-media {
     width: calc(100% - 16px);
-    margin-bottom: 16px;
+    margin-bottom: 22px;
     min-height: auto;
     grid-template-columns: 1fr;
     border-radius: 24px;
+    scroll-snap-align: none;
   }
 
   .snap-post:hover {
@@ -739,13 +741,17 @@
 @media (max-width: 640px) {
   .snap-feed {
     padding-top: 10px;
+    padding-bottom: max(130px, calc(env(safe-area-inset-bottom) + 104px));
+    scroll-snap-type: none;
   }
 
   .snap-post,
   .snap-post:not(.no-media),
   .snap-post.no-media {
     width: calc(100% - 12px);
+    margin-bottom: 24px;
     border-radius: 22px;
+    scroll-snap-align: none;
   }
 
   .snap-post:not(.no-media) .mini-media {

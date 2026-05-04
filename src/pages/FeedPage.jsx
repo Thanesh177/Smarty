@@ -337,9 +337,9 @@ const handleExplain = async (post) => {
 
                 <div className="post-actions">
 
-                  <button type="button" onClick={() => handleLike(postId)}>
+                  {/* <button type="button" onClick={() => handleLike(postId)}>
                     ❤️ {post.likes ?? 0}
-                  </button>
+                  </button> */}
 
                   <button type="button" onClick={() => handleSave(postId)}>
                     🔖 Save

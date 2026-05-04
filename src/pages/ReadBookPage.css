@@ -6,7 +6,7 @@
   width: 100%;
   min-height: calc(100vh - 72px);
   margin: 0;
-  padding: 4.25rem clamp(14px, 3vw, 48px) 82px;
+  padding: 1.25rem clamp(14px, 3vw, 48px) 82px;
   color: #f8fafc;
   box-sizing: border-box;
   position: relative;
@@ -591,7 +591,7 @@
 
 @media (max-width: 720px) {
   .read-books-page {
-    padding: 5.75rem 12px 76px;
+    padding: 0.75rem 12px 76px;
   }
 
   .read-books-hero {
@@ -677,6 +677,7 @@
 
 @media (max-width: 520px) {
   .access-filter-bar {
+    width: 100%;
     gap: 6px;
     padding: 4px;
     border-radius: 18px;

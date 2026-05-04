@@ -6,7 +6,7 @@
 .quiz-page {
   width: min(1600px, calc(100% - 32px));
   margin: 0 auto;
-  padding: 5rem clamp(16px, 4vw, 56px) 5rem;
+  padding: 2rem clamp(16px, 4vw, 56px) 5rem;
   color: #fff;
 }
 
@@ -576,7 +576,7 @@
 @media (max-width: 760px) {
   .quiz-page {
     width: min(100% - 24px, 1180px);
-    padding: 5.75rem 12px 2.8rem;
+    padding: 1.75rem 12px 2.8rem;
   }
 
   .quiz-hero.game-profile-hero {

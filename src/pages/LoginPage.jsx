@@ -58,7 +58,6 @@ export default function LoginPage() {
     <main className="login-page">
       <section className="login-hero">
         <div>
-          <span className="login-pill">Smarty Web</span>
           <h1>Learn faster. Scroll smarter.</h1>
           <p>
             Sign in to access your personalized educational feed, saved reels,

@@ -22,6 +22,10 @@ const NEWS_API_BASE_URL =
     ? 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com'
     : '/bbc-api');
 
+const OPENLIBRARY_BASE_URL = import.meta.env.PROD
+  ? 'https://openlibrary.org'
+  : '/openlibrary';
+
 export const newsApi = {
   async getLatestNews(lang = 'english') {
     const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
@@ -313,7 +317,7 @@ export const readBooksApi = {
     if (yearSearch) queryParams.set('first_publish_year', yearSearch);
 
     const { data } = await axios.get(
-      `/openlibrary/search.json?${queryParams.toString()}`,
+      `${OPENLIBRARY_BASE_URL}/search.json?${queryParams.toString()}`,
       {
         signal: options.signal,
         timeout: 20000,
@@ -395,7 +399,7 @@ readable: Boolean(
     }
 
     const { data } = await axios.get(
-      `/openlibrary/works/${encodeURIComponent(bookId)}.json`,
+      `${OPENLIBRARY_BASE_URL}/works/${encodeURIComponent(bookId)}.json`,
       { timeout: 20000 }
     );
 
@@ -490,7 +494,7 @@ readable: Boolean(
     }
 
     const { data } = await axios.get(
-      `/openlibrary/works/${encodeURIComponent(cleanWorkId)}/editions.json?limit=50`,
+      `${OPENLIBRARY_BASE_URL}/works/${encodeURIComponent(cleanWorkId)}/editions.json?limit=50`,
       { timeout: 20000 }
     );
 
