@@ -20,10 +20,17 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
       </button>
 
       {open && (
-        <>
-          <button className="menu-backdrop" type="button" onClick={closeMenu} />
-
-          <nav className="menu-panel" aria-label="Main navigation">
+        <div
+          className="menu-overlay"
+          onClick={closeMenu}
+          onTouchStart={closeMenu}
+        >
+          <nav
+            className="menu-panel"
+            aria-label="Main navigation"
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+          >
             <div className="menu-header">
               <div className="menu-title">
                 <span>Smarty</span>
@@ -68,7 +75,7 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
               )}
             </div>
           </nav>
-        </>
+        </div>
       )}
     </div>
   );

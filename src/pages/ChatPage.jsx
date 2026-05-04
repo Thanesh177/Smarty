@@ -73,6 +73,7 @@ export default function ChatPage() {
     );
 
     window.dispatchEvent(new Event('chat-unread-refresh'));
+    scrollMessagesToBottom();
   }, [chats]);
 
   useEffect(() => {
@@ -116,15 +117,38 @@ export default function ChatPage() {
       setMessages((prev) => {
         if (prev.find((m) => m.messageId === msg.messageId)) return prev;
 
+        const isOwnMessage = msg.senderId === userId;
+
+        if (isOwnMessage) {
+          const matchingLocalIndex = prev.findIndex(
+            (m) =>
+              String(m.messageId || '').startsWith('local-') &&
+              m.text === msg.text &&
+              Math.abs(Number(m.createdAt || 0) - Number(msg.createdAt || Date.now())) < 15000
+          );
+
+          if (matchingLocalIndex !== -1) {
+            return prev.map((m, index) =>
+              index === matchingLocalIndex
+                ? {
+                    ...msg,
+                    isMine: true,
+                  }
+                : m
+            );
+          }
+        }
+
         return [
           ...prev,
           {
             ...msg,
-            isMine: msg.senderId === userId,
+            isMine: isOwnMessage,
           },
         ];
       });
 
+      scrollMessagesToBottom();
       loadChats();
     });
 
@@ -256,13 +280,13 @@ const openChat = async (chat) => {
   setMobileChatOpen(true);
   setStatus('');
   setIsBlocked(chat?.isBlocked || false);
-try {
-  if (chatApi.markAsRead) {
-    await chatApi.markAsRead(chat.chatId);
+  try {
+    if (chatApi.markAsRead) {
+      await chatApi.markAsRead(chat.chatId);
+    }
+  } catch (e) {
+    console.error('Mark as read failed', e);
   }
-} catch (e) {
-  console.error('Mark as read failed', e);
-}
   // check block status from backend
   try {
     const blockStatus = await chatApi.checkBlockStatus(chat.receiverId);
@@ -281,6 +305,8 @@ try {
       }))
     );
 
+    setTimeout(scrollMessagesToBottom, 50);
+
     setChats((prev) =>
       prev.map((item) =>
         item.chatId === chat.chatId ? { ...item, unreadCount: 0 } : item
@@ -288,6 +314,7 @@ try {
     );
 
     window.dispatchEvent(new Event('chat-unread-refresh'));
+    scrollMessagesToBottom();
   } catch (err) {
     console.error('Could not load messages:', err);
     setStatus('Could not load messages.');
@@ -324,6 +351,8 @@ useEffect(() => {
         }))
       );
 
+      setTimeout(scrollMessagesToBottom, 50);
+
       // check block status from backend
       try {
         const blockStatus = await chatApi.checkBlockStatus(chat.receiverId);
@@ -345,13 +374,28 @@ useEffect(() => {
     if (!text.trim() || !activeChat || isBlocked) return;
 
     try {
+      const cleanText = text.trim();
+
+      const tempMessage = {
+        messageId: `local-${Date.now()}`,
+        chatId: activeChat.chatId,
+        senderId: userId,
+        text: cleanText,
+        createdAt: Date.now(),
+        isMine: true,
+      };
+
+      setMessages((prev) => [...prev, tempMessage]);
+      scrollMessagesToBottom();
+
       sendChatMessage({
         chatId: activeChat.chatId,
         receiverId: activeChat.receiverId,
-        text: text.trim(),
+        text: cleanText,
       });
 
       setText('');
+      scrollMessagesToBottom();
     } catch (err) {
       console.error('Message send failed:', err);
       setStatus(err.message || 'Message failed.');
@@ -486,14 +530,35 @@ const handleBlockUser = async () => {
                 className={activeChat?.chatId === chat.chatId ? 'active' : ''}
                 onClick={() => openChat(chat)}
               >
-                <strong>{chat.receiverName || chat.receiverEmail || 'User'}</strong>
 
-                <div className="chat-preview">
-                  <span>{chat.lastMessage || 'Open conversation'}</span>
-                  {Number(chat.unreadCount) > 0 && (
-                    <span className="unread-badge">{chat.unreadCount}</span>
-                  )}
-                </div>
+<div className="chat-item">
+  <img
+    className="chat-avatar"
+    src={
+      chat.receiverAvatar ||
+      chat.receiverPhoto ||
+      chat.receiverImage ||
+      chat.profilePicture ||
+      `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        chat.receiverName || chat.receiverEmail || 'User'
+      )}&background=7dd3fc&color=07111f&bold=true`
+    }
+    alt=""
+    loading="lazy"
+    referrerPolicy="no-referrer"
+  />
+
+  <div className="chat-content">
+    <strong>{chat.receiverName || chat.receiverEmail || 'User'}</strong>
+
+    <div className="chat-preview">
+      <span>{chat.lastMessage || 'Open conversation'}</span>
+      {activeChat?.chatId !== chat.chatId && Number(chat.unreadCount) > 0 && (
+        <span className="unread-badge">{chat.unreadCount}</span>
+      )}
+    </div>
+  </div>
+</div>
               </button>
             ))
           )}
