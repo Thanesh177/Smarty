@@ -88,6 +88,15 @@ console.log('ANDROID CODE:', androidCode)
           return;
         }
 
+        const cachedToken = localStorage.getItem('eduscroll_token');
+const cachedUser = localStorage.getItem('eduscroll_user');
+
+if (cachedToken && cachedUser) {
+  setUser(JSON.parse(cachedUser));
+  setLoading(false);
+  return;
+}
+
         const currentUser = await getCurrentUser();
         const session = await fetchAuthSession();
         console.log('Session loaded:', session);
