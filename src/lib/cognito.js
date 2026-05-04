@@ -1,6 +1,12 @@
 import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
 
+const DEFAULT_REDIRECT_SIGN_IN =
+  'http://localhost:5173/,https://main.d3qiuefonbp8n9.amplifyapp.com/,smarty://callback/';
+
+const DEFAULT_REDIRECT_SIGN_OUT =
+  'http://localhost:5173/login,https://main.d3qiuefonbp8n9.amplifyapp.com/login,smarty://signout/';
+
 const isAndroidApp = () => {
   const search = window.location.search || '';
   const userAgent = window.navigator.userAgent || '';
@@ -12,8 +18,8 @@ const isAndroidApp = () => {
   );
 };
 
-const splitUrls = (value = '') => {
-  const urls = value
+const pickRedirectUrl = (value = '', fallback = '') => {
+  const urls = (value || fallback)
     .split(',')
     .map((url) => url.trim())
     .filter(Boolean);
@@ -21,9 +27,9 @@ const splitUrls = (value = '') => {
   const currentOrigin = window.location.origin;
   const appUrl = urls.find((url) => url.startsWith('smarty://'));
 
-  // Android app must return ONLY the deep link, otherwise Amplify may choose the web URL.
+  // Android app must use only the deep link so Cognito returns to the app.
   if (isAndroidApp() && appUrl) {
-    return [appUrl];
+    return appUrl;
   }
 
   const currentUrl = urls.find((url) => {
@@ -36,7 +42,7 @@ const splitUrls = (value = '') => {
     }
   });
 
-  return currentUrl ? [currentUrl] : urls;
+  return currentUrl || urls[0] || fallback.split(',')[0];
 };
 
 Amplify.configure({
@@ -49,8 +55,14 @@ Amplify.configure({
         oauth: {
           domain: (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, ''),
           scopes: ['openid', 'email', 'profile'],
-          redirectSignIn: splitUrls(import.meta.env.VITE_REDIRECT_SIGN_IN),
-          redirectSignOut: splitUrls(import.meta.env.VITE_REDIRECT_SIGN_OUT),
+          redirectSignIn: pickRedirectUrl(
+            import.meta.env.VITE_REDIRECT_SIGN_IN,
+            DEFAULT_REDIRECT_SIGN_IN
+          ),
+          redirectSignOut: pickRedirectUrl(
+            import.meta.env.VITE_REDIRECT_SIGN_OUT,
+            DEFAULT_REDIRECT_SIGN_OUT
+          ),
           responseType: 'code',
         },
       },

@@ -10,6 +10,14 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
     <div className="navbar-menu">
       <button
         type="button"
+        className="navbar-brand-refresh"
+        onClick={() => window.location.reload()}
+        aria-label="Refresh Smarty"
+      >
+        <span className="navbar-brand-title">Smarty</span>
+      </button>
+      <button
+        type="button"
         className="hamburger-btn"
         onClick={() => setOpen((prev) => !prev)}
         aria-label="Open navigation menu"
