@@ -16,15 +16,11 @@ const isLocalhost =
   window.location.hostname === 'localhost' ||
   window.location.hostname === '127.0.0.1';
 
-const redirectSignIn = isAndroidApp()
-  ? 'smarty://callback/'
-  : isLocalhost
+const redirectSignIn = isLocalhost
   ? 'http://localhost:5173/'
   : 'https://main.d3qiuefonbp8n9.amplifyapp.com/';
 
-const redirectSignOut = isAndroidApp()
-  ? 'smarty://signout/'
-  : isLocalhost
+const redirectSignOut = isLocalhost
   ? 'http://localhost:5173/login'
   : 'https://main.d3qiuefonbp8n9.amplifyapp.com/login';
 
@@ -43,6 +39,34 @@ export const startAndroidGoogleLogin = () => {
   });
 
   window.location.href = `https://${domain}/oauth2/authorize?${query.toString()}`;
+};
+
+export const exchangeAndroidCodeForTokens = async (code) => {
+  const domain = (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, '');
+  const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
+
+  const body = new URLSearchParams({
+    grant_type: 'authorization_code',
+    client_id: clientId,
+    code,
+    redirect_uri: 'smarty://callback/',
+  });
+
+  const response = await fetch(`https://${domain}/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data?.error_description || data?.error || 'Android OAuth token exchange failed.');
+  }
+
+  return data;
 };
 
 console.log('COGNITO REDIRECT IN:', redirectSignIn);
