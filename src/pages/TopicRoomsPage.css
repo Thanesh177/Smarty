@@ -9,8 +9,8 @@
   overflow: hidden;
   color: #e5e7eb;
   background:
-    radial-gradient(circle at 12% 0%, rgba(148, 163, 184, 0.08), transparent 34%),
-    #020617;
+    radial-gradient(circle at 12% 0%, rgba(29, 76, 152, 0.06), transparent 34%),
+    #01040b;
 }
 .rooms-sidebar-head {
   display: flex;
@@ -94,10 +94,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: rgba(15, 23, 42, 0.72);
-  border-right: 1px solid rgba(255, 255, 255, 0.075);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(8, 18, 35, 0.78);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .sidebar h2 {
@@ -162,6 +162,80 @@
   box-shadow: 0 12px 26px rgba(0, 0, 0, 0.24);
 }
 
+/* ===== INVITE SEARCH ===== */
+
+.invite-box {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.invite-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.invite-search-row input {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #f8fafc;
+  font-size: 0.92rem;
+  padding: 10px 8px;
+}
+
+.invite-search-row input::placeholder {
+  color: rgba(226, 232, 240, 0.45);
+}
+
+.invite-search-row button {
+  min-width: 80px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #f8fafc;
+  color: #020617;
+  font-weight: 850;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.invite-search-row button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+.request-btn {
+  position: relative;
+}
+
+.request-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+.invite-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 /* ===== ROOM LIST ===== */
 
 .room-list {
@@ -182,15 +256,15 @@
   padding: 13px;
   border-radius: 16px;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.065);
-  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
 }
 
 .room-item:hover {
-  transform: translateY(-2px);
-  border-color: rgba(203, 213, 225, 0.18);
-  background: rgba(255, 255, 255, 0.065);
+  transform: translateY(-1px);
+  border-color: rgba(203, 213, 225, 0.12);
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .room-item.active {
@@ -303,7 +377,7 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
-  background: #020617;
+  background: #01040b;
 }
 
 .chat-header {
@@ -316,8 +390,8 @@
   color: #f8fafc;
   font-size: 1rem;
   font-weight: 850;
-  background: rgba(15, 23, 42, 0.72);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.075);
+  background: rgba(8, 18, 35, 0.82);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
@@ -340,8 +414,8 @@
   padding: 11px 13px;
   border-radius: 18px 18px 18px 6px;
   color: #e5e7eb;
-  background: rgba(15, 23, 42, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: rgba(10, 22, 40, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.045);
   animation: messageIn 0.2s ease both;
 }
 
@@ -349,7 +423,7 @@
   align-self: flex-end;
   border-radius: 18px 18px 6px 18px;
   color: #020617;
-  background: #f8fafc;
+  background: rgba(226, 232, 240, 0.9);
   border-color: rgba(255, 255, 255, 0.18);
 }
 
@@ -380,8 +454,8 @@
   gap: 9px;
   padding: 12px;
   padding-bottom: max(12px, env(safe-area-inset-bottom));
-  background: rgba(15, 23, 42, 0.96);
-  border-top: 1px solid rgba(255, 255, 255, 0.075);
+  background: rgba(8, 18, 35, 0.9);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
   z-index: 20;
 }
 

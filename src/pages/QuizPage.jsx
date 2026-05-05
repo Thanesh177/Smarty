@@ -373,6 +373,36 @@ function getTotalXP(progressMap) {
 
 export default function QuizPage() {
 const [comboCount, setComboCount] = useState(1);
+
+  // Swipe-to-go-back logic
+  useEffect(() => {
+    let startX = 0;
+    let currentX = 0;
+
+    const handleTouchStart = (e) => {
+      startX = e.touches[0].clientX;
+    };
+
+    const handleTouchMove = (e) => {
+      currentX = e.touches[0].clientX;
+    };
+
+    const handleTouchEnd = () => {
+      if (startX < 50 && currentX - startX > 80) {
+        window.history.back();
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
   const survivalMode = localStorage.getItem("smarty-game-mode") === "survival";
 const SURVIVAL_TIME = 12;
 const [survivalTimeLeft, setSurvivalTimeLeft] = useState(SURVIVAL_TIME);
@@ -803,7 +833,7 @@ if (topic && bossMode && !finished) {
     <main className="quiz-page">
       <section className="question-card">
         <div className="quiz-top-row">
-          <button className="back-btn" onClick={restart}>← Topics</button>
+          <button className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
           <span>Boss Level</span>
         </div>
 
@@ -858,7 +888,7 @@ if (topic && bossMode && !finished) {
       <main className="quiz-page">
         <section className="question-card">
           <div className="quiz-top-row">
-            <button className="back-btn" onClick={restart}>← Topics</button>
+            <button className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
             <span>Smarty Quiz</span>
           </div>
 
@@ -886,11 +916,16 @@ if (topic && bossMode && !finished) {
 
     return (
 
-      <main className="quiz-page">
+<main className="quiz-page">
+  <button
+    className="back-btn quiz-page-back"
+    onClick={() => window.history.back()}
+  >
+    <span className="arrow">←</span> Back
+  </button>
 
-        <section className="quiz-hero">
-
-          <div>
+  <section className="quiz-hero">
+    <div>
 
             <p className="quiz-kicker">SMARTY QUIZ</p>
 
@@ -1162,7 +1197,7 @@ startQuiz(item);
     <main className="quiz-page">
       <section className="question-card">
         <div className="quiz-top-row">
-          <button className="back-btn" onClick={restart}>← Topics</button>
+          <button className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
           <span>
             Challenge {index + 1}/{mixedSteps.length}
           </span>
@@ -1241,7 +1276,7 @@ if (result.success) {
 
         <div className="quiz-top-row">
           <div className="top-left">
-            <button className="back-btn" onClick={restart}>← Topics</button>
+            <button className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
           </div>
 
           <span>

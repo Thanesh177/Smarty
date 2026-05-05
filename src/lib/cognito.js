@@ -1,58 +1,83 @@
 import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
 
+const COGNITO_DOMAIN = (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, '');
+const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID;
+const COGNITO_USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID;
+
+const WEB_REDIRECT_SIGN_IN = 'https://main.d3qiuefonbp8n9.amplifyapp.com/';
+const WEB_REDIRECT_SIGN_OUT = 'https://main.d3qiuefonbp8n9.amplifyapp.com/login';
+const LOCAL_REDIRECT_SIGN_IN = 'http://localhost:5173/';
+const LOCAL_REDIRECT_SIGN_OUT = 'http://localhost:5173/login';
+const ANDROID_REDIRECT_URI = 'smarty://callback/';
+
+const isBrowser = typeof window !== 'undefined';
+
+const isLocalhost = isBrowser && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1'
+);
+
 const isAndroidApp = () => {
+  if (!isBrowser) return false;
+
   const search = window.location.search || '';
   const userAgent = window.navigator.userAgent || '';
 
   return (
     search.includes('platform=android') ||
-    userAgent.includes('wv') ||
-    Boolean(window.AndroidBridge)
+    Boolean(window.AndroidBridge) ||
+    /;\s*wv\)/i.test(userAgent) ||
+    /\bwv\b/i.test(userAgent)
   );
 };
 
-const isLocalhost =
-  window.location.hostname === 'localhost' ||
-  window.location.hostname === '127.0.0.1';
+const getWebRedirectSignIn = () => (
+  isLocalhost ? LOCAL_REDIRECT_SIGN_IN : WEB_REDIRECT_SIGN_IN
+);
 
-const redirectSignIn = isLocalhost
-  ? 'http://localhost:5173/'
-  : 'https://main.d3qiuefonbp8n9.amplifyapp.com/';
+const getWebRedirectSignOut = () => (
+  isLocalhost ? LOCAL_REDIRECT_SIGN_OUT : WEB_REDIRECT_SIGN_OUT
+);
 
-const redirectSignOut = isLocalhost
-  ? 'http://localhost:5173/login'
-  : 'https://main.d3qiuefonbp8n9.amplifyapp.com/login';
+const redirectSignIn = getWebRedirectSignIn();
+const redirectSignOut = getWebRedirectSignOut();
 
 export const isAndroidCognitoLogin = isAndroidApp;
 
 export const startAndroidGoogleLogin = () => {
-  const domain = (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, '');
-  const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
+  if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
+    throw new Error('Missing Cognito domain or client ID. Check VITE_COGNITO_DOMAIN and VITE_COGNITO_CLIENT_ID.');
+  }
 
   const query = new URLSearchParams({
     identity_provider: 'Google',
-    redirect_uri: 'smarty://callback/',
+    redirect_uri: ANDROID_REDIRECT_URI,
     response_type: 'code',
-    client_id: clientId,
+    client_id: COGNITO_CLIENT_ID,
     scope: 'openid email profile',
   });
 
-  window.location.href = `https://${domain}/oauth2/authorize?${query.toString()}`;
+  window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${query.toString()}`;
 };
 
 export const exchangeAndroidCodeForTokens = async (code) => {
-  const domain = (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, '');
-  const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
+  if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
+    throw new Error('Missing Cognito domain or client ID. Check VITE_COGNITO_DOMAIN and VITE_COGNITO_CLIENT_ID.');
+  }
+
+  if (!code) {
+    throw new Error('Missing authorization code from Android callback.');
+  }
 
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
-    client_id: clientId,
+    client_id: COGNITO_CLIENT_ID,
     code,
-    redirect_uri: 'smarty://callback/',
+    redirect_uri: ANDROID_REDIRECT_URI,
   });
 
-  const response = await fetch(`https://${domain}/oauth2/token`, {
+  const response = await fetch(`https://${COGNITO_DOMAIN}/oauth2/token`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -60,7 +85,7 @@ export const exchangeAndroidCodeForTokens = async (code) => {
     body,
   });
 
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
     throw new Error(data?.error_description || data?.error || 'Android OAuth token exchange failed.');
@@ -69,18 +94,25 @@ export const exchangeAndroidCodeForTokens = async (code) => {
   return data;
 };
 
-console.log('COGNITO REDIRECT IN:', redirectSignIn);
-console.log('COGNITO REDIRECT OUT:', redirectSignOut);
+if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID || !COGNITO_USER_POOL_ID) {
+  console.warn('Missing Cognito environment values. Check VITE_COGNITO_DOMAIN, VITE_COGNITO_CLIENT_ID, and VITE_COGNITO_USER_POOL_ID.');
+}
+
+if (import.meta.env.DEV) {
+  console.log('COGNITO REDIRECT IN:', redirectSignIn);
+  console.log('COGNITO REDIRECT OUT:', redirectSignOut);
+  console.log('ANDROID COGNITO MODE:', isAndroidApp());
+}
 
 Amplify.configure({
   Auth: {
     Cognito: {
-      userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
-      userPoolClientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
+      userPoolId: COGNITO_USER_POOL_ID,
+      userPoolClientId: COGNITO_CLIENT_ID,
       loginWith: {
         email: true,
         oauth: {
-          domain: (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^https?:\/\//, ''),
+          domain: COGNITO_DOMAIN,
           scopes: ['openid', 'email', 'profile'],
           redirectSignIn: [redirectSignIn],
           redirectSignOut: [redirectSignOut],

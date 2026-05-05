@@ -4,7 +4,16 @@
   box-sizing: border-box;
 }
 
+.topbar {
+  transition: transform 0.28s ease, opacity 0.28s ease;
+  will-change: transform;
+}
 
+.topbar-hidden {
+  transform: translateY(-120%);
+  opacity: 0;
+  pointer-events: none;
+}
 .install-popup {
   position: fixed;
   left: 50%;

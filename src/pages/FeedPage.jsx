@@ -12,30 +12,95 @@ const normalizeTopic = (value) =>
     .trim()
     .replace(/\s+/g, '-');
 
+const getPostCreatorId = (post) =>
+  post.authorId ||
+  post.creatorId ||
+  post.userId ||
+  post.ownerId ||
+  post.createdBy ||
+  post.authorUserId ||
+  post.creatorUserId ||
+  post.author?.userId ||
+  post.author?.id ||
+  post.creator?.userId ||
+  post.creator?.id ||
+  post.user?.userId ||
+  post.user?.id ||
+  '';
+
 const getDisplayUsername = (post, creatorProfile = null) => {
-  const profileName =
-    creatorProfile?.username ||
-    creatorProfile?.userName ||
-    creatorProfile?.displayName ||
-    creatorProfile?.name;
+  const profile = creatorProfile?.profile || creatorProfile?.user || creatorProfile || {};
 
-  if (profileName && !String(profileName).includes('@')) {
-    return String(profileName).trim();
-  }
+  const databasePostNames = [
+    post.creatorName,
+    post.authorName,
+    post.author,
+    post.creatorEmail,
+    post.authorEmail,
+    post.email,
+    post.creatorUsername,
+    post.authorUsername,
+    post.username,
+    post.userName,
+    post.displayName,
+  ];
 
-  const postName =
-    post.username ||
-    post.userName ||
-    post.displayName ||
-    post.name ||
-    post.creatorName ||
-    post.authorName;
+  const profileNames = [
+    profile.username,
+    profile.userName,
+    profile.displayName,
+    profile.name,
+    profile.email,
+  ];
 
-  if (postName && !String(postName).includes('@')) {
-    return String(postName).trim();
-  }
+  const nestedPostNames = [
+    post.author?.username,
+    post.author?.userName,
+    post.author?.displayName,
+    post.author?.name,
+    post.author?.email,
+    post.creator?.username,
+    post.creator?.userName,
+    post.creator?.displayName,
+    post.creator?.name,
+    post.creator?.email,
+    post.user?.username,
+    post.user?.userName,
+    post.user?.displayName,
+    post.user?.name,
+    post.user?.email,
+  ];
 
-  return 'Creator';
+  const blockedValues = new Set([
+    '',
+    'null',
+    'undefined',
+    'none',
+    'post',
+    'creator',
+    'unknown',
+  ]);
+
+  const formatName = (value) => {
+    const text = String(value || '').trim();
+    if (!text || blockedValues.has(text.toLowerCase())) return '';
+
+    if (text.includes('@')) {
+      return text.split('@')[0] || 'user';
+    }
+
+    return text;
+  };
+
+  const pickName = (values) => {
+    for (const value of values) {
+      const text = formatName(value);
+      if (text) return text;
+    }
+    return '';
+  };
+
+  return pickName(databasePostNames) || pickName(profileNames) || pickName(nestedPostNames) || 'user';
 };
 
     
@@ -140,7 +205,7 @@ export default function FeedPage() {
     const creatorIds = [
       ...new Set(
         visiblePosts
-          .map((post) => post.authorId || post.userId || post.creatorId)
+          .map((post) => getPostCreatorId(post))
           .filter(Boolean)
       ),
     ];
@@ -366,8 +431,9 @@ const handleExplain = async (post) => {
       <section className="snap-feed">
         {filteredPosts.map((post) => {
           const postId = post.reelId || post.id;
-          const creatorId = post.authorId || post.userId || post.creatorId;
+          const creatorId = getPostCreatorId(post);
           const creatorProfile = creatorId ? creatorProfiles[creatorId] : null;
+          const creatorName = getDisplayUsername(post, creatorProfile);
 
           return (
             <article
@@ -407,13 +473,15 @@ const handleExplain = async (post) => {
                   {post.topic || 'Smarty'}
                 </button>
 
-                {creatorId && (
-                  <div className="post-author">
+                <div className="post-author">
+                  {creatorId ? (
                     <Link to={`/creator/${creatorId}`} className="creator-link">
-                      @{getDisplayUsername(post, creatorProfile)}
+                      {creatorName}
                     </Link>
-                  </div>
-                )}
+                  ) : (
+                    <span className="creator-link creator-link-disabled">{creatorName}</span>
+                  )}
+                </div>
 
                 <h1>{post.title}</h1>
                 <p>

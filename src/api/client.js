@@ -96,6 +96,18 @@ const normalizeList = (data) => {
   return [];
 };
 
+const parseApiBody = (data) => {
+  if (typeof data?.body === 'string') {
+    try {
+      return JSON.parse(data.body);
+    } catch {
+      return data;
+    }
+  }
+
+  return data;
+};
+
 export const authApi = {
   async login() {
     throw new Error('Login is handled by Cognito, not API Gateway.');
@@ -579,13 +591,35 @@ async getFeed({ limit = 10, cursor = null, topic = null } = {}) {
   };
 },
 
-  async getCreatorPrivatePosts(userId) {
-  const { data } = await api.get('/creator/private-posts', {
-    params: { userId },
+async getCreatorPrivatePosts(userId) {
+  const creatorId = String(userId || '').trim();
+
+  if (!creatorId) {
+    throw new Error('Creator userId is required.');
+  }
+
+  const privatePostsPath = endpoints?.creator?.privatePosts || '/creator/private-posts';
+
+  const { data } = await api.get(privatePostsPath, {
+    params: {
+      userId: creatorId,
+      creatorId,
+      followingId: creatorId,
+    },
   });
 
-  return data.posts || data.items || [];
+  if (typeof data?.body === 'string') {
+    try {
+      const parsed = JSON.parse(data.body);
+      return parsed.posts || parsed.items || parsed.reels || [];
+    } catch {
+      return [];
+    }
+  }
+
+  return data.posts || data.items || data.reels || [];
 },
+
 async translatePost(payload) {
   const { data } = await api.post('/posts/translate', payload);
   return data;
@@ -803,6 +837,11 @@ export const userApi = {
     return res.data.profile || res.data;
   },
 
+  async followUser(followingId) {
+  const { data } = await api.post('/users/follow', { followingId });
+  return data;
+},
+
   updateProfile: async (payload) => {
     const res = await api.put('/users/profile', payload);
     return res.data.profile || res.data;
@@ -827,6 +866,20 @@ export const chatApi = {
     });
 
     return normalizeList(data);
+  },
+
+  async getMediaViewUrl({ mediaKey }) {
+    const { data } = await api.post('/media/view-url', {
+      mediaKey,
+    });
+
+    const parsed = parseApiBody(data);
+
+    return {
+      ...parsed,
+      mediaUrl: parsed?.mediaUrl || parsed?.fileUrl || parsed?.url || '',
+      fileUrl: parsed?.fileUrl || parsed?.mediaUrl || parsed?.url || '',
+    };
   },
 
 blockUser: async (blockedId) => {
@@ -877,17 +930,88 @@ async reportUser(payload) {
       params: { chatId },
     });
 
-    return normalizeList(data);
+    return normalizeList(data).map((message) => ({
+      ...message,
+      mediaKey: message.mediaKey || message.key || '',
+      mediaUrl: message.mediaUrl || message.fileUrl || '',
+      mediaName: message.mediaName || '',
+      mediaType: message.mediaType || '',
+      reactions: message.reactions || {},
+    }));
   },
 
-  async sendMessage({ chatId, receiverId, text }) {
+  async sendMessage({
+    chatId,
+    receiverId,
+    text = '',
+    mediaKey = '',
+    mediaUrl = '',
+    mediaName = '',
+    mediaType = '',
+    clientId = '',
+  }) {
     const { data } = await api.post(endpoints.chat.send, {
       chatId,
       receiverId,
       text,
+      mediaKey,
+      mediaUrl,
+      mediaName,
+      mediaType,
+      clientId,
     });
 
-    return data;
+    return parseApiBody(data);
+  },
+
+  async getMediaUploadUrl({ fileName, fileType }) {
+    const { data } = await api.post('/media/upload-url', {
+      fileName,
+      fileType,
+    });
+
+    const parsed = parseApiBody(data);
+
+    return {
+      ...parsed,
+      uploadUrl: parsed?.uploadUrl || '',
+      mediaKey: parsed?.mediaKey || parsed?.key || '',
+      mediaUrl: parsed?.mediaUrl || parsed?.fileUrl || parsed?.url || '',
+      fileUrl: parsed?.fileUrl || parsed?.mediaUrl || parsed?.url || '',
+    };
+  },
+
+  async getUploadUrl(payload) {
+    return this.getMediaUploadUrl(payload);
+  },
+
+  async reactToMessage({ chatId, messageId, emoji }) {
+    const { data } = await api.post('/messages/react', {
+      chatId,
+      messageId,
+      emoji,
+    });
+
+    return parseApiBody(data);
+  },
+
+  async editMessage({ chatId, messageId, text }) {
+    const { data } = await api.post('/messages/edit', {
+      chatId,
+      messageId,
+      text,
+    });
+
+    return parseApiBody(data);
+  },
+
+  async deleteMessage({ chatId, messageId }) {
+    const { data } = await api.post('/messages/delete', {
+      chatId,
+      messageId,
+    });
+
+    return parseApiBody(data);
   },
 
   

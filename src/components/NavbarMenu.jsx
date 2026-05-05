@@ -1,22 +1,60 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import './NavbarMenu.css';
 export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
   const [open, setOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [lastScrollY, setLastScrollY] = useState(0);
 
   const closeMenu = () => setOpen(false);
 
+  useEffect(() => {
+    let previousScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+
+    const handleScroll = (event) => {
+      const target = event.target === document ? document.documentElement : event.target;
+      const currentScrollY = target?.scrollTop ?? window.scrollY ?? 0;
+
+      if (open) {
+        setHidden(false);
+        previousScrollY = currentScrollY;
+        return;
+      }
+
+      if (currentScrollY > previousScrollY + 8 && currentScrollY > 80) {
+        setHidden(true);
+      }
+
+      if (currentScrollY < previousScrollY - 12 || currentScrollY <= 20) {
+        setHidden(false);
+      }
+
+      previousScrollY = currentScrollY;
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+      document.removeEventListener('scroll', handleScroll, { capture: true });
+    };
+  }, [open]);
+
   return (
-    <div className="navbar-menu">
+    <div className={`navbar-menu ${hidden ? 'navbar-menu-hidden' : ''}`}>
 
       <button
         type="button"
-        className="hamburger-btn"
+        className={`hamburger-btn ${open ? 'is-open' : ''}`}
         onClick={() => setOpen((prev) => !prev)}
-        aria-label="Open navigation menu"
+        aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
         aria-expanded={open}
       >
-        ☰
+        <span className="hamburger-line" />
+        <span className="hamburger-line" />
+        <span className="hamburger-line" />
       </button>
 
       {open && (
@@ -36,6 +74,14 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
                 <span>Smarty</span>
                 <h3>Navigation</h3>
               </div>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={closeMenu}
+                aria-label="Close menu"
+              >
+                ✕
+              </button>
             </div>
 
             {/* Profile card removed - starting directly with navigation sections */}

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { userApi, postApi, creatorApi } from '../api/client';
+import { userApi, postApi, creatorApi, roomApi } from '../api/client';
 import './ProfilePage.css';
+const PROFILE_CACHE_KEY = 'smarty.profilePage.cache.v1';
 
 function getPostImage(post) {
   return (
@@ -16,7 +17,10 @@ function getPostImage(post) {
 }
 export default function ProfilePage() {
   const navigate = useNavigate();
-
+  const [friendSearch, setFriendSearch] = useState('');
+  const [friendResults, setFriendResults] = useState([]);
+  const [searchingFriends, setSearchingFriends] = useState(false);
+  const [friendActionLoading, setFriendActionLoading] = useState('');
   const [profile, setProfile] = useState(null);
   const [tab, setTab] = useState('overview');
   const [myPosts, setMyPosts] = useState([]);
@@ -27,12 +31,38 @@ export default function ProfilePage() {
   const [status, setStatus] = useState('');
 
   const [editingProfile, setEditingProfile] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPhoto, setNewPhoto] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropX, setCropX] = useState(50);
+  const [cropY, setCropY] = useState(50);
+  const cropDragRef = useRef(null);
+
+useEffect(() => {
+  try {
+    const cached = localStorage.getItem(PROFILE_CACHE_KEY);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed?.profile) setProfile(parsed.profile);
+      if (Array.isArray(parsed?.myPosts)) setMyPosts(parsed.myPosts);
+      if (Array.isArray(parsed?.following)) {
+        setFollowing(parsed.following);
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to read profile cache', err);
+  }
+
+  loadProfileData();
+}, []);
 
   useEffect(() => {
-    loadProfileData();
-  }, []);
+    return () => {
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+    };
+  }, [photoPreview]);
 
   const displayName = useMemo(() => {
     const raw = profile?.username || profile?.name || profile?.email || 'User';
@@ -50,6 +80,68 @@ export default function ProfilePage() {
   const initials = useMemo(() => {
     return displayName.substring(0, 2).toUpperCase();
   }, [displayName]);
+
+  async function searchFriends() {
+    const query = friendSearch.trim();
+
+    if (!query) {
+      setFriendResults([]);
+      return;
+    }
+
+    try {
+      setSearchingFriends(true);
+      setStatus('');
+
+      const data = await roomApi.searchUsers(query);
+      const users = data.users || data || [];
+      const myId = profile?.id || profile?.userId || profile?.sub;
+      const myEmail = profile?.email;
+
+      setFriendResults(
+        users.filter((item) => {
+          const itemId = item.userId || item.id || item.sub;
+          return itemId !== myId && item.email !== myEmail;
+        })
+      );
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.response?.data?.error || 'Search failed');
+    } finally {
+      setSearchingFriends(false);
+    }
+  }
+
+async function inviteFriend(targetUser) {
+  if (!targetUser) return;
+
+  const targetId = targetUser.userId || targetUser.id || targetUser.sub;
+  if (!targetId) {
+    setStatus('Could not find this user id.');
+    return;
+  }
+
+  try {
+    setFriendActionLoading(targetId);
+    setStatus('Sending follow request...');
+
+    await userApi.followUser(targetId);
+
+    setStatus('Follow request sent. Waiting for approval.');
+    setFriendResults((prev) =>
+      prev.map((item) =>
+        (item.userId || item.id || item.sub) === targetId
+          ? { ...item, invited: true }
+          : item
+      )
+    );
+  } catch (err) {
+    console.error(err);
+    setStatus(err?.response?.data?.error || 'Follow request failed');
+  } finally {
+    setFriendActionLoading('');
+  }
+}
 
   async function loadProfileData() {
     try {
@@ -74,11 +166,126 @@ export default function ProfilePage() {
 
       setMyPosts(Array.isArray(posts) ? posts : []);
       setFollowing(Array.isArray(followingData) ? followingData : []);
+      try {
+        localStorage.setItem(
+          PROFILE_CACHE_KEY,
+          JSON.stringify({
+            profile: me,
+            myPosts: Array.isArray(posts) ? posts : [],
+            following: Array.isArray(followingData) ? followingData : [],
+            cachedAt: Date.now(),
+          })
+        );
+      } catch (cacheErr) {
+        console.warn('Failed to cache profile page data', cacheErr);
+      }
     } catch (err) {
       console.error(err);
       setStatus('Failed to load profile.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openProfileEditor() {
+    setEditingProfile(true);
+    setStatus('');
+  }
+
+  function handlePhotoSelect(file) {
+    if (!file) return;
+
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+
+    setNewPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+    setCropZoom(1);
+    setCropX(50);
+    setCropY(50);
+    setEditingProfile(true);
+  }
+
+  function startCropDrag(event) {
+    const pointer = event.touches?.[0] || event;
+
+    cropDragRef.current = {
+      startX: pointer.clientX,
+      startY: pointer.clientY,
+      cropX,
+      cropY,
+    };
+
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveCropDrag(event) {
+    if (!cropDragRef.current) return;
+
+    const pointer = event.touches?.[0] || event;
+    const deltaX = pointer.clientX - cropDragRef.current.startX;
+    const deltaY = pointer.clientY - cropDragRef.current.startY;
+    const sensitivity = 0.38;
+
+    setCropX(Math.max(0, Math.min(100, cropDragRef.current.cropX - deltaX * sensitivity)));
+    setCropY(Math.max(0, Math.min(100, cropDragRef.current.cropY - deltaY * sensitivity)));
+  }
+
+  function endCropDrag() {
+    cropDragRef.current = null;
+  }
+
+  async function createCroppedProfileImage(file) {
+    if (!file) return null;
+
+    const imageUrl = URL.createObjectURL(file);
+
+    try {
+      const image = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = imageUrl;
+      });
+
+      const canvasSize = 512;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvasSize;
+      canvas.height = canvasSize;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+
+      ctx.clearRect(0, 0, canvasSize, canvasSize);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(canvasSize / 2, canvasSize / 2, canvasSize / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+
+      const sourceWidth = image.naturalWidth || image.width;
+      const sourceHeight = image.naturalHeight || image.height;
+      const baseScale = Math.max(canvasSize / sourceWidth, canvasSize / sourceHeight);
+      const finalScale = baseScale * cropZoom;
+      const drawWidth = sourceWidth * finalScale;
+      const drawHeight = sourceHeight * finalScale;
+
+      const maxOffsetX = Math.max(0, drawWidth - canvasSize);
+      const maxOffsetY = Math.max(0, drawHeight - canvasSize);
+      const offsetX = (cropX / 100) * maxOffsetX;
+      const offsetY = (cropY / 100) * maxOffsetY;
+
+      ctx.drawImage(image, -offsetX, -offsetY, drawWidth, drawHeight);
+      ctx.restore();
+
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob(resolve, 'image/jpeg', 0.92);
+      });
+
+      if (!blob) return file;
+
+      return new File([blob], `profile-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    } finally {
+      URL.revokeObjectURL(imageUrl);
     }
   }
 
@@ -98,20 +305,23 @@ export default function ProfilePage() {
 
 async function saveProfile() {
   try {
+    setSavingProfile(true);
     setStatus('Saving profile...');
 
     let photoValue = profile?.photoKey || profile?.photoUrl || profile?.profilePic || '';
 
     if (newPhoto) {
+      const croppedPhoto = await createCroppedProfileImage(newPhoto);
+
       const upload = await postApi.getUploadUrl({
-        fileName: newPhoto.name,
-        fileType: newPhoto.type,
+        fileName: croppedPhoto.name,
+        fileType: croppedPhoto.type,
       });
 
       await fetch(upload.uploadUrl, {
         method: 'PUT',
-        body: newPhoto,
-        headers: { 'Content-Type': newPhoto.type },
+        body: croppedPhoto,
+        headers: { 'Content-Type': croppedPhoto.type },
       });
 
       photoValue = upload.fileKey || upload.fileUrl;
@@ -136,30 +346,49 @@ async function saveProfile() {
 
     setEditingProfile(false);
     setNewPhoto(null);
+    setPhotoPreview('');
+    setCropZoom(1);
+    setCropX(50);
+    setCropY(50);
     setStatus('Profile updated.');
   } catch (err) {
     console.error(err);
     setStatus('Failed to update profile.');
+  } finally {
+    setSavingProfile(false);
   }
 }
 
-  async function openApprovedCreator(creator) {
-    const creatorId = creator.userId || creator.followingId;
-    if (!creatorId) return;
+async function openApprovedCreator(creator) {
+  const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
 
-    try {
-      setLoadingCreator(true);
-      setTab('approved-private');
-
-      const posts = await postApi.getCreatorPrivatePosts(creatorId);
-      setCreatorPrivatePosts(Array.isArray(posts) ? posts : []);
-    } catch (err) {
-      console.error(err);
-      setStatus('Could not load creator posts.');
-    } finally {
-      setLoadingCreator(false);
-    }
+  if (!creatorId) {
+    setStatus('Could not find this creator id.');
+    return;
   }
+
+  try {
+    setLoadingCreator(true);
+    setStatus('');
+    setTab('approved-private');
+
+    const posts = await postApi.getCreatorPrivatePosts(creatorId);
+    setCreatorPrivatePosts(Array.isArray(posts) ? posts : []);
+  } catch (err) {
+    console.error(err);
+
+    if (err?.response?.status === 403) {
+      setStatus('This creator has not approved your follow request yet.');
+    } else {
+      setStatus(err?.response?.data?.error || 'Could not load creator posts.');
+    }
+
+    setCreatorPrivatePosts([]);
+    setTab('approved');
+  } finally {
+    setLoadingCreator(false);
+  }
+}
 
   function renderOwnPost(post, label) {
     const postId = post.id || post.reelId;
@@ -206,26 +435,35 @@ async function saveProfile() {
     <main className="profile-page">
       <section className="profile-hero">
         <div className="profile-left">
-          {profile?.photoUrl || profile?.profilePic ? (
-  <img
-    src={profile.photoUrl || profile.profilePic}
-    alt="Profile"
-    className="avatar-photo"
-    onError={(e) => {
-      e.currentTarget.style.display = 'none';
-      e.currentTarget.nextElementSibling.style.display = 'grid';
-    }}
-  />
-) : null}
+          <button
+            type="button"
+            className="profile-avatar-button"
+            onClick={openProfileEditor}
+            aria-label="Edit profile photo"
+          >
+            {profile?.photoUrl || profile?.profilePic ? (
+              <img
+                src={profile.photoUrl || profile.profilePic}
+                alt="Profile"
+                className="avatar-photo"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling.style.display = 'grid';
+                }}
+              />
+            ) : null}
 
-<div
-  className="avatar-xl"
-  style={{
-    display: profile?.photoUrl || profile?.profilePic ? 'none' : 'grid',
-  }}
->
-  {initials}
-</div>
+            <div
+              className="avatar-xl"
+              style={{
+                display: profile?.photoUrl || profile?.profilePic ? 'none' : 'grid',
+              }}
+            >
+              {initials}
+            </div>
+
+            <span className="avatar-edit-overlay">Edit</span>
+          </button>
 
           <div>
             <span className="profile-pill">Your profile</span>
@@ -237,7 +475,10 @@ async function saveProfile() {
               <button
                 type="button"
                 className="profile-edit-btn"
-                onClick={() => setEditingProfile((prev) => !prev)}
+                onClick={() => {
+                  setStatus('');
+                  setEditingProfile((prev) => !prev);
+                }}
               >
                 {editingProfile ? 'Close' : 'Edit Profile'}
               </button>
@@ -267,25 +508,7 @@ async function saveProfile() {
               </button>
             </div>
 
-            {editingProfile && (
-              <div className="profile-edit-box">
-                <input
-                  value={newUsername}
-                  placeholder="Username"
-                  onChange={(e) => setNewUsername(e.target.value)}
-                />
 
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => setNewPhoto(e.target.files?.[0] || null)}
-                />
-
-                <button type="button" onClick={saveProfile}>
-                  Save Changes
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -302,7 +525,7 @@ async function saveProfile() {
 
           <div className="stat-card">
             <strong>{following.length}</strong>
-            <span>Friends</span>
+            <span>Following</span>
           </div>
         </div>
       </section>
@@ -339,7 +562,7 @@ async function saveProfile() {
           className={tab === 'approved' || tab === 'approved-private' ? 'active' : ''}
           onClick={() => setTab('approved')}
         >
-          Friends
+          Following
         </button>
       </section>
 
@@ -397,21 +620,77 @@ async function saveProfile() {
 
       {tab === 'approved' && (
         <section className="profile-private-posts">
+          <div className="friend-search-card">
+            <div>
+              <span className="friend-search-eyebrow">Find people</span>
+              <h3>Search or follow people</h3>
+              <p>Search by username or email and send a follow request.</p>
+            </div>
+
+            <div className="friend-search-row">
+              <input
+                value={friendSearch}
+                placeholder="Search username or email"
+                onChange={(e) => setFriendSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') searchFriends();
+                }}
+              />
+
+              <button type="button" onClick={searchFriends} disabled={searchingFriends}>
+                {searchingFriends ? 'Searching...' : 'Search'}
+              </button>
+            </div>
+
+            {friendResults.length > 0 && (
+              <div className="friend-results-list">
+                {friendResults.map((item) => {
+                  const itemId = item.userId || item.id || item.sub || item.email;
+                  const itemName = item.username || item.name || item.email || 'User';
+                  const itemInitial = String(itemName).charAt(0).toUpperCase();
+
+                  return (
+                    <div className="friend-result-card" key={itemId || itemName}>
+                      <div className="friend-result-avatar">{itemInitial}</div>
+
+                      <div>
+                        <strong>{itemName}</strong>
+                        <span>{item.email || 'Smarty user'}</span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => inviteFriend(item)}
+                        disabled={item.invited || friendActionLoading === itemId}
+                      >
+                        {item.invited ? 'Requested' : friendActionLoading === itemId ? 'Sending...' : 'Follow'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           {following.length === 0 ? (
-            <p className="status">No friends yet.</p>
+            <p className="status">You are not following anyone yet.</p>
           ) : (
             <div className="approved-creators-list">
               {following.map((creator) => {
-                const creatorId = creator.userId || creator.followingId;
-                const name =
-                  creator.username ||
-                  creator.name ||
-                  creator.email?.split('@')[0] ||
-                  'Creator';
+const creatorId =
+  creator.userId ||
+  creator.followingId ||
+  creator.id ||
+  creator.sub;
+
+const name =
+  creator.username ||
+  creator.name ||
+  creator.email?.split('@')[0] ||
+  'Creator';
 
                 return (
                   <button
-                    key={creatorId}
+                    key={creatorId || name}
                     type="button"
                     className="approved-creator-card"
                     onClick={() => openApprovedCreator(creator)}
@@ -420,7 +699,7 @@ async function saveProfile() {
 
                     <div>
                       <h4>{name}</h4>
-                      <p>Friend</p>
+                      <p>Following</p>
                     </div>
 
                     <span>Open</span>
@@ -468,6 +747,136 @@ async function saveProfile() {
             </div>
           )}
         </section>
+      )}
+
+      {editingProfile && (
+        <div
+          className="profile-modal-overlay"
+          role="presentation"
+          onClick={() => {
+            if (!savingProfile) setEditingProfile(false);
+          }}
+        >
+          <section
+            className="profile-modal profile-edit-box"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit profile"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="profile-modal-header">
+              <div>
+                <span>Edit profile</span>
+                <h2>Update your profile</h2>
+              </div>
+
+              <button
+                type="button"
+                className="profile-modal-close"
+                onClick={() => setEditingProfile(false)}
+                disabled={savingProfile}
+                aria-label="Close edit profile"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="profile-modal-body">
+              <input
+                value={newUsername}
+                placeholder="Username"
+                onChange={(e) => setNewUsername(e.target.value)}
+              />
+
+              <label className="profile-photo-upload">
+                <span>Choose profile image</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handlePhotoSelect(e.target.files?.[0] || null)}
+                />
+              </label>
+
+              {(photoPreview || profile?.photoUrl || profile?.profilePic) && (
+                <div className="profile-crop-box">
+                  <div
+                    className="profile-crop-preview touch-crop-preview"
+                    onPointerDown={startCropDrag}
+                    onPointerMove={moveCropDrag}
+                    onPointerUp={endCropDrag}
+                    onPointerCancel={endCropDrag}
+                    onPointerLeave={endCropDrag}
+                  >
+                    <img
+                      src={photoPreview || profile?.photoUrl || profile?.profilePic}
+                      alt="Profile crop preview"
+                      draggable="false"
+                      style={{
+                        transform: `scale(${cropZoom})`,
+                        objectPosition: `${cropX}% ${cropY}%`,
+                        transformOrigin: `${cropX}% ${cropY}%`,
+                      }}
+                    />
+                    <span className="crop-drag-hint">Drag to adjust</span>
+                  </div>
+
+                  <div className="crop-controls">
+                    <label>
+                      Zoom
+                      <input
+                        type="range"
+                        min="1"
+                        max="2.4"
+                        step="0.05"
+                        value={cropZoom}
+                        onChange={(e) => setCropZoom(Number(e.target.value))}
+                      />
+                    </label>
+
+                    <button
+                      type="button"
+                      className="crop-reset-btn"
+                      onClick={() => {
+                        setCropZoom(1);
+                        setCropX(50);
+                        setCropY(50);
+                      }}
+                    >
+                      Reset image position
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="profile-modal-footer">
+              <button
+                type="button"
+                className="profile-modal-cancel"
+                onClick={() => setEditingProfile(false)}
+                disabled={savingProfile}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                className="profile-modal-save"
+                onClick={saveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <span className="saving-profile-label">
+                    <span className="saving-spinner" />
+                    Updating...
+                  </span>
+                ) : (
+                  'Save Changes'
+                )}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </main>
   );

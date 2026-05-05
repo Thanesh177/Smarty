@@ -7,7 +7,31 @@
     radial-gradient(circle at 55% 100%, rgba(20, 184, 166, 0.1), transparent 34%),
     #030712;
   color: #fff;
+  position: relative;
 }
+
+/* Quiz page back button (replaces .hero-back for QuizPage) */
+.quiz-page-back {
+  width: fit-content;
+  margin: 0 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quiz-page-back .arrow {
+  display: inline-block;
+  transition: transform 0.25s ease;
+}
+
+.quiz-page-back:hover .arrow {
+  transform: translateX(-4px) scale(1.1);
+}
+
+.quiz-page-back:active .arrow {
+  transform: translateX(-6px) scale(1.15) rotate(-5deg);
+}
+
 .streak-card {
   position: relative;
 }
@@ -479,7 +503,11 @@
 }
 /* ===== Hero Action Button ===== */
 .hero-actions {
-  margin-top: 16px;
+  margin-top: 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .profile-btn {
@@ -792,19 +820,21 @@
 }
 
 .quiz-hero {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 28px;
+  gap: clamp(28px, 5vw, 56px);
   align-items: center;
-  margin-bottom: 34px;
+  margin-bottom: 40px;
+  padding-top: 0;
 }
 
 .quiz-kicker {
-  margin: 0 0 12px;
+  margin: 0 0 16px;
   color: #93c5fd;
   font-weight: 950;
-  letter-spacing: 0.2em;
-  font-size: 0.76rem;
+  letter-spacing: 0.22em;
+  font-size: 0.78rem;
 }
 
 .quiz-hero h1 {
@@ -812,14 +842,15 @@
   font-size: clamp(2.7rem, 6vw, 5.8rem);
   line-height: 0.94;
   letter-spacing: -0.08em;
-  margin: 0 0 22px;
+  margin: 0 0 26px;
 }
 
 .quiz-hero p {
   max-width: 780px;
   color: rgba(255, 255, 255, 0.7);
-  line-height: 1.75;
+  line-height: 1.78;
   font-size: 1.02rem;
+  margin: 0;
 }
 
 .streak-card,
@@ -835,7 +866,9 @@
 }
 
 .streak-card {
-  padding: 24px;
+  padding: 26px;
+  align-self: center;
+  transform: translateY(8px);
 }
 
 .streak-card-top,
@@ -949,7 +982,7 @@
 .topic-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: clamp(18px, 2.2vw, 28px);
 }
 
 .topic-card {
@@ -957,7 +990,7 @@
   overflow: hidden;
   text-align: left;
   color: white;
-  padding: 24px;
+  padding: clamp(22px, 2.2vw, 30px);
   cursor: pointer;
   transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
 }
@@ -999,7 +1032,7 @@
 }
 
 .topic-card h3 {
-  margin: 28px 0 8px;
+  margin: 32px 0 10px;
   font-size: 1.24rem;
   letter-spacing: -0.02em;
 }
@@ -1304,6 +1337,8 @@
 @media (max-width: 1050px) {
   .quiz-hero {
     grid-template-columns: 1fr;
+    padding-top: 0;
+    gap: 28px;
   }
 
   .streak-card {
@@ -1321,7 +1356,13 @@
 
 @media (max-width: 700px) {
   .quiz-page {
-    padding: 33px 22px 40px;
+    padding: 28px 18px 40px;
+  }
+
+  .quiz-hero {
+    padding-top: 0;
+    gap: 24px;
+    margin-bottom: 28px;
   }
 
   .quiz-hero h1 {
@@ -1357,5 +1398,9 @@
 
   .unlock-card {
     min-height: auto;
+  }
+
+  .quiz-page-back {
+    margin-bottom: 14px;
   }
 }

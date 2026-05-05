@@ -1,6 +1,7 @@
 import { getAchievements } from "../../lib/progressStore";
 import { getAllAchievements } from "../../components/achievements/achievementEngine";
 import './GameProfile.css';
+import { useEffect } from 'react';
 function getProgress() {
   return JSON.parse(localStorage.getItem("smarty-topic-progress") || "{}");
 }
@@ -18,6 +19,34 @@ function getUnlockPercent(totalXP, requiredXP) {
 }
 
 export default function GameProfile() {
+  useEffect(() => {
+    let startX = 0;
+    let currentX = 0;
+
+    const handleTouchStart = (e) => {
+      startX = e.touches[0].clientX;
+    };
+
+    const handleTouchMove = (e) => {
+      currentX = e.touches[0].clientX;
+    };
+
+    const handleTouchEnd = () => {
+      if (startX < 50 && currentX - startX > 80) {
+        window.history.back();
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
   const progress = getProgress();
   const achievements = getAchievements();
 
@@ -147,6 +176,12 @@ export default function GameProfile() {
 
   return (
     <main className="quiz-page">
+      <button
+        className="back-btn"
+        onClick={() => window.history.back()}
+      >
+        <span className="arrow">←</span> Back
+      </button>
       <section className="quiz-hero game-profile-hero">
         <div>
           <p className="quiz-kicker">GAME PROFILE</p>

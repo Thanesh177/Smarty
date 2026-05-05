@@ -214,6 +214,36 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
     [accessFilter, searchResults]
   );
 
+  const suggestedBooks = useMemo(() => {
+    if (!cleanQuery) return [];
+
+    const words = cleanQuery.toLowerCase().split(/\s+/).filter(Boolean);
+
+    let pool = allLoadedBooks.length > 0 ? allLoadedBooks : browseBooks;
+
+    const scored = pool
+      .map((book) => {
+        const text = getSearchText(book);
+        let score = 0;
+
+        words.forEach((word) => {
+          if (text.includes(word)) score += 3;
+          else if (text.includes(word.slice(0, Math.max(3, word.length - 2)))) score += 1;
+        });
+
+        return { book, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+
+    // fallback: if nothing matches, just show some popular books
+    if (scored.length === 0) {
+      return pool.slice(0, 6);
+    }
+
+    return scored.slice(0, 6).map((item) => item.book);
+  }, [allLoadedBooks, browseBooks, cleanQuery]);
+
   const visibleBrowseBooks = useMemo(
     () => browseBooks.filter((book) => matchesAccessFilter(book, accessFilter)),
     [accessFilter, browseBooks]
@@ -658,9 +688,17 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
         />
       )}
 
-      {hasActiveFilters && !searching && visibleSearchResults.length === 0 && !error && (
-        <p className="read-books-status">No books found. Try another title, author, or subject.</p>
-      )}
+{hasActiveFilters && !searching && visibleSearchResults.length === 0 && !error && (
+  <>
+    <p className="read-books-status">
+      No exact matches found. Showing closest suggestions.
+    </p>
+
+    {suggestedBooks.length > 0 && (
+      <BookRow title="You might be looking for" books={suggestedBooks} />
+    )}
+  </>
+)}
 
       {!hasActiveFilters && visibleReadingHistory.length > 0 && (
         <BookRow title="Continue Reading" books={visibleReadingHistory} />

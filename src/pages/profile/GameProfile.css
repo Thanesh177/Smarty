@@ -10,6 +10,23 @@
   color: #fff;
 }
 
+.back-btn {
+  margin-bottom: 14px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: #f8fafc;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  transform: translateX(-2px);
+  background: rgba(255,255,255,0.1);
+}
+
 .quiz-kicker {
   margin: 0 0 10px;
   font-size: 0.72rem;
