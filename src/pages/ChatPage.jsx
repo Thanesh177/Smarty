@@ -217,7 +217,9 @@ function ChatMediaPreview({ msg, onRefreshMediaUrl }) {
         <img
           src={mediaSource}
           alt={msg.mediaName || 'Shared media'}
-          loading="lazy"
+          loading="eager"
+          decoding="async"
+          fetchPriority="high"
           onError={refreshMedia}
         />
       ) : mediaKind === 'video' ? (
@@ -1020,8 +1022,10 @@ const saveEditedMessage = async (msg) => {
 };
 
 const deleteMessage = async (msg) => {
-  const messageId = msg.messageId || msg.id;
-  if (!messageId || String(messageId).startsWith('local-') || !activeChat || !msg.isMine) return;
+  const messageId = msg.messageId || msg.id || msg._id;
+  const isOwnMessage = msg.isMine || msg.senderId === userId;
+
+  if (!messageId || String(messageId).startsWith('local-') || !activeChat || !isOwnMessage) return;
 
   if (!window.confirm('Delete this message?')) return;
 
@@ -1056,6 +1060,7 @@ const deleteMessage = async (msg) => {
       chatId: activeChat.chatId,
       messageId,
     });
+    await loadChats();
   } catch (err) {
     console.error('Delete message failed:', err);
     setMessages(previousMessages);
@@ -1210,7 +1215,9 @@ const handleBlockUser = async () => {
       )}&background=7dd3fc&color=07111f&bold=true`
     }
     alt=""
-    loading="lazy"
+    loading="eager"
+    decoding="async"
+    fetchPriority="high"
     referrerPolicy="no-referrer"
   />
 
@@ -1383,14 +1390,22 @@ const handleBlockUser = async () => {
         })}
       </div>
 
-      {msg.isMine && !msg.isDeleted && !String(msg.messageId || msg.id || '').startsWith('local-') && (
+      {(msg.isMine || msg.senderId === userId) && !msg.isDeleted && !String(msg.messageId || msg.id || msg._id || '').startsWith('local-') && (
         <div className="message-action-row">
           {(msg.text || msg.message) && (
             <button type="button" onClick={() => startEditMessage(msg)}>
               Edit
             </button>
           )}
-          <button type="button" className="message-delete-btn" onClick={() => deleteMessage(msg)}>
+          <button
+            type="button"
+            className="message-delete-btn"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              deleteMessage(msg);
+            }}
+          >
             Delete
           </button>
         </div>

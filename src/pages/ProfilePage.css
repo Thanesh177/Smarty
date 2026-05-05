@@ -1189,17 +1189,34 @@
   }
 
   .private-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
   .private-card,
   .post-card-main {
-    min-height: 300px;
+    min-height: 230px;
+    border-radius: 22px;
   }
 
   .private-card img,
   .private-placeholder {
-    height: 225px;
+    height: 170px;
+  }
+
+  .private-info {
+    padding: 12px;
+    margin-top: -54px;
+  }
+
+  .private-info h4 {
+    font-size: 0.9rem;
+    margin-bottom: 7px;
+  }
+
+  .private-info span {
+    padding: 5px 8px;
+    font-size: 0.66rem;
   }
 
   .approved-creator-card {
@@ -1509,5 +1526,37 @@
   .friend-result-avatar {
     width: 44px;
     height: 44px;
+  }
+  .private-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .private-card,
+  .post-card-main {
+    min-height: 210px;
+    border-radius: 20px;
+  }
+
+  .private-card img,
+  .private-placeholder {
+    height: 155px;
+  }
+
+  .private-info {
+    padding: 10px;
+    margin-top: -48px;
+  }
+
+  .private-info h4 {
+    font-size: 0.84rem;
+    line-height: 1.2;
+  }
+
+  .edit-post-btn {
+    top: 9px;
+    right: 9px;
+    padding: 6px 9px;
+    font-size: 0.68rem;
   }
 }
