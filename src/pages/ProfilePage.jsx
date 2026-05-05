@@ -480,7 +480,7 @@ async function openApprovedCreator(creator) {
                   setEditingProfile((prev) => !prev);
                 }}
               >
-                {editingProfile ? 'Close' : 'Edit Profile'}
+                {editingProfile ? 'Close' : 'Edit'}
               </button>
 
               <button
@@ -499,13 +499,6 @@ async function openApprovedCreator(creator) {
                 Saved
               </button>
 
-              <button
-                type="button"
-                className="profile-books-btn"
-                onClick={() => navigate('/bookinfo')}
-              >
-                Books
-              </button>
             </div>
 
 
@@ -546,7 +539,7 @@ async function openApprovedCreator(creator) {
           className={tab === 'public' ? 'active' : ''}
           onClick={() => setTab('public')}
         >
-          My Public Posts
+          Public
         </button>
 
         <button
@@ -554,7 +547,7 @@ async function openApprovedCreator(creator) {
           className={tab === 'private' ? 'active' : ''}
           onClick={() => setTab('private')}
         >
-          My Private Posts
+          Private
         </button>
 
         <button
@@ -562,7 +555,7 @@ async function openApprovedCreator(creator) {
           className={tab === 'approved' || tab === 'approved-private' ? 'active' : ''}
           onClick={() => setTab('approved')}
         >
-          Following
+          Friends
         </button>
       </section>
 
@@ -622,9 +615,7 @@ async function openApprovedCreator(creator) {
         <section className="profile-private-posts">
           <div className="friend-search-card">
             <div>
-              <span className="friend-search-eyebrow">Find people</span>
-              <h3>Search or follow people</h3>
-              <p>Search by username or email and send a follow request.</p>
+              <span className="friend-search-eyebrow">Find your friend</span>
             </div>
 
             <div className="friend-search-row">
@@ -766,7 +757,6 @@ const name =
           >
             <div className="profile-modal-header">
               <div>
-                <span>Edit profile</span>
                 <h2>Update your profile</h2>
               </div>
 

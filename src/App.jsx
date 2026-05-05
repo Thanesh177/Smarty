@@ -52,7 +52,6 @@ function ProtectedRoute({ children }) {
 function Layout() {
   const { user, logout } = useAuth();
   const [totalUnread, setTotalUnread] = useState(0);
-  const [topbarHidden, setTopbarHidden] = useState(false);
 
   // Keep chat notification badge updated globally, even when user is not on Chat page
   useEffect(() => {
@@ -120,69 +119,6 @@ useEffect(() => {
   }
 }, [totalUnread]);
 
-  useEffect(() => {
-    let lastY = window.scrollY || document.documentElement.scrollTop || 0;
-    let touchStartY = 0;
-
-    const shouldIgnoreTarget = (target) =>
-      target?.closest?.('.menu-panel, .profile-modal, .chat-window, .messages');
-
-    const showTopbar = () => setTopbarHidden(false);
-    const hideTopbar = () => setTopbarHidden(true);
-
-    const handleScroll = (event) => {
-      if (shouldIgnoreTarget(event.target)) return;
-
-      const target = event.target === document ? document.documentElement : event.target;
-      const currentY = target?.scrollTop ?? window.scrollY ?? 0;
-
-      if (currentY > lastY + 8 && currentY > 80) {
-        hideTopbar();
-      }
-
-      if (currentY < lastY - 12 || currentY <= 20) {
-        showTopbar();
-      }
-
-      lastY = currentY;
-    };
-
-    const handleWheel = (event) => {
-      if (shouldIgnoreTarget(event.target)) return;
-
-      if (event.deltaY > 10) hideTopbar();
-      if (event.deltaY < -10) showTopbar();
-    };
-
-    const handleTouchStart = (event) => {
-      if (shouldIgnoreTarget(event.target)) return;
-      touchStartY = event.touches?.[0]?.clientY || 0;
-    };
-
-    const handleTouchMove = (event) => {
-      if (shouldIgnoreTarget(event.target)) return;
-
-      const currentTouchY = event.touches?.[0]?.clientY || 0;
-      const deltaY = touchStartY - currentTouchY;
-
-      if (deltaY > 12) hideTopbar();
-      if (deltaY < -12) showTopbar();
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
-    window.addEventListener('wheel', handleWheel, { passive: true });
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchmove', handleTouchMove, { passive: true });
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll, { capture: true });
-      document.removeEventListener('scroll', handleScroll, { capture: true });
-      window.removeEventListener('wheel', handleWheel);
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-    };
-  }, []);
 
   // Fix Cognito redirect loop
 
@@ -217,7 +153,7 @@ useEffect(() => {
       <InstallPrompt />
 
       <div className="app-shell">
-        <header className={`topbar glass-topbar ${topbarHidden ? 'topbar-hidden' : ''}`}>
+        <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
               to="/feed"

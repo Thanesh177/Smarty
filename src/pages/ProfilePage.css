@@ -1175,13 +1175,17 @@
   .profile-tabs {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     border-radius: 24px;
   }
 
   .profile-tabs button {
     padding: 11px 10px;
     font-size: 0.82rem;
+  }
+
+  .profile-tabs button:first-child {
+    display: none;
   }
 
   .private-grid {
@@ -1249,9 +1253,9 @@
 
   .profile-action-row {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
-    gap: 8px;
+    gap: 7px;
   }
 
   .profile-edit-btn,
@@ -1259,11 +1263,16 @@
   .profile-saved-btn,
   .profile-books-btn {
     width: 100%;
-    min-height: 44px;
+    min-height: 42px;
     margin-right: 0;
     margin-top: 0;
-    padding: 0 12px;
-    font-size: 0.78rem;
+    padding: 0 8px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .profile-books-btn {
+    grid-column: 1 / -1;
   }
 
   .profile-card {
@@ -1473,14 +1482,28 @@
     border-radius: 24px;
   }
 
-  .friend-search-row,
   .friend-result-card {
     grid-template-columns: 1fr;
   }
 
-  .friend-search-row button,
+  .friend-search-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
   .friend-result-card button {
     width: 100%;
+  }
+
+  .friend-search-row button {
+    width: auto;
+    min-width: 84px;
+    padding: 0 12px;
+  }
+
+  .friend-search-row input {
+    min-width: 0;
+    padding: 0 12px;
   }
 
   .friend-result-avatar {
