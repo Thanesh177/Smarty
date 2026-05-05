@@ -16,7 +16,6 @@ body,
 
 body {
   margin: 0;
-  overflow: hidden;
   background: #020617;
 }
 
@@ -1223,10 +1222,6 @@ button {
 ========================= */
 
 @media (max-width: 860px) {
-  body {
-    overflow: hidden;
-  }
-
   .chat-page {
     width: 100%;
     height: calc(100dvh - 72px);
@@ -1356,7 +1351,7 @@ button {
     min-height: 0;
     height: 100%;
     padding: 10px 8px 88px;
-    gap: 11px;
+    gap: 1px;
     overflow-y: auto;
   }
 
