@@ -1,48 +1,80 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const STORAGE_KEY = "smarty_install_prompt_seen";
+
+const SNOOZE_KEY = "smarty_install_prompt_snoozed_until";
+const SNOOZE_DURATION = 1000 * 60 * 60 * 24 * 7;
+
+function safeGetStorage(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetStorage(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function isStandaloneMode() {
+  return Boolean(
+    window.navigator.standalone === true ||
+      window.matchMedia?.("(display-mode: standalone)")?.matches
+  );
+}
 
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [show, setShow] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const mountedRef = useRef(true);
+  const timerRef = useRef(null);
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem(STORAGE_KEY) === "true") return;
+    mountedRef.current = true;
+
+    if (typeof window === "undefined" || typeof navigator === "undefined") return undefined;
+
+    const seen = safeGetStorage(STORAGE_KEY) === "true";
+    const snoozedUntil = Number(safeGetStorage(SNOOZE_KEY) || 0);
+
+    if (seen || Date.now() < snoozedUntil || isStandaloneMode()) return undefined;
 
     const ua = navigator.userAgent.toLowerCase();
-    const iosDevice = /iphone|ipad|ipod/.test(ua);
-
-    const isStandalone =
-      window.navigator.standalone === true ||
-      window.matchMedia("(display-mode: standalone)").matches;
-
-    if (isStandalone) return;
+    const iosDevice = /iphone|ipad|ipod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
     setIsIOS(iosDevice);
 
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
+      if (!mountedRef.current) return;
       setDeferredPrompt(e);
       setShow(true);
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
-    const timer = setTimeout(() => {
-      if (iosDevice) setShow(true);
-    }, 1200);
+    timerRef.current = window.setTimeout(() => {
+      if (mountedRef.current && iosDevice && !isStandaloneMode()) setShow(true);
+    }, 1800);
 
     return () => {
+      mountedRef.current = false;
       window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-      clearTimeout(timer);
+      if (timerRef.current) window.clearTimeout(timerRef.current);
     };
   }, []);
 
   useEffect(() => {
     const handleInstalled = () => {
-      localStorage.setItem(STORAGE_KEY, "true");
-      setShow(false);
+      safeSetStorage(STORAGE_KEY, "true");
+      if (mountedRef.current) setShow(false);
     };
 
     window.addEventListener("appinstalled", handleInstalled);
@@ -53,21 +85,34 @@ export default function InstallPrompt() {
   }, []);
 
   const installApp = async () => {
-    if (!deferredPrompt) return;
+    if (!deferredPrompt || installing) return;
 
-    deferredPrompt.prompt();
-    const choice = await deferredPrompt.userChoice;
+    try {
+      setInstalling(true);
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
 
-    if (choice.outcome === "accepted") {
-      localStorage.setItem(STORAGE_KEY, "true");
-      setShow(false);
+      if (choice?.outcome === "accepted") {
+        safeSetStorage(STORAGE_KEY, "true");
+        if (mountedRef.current) setShow(false);
+      } else {
+        safeSetStorage(SNOOZE_KEY, String(Date.now() + SNOOZE_DURATION));
+        if (mountedRef.current) setShow(false);
+      }
+    } catch (err) {
+      console.error("Install prompt failed:", err);
+      safeSetStorage(SNOOZE_KEY, String(Date.now() + SNOOZE_DURATION));
+      if (mountedRef.current) setShow(false);
+    } finally {
+      if (mountedRef.current) {
+        setInstalling(false);
+        setDeferredPrompt(null);
+      }
     }
-
-    setDeferredPrompt(null);
   };
 
   const closePopup = () => {
-    localStorage.setItem(STORAGE_KEY, "true");
+    safeSetStorage(SNOOZE_KEY, String(Date.now() + SNOOZE_DURATION));
     setShow(false);
   };
 
@@ -85,8 +130,8 @@ export default function InstallPrompt() {
       </div>
 
       {!isIOS && deferredPrompt && (
-        <button type="button" onClick={installApp}>
-          Install
+        <button type="button" disabled={installing} onClick={installApp}>
+          {installing ? "Opening..." : "Install"}
         </button>
       )}
 
@@ -94,7 +139,7 @@ export default function InstallPrompt() {
         <p className="install-hint">Use browser menu → Install app</p>
       )}
 
-      <button type="button" onClick={closePopup}>
+      <button type="button" disabled={installing} onClick={closePopup}>
         Close
       </button>
     </div>

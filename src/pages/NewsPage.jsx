@@ -29,13 +29,17 @@ function getCachedNews(lang) {
 }
 
 function setCachedNews(lang, news) {
-  localStorage.setItem(
-    getCacheKey(lang),
-    JSON.stringify({
-      timestamp: Date.now(),
-      news,
-    })
-  );
+  try {
+    localStorage.setItem(
+      getCacheKey(lang),
+      JSON.stringify({
+        timestamp: Date.now(),
+        news,
+      })
+    );
+  } catch {
+    // Ignore cache write failures.
+  }
 }
 
 function NewsSkeleton() {
@@ -71,14 +75,27 @@ export default function NewsPage() {
 
   const loaderRef = useRef(null);
   const requestIdRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      requestIdRef.current += 1;
+    };
+  }, []);
 
   async function fetchNews(lang = language, forceRefresh = false) {
     setError('');
     setVisibleCount(PAGE_SIZE);
 
+    if (!mountedRef.current) return;
+
     const cachedNews = getCachedNews(lang);
 
     if (cachedNews && !forceRefresh) {
+      if (!mountedRef.current) return;
       setNews(cachedNews);
       setFromCache(true);
       setLoading(false);
@@ -95,13 +112,13 @@ export default function NewsPage() {
     try {
       const data = await newsApi.getLatestNews(lang);
 
-      if (requestId !== requestIdRef.current) return;
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
       setNews(data);
       setCachedNews(lang, data);
       setLastUpdated(new Date().toLocaleString());
     } catch (err) {
-      if (requestId !== requestIdRef.current) return;
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
       if (lang !== 'english') {
         try {
@@ -118,7 +135,7 @@ export default function NewsPage() {
 
           const fallbackData = await newsApi.getLatestNews('english');
 
-          if (requestId !== requestIdRef.current) return;
+          if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
           setNews(fallbackData);
           setCachedNews('english', fallbackData);
@@ -128,18 +145,22 @@ export default function NewsPage() {
           setError(`${lang.toUpperCase()} news is unavailable right now. Showing English news instead.`);
           return;
         } catch (fallbackErr) {
-          setError(
-            fallbackErr.message ||
-              err.message ||
-              'Failed to load BBC news. Please try again later.'
-          );
+          if (mountedRef.current) {
+            setError(
+              fallbackErr.message ||
+                err.message ||
+                'Failed to load BBC news. Please try again later.'
+            );
+          }
           return;
         }
       }
 
-      setError(err.message || 'Failed to load BBC news. Please try again later.');
+      if (mountedRef.current) {
+        setError(err.message || 'Failed to load BBC news. Please try again later.');
+      }
     } finally {
-      if (requestId === requestIdRef.current) {
+      if (mountedRef.current && requestId === requestIdRef.current) {
         setLoading(false);
       }
     }
@@ -169,13 +190,12 @@ export default function NewsPage() {
     }
 
     if (search.trim()) {
-      const q = search.toLowerCase();
+      const q = search.trim().toLowerCase();
 
-      allArticles = allArticles.filter(
-        (item) =>
-          item.title?.toLowerCase().includes(q) ||
-          item.summary?.toLowerCase().includes(q)
-      );
+      allArticles = allArticles.filter((item) => {
+        const text = `${item.title || ''} ${item.summary || ''} ${item.section || ''}`.toLowerCase();
+        return text.includes(q);
+      });
     }
 
     return allArticles;
@@ -207,14 +227,21 @@ export default function NewsPage() {
   }, [articles.length]);
 
   function toggleSave(article) {
-    const exists = saved.some((item) => item.news_link === article.news_link);
+    setSaved((currentSaved) => {
+      const exists = currentSaved.some((item) => item.news_link === article.news_link);
 
-    const updated = exists
-      ? saved.filter((item) => item.news_link !== article.news_link)
-      : [...saved, article];
+      const updated = exists
+        ? currentSaved.filter((item) => item.news_link !== article.news_link)
+        : [...currentSaved, article];
 
-    setSaved(updated);
-    localStorage.setItem('saved_news', JSON.stringify(updated));
+      try {
+        localStorage.setItem('saved_news', JSON.stringify(updated));
+      } catch {
+        // Ignore save write failures.
+      }
+
+      return updated;
+    });
   }
 
   function isSaved(article) {
@@ -231,7 +258,6 @@ export default function NewsPage() {
         });
       } else {
         await navigator.clipboard.writeText(article.news_link);
-        alert('News link copied');
       }
     } catch {
       // user cancelled share
@@ -327,7 +353,9 @@ export default function NewsPage() {
                   <img
                     src={article.image_link}
                     alt={article.title || 'BBC News'}
-                    loading="lazy"
+                    loading={index < 3 ? 'eager' : 'lazy'}
+                    decoding="async"
+                    fetchPriority={index < 3 ? 'high' : 'auto'}
                   />
                 ) : (
                   <div className="missing-news-image">BBC News</div>

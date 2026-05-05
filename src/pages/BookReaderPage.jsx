@@ -45,13 +45,19 @@ function splitIntoChapters(text) {
   return chunks.length ? chunks : ['No readable content available.'];
 }
 
-function addToHistory(bookId, title) {
+function addToHistory(bookId, title, extra = {}) {
   try {
     const history = JSON.parse(localStorage.getItem('reading_history') || '[]');
     const cleanTitle = title && !title.startsWith('Book #') ? title : `Book #${bookId}`;
 
     const updated = [
-      { id: bookId, title: cleanTitle, lastReadAt: Date.now() },
+      {
+        id: bookId,
+        title: cleanTitle,
+        cover: extra.cover || extra.coverUrl || '',
+        coverUrl: extra.coverUrl || extra.cover || '',
+        lastReadAt: Date.now(),
+      },
       ...history.filter((book) => String(book.id) !== String(bookId)),
     ].slice(0, 20);
 
@@ -65,6 +71,9 @@ export default function BookReaderPage() {
   const { bookId } = useParams();
   const savedSettings = getReaderSettings();
   const loadedBookRef = useRef('');
+  const mountedRef = useRef(true);
+  const chapterTimerRef = useRef(null);
+  const animationTimerRef = useRef(null);
 
   const [showMenu, setShowMenu] = useState(false);
   const [chapters, setChapters] = useState([]);
@@ -84,36 +93,65 @@ export default function BookReaderPage() {
   const [error, setError] = useState('');
   const [bookTitle, setBookTitle] = useState(`Book #${bookId}`);
 
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      if (chapterTimerRef.current) window.clearTimeout(chapterTimerRef.current);
+      if (animationTimerRef.current) window.clearTimeout(animationTimerRef.current);
+    };
+  }, []);
+
   async function loadBookText(forceRefresh = false) {
     setLoading(true);
     setError('');
+
+    if (chapterTimerRef.current) window.clearTimeout(chapterTimerRef.current);
+    if (animationTimerRef.current) window.clearTimeout(animationTimerRef.current);
 
     try {
       if (!bookId) throw new Error('Book ID is missing.');
 
       let resolvedTitle = `Book #${bookId}`;
+      let bookMeta = {};
       const isOpenLibraryWork = String(bookId).startsWith('OL') && String(bookId).endsWith('W');
 
       if (isOpenLibraryWork) {
         try {
           const data = await readBooksApi.getBookById(bookId);
-          resolvedTitle = data.title || resolvedTitle;
+          bookMeta = data || {};
+          resolvedTitle = data?.title || resolvedTitle;
         } catch {
           // ignore title fetch errors
         }
       }
 
+      if (!mountedRef.current) return;
       setBookTitle(resolvedTitle);
+
       const fetchedText = await readBooksApi.getBookText(bookId);
+      if (!mountedRef.current) return;
 
       if (!fetchedText || String(fetchedText).trim().length < 80) {
         throw new Error('Readable text is not available for this book. Try another book from the library.');
       }
 
-      addToHistory(bookId, resolvedTitle);
-      localStorage.setItem(`book_${bookId}`, JSON.stringify({ id: bookId, title: resolvedTitle }));
+      const coverUrl = bookMeta.cover || bookMeta.coverUrl || bookMeta.image || '';
+      addToHistory(bookId, resolvedTitle, { cover: coverUrl, coverUrl });
+
+      try {
+        localStorage.setItem(
+          `book_${bookId}`,
+          JSON.stringify({ id: bookId, title: resolvedTitle, cover: coverUrl, coverUrl })
+        );
+      } catch {
+        // ignore storage errors
+      }
 
       const split = splitIntoChapters(fetchedText);
+      if (!mountedRef.current) return;
+
       const savedProgress = forceRefresh
         ? 0
         : Number(localStorage.getItem(getProgressKey(bookId)) || 0);
@@ -125,13 +163,15 @@ export default function BookReaderPage() {
       const isOpenLibraryWork = String(bookId).startsWith('OL') && String(bookId).endsWith('W');
       const openLibraryUrl = isOpenLibraryWork ? `https://openlibrary.org/works/${bookId}` : '';
 
+      if (!mountedRef.current) return;
+
       if (status === 404 || status === 500) {
         setError('Readable text is not available for this book. Try another book from the library.');
       } else {
         setError(err.message || 'Failed to load book.');
       }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }
 
@@ -142,6 +182,11 @@ export default function BookReaderPage() {
     loadedBookRef.current = bookId;
 
     setBookTitle(`Book #${bookId}`);
+    try {
+      setBookmarks(JSON.parse(localStorage.getItem(`bookmarks_${bookId}`) || '[]'));
+    } catch {
+      setBookmarks([]);
+    }
     loadBookText();
   }, [bookId]);
 
@@ -166,27 +211,47 @@ export default function BookReaderPage() {
     ? Math.round(((currentChapter + 1) / chapters.length) * 100)
     : 0;
 
-  const estimatedMinutesLeft = Math.max(
-    1,
-    Math.ceil(
-      chapters.slice(currentChapter).join(' ').split(/\s+/).filter(Boolean).length / 220
-    )
+  const estimatedMinutesLeft = useMemo(() => {
+    const wordsLeft = chapters
+      .slice(currentChapter)
+      .join(' ')
+      .split(/\s+/)
+      .filter(Boolean).length;
+
+    return Math.max(1, Math.ceil(wordsLeft / 220));
+  }, [chapters, currentChapter]);
+
+  const currentChapterWordCount = useMemo(
+    () => currentText.split(/\s+/).filter(Boolean).length,
+    [currentText]
   );
 
-  const currentChapterWordCount = currentText.split(/\s+/).filter(Boolean).length;
   const isBookmarked = bookmarks.includes(currentChapter);
 
+  const currentParagraphs = useMemo(
+    () => currentText.split('\n').map((line) => line.trim() || '\u00A0'),
+    [currentText]
+  );
+
   function changeChapter(nextChapter, direction) {
+    if (!chapters.length) return;
+
     const safeChapter = Math.min(Math.max(nextChapter, 0), chapters.length - 1);
+    if (safeChapter === currentChapter) return;
+
+    if (chapterTimerRef.current) window.clearTimeout(chapterTimerRef.current);
+    if (animationTimerRef.current) window.clearTimeout(animationTimerRef.current);
 
     setPageAnimation(direction === 'next' ? 'page-flip-next' : 'page-flip-prev');
 
-    window.setTimeout(() => {
+    chapterTimerRef.current = window.setTimeout(() => {
+      if (!mountedRef.current) return;
+
       setCurrentChapter(safeChapter);
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
-      window.setTimeout(() => {
-        setPageAnimation('');
+      animationTimerRef.current = window.setTimeout(() => {
+        if (mountedRef.current) setPageAnimation('');
       }, 220);
     }, 120);
   }
@@ -202,19 +267,22 @@ export default function BookReaderPage() {
   }
 
   function toggleBookmark() {
-    const exists = bookmarks.includes(currentChapter);
+    setBookmarks((currentBookmarks) => {
+      const exists = currentBookmarks.includes(currentChapter);
 
-    const updated = exists
-      ? bookmarks.filter((item) => item !== currentChapter)
-      : [...bookmarks, currentChapter].sort((a, b) => a - b);
+      const updated = exists
+        ? currentBookmarks.filter((item) => item !== currentChapter)
+        : [...currentBookmarks, currentChapter].sort((a, b) => a - b);
 
-    setBookmarks(updated);
+      try {
+        localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(updated));
+        window.dispatchEvent(new Event('books-info-refresh'));
+      } catch {
+        // ignore storage errors
+      }
 
-    try {
-      localStorage.setItem(`bookmarks_${bookId}`, JSON.stringify(updated));
-    } catch {
-      // ignore storage errors
-    }
+      return updated;
+    });
   }
 
   if (loading) {
@@ -301,7 +369,7 @@ export default function BookReaderPage() {
             <span>{progress}% complete · Chapter {currentChapter + 1} of {chapters.length}</span>
           </div>
 
-          <button className="reader-icon-btn" type="button" aria-label="Refresh book" onClick={() => loadBookText(true)}>
+          <button className="reader-icon-btn" type="button" aria-label="Refresh book" disabled={loading} onClick={() => loadBookText(true)}>
             ⟳
           </button>
         </div>
@@ -325,6 +393,7 @@ export default function BookReaderPage() {
               <button
                 type="button"
                 className={`reader-bookmark-btn ${isBookmarked ? 'active' : ''}`}
+                disabled={!chapters.length}
                 onClick={toggleBookmark}
               >
                 {isBookmarked ? '🔖 Bookmarked' : '🔖 Add Bookmark'}
@@ -365,7 +434,7 @@ export default function BookReaderPage() {
               <button type="button" onClick={() => setLineHeight((value) => Math.min(2.4, Number((value + 0.1).toFixed(1))))}>
                 Loose
               </button>
-              <button type="button" className={isBookmarked ? 'reader-menu-active' : ''} onClick={toggleBookmark}>
+              <button type="button" className={isBookmarked ? 'reader-menu-active' : ''} disabled={!chapters.length} onClick={toggleBookmark}>
                 {isBookmarked ? 'Remove Bookmark' : 'Bookmark'}
               </button>
             </div>
@@ -398,10 +467,10 @@ export default function BookReaderPage() {
           <div className="bookmark-list reader-surface-card">
             <strong>Saved chapters</strong>
             <div>
-              {bookmarks.map((chapter) => (
+              {bookmarks.map((chapter, index) => (
                 <button
                   type="button"
-                  key={chapter}
+                  key={`${chapter}-${index}`}
                   onClick={() => changeChapter(chapter, chapter > currentChapter ? 'next' : 'prev')}
                 >
                   Chapter {chapter + 1}
@@ -424,8 +493,8 @@ export default function BookReaderPage() {
             lineHeight,
           }}
         >
-          {currentText.split('\n').map((line, index) => (
-            <p key={index}>{line.trim() || '\u00A0'}</p>
+          {currentParagraphs.map((line, index) => (
+            <p key={`${currentChapter}-${index}`}>{line}</p>
           ))}
         </article>
 

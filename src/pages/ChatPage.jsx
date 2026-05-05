@@ -217,13 +217,12 @@ function ChatMediaPreview({ msg, onRefreshMediaUrl }) {
         <img
           src={mediaSource}
           alt={msg.mediaName || 'Shared media'}
-          loading="eager"
+          loading="lazy"
           decoding="async"
-          fetchPriority="high"
           onError={refreshMedia}
         />
       ) : mediaKind === 'video' ? (
-        <video src={mediaSource} controls playsInline onError={refreshMedia} />
+        <video src={mediaSource} controls playsInline preload="metadata" onError={refreshMedia} />
       ) : mediaKind === 'audio' ? (
         <AudioMiniPlayer
           src={mediaSource}
@@ -241,10 +240,10 @@ function ChatMediaPreview({ msg, onRefreshMediaUrl }) {
 
 export default function ChatPage() {
   const [isRecording, setIsRecording] = useState(false);
-const [mediaRecorder, setMediaRecorder] = useState(null);
-const [recordingSeconds, setRecordingSeconds] = useState(0);
-const audioChunksRef = useRef([]);
-const recordingTimerRef = useRef(null);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const audioChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
   const { user } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -274,12 +273,39 @@ const recordingTimerRef = useRef(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
 
+  const mountedRef = useRef(true);
+  const activeChatIdRef = useRef(null);
+  const scrollRafRef = useRef(null);
+  const scrollTimerRef = useRef(null);
+  const chatRequestSeqRef = useRef(0);
+  const searchRequestSeqRef = useRef(0);
+  const openedChatIdsRef = useRef(new Set());
+  const activeUploadAbortRef = useRef(null);
+  const uploadResetTimerRef = useRef(null);
+  const cancelRecordingRef = useRef(false);
+
   const userId = user?.id || user?.userId || user?.sub;
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      activeUploadAbortRef.current?.abort();
+      if (uploadResetTimerRef.current) window.clearTimeout(uploadResetTimerRef.current);
+      if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+      if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
+      localStorage.removeItem('activeChatId');
+      disconnectChatSocket();
+    };
+  }, []);
 
   const loadChats = async () => {
     try {
       const data = await chatApi.getChats();
-      setChats(Array.isArray(data) ? data : []);
+      if (!mountedRef.current) return;
+      setChats(Array.isArray(data) ? data : Array.isArray(data?.chats) ? data.chats : []);
     } catch (err) {
       console.error('Failed to load chats:', err);
     }
@@ -306,10 +332,8 @@ const recordingTimerRef = useRef(null);
   }, [chats]);
 
   useEffect(() => {
-    return () => {
-      localStorage.removeItem('activeChatId');
-    };
-  }, []);
+    activeChatIdRef.current = activeChat?.chatId || null;
+  }, [activeChat?.chatId]);
 
   useEffect(() => {
     return () => {
@@ -323,6 +347,7 @@ const recordingTimerRef = useRef(null);
     if (!userId) return;
 
     connectChatSocket(userId, (data) => {
+      if (!mountedRef.current) return;
       if (data.type === 'messageReaction') {
         const reactionMessage = data.message || data;
         const targetMessageId = reactionMessage.messageId;
@@ -365,16 +390,16 @@ const recordingTimerRef = useRef(null);
       }
       if (data.type !== 'newMessage') return;
 
-      const activeChatId = activeChat?.chatId;
+      const activeChatId = activeChatIdRef.current;
 
       // If message belongs to currently open chat, do not increase unread
-      if (data.message.chatId === activeChatId) {
+      if (data.message?.chatId === activeChatId) {
         // skip unread increment
       } else {
         // Increment unread count for that chat
         setChats((prev) =>
           prev.map((chat) =>
-            chat.chatId === data.message.chatId
+            chat.chatId === data.message?.chatId
               ? { ...chat, unreadCount: (chat.unreadCount || 0) + 1 }
               : chat
           )
@@ -385,11 +410,12 @@ const recordingTimerRef = useRef(null);
       }
 
       // Only append message if chat is open
-      if (data.message.chatId !== activeChatId) {
+      if (data.message?.chatId !== activeChatId) {
         return;
       }
 
-      const msg = data.message;
+      const msg = data.message || {};
+      if (!msg.chatId) return;
 
       setMessages((prev) => {
         if (prev.find((m) => m.messageId === msg.messageId)) return prev;
@@ -402,7 +428,7 @@ const recordingTimerRef = useRef(null);
               (m.clientId && msg.clientId && m.clientId === msg.clientId) ||
               (
                 String(m.messageId || '').startsWith('local-') &&
-                m.text === msg.text &&
+                (m.text || m.message || '') === (msg.text || msg.message || '') &&
                 (
                   (m.mediaKey || '') === (msg.mediaKey || '') ||
                   (m.mediaUrl || '') === (msg.mediaUrl || '')
@@ -433,18 +459,20 @@ const recordingTimerRef = useRef(null);
       });
 
       scrollMessagesToBottom();
-      loadChats();
+      if (mountedRef.current) loadChats();
     });
 
     return () => {
       localStorage.removeItem('activeChatId');
       disconnectChatSocket();
     };
-  }, [userId, activeChat?.chatId]);
+  }, [userId]);
 
 const scrollMessagesToBottom = () => {
-  window.requestAnimationFrame(() => {
-    if (!scrollRef.current) return;
+  if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
+
+  scrollRafRef.current = window.requestAnimationFrame(() => {
+    if (!mountedRef.current || !scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   });
 };
@@ -496,6 +524,7 @@ useEffect(() => {
       };
 
       const chat = await chatApi.startChat(normalizedUser);
+      if (!mountedRef.current) return;
 
       const fixedChat = {
         ...chat,
@@ -505,14 +534,16 @@ useEffect(() => {
       };
 
       setActiveChat(fixedChat);
+      activeChatIdRef.current = fixedChat.chatId;
       localStorage.setItem('activeChatId', fixedChat.chatId);
       setIsBlocked(fixedChat?.isBlocked || false);
       setMobileChatOpen(true);
 
       const data = await chatApi.getMessages(fixedChat.chatId);
+      if (!mountedRef.current || activeChatIdRef.current !== fixedChat.chatId) return;
 
       setMessages(
-        data.map((msg) => ({
+        (Array.isArray(data) ? data : Array.isArray(data?.messages) ? data.messages : []).map((msg) => ({
           ...msg,
           isMine: msg.senderId === userId,
         }))
@@ -521,7 +552,7 @@ useEffect(() => {
       await loadChats();
     } catch (err) {
       console.error('Auto start chat failed:', err);
-      setStatus('Could not open chat with this user.');
+      if (mountedRef.current) setStatus('Could not open chat with this user.');
     }
   };
 
@@ -568,18 +599,29 @@ useEffect(() => {
     if (!query.trim()) return;
 
     try {
+      const requestId = searchRequestSeqRef.current + 1;
+      searchRequestSeqRef.current = requestId;
       const data = await chatApi.searchUsers(query.trim());
-      setUsers(Array.isArray(data) ? data : []);
+      if (!mountedRef.current || requestId !== searchRequestSeqRef.current) return;
+      setUsers(Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : []);
     } catch (err) {
       console.error('User search failed:', err);
-      setStatus('User search failed.');
+      if (mountedRef.current) setStatus('User search failed.');
     }
   };
 
 const openChat = async (chat) => {
+  if (!chat?.chatId) return;
+
+  const requestId = chatRequestSeqRef.current + 1;
+  chatRequestSeqRef.current = requestId;
+
   setActiveChat(chat);
+  activeChatIdRef.current = chat.chatId;
   localStorage.setItem('activeChatId', chat.chatId);
   setMobileChatOpen(true);
+  setMessages([]);
+  setActionsOpen(false);
   setStatus('');
   setOpenReactionMenuId(null);
   setEditingMessageId(null);
@@ -596,6 +638,7 @@ const openChat = async (chat) => {
 
   try {
     const blockStatus = await chatApi.checkBlockStatus(chat.receiverId);
+    if (!mountedRef.current || requestId !== chatRequestSeqRef.current) return;
     setIsBlocked(blockStatus?.isBlocked || false);
   } catch (e) {
     console.error('Block status check failed', e);
@@ -603,15 +646,17 @@ const openChat = async (chat) => {
 
   try {
     const data = await chatApi.getMessages(chat.chatId);
+    if (!mountedRef.current || requestId !== chatRequestSeqRef.current || activeChatIdRef.current !== chat.chatId) return;
 
     setMessages(
-      data.map((msg) => ({
+      (Array.isArray(data) ? data : Array.isArray(data?.messages) ? data.messages : []).map((msg) => ({
         ...msg,
         isMine: msg.senderId === userId,
       }))
     );
 
-    setTimeout(scrollMessagesToBottom, 50);
+    if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = window.setTimeout(scrollMessagesToBottom, 50);
 
     setChats((prev) =>
       prev.map((item) =>
@@ -623,7 +668,7 @@ const openChat = async (chat) => {
     scrollMessagesToBottom();
   } catch (err) {
     console.error('Could not load messages:', err);
-    setStatus('Could not load messages.');
+    if (mountedRef.current) setStatus('Could not load messages.');
   }
 };
 
@@ -634,7 +679,8 @@ useEffect(() => {
 
   const targetChat = chats.find((chat) => chat.chatId === chatIdFromUrl);
 
-  if (targetChat && activeChat?.chatId !== targetChat.chatId) {
+  if (targetChat && activeChat?.chatId !== targetChat.chatId && !openedChatIdsRef.current.has(targetChat.chatId)) {
+    openedChatIdsRef.current.add(targetChat.chatId);
     openChat(targetChat);
   }
 }, [searchParams, chats, activeChat?.chatId]);
@@ -642,6 +688,8 @@ useEffect(() => {
   const startChat = async (selectedUser) => {
     try {
       const chat = await chatApi.startChat(selectedUser);
+      if (!mountedRef.current) return;
+      activeChatIdRef.current = chat.chatId;
 
       setActiveChat({
         ...chat,
@@ -651,6 +699,8 @@ useEffect(() => {
       });
       localStorage.setItem('activeChatId', chat.chatId);
       setMobileChatOpen(true);
+      setMessages([]);
+      setActionsOpen(false);
       setOpenReactionMenuId(null);
       setEditingMessageId(null);
       setEditingText('');
@@ -658,18 +708,21 @@ useEffect(() => {
       setQuery('');
 
       const data = await chatApi.getMessages(chat.chatId);
+      if (!mountedRef.current || activeChatIdRef.current !== chat.chatId) return;
       setMessages(
-        data.map((msg) => ({
+        (Array.isArray(data) ? data : Array.isArray(data?.messages) ? data.messages : []).map((msg) => ({
           ...msg,
           isMine: msg.senderId === userId,
         }))
       );
 
-      setTimeout(scrollMessagesToBottom, 50);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = window.setTimeout(scrollMessagesToBottom, 50);
 
       // check block status from backend
       try {
         const blockStatus = await chatApi.checkBlockStatus(chat.receiverId);
+        if (!mountedRef.current || activeChatIdRef.current !== chat.chatId) return;
         setIsBlocked(blockStatus?.isBlocked || false);
       } catch (e) {
         console.error('Block status check failed', e);
@@ -678,7 +731,7 @@ useEffect(() => {
       await loadChats();
     } catch (err) {
       console.error('Could not start chat:', err);
-      setStatus('Could not start chat.');
+      if (mountedRef.current) setStatus('Could not start chat.');
     }
   };
 
@@ -737,6 +790,7 @@ const refreshMessageMediaUrl = async (msg) => {
 
   if (!freshUrl) return '';
 
+  if (!mountedRef.current) return freshUrl;
   setMessages((prev) =>
     prev.map((item) =>
       (item.messageId || item.id) === (msg.messageId || msg.id)
@@ -751,6 +805,11 @@ const refreshMessageMediaUrl = async (msg) => {
 const startVoiceRecording = async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    cancelRecordingRef.current = false;
+    if (!mountedRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
 
     const recorder = new MediaRecorder(stream);
     audioChunksRef.current = [];
@@ -762,6 +821,15 @@ const startVoiceRecording = async () => {
     };
 
     recorder.onstop = () => {
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      if (cancelRecordingRef.current) {
+        audioChunksRef.current = [];
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       const audioBlob = new Blob(audioChunksRef.current, {
         type: 'audio/webm',
       });
@@ -784,17 +852,18 @@ const startVoiceRecording = async () => {
     setRecordingSeconds(0);
 
     recordingTimerRef.current = window.setInterval(() => {
-      setRecordingSeconds((prev) => prev + 1);
+      if (mountedRef.current) setRecordingSeconds((prev) => prev + 1);
     }, 1000);
   } catch (err) {
     console.error('Voice recording failed:', err);
-    setStatus('Microphone permission denied.');
+    if (mountedRef.current) setStatus('Microphone permission denied.');
   }
 };
 
 const stopVoiceRecording = () => {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
+    mediaRecorder.stream?.getTracks?.().forEach((track) => track.stop());
   }
 
   setIsRecording(false);
@@ -807,8 +876,10 @@ const stopVoiceRecording = () => {
 };
 
 const cancelVoiceRecording = () => {
+  cancelRecordingRef.current = true;
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
+    mediaRecorder.stream?.getTracks?.().forEach((track) => track.stop());
   }
 
   audioChunksRef.current = [];
@@ -822,102 +893,113 @@ const cancelVoiceRecording = () => {
   }
 };
 
-const sendMessage = async (e) => {
-  e.preventDefault();
+  const sendMessage = async (e) => {
+    e.preventDefault();
 
-  if ((!text.trim() && !selectedMedia) || !activeChat || isBlocked || isUploading) return;
+    if ((!text.trim() && !selectedMedia) || !activeChat || isBlocked || isUploading) return;
 
-  const cleanText = text.trim();
-  const clientId = `local-${Date.now()}`;
-  let progressTimer;
-  let mediaKey = '';
-  let mediaUrl = '';
+    const cleanText = text.trim();
+    const clientId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let progressTimer;
+    let mediaKey = '';
+    let mediaUrl = '';
 
-  try {
-    if (selectedMedia) {
-      setIsUploading(true);
-      setUploadProgress(8);
+    try {
+      if (selectedMedia) {
+        setIsUploading(true);
+        setUploadProgress(8);
 
-      progressTimer = window.setInterval(() => {
-        setUploadProgress((prev) => Math.min(prev + 18, 92));
-      }, 140);
+        progressTimer = window.setInterval(() => {
+          setUploadProgress((prev) => Math.min(prev + 18, 92));
+        }, 140);
 
-      const uploadData = await chatApi.getMediaUploadUrl({
-        fileName: selectedMedia.name,
-        fileType: selectedMedia.type,
-      });
+        const uploadData = await chatApi.getMediaUploadUrl({
+          fileName: selectedMedia.name,
+          fileType: selectedMedia.type,
+        });
 
-      const uploadUrl = uploadData?.uploadUrl || '';
-      mediaKey = uploadData?.mediaKey || uploadData?.key || '';
-      mediaUrl = uploadData?.mediaUrl || uploadData?.fileUrl || '';
+        const uploadUrl = uploadData?.uploadUrl || '';
+        mediaKey = uploadData?.mediaKey || uploadData?.key || '';
+        mediaUrl = uploadData?.mediaUrl || uploadData?.fileUrl || '';
 
-      if (!uploadUrl || !mediaKey) {
-        throw new Error('Upload URL or media key missing');
+        if (!uploadUrl || !mediaKey) {
+          throw new Error('Upload URL or media key missing');
+        }
+
+        const uploadAbortController = new AbortController();
+        activeUploadAbortRef.current = uploadAbortController;
+
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: selectedMedia,
+          signal: uploadAbortController.signal,
+          headers: {
+            'Content-Type': selectedMedia.type || 'application/octet-stream',
+          },
+        });
+
+        activeUploadAbortRef.current = null;
+
+        if (!uploadRes.ok) {
+          throw new Error('Media upload failed');
+        }
       }
 
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: selectedMedia,
-        headers: {
-          'Content-Type': selectedMedia.type || 'application/octet-stream',
-        },
+      if (!mountedRef.current) return;
+      const tempMessage = {
+        messageId: clientId,
+        clientId,
+        chatId: activeChat.chatId,
+        senderId: userId,
+        text: cleanText,
+        mediaKey,
+        mediaUrl,
+        mediaName: selectedMedia?.name || '',
+        mediaType: selectedMedia?.type || '',
+        mediaPreview: selectedMediaPreview || '',
+        createdAt: Date.now(),
+        isMine: true,
+        reactions: {},
+      };
+
+      setMessages((prev) => [...prev, tempMessage]);
+      scrollMessagesToBottom();
+
+      sendChatMessage({
+        chatId: activeChat.chatId,
+        receiverId: activeChat.receiverId,
+        text: cleanText,
+        mediaKey,
+        mediaUrl,
+        mediaName: selectedMedia?.name || '',
+        mediaType: selectedMedia?.type || '',
+        clientId,
       });
 
-      if (!uploadRes.ok) {
-        throw new Error('Media upload failed');
-      }
-    }
+      if (progressTimer) window.clearInterval(progressTimer);
+      setUploadProgress(selectedMedia ? 100 : 0);
 
-    const tempMessage = {
-      messageId: clientId,
-      clientId,
-      chatId: activeChat.chatId,
-      senderId: userId,
-      text: cleanText,
-      mediaKey,
-      mediaUrl,
-      mediaName: selectedMedia?.name || '',
-      mediaType: selectedMedia?.type || '',
-      mediaPreview: selectedMediaPreview || '',
-      createdAt: Date.now(),
-      isMine: true,
-      reactions: {},
-    };
+      if (uploadResetTimerRef.current) window.clearTimeout(uploadResetTimerRef.current);
+      uploadResetTimerRef.current = window.setTimeout(() => {
+        if (!mountedRef.current) return;
+        setIsUploading(false);
+        setUploadProgress(0);
+      }, selectedMedia ? 350 : 0);
 
-    setMessages((prev) => [...prev, tempMessage]);
-    scrollMessagesToBottom();
-
-    sendChatMessage({
-      chatId: activeChat.chatId,
-      receiverId: activeChat.receiverId,
-      text: cleanText,
-      mediaKey,
-      mediaUrl,
-      mediaName: selectedMedia?.name || '',
-      mediaType: selectedMedia?.type || '',
-      clientId,
-    });
-
-    if (progressTimer) window.clearInterval(progressTimer);
-    setUploadProgress(selectedMedia ? 100 : 0);
-
-    window.setTimeout(() => {
+      setText('');
+      removeSelectedMedia(false);
+      setShowComposerTools(false);
+      scrollMessagesToBottom();
+    } catch (err) {
+      if (progressTimer) window.clearInterval(progressTimer);
+      activeUploadAbortRef.current = null;
+      if (!mountedRef.current) return;
       setIsUploading(false);
       setUploadProgress(0);
-    }, selectedMedia ? 350 : 0);
-
-    setText('');
-    removeSelectedMedia(false);
-    setShowComposerTools(false);
-    scrollMessagesToBottom();
-  } catch (err) {
-    if (progressTimer) window.clearInterval(progressTimer);
-    setIsUploading(false);
-    setUploadProgress(0);
-    console.error('Message send failed:', err);
-    setStatus(err.message || 'Message failed.');
-  }
-};
+      console.error('Message send failed:', err);
+      setStatus(err.message || 'Message failed.');
+    }
+  };
 const reactToMessage = async (msg, emoji) => {
   const messageId = msg.messageId || msg.id;
   if (!messageId || String(messageId).startsWith('local-') || !activeChat) return;
@@ -971,7 +1053,9 @@ const reactToMessage = async (msg, emoji) => {
       })
     );
 
-    setStatus(err?.response?.status === 401 ? 'Reaction route is not authorized. Check API Gateway auth for /messages/react.' : 'Could not react to message.');
+    if (mountedRef.current) {
+      setStatus(err?.response?.status === 401 ? 'Reaction route is not authorized. Check API Gateway auth for /messages/react.' : 'Could not react to message.');
+    }
   }
 };
 
@@ -995,7 +1079,7 @@ const saveEditedMessage = async (msg) => {
 
   if (!messageId || !activeChat || !nextText) return;
 
-  const previousMessages = messages;
+  const previousMessages = [...messages];
 
   setMessages((prev) =>
     prev.map((item) =>
@@ -1016,8 +1100,10 @@ const saveEditedMessage = async (msg) => {
     });
   } catch (err) {
     console.error('Edit message failed:', err);
-    setMessages(previousMessages);
-    setStatus('Could not edit message.');
+    if (mountedRef.current) {
+      setMessages(previousMessages);
+      setStatus('Could not edit message.');
+    }
   }
 };
 
@@ -1029,7 +1115,7 @@ const deleteMessage = async (msg) => {
 
   if (!window.confirm('Delete this message?')) return;
 
-  const previousMessages = messages;
+  const previousMessages = [...messages];
 
   setOpenReactionMenuId(null);
   setEditingMessageId(null);
@@ -1063,8 +1149,10 @@ const deleteMessage = async (msg) => {
     await loadChats();
   } catch (err) {
     console.error('Delete message failed:', err);
-    setMessages(previousMessages);
-    setStatus('Could not delete message.');
+    if (mountedRef.current) {
+      setMessages(previousMessages);
+      setStatus('Could not delete message.');
+    }
   }
 };
 const handleBlockUser = async () => {
@@ -1073,6 +1161,7 @@ const handleBlockUser = async () => {
   try {
     if (isBlocked) {
       await chatApi.unblockUser(activeChat.receiverId);
+      if (!mountedRef.current) return;
       setIsBlocked(false);
       setStatus('User unblocked.');
       await loadChats();
@@ -1086,13 +1175,14 @@ const handleBlockUser = async () => {
     if (!confirmBlock) return;
 
     await chatApi.blockUser(activeChat.receiverId);
+    if (!mountedRef.current) return;
     setIsBlocked(true);
     setStatus('User blocked.');
     setMessages([]);
     await loadChats();
   } catch (err) {
     console.error('Block toggle failed:', err);
-    setStatus('Block action failed.');
+    if (mountedRef.current) setStatus('Block action failed.');
   }
 };
 
@@ -1109,11 +1199,11 @@ const handleBlockUser = async () => {
         chatId: activeChat.chatId,
         reason: reason.trim(),
       });
-
+      if (!mountedRef.current) return;
       setStatus('Report submitted.');
     } catch (err) {
       console.error('Failed to submit report:', err);
-      setStatus('Failed to submit report.');
+      if (mountedRef.current) setStatus('Failed to submit report.');
     }
   };
 
@@ -1146,11 +1236,13 @@ const handleBlockUser = async () => {
     if (startedNearLeftEdge && swipeDistance > 90) {
       setMobileChatOpen(false);
       setActiveChat(null);
+      activeChatIdRef.current = null;
       setOpenReactionMenuId(null);
       setEditingMessageId(null);
       setEditingText('');
       localStorage.removeItem('activeChatId');
       setMessages([]);
+      setActionsOpen(false);
     }
   };
 
@@ -1162,9 +1254,10 @@ const handleBlockUser = async () => {
     <input
       placeholder="Search by username or email..."
       value={query}
+      autoComplete="off"
       onChange={(e) => setQuery(e.target.value)}
     />
-    <button type="submit">Search</button>
+    <button type="submit" disabled={!query.trim()}>Search</button>
   </form>
 
   {users.length > 0 && (
@@ -1215,9 +1308,8 @@ const handleBlockUser = async () => {
       )}&background=7dd3fc&color=07111f&bold=true`
     }
     alt=""
-    loading="eager"
+    loading="lazy"
     decoding="async"
-    fetchPriority="high"
     referrerPolicy="no-referrer"
   />
 
@@ -1259,11 +1351,13 @@ const handleBlockUser = async () => {
                 onClick={() => {
                   setMobileChatOpen(false);
                   setActiveChat(null);
+                  activeChatIdRef.current = null;
                   setOpenReactionMenuId(null);
                   setEditingMessageId(null);
                   setEditingText('');
                   localStorage.removeItem('activeChatId');
                   setMessages([]);
+                  setActionsOpen(false);
                 }}
               >
                 ←
@@ -1292,10 +1386,16 @@ const handleBlockUser = async () => {
 
   {actionsOpen && (
     <div className="chat-actions-menu">
-      <button className="btn-report" type="button" onClick={handleReportUser}>
+      <button className="btn-report" type="button" onClick={() => {
+        setActionsOpen(false);
+        handleReportUser();
+      }}>
         Report
       </button>
-      <button className="btn-block" type="button" onClick={handleBlockUser}>
+      <button className="btn-block" type="button" onClick={() => {
+        setActionsOpen(false);
+        handleBlockUser();
+      }}>
         {isBlocked ? 'Unblock' : 'Block'}
       </button>
     </div>
@@ -1313,9 +1413,9 @@ const handleBlockUser = async () => {
                       <span>{group.label}</span>
                     </div>
 
-                    {group.messages.map((msg) => (
+                    {group.messages.map((msg, index) => (
                       <div
-                        key={msg.messageId || msg.id}
+                        key={msg.messageId || msg.id || msg.clientId || `${msg.createdAt || 'msg'}-${index}`}
                         className={msg.isMine ? 'message mine' : 'message'}
                       >
                         {(msg.mediaUrl || msg.mediaPreview || msg.mediaKey) && (
@@ -1326,12 +1426,14 @@ const handleBlockUser = async () => {
   <div className="message-edit-box">
     <input
       value={editingText}
+      autoComplete="off"
+      disabled={isUploading}
       onChange={(event) => setEditingText(event.target.value)}
       autoFocus
     />
     <div className="message-edit-actions">
-      <button type="button" onClick={() => saveEditedMessage(msg)}>Save</button>
-      <button type="button" onClick={cancelEditMessage}>Cancel</button>
+      <button type="button" disabled={isUploading || !editingText.trim()} onClick={() => saveEditedMessage(msg)}>Save</button>
+      <button type="button" disabled={isUploading} onClick={cancelEditMessage}>Cancel</button>
     </div>
   </div>
 ) : (
@@ -1351,6 +1453,7 @@ const handleBlockUser = async () => {
   <button
     type="button"
     className="message-menu-btn"
+    disabled={isUploading}
     aria-label="Show reactions"
     aria-expanded={openReactionMenuId === (msg.messageId || msg.id)}
     onClick={() => {
@@ -1393,13 +1496,14 @@ const handleBlockUser = async () => {
       {(msg.isMine || msg.senderId === userId) && !msg.isDeleted && !String(msg.messageId || msg.id || msg._id || '').startsWith('local-') && (
         <div className="message-action-row">
           {(msg.text || msg.message) && (
-            <button type="button" onClick={() => startEditMessage(msg)}>
+            <button type="button" disabled={isUploading} onClick={() => startEditMessage(msg)}>
               Edit
             </button>
           )}
           <button
             type="button"
             className="message-delete-btn"
+            disabled={isUploading}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -1443,9 +1547,14 @@ const handleBlockUser = async () => {
       {selectedMediaPreview && (
         <div className="selected-media-card">
           {selectedMedia?.type?.startsWith('image/') ? (
-            <img src={selectedMediaPreview} alt={selectedMedia?.name || 'Selected media'} />
+            <img
+              src={selectedMediaPreview}
+              alt={selectedMedia?.name || 'Selected media'}
+              loading="eager"
+              decoding="async"
+            />
           ) : selectedMedia?.type?.startsWith('video/') ? (
-            <video src={selectedMediaPreview} controls playsInline />
+            <video src={selectedMediaPreview} controls playsInline preload="metadata" />
           ) : selectedMedia?.type?.startsWith('audio/') ? (
             <div className="selected-audio-preview">
               <AudioMiniPlayer
@@ -1462,7 +1571,7 @@ const handleBlockUser = async () => {
             <span>{selectedMedia?.type || 'File ready to send'}</span>
           </div>
 
-          <button type="button" onClick={removeSelectedMedia}>✕</button>
+          <button type="button" disabled={isUploading} onClick={removeSelectedMedia}>✕</button>
         </div>
       )}
     </div>
@@ -1481,10 +1590,10 @@ const handleBlockUser = async () => {
       accept="image/*,video/*,audio/*"
       className="media-input-hidden"
       onChange={handleMediaSelect}
-      disabled={isBlocked}
+      disabled={isBlocked || isUploading}
     />
 
-    <button type="button" className="composer-icon-btn" onClick={() => mediaInputRef.current?.click()}>
+    <button type="button" className="composer-icon-btn" disabled={isBlocked || isUploading} onClick={() => mediaInputRef.current?.click()}>
       ＋
     </button>
 
@@ -1500,10 +1609,10 @@ const handleBlockUser = async () => {
         scrollMessagesToBottom();
       }}
       onFocus={() => {
-        setTimeout(scrollMessagesToBottom, 120);
-        setTimeout(scrollMessagesToBottom, 320);
+        if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+        scrollTimerRef.current = window.setTimeout(scrollMessagesToBottom, 120);
       }}
-      disabled={isBlocked}
+      disabled={isBlocked || isUploading}
     />
 
     <button
@@ -1518,6 +1627,7 @@ const handleBlockUser = async () => {
   <button
     type="button"
     className="voice-cancel-btn"
+    disabled={isUploading}
     onClick={cancelVoiceRecording}
   >
     ✕

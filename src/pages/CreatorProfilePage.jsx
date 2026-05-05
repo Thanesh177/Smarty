@@ -1,11 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { creatorApi, postApi } from '../api/client';
 import './CreatorProfile.css';
 
 export default function CreatorProfilePage() {
   const { userId } = useParams();
   const navigate = useNavigate();
+  const mountedRef = useRef(true);
 
   const [profile, setProfile] = useState(null);
   const [creatorPosts, setCreatorPosts] = useState([]);
@@ -14,6 +15,7 @@ export default function CreatorProfilePage() {
   const [activeTab, setActiveTab] = useState('posts');
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [postsLoading, setPostsLoading] = useState(false);
 
   const displayName =
     profile?.name ||
@@ -22,33 +24,80 @@ export default function CreatorProfilePage() {
     (userId?.length > 20 ? `Creator_${userId.substring(0, 5)}` : userId);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     async function loadCreatorData() {
       setLoading(true);
+      setPostsLoading(false);
 
       try {
-        const [profileData, followersData, followingData] = await Promise.all([
-          creatorApi.getProfile(userId),
+        const profileData = await creatorApi.getProfile(userId);
+        if (!mountedRef.current) return;
+
+        setProfile(profileData || null);
+        setLoading(false);
+        setPostsLoading(true);
+
+        const [followersResult, followingResult, postsResult] = await Promise.allSettled([
           creatorApi.getFollowers(userId),
           creatorApi.getFollowing(userId),
+          postApi.getPostsByCreator(userId),
         ]);
 
-        setProfile(profileData);
-        setFollowers(followersData || []);
-        setFollowing(followingData || []);
+        if (!mountedRef.current) return;
 
-        const posts = await postApi.getPostsByCreator(userId);
-        setCreatorPosts(posts || []);
+        if (followersResult.status === 'fulfilled') {
+          const followersData = followersResult.value;
+          setFollowers(
+            Array.isArray(followersData?.followers)
+              ? followersData.followers
+              : Array.isArray(followersData)
+                ? followersData
+                : []
+          );
+        }
+
+        if (followingResult.status === 'fulfilled') {
+          const followingData = followingResult.value;
+          setFollowing(
+            Array.isArray(followingData?.following)
+              ? followingData.following
+              : Array.isArray(followingData)
+                ? followingData
+                : []
+          );
+        }
+
+        if (postsResult.status === 'fulfilled') {
+          const posts = postsResult.value;
+          setCreatorPosts(
+            Array.isArray(posts?.posts)
+              ? posts.posts
+              : Array.isArray(posts?.reels)
+                ? posts.reels
+                : Array.isArray(posts)
+                  ? posts
+                  : []
+          );
+        }
       } catch (err) {
         console.error('Error fetching creator data:', err);
+        if (mountedRef.current) setLoading(false);
       } finally {
-        setLoading(false);
+        if (mountedRef.current) setPostsLoading(false);
       }
     }
 
     if (userId) loadCreatorData();
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, [userId]);
 
   const handleStartChat = () => {
+    if (!userId) return;
+
     navigate('/chat', {
       state: {
         startWithUser: {
@@ -64,25 +113,27 @@ export default function CreatorProfilePage() {
   };
 
 const handleFollow = async () => {
-  if (!profile || actionLoading || profile.requestPending) return;
+  if (!profile || !userId || actionLoading || profile.requestPending) return;
 
   setActionLoading(true);
 
   try {
     if (profile.isFollowing) {
       await creatorApi.unfollow(userId);
+      if (!mountedRef.current) return;
 
       setProfile((prev) => ({
         ...prev,
         isFollowing: false,
         requestPending: false,
+        followersCount: Math.max(0, Number(prev?.followersCount || 0) - 1),
       }));
 
       return;
     }
 
-    // always send request first
     await creatorApi.follow(userId);
+    if (!mountedRef.current) return;
 
     setProfile((prev) => ({
       ...prev,
@@ -92,7 +143,7 @@ const handleFollow = async () => {
   } catch (err) {
     console.error(err);
   } finally {
-    setActionLoading(false);
+    if (mountedRef.current) setActionLoading(false);
   }
 };
 
@@ -127,6 +178,10 @@ const getFollowButtonText = () => {
                 className="avatar-large image-avatar"
                 src={profile.avatarUrl}
                 alt={displayName}
+                loading="eager"
+                decoding="async"
+                fetchpriority="high"
+                referrerPolicy="no-referrer"
               />
             ) : (
               <div className="avatar-large">
@@ -164,7 +219,7 @@ const getFollowButtonText = () => {
 
         <div className="stats-bar">
           <button className="stat" onClick={() => setActiveTab('posts')}>
-            <strong>{creatorPosts.length || profile?.postsCount || 0}</strong>
+            <strong>{creatorPosts.length || profile?.postsCount || profile?.reelsCount || 0}</strong>
             posts
           </button>
 
@@ -183,20 +238,31 @@ const getFollowButtonText = () => {
           <section className="posts-section">
             <h3>Recent Contributions</h3>
 
-            {creatorPosts.length > 0 ? (
+            {postsLoading ? (
+              <div className="empty-state">
+                <p>Loading posts...</p>
+              </div>
+            ) : creatorPosts.length > 0 ? (
               <div className="creator-grid">
-                {creatorPosts.map((post) => {
+                {creatorPosts.map((post, index) => {
                   const postId = post.id || post.reelId;
 
                   return (
                     <button
-                      key={postId}
+                      key={postId || `creator-post-${index}`}
                       className="mini-post-card"
                       type="button"
-                      onClick={() => navigate(`/reel/${postId}`)}
+                      disabled={!postId}
+                      onClick={() => postId && navigate(`/reel/${postId}`)}
                     >
                       {post.imageUrl ? (
-                        <img src={post.imageUrl} alt={post.title} />
+                        <img
+                          src={post.imageUrl}
+                          alt={post.title || 'Creator post'}
+                          loading={index < 4 ? 'eager' : 'lazy'}
+                          decoding="async"
+                          fetchpriority={index < 4 ? 'high' : 'auto'}
+                        />
                       ) : (
                         <div className="mini-placeholder">
                           {post.topic?.[0] || 'S'}
@@ -225,11 +291,11 @@ const getFollowButtonText = () => {
 
             {followers.length > 0 ? (
               <div className="people-list">
-                {followers.map((item) => {
+                {followers.map((item, index) => {
                   const id = item.userId || item.followerId;
 
                   return (
-                    <button key={id} onClick={() => navigate(`/creator/${id}`)}>
+                    <button key={id || `follower-${index}`} disabled={!id} onClick={() => id && navigate(`/creator/${id}`)}>
                       <strong>{item.name || item.email || id}</strong>
                       <span>{item.email || 'Follower'}</span>
                     </button>
@@ -249,12 +315,12 @@ const getFollowButtonText = () => {
             <h3>Following</h3>
 
             {following.length > 0 ? (
-              <div className="people-list">
-                {following.map((item) => {
+              <div classNfame="people-list">
+                {following.map((item, index) => {
                   const id = item.userId || item.followingId;
 
                   return (
-                    <button key={id} onClick={() => navigate(`/creator/${id}`)}>
+                    <button key={id || `following-${index}`} disabled={!id} onClick={() => id && navigate(`/creator/${id}`)}>
                       <strong>{item.name || item.email || id}</strong>
                       <span>{item.email || 'Following'}</span>
                     </button>

@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
@@ -43,14 +43,16 @@ function PageLoader() {
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return <p className="status">Loading...</p>;
 
-  return user ? children : <Navigate to="/login" replace />;
+  return user ? children : <Navigate to="/login" replace state={{ from: location }} />;
 }
 
 function Layout() {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const [totalUnread, setTotalUnread] = useState(0);
 
   // Keep chat notification badge updated globally, even when user is not on Chat page
@@ -63,6 +65,8 @@ function Layout() {
     let cancelled = false;
 
     const refreshChatUnread = async () => {
+      if (document.visibilityState === 'hidden') return;
+
       try {
         const chats = await chatApi.getChats();
         if (cancelled) return;
@@ -79,16 +83,18 @@ function Layout() {
 
     refreshChatUnread();
 
-    const intervalId = window.setInterval(refreshChatUnread, 8000);
+    const intervalId = window.setInterval(refreshChatUnread, 30000);
 
     window.addEventListener('focus', refreshChatUnread);
     window.addEventListener('chat-unread-refresh', refreshChatUnread);
+    document.addEventListener('visibilitychange', refreshChatUnread);
 
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
       window.removeEventListener('focus', refreshChatUnread);
       window.removeEventListener('chat-unread-refresh', refreshChatUnread);
+      document.removeEventListener('visibilitychange', refreshChatUnread);
     };
   }, [user]);
 
@@ -110,7 +116,7 @@ function Layout() {
 }, []);
 
 useEffect(() => {
-  if (!('setAppBadge' in navigator)) return;
+  if (typeof navigator === 'undefined' || !('setAppBadge' in navigator)) return;
 
   if (totalUnread > 0) {
     navigator.setAppBadge(totalUnread).catch(() => {});
@@ -133,7 +139,11 @@ useEffect(() => {
 
       if (!isStandalone) return;
 
-      await notificationApi.initPush(user);
+      try {
+        await notificationApi.initPush(user);
+      } catch (error) {
+        console.error('Failed to initialize push notifications:', error);
+      }
     }
 
     setupPush();
@@ -143,6 +153,23 @@ useEffect(() => {
   useEffect(() => {
     const unsubscribe = listenForForegroundMessages();
     return () => unsubscribe && unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const preloadCommonPages = () => {
+      FeedPage.preload?.();
+      ProfilePage.preload?.();
+      ChatPage.preload?.();
+      SavedPage.preload?.();
+    };
+
+    if ('requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(preloadCommonPages, { timeout: 3000 });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timeoutId = window.setTimeout(preloadCommonPages, 1200);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   return (
@@ -199,7 +226,7 @@ useEffect(() => {
 <Route
   path="/"
   element={
-    window.location.search.includes('code=')
+    location.search.includes('code=')
       ? <p className="status">Completing login...</p>
       : <Navigate to="/feed" replace />
   }

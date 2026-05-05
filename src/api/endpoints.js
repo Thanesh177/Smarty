@@ -23,6 +23,12 @@ export const endpoints = {
   create: '/rooms/create',
   join: '/rooms/join',
   messages: '/rooms/messages',
+
+  // 🔥 Room invite system
+  invites: '/rooms/invites',
+  sendInvite: (roomId) => `/rooms/${roomId}/invites`,
+  acceptInvite: (roomId) => `/rooms/${roomId}/invites/accept`,
+  rejectInvite: (roomId) => `/rooms/${roomId}/invites/reject`,
 },
 
   chat: {

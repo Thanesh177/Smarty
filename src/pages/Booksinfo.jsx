@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import './Booksinfo.css';
 
@@ -10,7 +10,7 @@ function getReadingHistory() {
   }
 }
 
-function getSavedBookTitle(bookId, fallbackBook = {}) {
+function getSavedBookTitle(bookId, fallbackBook = {}, historyCache = null) {
   const fallbackTitle = fallbackBook.title || fallbackBook.name;
 
   if (fallbackTitle && fallbackTitle !== `Book #${bookId}`) {
@@ -28,7 +28,7 @@ function getSavedBookTitle(bookId, fallbackBook = {}) {
   }
 
   try {
-    const history = getReadingHistory();
+    const history = historyCache || getReadingHistory();
     const historyBook = history.find((book) => String(book.id) === String(bookId));
 
     if (historyBook?.title && historyBook.title !== `Book #${bookId}`) {
@@ -53,7 +53,7 @@ function getSavedBookTitle(bookId, fallbackBook = {}) {
   return `Book #${bookId}`;
 }
 
-function getAllBookmarkedBooks() {
+function getAllBookmarkedBooks(historyCache = null) {
   const items = [];
 
   Object.keys(localStorage).forEach((key) => {
@@ -64,12 +64,14 @@ function getAllBookmarkedBooks() {
       const bookmarks = JSON.parse(localStorage.getItem(key) || '[]');
 
       if (bookmarks.length > 0) {
+        const cover = getSavedBookCover(bookId, {}, historyCache);
+
         items.push({
           id: bookId,
-          title: getSavedBookTitle(bookId),
+          title: getSavedBookTitle(bookId, {}, historyCache),
           count: bookmarks.length,
-          cover: getSavedBookCover(bookId),
-          coverUrl: getSavedBookCover(bookId),
+          cover,
+          coverUrl: cover,
         });
       }
     } catch {
@@ -103,7 +105,7 @@ function getBookProgress(bookId) {
   return 0;
 }
 
-function getSavedBookCover(bookId, fallbackBook = {}) {
+function getSavedBookCover(bookId, fallbackBook = {}, historyCache = null) {
   if (fallbackBook.cover || fallbackBook.coverUrl) {
     return fallbackBook.cover || fallbackBook.coverUrl;
   }
@@ -119,7 +121,7 @@ function getSavedBookCover(bookId, fallbackBook = {}) {
   }
 
   try {
-    const history = getReadingHistory();
+    const history = historyCache || getReadingHistory();
     const historyBook = history.find((book) => String(book.id) === String(bookId));
 
     if (historyBook?.cover || historyBook?.coverUrl) {
@@ -135,83 +137,112 @@ function getSavedBookCover(bookId, fallbackBook = {}) {
 export default function Booksinfo() {
   const navigate = useNavigate();
   const location = useLocation();
+  const mountedRef = useRef(true);
+  const titleAbortRef = useRef(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    const refreshBooksInfo = () => setRefreshKey((prev) => prev + 1);
+    mountedRef.current = true;
+
+    const refreshBooksInfo = () => {
+      if (mountedRef.current) setRefreshKey((prev) => prev + 1);
+    };
 
     window.addEventListener('focus', refreshBooksInfo);
     window.addEventListener('storage', refreshBooksInfo);
+    window.addEventListener('books-info-refresh', refreshBooksInfo);
 
     return () => {
+      mountedRef.current = false;
+      titleAbortRef.current?.abort();
       window.removeEventListener('focus', refreshBooksInfo);
       window.removeEventListener('storage', refreshBooksInfo);
+      window.removeEventListener('books-info-refresh', refreshBooksInfo);
     };
   }, []);
 
   useEffect(() => {
     async function fixMissingTitles() {
       const currentHistory = getReadingHistory();
+      const booksNeedingTitles = currentHistory.filter(
+        (book) => book?.id && (!book.title || book.title.startsWith('Book #'))
+      );
+
+      if (booksNeedingTitles.length === 0) return;
+
+      titleAbortRef.current?.abort();
+      titleAbortRef.current = new AbortController();
+
       let changed = false;
+      const fixedMap = new Map();
 
-      const fixedHistory = await Promise.all(
-        currentHistory.map(async (book) => {
-          if (book.title && !book.title.startsWith('Book #')) {
-            return book;
-          }
-
-          if (!book.id) {
-            return book;
-          }
-
+      await Promise.allSettled(
+        booksNeedingTitles.slice(0, 8).map(async (book) => {
           try {
-            const response = await fetch(`https://openlibrary.org/works/${book.id}.json`);
+            const response = await fetch(`https://openlibrary.org/works/${book.id}.json`, {
+              signal: titleAbortRef.current.signal,
+            });
 
-            if (!response.ok) {
-              return book;
-            }
+            if (!response.ok) return;
 
             const data = await response.json();
             const title = data.title || book.title;
 
-            if (!title || title.startsWith('Book #')) {
-              return book;
-            }
-
-            changed = true;
+            if (!title || title.startsWith('Book #')) return;
 
             const coverUrl = data.covers?.[0]
               ? `https://covers.openlibrary.org/b/id/${data.covers[0]}-M.jpg`
               : book.cover || book.coverUrl || '';
 
-            const fixedBook = {
+            fixedMap.set(String(book.id), {
               ...book,
               title,
               cover: coverUrl,
               coverUrl,
-            };
-
-            localStorage.setItem(`book_${book.id}`, JSON.stringify(fixedBook));
-            return fixedBook;
-          } catch {
-            return book;
+            });
+          } catch (err) {
+            if (err?.name !== 'AbortError') console.error('Failed to fix book title:', err);
           }
         })
       );
 
+      if (!mountedRef.current || fixedMap.size === 0) return;
+
+      const fixedHistory = currentHistory.map((book) => {
+        const fixedBook = fixedMap.get(String(book.id));
+        if (!fixedBook) return book;
+
+        changed = true;
+        try {
+          localStorage.setItem(`book_${book.id}`, JSON.stringify(fixedBook));
+        } catch {
+          // ignore
+        }
+        return fixedBook;
+      });
+
       if (changed) {
-        localStorage.setItem('reading_history', JSON.stringify(fixedHistory));
-        setRefreshKey((prev) => prev + 1);
+        try {
+          localStorage.setItem('reading_history', JSON.stringify(fixedHistory));
+        } catch {
+          // ignore
+        }
+        if (mountedRef.current) setRefreshKey((prev) => prev + 1);
       }
     }
 
     fixMissingTitles();
+
+    return () => {
+      titleAbortRef.current?.abort();
+    };
   }, [location.pathname]);
 
   const history = useMemo(() => getReadingHistory(), [refreshKey]);
-  const bookmarkedBooks = useMemo(() => getAllBookmarkedBooks(), [refreshKey]);
+  const bookmarkedBooks = useMemo(() => getAllBookmarkedBooks(history), [history]);
   const totalBookmarks = useMemo(() => getTotalBookmarkCount(bookmarkedBooks), [bookmarkedBooks]);
   const latestBook = history[0];
+  const latestBookTitle = latestBook ? getSavedBookTitle(latestBook.id, latestBook, history) : '';
 
   return (
     <main className="books-page">
@@ -236,7 +267,7 @@ export default function Booksinfo() {
 
         <div className="books-hero-card">
           <div className="book-glow">📚</div>
-          <h3>{latestBook ? getSavedBookTitle(latestBook.id, latestBook) : 'Ready to read?'}</h3>
+          <h3>{latestBook ? latestBookTitle : 'Ready to read?'}</h3>
           <p>
             {latestBook
               ? 'Your latest book is ready when you are.'
@@ -266,7 +297,7 @@ export default function Booksinfo() {
           onClick={() => latestBook ? navigate(`/read-book/${latestBook.id}`) : navigate('/read-books')}
         >
           <span>Continue</span>
-          <strong>{latestBook ? getSavedBookTitle(latestBook.id, latestBook) : 'No book yet'}</strong>
+          <strong>{latestBook ? latestBookTitle : 'No book yet'}</strong>
         </button>
 
         <button type="button" onClick={() => navigate('/read-books')}>
@@ -310,24 +341,24 @@ export default function Booksinfo() {
             </div>
           ) : (
             <div className="mini-book-list">
-              {history.slice(0, 6).map((book) => (
+              {history.slice(0, 6).map((book, index) => (
                 <button
-                  key={book.id}
-                  onClick={() => navigate(`/read-book/${book.id}`)}
+                  key={book.id || `history-${index}`}
+                  disabled={!book.id}
+                  onClick={() => book.id && navigate(`/read-book/${book.id}`)}
                 >
                   <span className="mini-cover" aria-hidden="true">
                     <img
-  src={getSavedBookCover(book.id, book) || '/default-book-cover.png'}
+  src={getSavedBookCover(book.id, book, history) || '/default-book-cover.png'}
   alt=""
-  loading="lazy"
-  onError={(e) => {
-    e.currentTarget.src = '/default-book-cover.png';
-  }}
+  loading={index < 3 ? 'eager' : 'lazy'}
+  decoding="async"
+  fetchPriority={index < 3 ? 'high' : 'auto'}
 />
                   </span>
 
                   <span className="mini-book-info">
-                    <strong>{getSavedBookTitle(book.id, book)}</strong>
+                    <strong>{getSavedBookTitle(book.id, book, history)}</strong>
                     <small>Continue →</small>
 
                     <span className="book-progress-track">
@@ -352,19 +383,19 @@ export default function Booksinfo() {
             </div>
           ) : (
             <div className="mini-book-list">
-              {bookmarkedBooks.slice(0, 6).map((book) => (
+              {bookmarkedBooks.slice(0, 6).map((book, index) => (
                 <button
-                  key={book.id}
-                  onClick={() => navigate(`/read-book/${book.id}`)}
+                  key={book.id || `bookmark-${index}`}
+                  disabled={!book.id}
+                  onClick={() => book.id && navigate(`/read-book/${book.id}`)}
                 >
                   <span className="mini-cover" aria-hidden="true">
                     <img
-                      src={getSavedBookCover(book.id, book) || '/default-book-cover.png'}
+                      src={getSavedBookCover(book.id, book, history) || '/default-book-cover.png'}
                       alt=""
-                      loading="lazy"
-                      onError={(event) => {
-                        event.currentTarget.src = '/default-book-cover.png';
-                      }}
+                      loading={index < 3 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      fetchPriority={index < 3 ? 'high' : 'auto'}
                     />
                   </span>
 

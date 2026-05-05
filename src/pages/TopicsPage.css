@@ -8,6 +8,7 @@
     #030712;
   color: #fff;
 }
+
 .feed-topics-hero {
   max-width: 900px;
   margin-bottom: 34px;
@@ -133,5 +134,86 @@
 
   .feed-topics-grid {
     grid-template-columns: 1fr;
+  }
+}
+.room-card {
+  position: relative;
+}
+
+.room-card-menu-wrap {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+}
+
+.room-card-menu-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.065);
+  color: #f8fafc;
+  font-size: 1rem;
+  font-weight: 950;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition: opacity 0.16s ease, transform 0.16s ease, background 0.16s ease;
+}
+
+.room-card:hover .room-card-menu-btn,
+.room-card:focus-within .room-card-menu-btn,
+.room-card.active .room-card-menu-btn {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.room-card-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.room-card-menu-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 130px;
+  padding: 6px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.room-card-menu-popover button {
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  color: #e5e7eb;
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-align: left;
+  cursor: pointer;
+}
+
+.room-card-menu-popover button:hover {
+  background: rgba(255, 255, 255, 0.075);
+  color: #fff;
+}
+
+@media (hover: none) {
+  .room-card-menu-btn {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
   }
 }

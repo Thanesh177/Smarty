@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { userApi, postApi } from '../api/client';
 import EmptyState from '../components/EmptyState';
@@ -17,6 +17,9 @@ function getPostImage(post) {
 export default function SavedPage() {
   const navigate = useNavigate();
 
+  const mountedRef = useRef(true);
+  const toastTimerRef = useRef(null);
+
   const [posts, setPosts] = useState([]);
   const [query, setQuery] = useState('');
   const [activeTopic, setActiveTopic] = useState('All');
@@ -25,19 +28,55 @@ export default function SavedPage() {
   const [toast, setToast] = useState('');
 
   const showToast = (message) => {
+    if (!mountedRef.current) return;
+
     setToast(message);
-    setTimeout(() => setToast(''), 1600);
+
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+
+    toastTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) setToast('');
+    }, 1600);
   };
 
   useEffect(() => {
-    postApi
-  .getSavedReels()
-  .then((data) => setPosts(Array.isArray(data) ? data : []))
-      .catch((err) => {
+    mountedRef.current = true;
+
+    async function loadSavedPosts() {
+      try {
+        setLoading(true);
+        setError('');
+
+        const data = await postApi.getSavedReels();
+        if (!mountedRef.current) return;
+
+        const savedPosts = Array.isArray(data?.posts)
+          ? data.posts
+          : Array.isArray(data?.reels)
+            ? data.reels
+            : Array.isArray(data)
+              ? data
+              : [];
+
+        setPosts(savedPosts);
+      } catch (err) {
         console.error('Saved reels error:', err);
-        setError('Failed to load saved content.');
-      })
-      .finally(() => setLoading(false));
+        if (mountedRef.current) setError('Failed to load saved content.');
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
+    }
+
+    loadSavedPosts();
+
+    return () => {
+      mountedRef.current = false;
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
   }, []);
 
   const topics = useMemo(() => {
@@ -46,12 +85,16 @@ export default function SavedPage() {
   }, [posts]);
 
   const filteredPosts = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
     return posts.filter((post) => {
       const matchesTopic = activeTopic === 'All' || post.topic === activeTopic;
-      const text = `${post.title || ''} ${post.body || ''} ${post.topic || ''}`.toLowerCase();
-      const matchesSearch = text.includes(query.toLowerCase());
+      if (!matchesTopic) return false;
 
-      return matchesTopic && matchesSearch;
+      if (!normalizedQuery) return true;
+
+      const text = `${post.title || ''} ${post.body || ''} ${post.description || ''} ${post.topic || ''}`.toLowerCase();
+      return text.includes(normalizedQuery);
     });
   }, [posts, activeTopic, query]);
 
@@ -59,12 +102,19 @@ export default function SavedPage() {
     try {
       await postApi.toggleLike(postId);
 
+      if (!mountedRef.current) return;
+
       setPosts((prev) =>
-        prev.map((post) =>
-          (post.id || post.reelId) === postId
-            ? { ...post, likes: Number(post.likes || 0) + 1, liked: true }
-            : post
-        )
+        prev.map((post) => {
+          if ((post.id || post.reelId) !== postId) return post;
+
+          const wasLiked = Boolean(post.liked);
+          return {
+            ...post,
+            likes: Math.max(0, Number(post.likes || 0) + (wasLiked ? -1 : 1)),
+            liked: !wasLiked,
+          };
+        })
       );
 
       showToast('Liked ❤️');
@@ -77,6 +127,7 @@ export default function SavedPage() {
   const handleSave = async (postId) => {
     try {
       await postApi.toggleSave(postId);
+      if (!mountedRef.current) return;
 
       setPosts((prev) =>
         prev.filter((post) => (post.id || post.reelId) !== postId)
@@ -168,9 +219,15 @@ export default function SavedPage() {
                     onClick={() => navigate(`/reel/${postId}`)}
                   >
                     {post.videoUrl ? (
-                      <video src={post.videoUrl} muted playsInline />
+                      <video src={post.videoUrl} muted playsInline preload="metadata" />
                     ) : getPostImage(post) ? (
-                      <img src={getPostImage(post)} alt={post.title || 'Saved post'} />
+                      <img
+                        src={getPostImage(post)}
+                        alt={post.title || 'Saved post'}
+                        loading="eager"
+                        decoding="async"
+                        fetchPriority="high"
+                      />
                     ) : (
                       <div className="saved-placeholder">{post.topic?.[0] || 'S'}</div>
                     )}

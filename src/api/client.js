@@ -135,11 +135,27 @@ export const roomApi = {
 },
 
 inviteUserToRoom: async (roomId, userId) => {
-  const { data } = await api.post('/users/find', {
-    action: 'invite',
-    roomId,
+  const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/invites`, {
     userId,
+    invitedUserId: userId,
   });
+  return data;
+},
+
+getRoomInvites: async () => {
+  const { data } = await api.get('/rooms/invites');
+  return data;
+},
+
+
+
+acceptRoomInvite: async (roomId) => {
+  const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/invites/accept`);
+  return data;
+},
+
+declineRoomInvite: async (roomId) => {
+  const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/invites/reject`);
   return data;
 },
 

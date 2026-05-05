@@ -160,13 +160,25 @@ export default function ReadBookPage() {
   const [error, setError] = useState('');
 
   const loadMoreRef = useRef(null);
+  const mountedRef = useRef(true);
+  const browseAbort = useRef(null);
+  const lastBrowseKeyRef = useRef('');
   const searchAbort = useRef(null);
 
   const cleanQuery = query.trim();
   const cleanAuthorFilter = authorFilter.trim();
   const cleanYearFilter = yearFilter.trim();
   const activeSearchText = cleanQuery;
-const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanYearFilter || categoryFilter);
+  const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanYearFilter || categoryFilter);
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      searchAbort.current?.abort();
+      browseAbort.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     setAccessFilter(isPreviewPage ? 'preview' : 'read');
@@ -271,34 +283,55 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
   );
 
   const loadBrowsePage = useCallback(async (pageToLoad = 1) => {
+    const browseKey = JSON.stringify({
+      search: categoryFilter,
+      author: cleanAuthorFilter,
+      year: cleanYearFilter,
+      category: categoryFilter,
+      page: pageToLoad,
+    });
+
+    if (lastBrowseKeyRef.current === browseKey && loadingMore) return;
+    lastBrowseKeyRef.current = browseKey;
+
+    browseAbort.current?.abort();
+    browseAbort.current = new AbortController();
+
     setLoadingMore(true);
     setError('');
 
     try {
-      const books = await readBooksApi.getBooks({
-        search: categoryFilter,
-        author: cleanAuthorFilter,
-        year: cleanYearFilter,
-        category: categoryFilter,
-        page: pageToLoad,
-        page_size: SEARCH_PAGE_SIZE,
-      });
+      const books = await readBooksApi.getBooks(
+        {
+          search: categoryFilter,
+          author: cleanAuthorFilter,
+          year: cleanYearFilter,
+          category: categoryFilter,
+          page: pageToLoad,
+          page_size: SEARCH_PAGE_SIZE,
+        },
+        { signal: browseAbort.current.signal }
+      );
+
+      if (!mountedRef.current) return;
+
+      const safeBooks = Array.isArray(books) ? books : [];
 
       setBrowseBooks((currentBooks) => (
-        pageToLoad === 1 ? books : mergeUniqueBooks(currentBooks, books)
+        pageToLoad === 1 ? safeBooks : mergeUniqueBooks(currentBooks, safeBooks)
       ));
       setBrowsePage(pageToLoad);
-      setHasMoreBrowse(books.length >= SEARCH_PAGE_SIZE);
+      setHasMoreBrowse(safeBooks.length >= SEARCH_PAGE_SIZE);
     } catch (err) {
       if (err.name === 'AbortError' || err.message === 'canceled' || err.code === 'ERR_CANCELED') {
         return;
       }
 
-      setError(err.message || 'Failed to load more books.');
+      if (mountedRef.current) setError(err.message || 'Failed to load more books.');
     } finally {
-      setLoadingMore(false);
+      if (mountedRef.current) setLoadingMore(false);
     }
-  }, [categoryFilter, cleanAuthorFilter, cleanYearFilter]);
+  }, [categoryFilter, cleanAuthorFilter, cleanYearFilter, loadingMore]);
 
   const loadSearchPage = useCallback(async (searchText, pageToLoad = 1) => {
     if (!searchText) return;
@@ -323,20 +356,26 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
         { signal: searchAbort.current.signal }
       );
 
+      if (!mountedRef.current) return;
+
+      const safeBooks = Array.isArray(books) ? books : [];
+
       setSearchResults((currentBooks) => (
-        pageToLoad === 1 ? books : mergeUniqueBooks(currentBooks, books)
+        pageToLoad === 1 ? safeBooks : mergeUniqueBooks(currentBooks, safeBooks)
       ));
       setSearchPage(pageToLoad);
-      setHasMoreSearch(books.length >= SEARCH_PAGE_SIZE);
+      setHasMoreSearch(safeBooks.length >= SEARCH_PAGE_SIZE);
     } catch (err) {
       if (err.name === 'AbortError' || err.message === 'canceled' || err.code === 'ERR_CANCELED') {
         return;
       }
 
-      setError(err.message || 'Search failed.');
+      if (mountedRef.current) setError(err.message || 'Search failed.');
     } finally {
-      setSearching(false);
-      setLoadingMore(false);
+      if (mountedRef.current) {
+        setSearching(false);
+        setLoadingMore(false);
+      }
     }
   }, [categoryFilter, cleanAuthorFilter, cleanYearFilter]);
 
@@ -358,11 +397,12 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
           })
         );
 
-        setRows(Object.fromEntries(results));
+        if (!mountedRef.current) return;
+        setRows(Object.fromEntries(results.map(([title, books]) => [title, Array.isArray(books) ? books : []])));
       } catch (err) {
-        setError(err.message || 'Failed to load books.');
+        if (mountedRef.current) setError(err.message || 'Failed to load books.');
       } finally {
-        setLoadingRows(false);
+        if (mountedRef.current) setLoadingRows(false);
       }
     }
 
@@ -372,19 +412,20 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
 
   useEffect(() => {
     if (!hasActiveFilters) {
+      searchAbort.current?.abort();
       setSearchResults([]);
       setSearchPage(1);
       setHasMoreSearch(false);
       loadBrowsePage(1);
-      return;
+      return undefined;
     }
 
-    const timer = setTimeout(() => {
-      loadSearchPage(activeSearchText || 'books', 1);
-    }, 180);
+    const timer = window.setTimeout(() => {
+      loadSearchPage(activeSearchText || categoryFilter || 'books', 1);
+    }, 260);
 
-    return () => clearTimeout(timer);
-  }, [activeSearchText, cleanAuthorFilter, cleanYearFilter, hasActiveFilters, loadBrowsePage, loadSearchPage]);
+    return () => window.clearTimeout(timer);
+  }, [activeSearchText, categoryFilter, cleanAuthorFilter, cleanYearFilter, hasActiveFilters, loadBrowsePage, loadSearchPage]);
 
   useEffect(() => {
     const node = loadMoreRef.current;
@@ -429,7 +470,7 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
     event.preventDefault();
 
     if (hasActiveFilters) {
-      loadSearchPage(activeSearchText || 'books', 1);
+      loadSearchPage(activeSearchText || categoryFilter || 'books', 1);
     }
   }
 
@@ -443,6 +484,7 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
     setSearchPage(1);
     setHasMoreSearch(false);
     setError('');
+    searchAbort.current?.abort();
   }
 
   function runQuickSearch(searchText) {
@@ -451,6 +493,7 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
     setCategoryFilter('');
     setAuthorFilter('');
     setYearFilter('');
+    searchAbort.current?.abort();
     loadSearchPage(searchText, 1);
   }
 
@@ -458,14 +501,15 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
     const id = getBookId(book);
     if (!id) return;
 
-    const exists = savedBooks.some((item) => getBookId(item) === id);
+    setSavedBooks((currentSavedBooks) => {
+      const exists = currentSavedBooks.some((item) => getBookId(item) === id);
+      const updated = exists
+        ? currentSavedBooks.filter((item) => getBookId(item) !== id)
+        : [book, ...currentSavedBooks];
 
-    const updated = exists
-      ? savedBooks.filter((item) => getBookId(item) !== id)
-      : [book, ...savedBooks];
-
-    setSavedBooks(updated);
-    saveSavedBooks(updated);
+      saveSavedBooks(updated);
+      return updated;
+    });
   }
 
   function isSaved(book) {
@@ -497,7 +541,9 @@ const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanY
             <img
               src={cover}
               alt={`${title} cover`}
-              loading="lazy"
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
               onError={(event) => {
                 event.currentTarget.style.display = 'none';
               }}

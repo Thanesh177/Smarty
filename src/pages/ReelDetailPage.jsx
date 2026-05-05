@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { postApi } from '../api/client';
 import './ReelDetailPage.css';
@@ -16,6 +16,7 @@ function getPostImage(post) {
 export default function ReelDetailPage() {
   const { reelId } = useParams();
   const navigate = useNavigate();
+  const mountedRef = useRef(true);
 
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
@@ -24,50 +25,70 @@ export default function ReelDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     async function loadPost() {
       try {
-        const [postData, commentsData] = await Promise.all([
-          postApi.getSingleReel(reelId),
-          postApi.getComments(reelId),
-        ]);
+        setLoading(true);
+        setStatus('');
 
-        setPost(postData);
-        setComments(commentsData || []);
+        const postData = await postApi.getSingleReel(reelId);
+        if (!mountedRef.current) return;
+        setPost(postData || null);
+        setLoading(false);
+
+        try {
+          const commentsData = await postApi.getComments(reelId);
+          if (!mountedRef.current) return;
+
+          const loadedComments = Array.isArray(commentsData?.comments)
+            ? commentsData.comments
+            : Array.isArray(commentsData)
+              ? commentsData
+              : [];
+
+          setComments(loadedComments);
+        } catch (commentsErr) {
+          console.error('Failed to load comments:', commentsErr);
+          if (mountedRef.current) setComments([]);
+        }
       } catch (err) {
         console.error(err);
-        setStatus('Failed to load post.');
-      } finally {
-        setLoading(false);
+        if (mountedRef.current) {
+          setStatus('Failed to load post.');
+          setLoading(false);
+        }
       }
     }
 
     loadPost();
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, [reelId]);
 
 const handleLike = async () => {
+  if (!post) return;
 
   try {
-
     await postApi.toggleLike(reelId);
+    if (!mountedRef.current) return;
 
-    setPost((prev) => ({
+    setPost((prev) => {
+      if (!prev) return prev;
+      const wasLiked = Boolean(prev.liked);
 
-      ...prev,
-
-      likes: Number(prev?.likes || 0) + 1,
-
-      liked: true,
-
-    }));
-
+      return {
+        ...prev,
+        likes: Math.max(0, Number(prev.likes || 0) + (wasLiked ? -1 : 1)),
+        liked: !wasLiked,
+      };
+    });
   } catch (err) {
-
     console.error('Like failed:', err);
-
-    setStatus('Like failed.');
-
+    if (mountedRef.current) setStatus('Like failed.');
   }
-
 };
 
 const handleShare = async () => {
@@ -81,61 +102,71 @@ const handleShare = async () => {
         url: currentLink,
       });
       return;
-    } catch {}
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
   }
 
-  await navigator.clipboard.writeText(currentLink);
-  setStatus('Link copied to clipboard.');
+  try {
+    await navigator.clipboard.writeText(currentLink);
+    if (mountedRef.current) setStatus('Link copied to clipboard.');
+  } catch (err) {
+    console.error('Share failed:', err);
+    if (mountedRef.current) setStatus('Could not copy link.');
+  }
 };
 
 const handleSave = async () => {
+  if (!post) return;
 
   try {
-
     await postApi.toggleSave(reelId);
+    if (!mountedRef.current) return;
 
-    setPost((prev) => ({
+    setPost((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        saved: !Boolean(prev.saved),
+      };
+    });
 
-      ...prev,
-
-      saved: true,
-
-    }));
-
-    setStatus('Saved successfully.');
-
+    setStatus(post.saved ? 'Removed from saved.' : 'Saved successfully.');
   } catch (err) {
-
     console.error('Save failed:', err);
-
-    setStatus('Save failed.');
-
+    if (mountedRef.current) setStatus('Save failed.');
   }
-
 };
 
   const handleComment = async (e) => {
     e.preventDefault();
 
-    if (!comment.trim()) return;
+    const cleanComment = comment.trim();
+    if (!cleanComment) return;
 
-    await postApi.addComment({
-      reelId,
-      comment: comment.trim(),
-      text: comment.trim(),
-    });
+    const tempComment = {
+      id: `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      author: 'You',
+      comment: cleanComment,
+      createdAt: Date.now(),
+    };
 
-    setComments((prev) => [
-      {
-        id: crypto.randomUUID(),
-        author: 'You',
-        comment: comment.trim(),
-        createdAt: Date.now(),
-      },
-      ...prev,
-    ]);
-
+    setComments((prev) => [tempComment, ...prev]);
     setComment('');
+
+    try {
+      await postApi.addComment({
+        reelId,
+        comment: cleanComment,
+        text: cleanComment,
+      });
+    } catch (err) {
+      console.error('Comment failed:', err);
+      if (!mountedRef.current) return;
+      setComments((prev) => prev.filter((item) => item.id !== tempComment.id));
+      setComment(cleanComment);
+      setStatus('Comment failed.');
+    }
   };
 
   if (loading) {
@@ -155,9 +186,15 @@ const handleSave = async () => {
       <section className="reel-detail-layout">
         <div className="reel-media-panel">
   {post.videoUrl ? (
-    <video src={post.videoUrl} controls playsInline />
+    <video src={post.videoUrl} controls playsInline preload="metadata" />
   ) : getPostImage(post) ? (
-    <img src={getPostImage(post)} alt={post.title || 'Post'} />
+    <img
+      src={getPostImage(post)}
+      alt={post.title || 'Post'}
+      loading="eager"
+      decoding="async"
+      fetchPriority="high"
+    />
   ) : (
     <div className="reel-media-placeholder">
       {post.topic?.[0] || 'S'}
@@ -180,7 +217,7 @@ const handleSave = async () => {
 
           <div className="reel-actions">
             <button onClick={handleLike}>❤️ {post.likes || 0}</button>
-            <button onClick={handleSave}>🔖 Save</button>
+            <button onClick={handleSave}>{post.saved ? '✅ Saved' : '🔖 Save'}</button>
             <button onClick={handleShare}>
               🔗 Share
             </button>
@@ -197,7 +234,7 @@ const handleSave = async () => {
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
               />
-              <button type="submit">Post</button>
+              <button type="submit" disabled={!comment.trim()}>Post</button>
             </form>
 
             <div className="reel-comment-list">
@@ -205,7 +242,7 @@ const handleSave = async () => {
                 <p className="empty-comments">No comments yet.</p>
               ) : (
                 comments.map((item, index) => (
-                  <div className="reel-comment" key={item.id || item.commentId || index}>
+                  <div className="reel-comment" key={item.id || item.commentId || `${item.createdAt || 'comment'}-${index}`}>
                     <strong>{item.author || item.user || item.username || 'User'}</strong>
                     <p>{item.comment || item.text || item.body}</p>
                   </div>

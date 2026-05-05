@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { postApi, creatorApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import useFeed from '../hooks/useFeed';
 import './FeedPage.css';
-import { useLocation } from "react-router-dom";
 
 const normalizeTopic = (value) =>
   String(value || '')
@@ -109,6 +108,11 @@ export default function FeedPage() {
   const { topic } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const mountedRef = useRef(true);
+  const highlightTimerRef = useRef(null);
+  const highlightRemoveTimerRef = useRef(null);
+  const requestedCreatorIdsRef = useRef(new Set());
+  const toastTimerRef = useRef(null);
 
   const {
     posts,
@@ -131,14 +135,24 @@ export default function FeedPage() {
   const [explaining, setExplaining] = useState({});
   const [creatorProfiles, setCreatorProfiles] = useState({});
   useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      if (highlightRemoveTimerRef.current) clearTimeout(highlightRemoveTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!loadMoreRef.current || !nextCursor) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && !loadingMore && !loading && nextCursor) {
-        observer.unobserve(entry.target);
-        loadMore();
-      }
+          observer.unobserve(entry.target);
+          loadMore();
+        }
       },
       {
         root: null,
@@ -154,22 +168,32 @@ export default function FeedPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const targetPostId = params.get("postId");
+    const targetPostId = params.get('postId');
 
-    if (!targetPostId) return;
+    if (!targetPostId) return undefined;
 
-    setTimeout(() => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    if (highlightRemoveTimerRef.current) clearTimeout(highlightRemoveTimerRef.current);
+
+    highlightTimerRef.current = window.setTimeout(() => {
+      if (!mountedRef.current) return;
+
       const el = document.getElementById(`post-${targetPostId}`);
       if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("highlight-post");
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('highlight-post');
 
-        setTimeout(() => {
-          el.classList.remove("highlight-post");
+        highlightRemoveTimerRef.current = window.setTimeout(() => {
+          el.classList.remove('highlight-post');
         }, 2000);
       }
-    }, 600);
-  }, [location, posts]);
+    }, 450);
+
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      if (highlightRemoveTimerRef.current) clearTimeout(highlightRemoveTimerRef.current);
+    };
+  }, [location.search, posts.length]);
 
   const visiblePosts = useMemo(() => {
     const map = new Map();
@@ -205,32 +229,38 @@ export default function FeedPage() {
     const creatorIds = [
       ...new Set(
         visiblePosts
+          .slice(0, 30)
           .map((post) => getPostCreatorId(post))
           .filter(Boolean)
       ),
     ];
 
-    const missingCreatorIds = creatorIds.filter((id) => !creatorProfiles[id]);
+    const missingCreatorIds = creatorIds.filter(
+      (id) => !creatorProfiles[id] && !requestedCreatorIdsRef.current.has(id)
+    );
 
-    if (missingCreatorIds.length === 0) return;
+    if (missingCreatorIds.length === 0) return undefined;
 
     let cancelled = false;
+
+    missingCreatorIds.forEach((id) => requestedCreatorIdsRef.current.add(id));
 
     async function loadCreatorProfiles() {
       const loadedProfiles = {};
 
-      await Promise.all(
+      await Promise.allSettled(
         missingCreatorIds.map(async (creatorId) => {
           try {
             const profile = await creatorApi.getProfile(creatorId);
             loadedProfiles[creatorId] = profile;
           } catch (err) {
+            requestedCreatorIdsRef.current.delete(creatorId);
             console.error('Could not load creator profile:', creatorId, err);
           }
         })
       );
 
-      if (!cancelled && Object.keys(loadedProfiles).length > 0) {
+      if (!cancelled && mountedRef.current && Object.keys(loadedProfiles).length > 0) {
         setCreatorProfiles((prev) => ({ ...prev, ...loadedProfiles }));
       }
     }
@@ -243,21 +273,50 @@ export default function FeedPage() {
   }, [visiblePosts, creatorProfiles]);
 
   const handleTranslate = async (post, lang = 'Hindi') => {
-  const postId = post.reelId || post.id;
+    const postId = post.reelId || post.id;
+    if (!postId || translating[postId]) return;
 
-  try {
-    setTranslating((prev) => ({ ...prev, [postId]: true }));
+    try {
+      setTranslating((prev) => ({ ...prev, [postId]: true }));
 
-    const data = await postApi.translatePost({
-      postId,
-      title: post.title,
-      body: post.body,
-      targetLang: lang,
-    });
+      const data = await postApi.translatePost({
+        postId,
+        title: post.title,
+        body: post.body,
+        targetLang: lang,
+      });
+      if (!mountedRef.current) return;
 
-    const translation = data?.translation?.trim();
+      const translation = data?.translation?.trim();
 
-    if (!translation || translation === 'Translation not available right now.') {
+      if (!translation || translation === 'Translation not available right now.') {
+        setTranslations((prev) => {
+          const copy = { ...prev };
+          delete copy[postId];
+          return copy;
+        });
+
+        setShowTranslated((prev) => ({
+          ...prev,
+          [postId]: false,
+        }));
+
+        showToast('Translation failed. Check Lambda logs.');
+        return;
+      }
+
+      setTranslations((prev) => ({
+        ...prev,
+        [postId]: translation,
+      }));
+
+      setShowTranslated((prev) => ({
+        ...prev,
+        [postId]: true,
+      }));
+    } catch (err) {
+      console.error('Translate failed:', err);
+
       setTranslations((prev) => {
         const copy = { ...prev };
         delete copy[postId];
@@ -269,38 +328,13 @@ export default function FeedPage() {
         [postId]: false,
       }));
 
-      showToast('Translation failed. Check Lambda logs.');
-      return;
+      showToast('Translation failed');
+    } finally {
+      if (mountedRef.current) {
+        setTranslating((prev) => ({ ...prev, [postId]: false }));
+      }
     }
-
-    setTranslations((prev) => ({
-      ...prev,
-      [postId]: translation,
-    }));
-
-    setShowTranslated((prev) => ({
-      ...prev,
-      [postId]: true,
-    }));
-  } catch (err) {
-    console.error('Translate failed:', err);
-
-    setTranslations((prev) => {
-      const copy = { ...prev };
-      delete copy[postId];
-      return copy;
-    });
-
-    setShowTranslated((prev) => ({
-      ...prev,
-      [postId]: false,
-    }));
-
-    showToast('Translation failed');
-  } finally {
-    setTranslating((prev) => ({ ...prev, [postId]: false }));
-  }
-};
+  };
 
 
   const routeFilteredPosts = useMemo(() => {
@@ -326,12 +360,12 @@ export default function FeedPage() {
     );
   }, [routeFilteredPosts, selectedTopic]);
 
-  const toastTimerRef = useRef(null);
-
   const showToast = (message, duration = 1200) => {
     if (toastTimerRef.current) {
       clearTimeout(toastTimerRef.current);
     }
+
+    if (!mountedRef.current) return;
 
     setToast(message);
 
@@ -345,11 +379,13 @@ export default function FeedPage() {
     return () => {
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
       }
     };
   }, []);
 
   const handleSave = async (postId) => {
+    if (!postId) return;
     try {
       await savePost(postId);
       showToast('Saved successfully 🔖');
@@ -358,32 +394,37 @@ export default function FeedPage() {
       showToast('Save failed');
     }
   };
-const handleExplain = async (post) => {
-  const postId = post.reelId || post.id;
+  const handleExplain = async (post) => {
+    const postId = post.reelId || post.id;
+    if (!postId || explaining[postId]) return;
 
-  if (simpleExplanations[postId]) return;
+    if (simpleExplanations[postId]) return;
 
-  try {
-    setExplaining((prev) => ({ ...prev, [postId]: true }));
+    try {
+      setExplaining((prev) => ({ ...prev, [postId]: true }));
 
-    const data = await postApi.explainPost({
+      const data = await postApi.explainPost({
         postId,
-      title: post.title,
-      body: post.body,
-    });
+        title: post.title,
+        body: post.body,
+      });
+      if (!mountedRef.current) return;
 
-    setSimpleExplanations((prev) => ({
-      ...prev,
-      [postId]: data.explanation || 'Could not simplify this post.',
-    }));
-  } catch (err) {
-    console.error('Explain failed:', err);
-    showToast('Could not explain right now');
-  } finally {
-    setExplaining((prev) => ({ ...prev, [postId]: false }));
-  }
-};
+      setSimpleExplanations((prev) => ({
+        ...prev,
+        [postId]: data.explanation || 'Could not simplify this post.',
+      }));
+    } catch (err) {
+      console.error('Explain failed:', err);
+      showToast('Could not explain right now');
+    } finally {
+      if (mountedRef.current) {
+        setExplaining((prev) => ({ ...prev, [postId]: false }));
+      }
+    }
+  };
   const handleLike = async (postId) => {
+    if (!postId) return;
     try {
       await likePost(postId);
       showToast('Liked ❤️');
@@ -429,7 +470,7 @@ const handleExplain = async (post) => {
       )}
 
       <section className="snap-feed">
-        {filteredPosts.map((post) => {
+        {filteredPosts.map((post, index) => {
           const postId = post.reelId || post.id;
           const creatorId = getPostCreatorId(post);
           const creatorProfile = creatorId ? creatorProfiles[creatorId] : null;
@@ -450,14 +491,15 @@ const handleExplain = async (post) => {
                       src={post.videoUrl}
                       controls
                       playsInline
-                      preload="metadata"
+                      preload={index < 2 ? 'auto' : 'metadata'}
                     />
                   ) : (
                     <img
                       src={post.imageUrl}
                       alt={post.title || 'Post media'}
-                      loading="lazy"
+                      loading={index < 3 ? 'eager' : 'lazy'}
                       decoding="async"
+                      fetchpriority={index < 3 ? 'high' : 'auto'}
                       className="feed-image"
                     />
                   )}
@@ -468,7 +510,7 @@ const handleExplain = async (post) => {
                 <button
                   type="button"
                   className="post-topic clickable-topic"
-                  onClick={() => navigate(`/feed/${normalizeTopic(post.topic)}`)}
+                  onClick={() => post.topic && navigate(`/feed/${normalizeTopic(post.topic)}`)}
                 >
                   {post.topic || 'Smarty'}
                 </button>
@@ -496,13 +538,14 @@ const handleExplain = async (post) => {
                     ❤️ {post.likes ?? 0}
                   </button> */}
 
-                  <button type="button" onClick={() => handleSave(postId)}>
+                  <button type="button" disabled={!postId} onClick={() => handleSave(postId)}>
                     🔖 Save
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => navigate(`/comments/${postId}`)}
+                    disabled={!postId}
+                    onClick={() => postId && navigate(`/comments/${postId}`)}
                   >
                     💬 Comments
                   </button>

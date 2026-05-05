@@ -22,6 +22,10 @@ export default function CommentsPage() {
   const navigate = useNavigate();
   const inputRef = useRef(null);
   const bottomRef = useRef(null);
+  const mountedRef = useRef(true);
+  const focusTimerRef = useRef(null);
+  const scrollTimerRef = useRef(null);
+  const toastTimerRef = useRef(null);
   const { user } = useAuth();
 
   const currentUserId = user?.id || user?.userId || user?.sub;
@@ -33,11 +37,24 @@ export default function CommentsPage() {
   const [editingText, setEditingText] = useState('');
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
+  const [processingCommentId, setProcessingCommentId] = useState('');
   const [toast, setToast] = useState('');
 
   useEffect(() => {
+    mountedRef.current = true;
     loadComments();
-    setTimeout(() => inputRef.current?.focus(), 300);
+
+    if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) inputRef.current?.focus();
+    }, 250);
+
+    return () => {
+      mountedRef.current = false;
+      if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
   }, [reelId]);
 
   useEffect(() => {
@@ -45,43 +62,59 @@ export default function CommentsPage() {
   }, [loading]);
 
   const scrollToBottom = (smooth = true) => {
-    setTimeout(() => {
+    if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+
+    scrollTimerRef.current = window.setTimeout(() => {
+      if (!mountedRef.current) return;
       bottomRef.current?.scrollIntoView({
         behavior: smooth ? 'smooth' : 'auto',
         block: 'end',
       });
-    }, 80);
+    }, 60);
   };
 
   const showToast = (msg) => {
+    if (!mountedRef.current) return;
+
     setToast(msg);
-    setTimeout(() => setToast(''), 1600);
+
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) setToast('');
+    }, 1400);
   };
 
   const getCommentId = (item, index) =>
     item.commentId || item.id || `${item.createdAt || 'comment'}-${index}`;
 
-  const isMine = (item) =>
-    Boolean(item.userId && currentUserId && item.userId === currentUserId);
+  const isMine = (item) => {
+    const ownerId = item.userId || item.authorId || item.senderId;
+    return Boolean(ownerId && currentUserId && ownerId === currentUserId);
+  };
 
   const loadComments = async () => {
     try {
       setLoading(true);
 
       const data = await postApi.getComments(reelId);
+      if (!mountedRef.current) return;
 
-      const sorted = Array.isArray(data)
-        ? [...data].sort(
-            (a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0)
-          )
-        : [];
+      const rawComments = Array.isArray(data?.comments)
+        ? data.comments
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      const sorted = [...rawComments].sort(
+        (a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0)
+      );
 
       setComments(sorted);
     } catch (err) {
       console.error(err);
       showToast('Failed to load comments');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
@@ -101,11 +134,11 @@ export default function CommentsPage() {
         comment: finalText,
         text: finalText,
         body: finalText,
-        parentCommentId: replyingTo?.id || '',
+        parentCommentId: replyingTo?.id || undefined,
       });
 
       const optimistic = {
-        commentId: saved?.commentId || crypto.randomUUID(),
+        commentId: saved?.commentId || saved?.id || `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         userId: saved?.userId || currentUserId,
         username:
           saved?.username ||
@@ -114,11 +147,12 @@ export default function CommentsPage() {
           user?.email ||
           'You',
         email: saved?.email || user?.email || '',
-        text: saved?.text || finalText,
+        text: saved?.text || saved?.comment || saved?.body || finalText,
         createdAt: saved?.createdAt || Date.now(),
         parentCommentId: replyingTo?.id || '',
       };
 
+      if (!mountedRef.current) return;
       setComments((prev) => [...prev, optimistic]);
       setText('');
       setReplyingTo(null);
@@ -128,27 +162,33 @@ export default function CommentsPage() {
       console.error(err);
       showToast('Failed to post');
     } finally {
-      setPosting(false);
+      if (mountedRef.current) setPosting(false);
     }
   };
 
-  const editComment = async (item) => {
+  const editComment = async (item, index) => {
     const cleanText = editingText.trim();
-    if (!cleanText) return;
+    const commentId = item.commentId || item.id || getCommentId(item, index);
+
+    if (!cleanText || !commentId || processingCommentId) return;
 
     try {
+      setProcessingCommentId(commentId);
+
       const updated = await postApi.editComment({
         reelId,
-        commentId: item.commentId,
+        commentId,
         text: cleanText,
       });
 
+      if (!mountedRef.current) return;
+
       setComments((prev) =>
-        prev.map((comment) =>
-          comment.commentId === item.commentId
+        prev.map((comment, commentIndex) =>
+          getCommentId(comment, commentIndex) === commentId
             ? {
                 ...comment,
-                text: updated.text || updated.comment?.text || cleanText,
+                text: updated?.text || updated?.comment?.text || updated?.comment || cleanText,
                 updatedAt: Date.now(),
               }
             : comment
@@ -161,27 +201,38 @@ export default function CommentsPage() {
     } catch (err) {
       console.error(err);
       showToast('Failed to edit comment');
+    } finally {
+      if (mountedRef.current) setProcessingCommentId('');
     }
   };
 
-  const deleteComment = async (item) => {
+  const deleteComment = async (item, index) => {
+    const commentId = item.commentId || item.id || getCommentId(item, index);
+    if (!commentId || processingCommentId) return;
+
     const ok = window.confirm('Delete this comment?');
     if (!ok) return;
 
     try {
+      setProcessingCommentId(commentId);
+
       await postApi.deleteComment({
         reelId,
-        commentId: item.commentId,
+        commentId,
       });
 
+      if (!mountedRef.current) return;
+
       setComments((prev) =>
-        prev.filter((comment) => comment.commentId !== item.commentId)
+        prev.filter((comment, commentIndex) => getCommentId(comment, commentIndex) !== commentId)
       );
 
       showToast('Comment deleted');
     } catch (err) {
       console.error(err);
       showToast('Failed to delete comment');
+    } finally {
+      if (mountedRef.current) setProcessingCommentId('');
     }
   };
 
@@ -194,7 +245,10 @@ export default function CommentsPage() {
     });
 
     setText('');
-    setTimeout(() => inputRef.current?.focus(), 100);
+    if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) inputRef.current?.focus();
+    }, 80);
   };
 
   const cancelReply = () => {
@@ -260,7 +314,11 @@ export default function CommentsPage() {
                       <button
                         type="button"
                         className="comment-username"
-                        onClick={() => item.userId && navigate(`/creator/${item.userId}`)}
+                        disabled={mine || !(item.userId || item.authorId || item.senderId)}
+                        onClick={() => {
+                          const ownerId = item.userId || item.authorId || item.senderId;
+                          if (!mine && ownerId) navigate(`/creator/${ownerId}`);
+                        }}
                       >
                         {mine ? 'You' : `@${name}`}
                       </button>
@@ -270,16 +328,23 @@ export default function CommentsPage() {
                       <div className="comment-edit-box">
                         <input
                           value={editingText}
+                          disabled={processingCommentId === commentId}
+                          autoComplete="off"
                           onChange={(e) => setEditingText(e.target.value)}
                           autoFocus
                         />
 
-                        <button type="button" onClick={() => editComment(item)}>
-                          Save
+                        <button
+                          type="button"
+                          disabled={processingCommentId === commentId || !editingText.trim()}
+                          onClick={() => editComment(item, index)}
+                        >
+                          {processingCommentId === commentId ? 'Saving...' : 'Save'}
                         </button>
 
                         <button
                           type="button"
+                          disabled={processingCommentId === commentId}
                           onClick={() => {
                             setEditingCommentId(null);
                             setEditingText('');
@@ -309,8 +374,12 @@ export default function CommentsPage() {
                             Edit
                           </button>
 
-                          <button type="button" onClick={() => deleteComment(item)}>
-                            Delete
+                          <button
+                            type="button"
+                            disabled={processingCommentId === commentId}
+                            onClick={() => deleteComment(item, index)}
+                          >
+                            {processingCommentId === commentId ? 'Deleting...' : 'Delete'}
                           </button>
                         </>
                       )}
@@ -347,8 +416,12 @@ export default function CommentsPage() {
               : 'Write something smart...'
           }
           value={text}
+          autoComplete="off"
+          disabled={posting}
           onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) submit();
+          }}
         />
 
         <button

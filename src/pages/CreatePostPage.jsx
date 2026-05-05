@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import imageCompression from 'browser-image-compression';
 import { postApi } from '../api/client';
 import './CreatePostPage.css';
@@ -33,6 +33,10 @@ const compressImage = async (file) => {
 };
 
 export default function CreatePostPage() {
+  const mountedRef = useRef(true);
+  const activeUploadRef = useRef(null);
+  const resetTimerRef = useRef(null);
+
   const [topics, setTopics] = useState([]);
   const [topicMode, setTopicMode] = useState('existing');
 
@@ -51,25 +55,58 @@ export default function CreatePostPage() {
   const [status, setStatus] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const imagePreviewUrl = useMemo(() => {
+    if (!imageFile) return '';
+    return URL.createObjectURL(imageFile);
+  }, [imageFile]);
+
   useEffect(() => {
-    postApi.getTopics().then((data) => {
-      const topicList = Array.isArray(data)
-        ? data
-            .map((item) =>
-              typeof item === 'string'
-                ? item
-                : item.topic || item.name || item.title
-            )
-            .filter(Boolean)
-        : [];
+    mountedRef.current = true;
 
-      setTopics(topicList);
+    async function loadTopics() {
+      try {
+        const data = await postApi.getTopics();
+        if (!mountedRef.current) return;
 
-      if (topicList.length > 0) {
-        setForm((prev) => ({ ...prev, topic: topicList[0] }));
+        const rawTopics = Array.isArray(data?.topics)
+          ? data.topics
+          : Array.isArray(data)
+            ? data
+            : [];
+
+        const topicList = rawTopics
+          .map((item) =>
+            typeof item === 'string'
+              ? item
+              : item?.topic || item?.name || item?.title
+          )
+          .filter(Boolean);
+
+        setTopics(topicList);
+
+        if (topicList.length > 0) {
+          setForm((prev) => ({ ...prev, topic: prev.topic || topicList[0] }));
+        }
+      } catch (err) {
+        console.error('Failed to load topics:', err);
+        if (mountedRef.current) setStatus('Could not load topics. You can use a custom topic.');
       }
-    });
+    }
+
+    loadTopics();
+
+    return () => {
+      mountedRef.current = false;
+      if (activeUploadRef.current) activeUploadRef.current.abort();
+      if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current);
+    };
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    };
+  }, [imagePreviewUrl]);
 
   const selectedTopic = useMemo(() => {
     return topicMode === 'custom' ? form.customTopic.trim() : form.topic;
@@ -85,6 +122,7 @@ export default function CreatePostPage() {
 
     await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      activeUploadRef.current = xhr;
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
@@ -94,11 +132,20 @@ export default function CreatePostPage() {
       };
 
       xhr.onload = () => {
+        activeUploadRef.current = null;
         if (xhr.status >= 200 && xhr.status < 300) resolve();
         else reject(new Error(`Upload failed: ${xhr.status}`));
       };
 
-      xhr.onerror = () => reject(new Error('Upload failed'));
+      xhr.onerror = () => {
+        activeUploadRef.current = null;
+        reject(new Error('Upload failed'));
+      };
+
+      xhr.onabort = () => {
+        activeUploadRef.current = null;
+        reject(new Error('Upload cancelled'));
+      };
 
       xhr.open('PUT', uploadData.uploadUrl);
       xhr.setRequestHeader('Content-Type', file.type);
@@ -127,6 +174,7 @@ export default function CreatePostPage() {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (submitting) return;
     setSubmitting(true);
     setStatus('');
     setUploadProgress(0);
@@ -158,11 +206,13 @@ export default function CreatePostPage() {
         setUploadProgress(10);
 
         const compressedImage = await compressImage(imageFile);
+        if (!mountedRef.current) return;
 
         setUploadStage('Uploading image');
         setUploadProgress(0);
 
         const imageUpload = await uploadFile(compressedImage, setUploadProgress);
+        if (!mountedRef.current) return;
 
         imageUrl = imageUpload.url;
         imageKey = imageUpload.key;
@@ -175,6 +225,7 @@ export default function CreatePostPage() {
         setUploadProgress(0);
 
         const videoUpload = await uploadFile(videoFile, setUploadProgress);
+        if (!mountedRef.current) return;
 
         videoUrl = videoUpload.url;
         videoKey = videoUpload.key;
@@ -197,23 +248,27 @@ export default function CreatePostPage() {
         videoUrl,
         videoKey,
       });
+      if (!mountedRef.current) return;
 
       setUploadStage('Success');
       setUploadProgress(100);
       setStatus('Post created successfully.');
       resetForm();
 
-      setTimeout(() => {
+      resetTimerRef.current = window.setTimeout(() => {
+        if (!mountedRef.current) return;
         setSubmitting(false);
         setUploadStage('');
         setUploadProgress(0);
-      }, 1200);
+      }, 800);
     } catch (err) {
       console.error('Create post failed:', err);
-      setStatus('Failed to publish.');
-      setSubmitting(false);
-      setUploadStage('');
-      setUploadProgress(0);
+      if (mountedRef.current) {
+        setStatus(err?.message === 'Upload cancelled' ? 'Upload cancelled.' : 'Failed to publish.');
+        setSubmitting(false);
+        setUploadStage('');
+        setUploadProgress(0);
+      }
     }
   };
 
@@ -267,6 +322,7 @@ export default function CreatePostPage() {
             <div className="topic-row">
               <select
                 value={topicMode}
+                disabled={submitting}
                 onChange={(e) => setTopicMode(e.target.value)}
               >
                 <option value="existing">Choose topic</option>
@@ -276,8 +332,9 @@ export default function CreatePostPage() {
               {topicMode === 'existing' ? (
                 <select
                   value={form.topic}
+                  disabled={submitting}
                   onChange={(e) =>
-                    setForm({ ...form, topic: e.target.value })
+                    setForm((current) => ({ ...current, topic: e.target.value }))
                   }
                 >
                   {topics.length === 0 ? (
@@ -294,8 +351,9 @@ export default function CreatePostPage() {
                 <input
                   placeholder="Example: Neuroscience, Space, Finance..."
                   value={form.customTopic}
+                  disabled={submitting}
                   onChange={(e) =>
-                    setForm({ ...form, customTopic: e.target.value })
+                    setForm((current) => ({ ...current, customTopic: e.target.value }))
                   }
                 />
               )}
@@ -307,7 +365,8 @@ export default function CreatePostPage() {
             <input
               placeholder="Example: Your brain predicts the world before you see it"
               value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              disabled={submitting}
+              onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
             />
           </div>
 
@@ -317,7 +376,8 @@ export default function CreatePostPage() {
               rows="11"
               placeholder="Write a short, engaging educational post..."
               value={form.body}
-              onChange={(e) => setForm({ ...form, body: e.target.value })}
+              disabled={submitting}
+              onChange={(e) => setForm((current) => ({ ...current, body: e.target.value }))}
             />
           </div>
 
@@ -331,16 +391,23 @@ export default function CreatePostPage() {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                  disabled={submitting}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setImageFile(file);
+                    if (file) setVideoFile(null);
+                  }}
                 />
 
                 {imageFile ? (
                   <>
                     <small>{imageFile.name}</small>
                     <img
-                      src={URL.createObjectURL(imageFile)}
+                      src={imagePreviewUrl}
                       alt="Selected preview"
                       className="image-preview"
+                      loading="eager"
+                      decoding="async"
                     />
                   </>
                 ) : (
@@ -354,7 +421,12 @@ export default function CreatePostPage() {
                 <input
                   type="file"
                   accept="video/*"
-                  onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
+                  disabled={submitting}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setVideoFile(file);
+                    if (file) setImageFile(null);
+                  }}
                 />
 
                 <small>{videoFile ? videoFile.name : 'Upload video'}</small>
@@ -370,24 +442,26 @@ export default function CreatePostPage() {
                 <button
                   type="button"
                   className={form.visibility === 'public' ? 'active' : ''}
-                  onClick={() => setForm({ ...form, visibility: 'public' })}
+                  disabled={submitting}
+                  onClick={() => setForm((current) => ({ ...current, visibility: 'public' }))}
                 >
-                  🌍 Public
+                   Public
                 </button>
 
                 <button
                   type="button"
                   className={form.visibility === 'private' ? 'active' : ''}
-                  onClick={() => setForm({ ...form, visibility: 'private' })}
+                  disabled={submitting}
+                  onClick={() => setForm((current) => ({ ...current, visibility: 'private' }))}
                 >
-                  🔒 Private
+                   Private
                 </button>
               </div>
             </div>
 
             <button
               className="primary-btn publish-btn"
-              disabled={submitting}
+              disabled={submitting || !selectedTopic || !form.title.trim() || !form.body.trim()}
               type="submit"
             >
               {submitting ? 'Publishing...' : 'Publish reel'}

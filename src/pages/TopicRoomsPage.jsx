@@ -7,22 +7,33 @@ import './TopicRoomsPage.css';
 export default function TopicRoomsPage() {
   const { user } = useAuth();
   const userId = user?.id || user?.userId || user?.sub;
-const [mobileChatOpen, setMobileChatOpen] = useState(false);
-const activeRoomRef = useRef(null);
-const messagesRef = useRef(null);
-const [hiddenRooms, setHiddenRooms] = useState([]);
-const [showHidden, setShowHidden] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
+  const activeRoomRef = useRef(null);
+  const messagesRef = useRef(null);
+  const mountedRef = useRef(true);
+  const loadingRoomRef = useRef(false);
+  const sendingMessageRef = useRef(false);
+  const [hiddenRooms, setHiddenRooms] = useState([]);
+  const [showHidden, setShowHidden] = useState(false);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [roomInvites, setRoomInvites] = useState([]);
+  const [showRoomInvites, setShowRoomInvites] = useState(false);
+  const [roomInvitesLoading, setRoomInvitesLoading] = useState(false);
+  const [processingInviteId, setProcessingInviteId] = useState('');
   const [rooms, setRooms] = useState([]);
   const [roomUnreadCounts, setRoomUnreadCounts] = useState({});
   const [activeRoom, setActiveRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
-const [showInvite, setShowInvite] = useState(false);
-const [inviteSearch, setInviteSearch] = useState('');
-const [inviteResults, setInviteResults] = useState([]);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteSearch, setInviteSearch] = useState('');
+  const [inviteResults, setInviteResults] = useState([]);
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomPrivacy, setNewRoomPrivacy] = useState('public');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showRoomMenu, setShowRoomMenu] = useState(false);
+  const [openRoomActionMenuId, setOpenRoomActionMenuId] = useState('');
 
   const [roomSearch, setRoomSearch] = useState('');
   const [modalTitle, setModalTitle] = useState('Group Members');
@@ -40,12 +51,18 @@ const [inviteResults, setInviteResults] = useState([]);
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
 
+  useEffect(() => {
+  mountedRef.current = true;
+
+  return () => {
+    mountedRef.current = false;
+  };
+}, []);
+
 const scrollMessagesToBottom = () => {
-  window.requestAnimationFrame(() => {
-    const messagesEl = messagesRef.current;
-    if (!messagesEl) return;
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  });
+  const el = messagesRef.current;
+  if (!el) return;
+  el.scrollTop = el.scrollHeight;
 };
 
 useEffect(() => {
@@ -71,25 +88,26 @@ useEffect(() => {
   async function loadRooms(searchValue = roomSearch) {
     try {
       setStatus('');
+      setRoomsLoading(true);
 
       const data = await roomApi.getRooms({
         search: searchValue.trim(),
       });
 
-      const allRooms = data.rooms || data || [];
-      // Always include rooms created by the user
+      if (!mountedRef.current) return;
+
+      const allRooms = Array.isArray(data?.rooms) ? data.rooms : Array.isArray(data) ? data : [];
+      const normalizedSearch = searchValue.trim().toLowerCase();
+
       const visibleRooms = allRooms.filter((room) => {
         const isOwner = room.ownerId === userId || room.createdBy === userId;
 
         if (isOwner) return true;
+        if (!normalizedSearch) return true;
 
-        // For others, apply search filter if present
-        if (!searchValue) return true;
-
-        return (room.name || '').toLowerCase().includes(searchValue.toLowerCase());
+        return (room.name || '').toLowerCase().includes(normalizedSearch);
       });
 
-      // Sort: user's rooms first, then by latest created
       visibleRooms.sort((a, b) => {
         const aOwner = a.ownerId === userId || a.createdBy === userId;
         const bOwner = b.ownerId === userId || b.createdBy === userId;
@@ -97,59 +115,72 @@ useEffect(() => {
         if (aOwner && !bOwner) return -1;
         if (!aOwner && bOwner) return 1;
 
-        return (b.createdAt || 0) - (a.createdAt || 0);
+        return Number(b.createdAt || 0) - Number(a.createdAt || 0);
       });
 
       setRooms(visibleRooms);
     } catch (err) {
       console.error(err);
-      setStatus('Failed to load rooms');
+      if (mountedRef.current) setStatus('Failed to load rooms');
+    } finally {
+      if (mountedRef.current) setRoomsLoading(false);
     }
   }
 
-  useEffect(() => {
+useEffect(() => {
+  if (!userId) return;
+
+  const timeout = setTimeout(() => {
     loadRooms('');
-  }, []);
+  }, 150);
+
+  return () => clearTimeout(timeout);
+}, [userId]);
+
+
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) return undefined;
 
-    connectChatSocket(userId, (data) => {
-      const msg = data.message;
+    const unsubscribe = connectChatSocket(userId, (data) => {
+      if (!mountedRef.current) return;
+
+      const msg = data?.message;
       const current = activeRoomRef.current;
 
       if (!msg) return;
 
-      // Handle ACK separately (only replace temp message)
       if (data.type === 'messageAck') {
-  if (!msg.clientId) return;
+        if (!msg.clientId) return;
 
-  setMessages((prev) => {
-    const index = prev.findIndex(
-      (m) => m.clientId === msg.clientId || m.messageId === msg.clientId
-    );
+        setMessages((prev) => {
+          const index = prev.findIndex(
+            (m) => m.clientId === msg.clientId || m.messageId === msg.clientId
+          );
 
-    if (index === -1) {
-      const alreadyExists = prev.some((m) => m.messageId === msg.messageId);
-      return alreadyExists ? prev : [...prev, msg];
-    }
+          if (index === -1) {
+            const alreadyExists = prev.some((m) => m.messageId === msg.messageId);
+            return alreadyExists ? prev : [...prev, msg];
+          }
 
-    const copy = [...prev];
-    copy[index] = msg;
-    return copy;
-  });
+          const copy = [...prev];
+          copy[index] = {
+            ...copy[index],
+            ...msg,
+            pending: false,
+            failed: false,
+          };
+          return copy;
+        });
 
-  return;
-}
+        return;
+      }
 
-      // Handle real incoming message
       if (data.type !== 'roomMessage') return;
-      if (msg.senderId === userId && msg.clientId) {
-  return;
-}
+      if (msg.senderId === userId && msg.clientId) return;
 
       if (!current || msg.roomId !== current.roomId) {
-        if (msg.senderId !== userId) {
+        if (msg.senderId !== userId && msg.roomId) {
           setRoomUnreadCounts((prev) => ({
             ...prev,
             [msg.roomId]: Number(prev[msg.roomId] || 0) + 1,
@@ -159,13 +190,19 @@ useEffect(() => {
       }
 
       setMessages((prev) => {
-        // prevent duplicates
-        const exists = prev.some((m) => m.messageId === msg.messageId);
-        if (exists) return prev;
+        const key = msg.messageId || msg.clientId;
+if (!key) return prev;
 
+if (prev.some((m) => (m.messageId || m.clientId) === key)) {
+  return prev;
+}
         return [...prev, msg];
       });
     });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, [userId]);
 
   async function createRoom(e) {
@@ -191,7 +228,12 @@ useEffect(() => {
 
       console.log('CREATE ROOM RESPONSE:', data);
 
-      const parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+      let parsedData = data;
+      try {
+        parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+      } catch {
+        parsedData = data;
+      }
       const parsedBody =
         typeof parsedData?.body === 'string'
           ? JSON.parse(parsedData.body)
@@ -224,16 +266,37 @@ useEffect(() => {
       activeRoomRef.current = createdRoom;
       setMessages([]);
       setMobileChatOpen(true);
+
+      if (createdRoom.privacy === 'private') {
+        setModalTitle(`Invite users to ${createdRoom.name}`);
+        setModalMode('members');
+        setModalRoom(createdRoom);
+        setMembers([]);
+        setInviteSearch('');
+        setInviteResults([]);
+        setShowInvite(true);
+        setShowMembers(true);
+      }
       setRoomUnreadCounts((prev) => ({
         ...prev,
         [createdRoom.roomId]: 0,
       }));
 
       try {
+        setMessagesLoading(true);
         const messageData = await roomApi.getRoomMessages(createdRoom.roomId);
-        setMessages(messageData.messages || messageData || []);
+        if (mountedRef.current) {
+          const loadedMessages = Array.isArray(messageData?.messages)
+            ? messageData.messages
+            : Array.isArray(messageData)
+              ? messageData
+              : [];
+          setMessages(loadedMessages);
+        }
       } catch (messageErr) {
         console.error('Could not load new room messages:', messageErr);
+      } finally {
+        if (mountedRef.current) setMessagesLoading(false);
       }
 
       setStatus('Room created successfully');
@@ -252,15 +315,17 @@ useEffect(() => {
   }
 
   async function openHiddenRooms() {
-  try {
-    const data = await roomApi.getHiddenRooms();
-    setHiddenRooms(data);
-    setShowHidden(true);
-  } catch (err) {
-    console.error(err);
-    setStatus('Could not load hidden rooms');
+    try {
+      setShowRoomMenu(false);
+      const data = await roomApi.getHiddenRooms();
+      if (!mountedRef.current) return;
+      setHiddenRooms(Array.isArray(data) ? data : Array.isArray(data?.rooms) ? data.rooms : []);
+      setShowHidden(true);
+    } catch (err) {
+      console.error(err);
+      if (mountedRef.current) setStatus('Could not load hidden rooms');
+    }
   }
-}
 
 async function unhideRoom(room) {
   try {
@@ -273,40 +338,131 @@ async function unhideRoom(room) {
   }
 }
 
+// Room Invites popup logic
+async function loadRoomInvites(openPopup = false) {
+  try {
+    if (openPopup) setStatus('');
+    setRoomInvitesLoading(true);
+
+    const data = await roomApi.getRoomInvites();
+    if (!mountedRef.current) return;
+
+    const invites = Array.isArray(data?.invites)
+      ? data.invites
+      : Array.isArray(data)
+        ? data
+        : [];
+
+    setRoomInvites(invites);
+    if (openPopup) setShowRoomInvites(true);
+  } catch (err) {
+    console.error(err);
+    if (mountedRef.current && openPopup) {
+      setStatus(err?.response?.data?.error || 'Could not load room invites');
+    }
+  } finally {
+    if (mountedRef.current) setRoomInvitesLoading(false);
+  }
+}
+
+async function openRoomInvites() {
+  setShowRoomMenu(false);
+  await loadRoomInvites(true);
+}
+
+async function acceptRoomInvite(invite) {
+  const roomId = invite?.roomId;
+  if (!roomId || processingInviteId) return;
+
+  try {
+    setProcessingInviteId(roomId);
+    setStatus('');
+
+    await roomApi.acceptRoomInvite(roomId);
+    if (!mountedRef.current) return;
+
+    setRoomInvites((prev) => {
+  const updated = prev.filter((item) => (item.roomId || item.id) !== roomId);
+  if (updated.length === 0) setShowRoomInvites(false);
+  return updated;
+});
+
+setStatus('Room invite accepted');
+await loadRooms();
+  } catch (err) {
+    console.error(err);
+    if (mountedRef.current) setStatus(err?.response?.data?.error || 'Could not accept invite');
+  } finally {
+    if (mountedRef.current) setProcessingInviteId('');
+  }
+}
+
+async function rejectRoomInvite(invite) {
+  const roomId = invite?.roomId;
+  if (!roomId || processingInviteId) return;
+
+  try {
+    setProcessingInviteId(roomId);
+    setStatus('');
+
+    await roomApi.declineRoomInvite(roomId);
+    if (!mountedRef.current) return;
+
+setRoomInvites((prev) => {
+  const updated = prev.filter((item) => (item.roomId || item.id) !== roomId);
+  if (updated.length === 0) setShowRoomInvites(false);
+  return updated;
+});
+
+setStatus('Room invite rejected');
+  } catch (err) {
+    console.error(err);
+    if (mountedRef.current) setStatus(err?.response?.data?.error || 'Could not reject invite');
+  } finally {
+    if (mountedRef.current) setProcessingInviteId('');
+  }
+}
+
   async function openRoom(room) {
-    const isOwner = room.ownerId === userId || room.createdBy === userId;
-    const isPrivate = room.privacy === 'private';
+    if (!room?.roomId || loadingRoomRef.current) return;
+    loadingRoomRef.current = true;
 
     try {
       setStatus('');
-
-      if (isPrivate && !isOwner) {
-        const data = await roomApi.requestJoinRoom(room.roomId);
-        setStatus(data.message || 'Join request sent to creator');
-        return;
-      }
-
-      await roomApi.joinRoom(room.roomId);
+      setOpenRoomActionMenuId('');
 
       setActiveRoom(room);
       activeRoomRef.current = room;
       setMessages([]);
       setMobileChatOpen(true);
+      setMessagesLoading(true);
       setRoomUnreadCounts((prev) => ({
         ...prev,
         [room.roomId]: 0,
       }));
 
-      try {
-        const data = await roomApi.getRoomMessages(room.roomId);
-        setMessages(data.messages || data || []);
-      } catch (messageErr) {
-        console.error('Could not load room messages:', messageErr);
-        setStatus('Room opened, but old messages could not load.');
-      }
+      const data = await roomApi.getRoomMessages(room.roomId);
+      if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) return;
+
+      const loadedMessages = Array.isArray(data?.messages)
+        ? data.messages
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      setMessages(loadedMessages);
     } catch (err) {
       console.error(err);
-      setStatus(err?.response?.data?.error || 'Could not open room');
+      if (mountedRef.current) {
+        setActiveRoom(null);
+        activeRoomRef.current = null;
+        setMessages([]);
+        setMobileChatOpen(false);
+        setStatus(err?.response?.data?.error || 'Could not open room');
+      }
+    } finally {
+      loadingRoomRef.current = false;
+      if (mountedRef.current) setMessagesLoading(false);
     }
   }
 
@@ -350,7 +506,7 @@ async function searchUsers() {
 
 async function inviteUser(userIdToInvite) {
   if (!modalRoom?.roomId || !userIdToInvite) return;
-
+if (inviteResults.some((item) => item.userId === userIdToInvite && item.invited)) return;
   try {
     setStatus('');
 
@@ -359,7 +515,7 @@ async function inviteUser(userIdToInvite) {
       userIdToInvite
     );
 
-    setStatus(data.message || 'User invited successfully');
+    setStatus(data?.message || 'Invite request sent. The user must accept before joining.');
 
     setInviteResults((prev) =>
       prev.map((item) =>
@@ -368,8 +524,6 @@ async function inviteUser(userIdToInvite) {
           : item
       )
     );
-
-    await openMembers(modalRoom);
   } catch (err) {
     console.error(err);
     setStatus(err?.response?.data?.error || 'Invite failed');
@@ -414,26 +568,35 @@ async function inviteUser(userIdToInvite) {
     const ok = window.confirm(`Leave "${room.name}"? You will need creator approval to join again.`);
     if (!ok) return;
 
+    setOpenRoomActionMenuId('');
+
+    if (activeRoomRef.current?.roomId === room.roomId) {
+      setActiveRoom(null);
+      activeRoomRef.current = null;
+      setMessages([]);
+      setMobileChatOpen(false);
+    }
+
+    setRooms((prev) => prev.filter((item) => item.roomId !== room.roomId));
+
+    setRoomUnreadCounts((prev) => {
+      const copy = { ...prev };
+      delete copy[room.roomId];
+      return copy;
+    });
+
     try {
       setStatus('');
-
       await roomApi.leaveRoom(room.roomId);
-      setRoomUnreadCounts((prev) => {
-        const copy = { ...prev };
-        delete copy[room.roomId];
-        return copy;
-      });
+      setStatus('Left private group');
 
-      if (activeRoom?.roomId === room.roomId) {
-        setActiveRoom(null);
-        activeRoomRef.current = null;
-        setMessages([]);
-      }
-
-      await loadRooms();
+      window.setTimeout(() => {
+        if (mountedRef.current) loadRooms();
+      }, 150);
     } catch (err) {
       console.error(err);
       setStatus(err?.response?.data?.error || 'Could not leave room');
+      if (mountedRef.current) loadRooms();
     }
   }
 
@@ -492,66 +655,127 @@ function sendMessage(e) {
   e.preventDefault();
 
   const cleanText = text.trim();
-  if (!cleanText || !activeRoom) return;
+  const room = activeRoomRef.current;
 
-  const clientId = `temp-${Date.now()}`;
+  if (!cleanText || !room || sendingMessageRef.current) return;
+
+  sendingMessageRef.current = true;
+
+  const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const tempMessage = {
     messageId: clientId,
     clientId,
-    roomId: activeRoom.roomId,
+    roomId: room.roomId,
     senderId: userId,
     senderName: user?.name || user?.email || 'You',
     text: cleanText,
     createdAt: Date.now(),
+    pending: true,
   };
 
-setMessages((prev) => [...prev, tempMessage]);
-scrollMessagesToBottom();
+  setText('');
+  setMessages((prev) => {
+    if (prev.some((msg) => (msg.messageId || msg.clientId) === clientId)) return prev;
+    return [...prev, tempMessage];
+  });
+
+  window.setTimeout(scrollMessagesToBottom, 0);
+
   try {
     sendRoomMessage({
       action: 'sendRoomMessage',
-      roomId: activeRoom.roomId,
+      roomId: room.roomId,
       text: cleanText,
       clientId,
     });
-
-    setText('');
-scrollMessagesToBottom();
   } catch (err) {
     console.error(err);
     setStatus('Failed to send message');
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.clientId === clientId
+          ? { ...msg, pending: false, failed: true }
+          : msg
+      )
+    );
+  } finally {
+    sendingMessageRef.current = false;
   }
 }
 
   return (
-<main className={`rooms-page ${mobileChatOpen && activeRoom ? 'mobile-chat-open' : ''}`}>      <aside className="sidebar">
-        <h2>Rooms</h2>
+<main className={`rooms-page ${mobileChatOpen && activeRoom ? 'mobile-chat-open' : ''}`}>
+      <aside className="sidebar">
+        <div className="rooms-title-row">
+          <h2>Rooms</h2>
 
-        <button
-          type="button"
-          className="create-room-btn"
-          onClick={() => setShowCreateModal(true)}
-        >
-          ➕ Create Room
-        </button>
+          <div className="rooms-menu-wrap">
+            <button
+              type="button"
+              className="rooms-create-plus-btn"
+              aria-label="Create room"
+              onClick={() => {
+                setShowRoomMenu(false);
+                setShowCreateModal(true);
+              }}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className="rooms-menu-btn"
+              aria-label="Room options"
+              aria-expanded={showRoomMenu}
+              onClick={() => setShowRoomMenu((prev) => !prev)}
+            >
+              ⋯
+              {roomInvites.length > 0 && (
+                <span className="rooms-menu-badge">
+                  {roomInvites.length > 9 ? '9+' : roomInvites.length}
+                </span>
+              )}
+            </button>
+
+            {showRoomMenu && (
+              <div className="rooms-menu-popover">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRoomMenu(false);
+                    openHiddenRooms();
+                  }}
+                >
+                  Hidden Groups
+                </button>
+
+                <button type="button" onClick={openRoomInvites}>
+                  Room Invites
+                  {roomInvites.length > 0 && (
+                    <span className="rooms-invite-count">
+                      {roomInvites.length > 9 ? '9+' : roomInvites.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
 
         {status && <p className="room-status">{status}</p>}
 
-
-
-        <button type="button" className="hidden-rooms-btn" onClick={openHiddenRooms}>
-  Hidden Groups
-</button>
-
         <div className="room-list">
-          {rooms.map((room) => {
+          {roomsLoading ? (
+            <p className="empty">Loading rooms...</p>
+          ) : rooms.length === 0 ? (
+            <p className="empty">No rooms found</p>
+          ) : rooms.map((room) => {
             const isOwner = room.ownerId === userId || room.createdBy === userId;
             const isPrivateCustom = room.type === 'custom' && room.privacy === 'private';
             const canLeave = isPrivateCustom && !isOwner;
             const canDelete = room.type === 'custom' && isOwner;
             const canViewRequests = isPrivateCustom && isOwner;
-            const unreadCount = Number(roomUnreadCounts[room.roomId] || room.unreadCount || 0);
+            const unreadCount = roomUnreadCounts[room.roomId] || room.unreadCount || 0;
 
             return (
               <div
@@ -573,68 +797,102 @@ scrollMessagesToBottom();
                       </span>
                     )}
                   </div>
-                  <span>{room.privacy === 'private' ? '🔒 Private' : '🌍 Public'}</span>
+                  <span>{room.privacy === 'private' ? ' Private' : ' Public'}</span>
 
-                  <div className="room-actions">
+                  <div
+                    className="room-card-menu-wrap"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openMembers(room);
-                      }}
+                      className="room-card-menu-btn"
+                      aria-label="Room actions"
+                      aria-expanded={openRoomActionMenuId === room.roomId}
+                      onClick={() =>
+                        setOpenRoomActionMenuId((current) =>
+                          current === room.roomId ? '' : room.roomId
+                        )
+                      }
                     >
-                      Members
+                      ⋯
                     </button>
 
-                    {canViewRequests && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openJoinRequests(room);
-                        }}
-                      >
-                        Requests
-                      </button>
-                    )}
+                    {openRoomActionMenuId === room.roomId && (
+                      <div className="room-card-menu-popover">
+                        {room.privacy === 'private' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setOpenRoomActionMenuId('');
+                              openMembers(room);
+                            }}
+                          >
+                            Members
+                          </button>
+                        )}
 
-                    {canLeave && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          leaveRoom(room);
-                        }}
-                      >
-                        Leave
-                      </button>
-                    )}
+                        {canViewRequests && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setOpenRoomActionMenuId('');
+                              openJoinRequests(room);
+                            }}
+                          >
+                            Requests
+                          </button>
+                        )}
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        hideRoom(room);
-                      }}
-                    >
-                      Hide
-                    </button>
+                        {canLeave && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setOpenRoomActionMenuId('');
+                              leaveRoom(room);
+                            }}
+                          >
+                            Leave
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setOpenRoomActionMenuId('');
+                            hideRoom(room);
+                          }}
+                        >
+                          Hide
+                        </button>
+
+                        {canDelete && (
+                          <button
+                            type="button"
+                            className="danger-menu-item"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setOpenRoomActionMenuId('');
+                              deleteRoom(room);
+                            }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {canDelete && (
-                  <button
-                    type="button"
-                    className="delete-room-btn"
-                    aria-label={`Delete ${room.name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteRoom(room);
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
             );
           })}
@@ -663,40 +921,46 @@ scrollMessagesToBottom();
   <span>{activeRoom.name}</span>
 </div>
 <div className="messages" ref={messagesRef}>
-                {messages.length === 0 ? (
+                {messagesLoading ? (
+  <p className="empty">Loading messages...</p>
+) : messages.length === 0 ? (
   <p className="empty">No messages yet</p>
 ) : (
   Array.from(
     new Map(
-      messages.map((msg) => [msg.messageId || msg.clientId, msg])
+      messages.map((msg, index) => [msg.messageId || msg.clientId || `${msg.createdAt || 'msg'}-${index}`, msg])
     ).values()
-  ).map((msg) => (
+  ).map((msg, index) => (
     <div
-      key={msg.messageId || msg.clientId}
+      key={msg.messageId || msg.clientId || `${msg.createdAt || 'msg'}-${msg.senderId || 'user'}-${index}`}
       className={msg.senderId === userId ? 'msg mine' : 'msg'}
     >
-      <b>{msg.senderName || 'User'}</b>
-      <p>{msg.text}</p>
+      <b>{msg.senderName || msg.name || 'User'}</b>
+      <p>
+        {msg.text || msg.message || ''}
+        {msg.pending && <span className="msg-state"> Sending...</span>}
+        {msg.failed && <span className="msg-state failed"> Failed</span>}
+      </p>
     </div>
   ))
 )}
             </div>
 
             <form className="input" onSubmit={sendMessage}>
+
 <input
   placeholder="Type message..."
+  disabled={!activeRoom}
   value={text}
   onChange={(e) => {
     setText(e.target.value);
-    scrollMessagesToBottom();
   }}
   onFocus={() => {
-    setTimeout(scrollMessagesToBottom, 120);
-    setTimeout(scrollMessagesToBottom, 320);
+    window.setTimeout(scrollMessagesToBottom, 120);
   }}
 />
 
-              <button type="submit">Send</button>
+              <button type="submit" disabled={!text.trim() || !activeRoom}>Send</button>
             </form>
           </>
         )}
@@ -736,6 +1000,65 @@ scrollMessagesToBottom();
   </div>
 )}
 
+      {showRoomInvites && (
+        <div className="members-modal">
+          <div className="members-card">
+            <button
+              type="button"
+              className="close-members"
+              onClick={() => setShowRoomInvites(false)}
+            >
+              ✕
+            </button>
+
+            <h3>Room Invites</h3>
+
+            {roomInvitesLoading ? (
+              <p className="member-empty">Loading invites...</p>
+            ) : roomInvites.length === 0 ? (
+              <p className="member-empty">No pending room invites.</p>
+            ) : (
+              roomInvites.map((invite, index) => {
+                const inviteRoomId = invite.roomId || invite.id;
+
+                return (
+                  <div key={inviteRoomId || `invite-${index}`} className="member-row">
+                    <div>
+                      <strong>{invite.roomName || invite.name || 'Room invite'}</strong>
+                      {(invite.inviterName || invite.inviterEmail || invite.createdByName) && (
+                        <small>
+                          Invited by {invite.inviterName || invite.inviterEmail || invite.createdByName}
+                        </small>
+                      )}
+                    </div>
+
+                    <div className="room-actions">
+                      <button
+                        type="button"
+                        className="approve-request-btn"
+                        disabled={!inviteRoomId || processingInviteId === inviteRoomId}
+                        onClick={() => acceptRoomInvite({ ...invite, roomId: inviteRoomId })}
+                      >
+                        {processingInviteId === inviteRoomId ? 'Accepting...' : 'Accept'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="delete-room-btn"
+                        disabled={!inviteRoomId || processingInviteId === inviteRoomId}
+                        onClick={() => rejectRoomInvite({ ...invite, roomId: inviteRoomId })}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
       {showMembers && (
         <div className="members-modal">
           <div className="members-card">
@@ -753,7 +1076,7 @@ scrollMessagesToBottom();
   className="approve-request-btn"
   onClick={() => setShowInvite((prev) => !prev)}
 >
-  ➕ Invite Users
+  ➕ Send Invite Request
 </button>
 
 {showInvite && (
@@ -782,7 +1105,7 @@ scrollMessagesToBottom();
 
     <div className="invite-results">
       {inviteResults.length === 0 ? (
-        <p className="member-empty">Search for users by email or user ID.</p>
+        <p className="member-empty">Search for users and send them an invite request. They must accept before joining.</p>
       ) : (
         inviteResults.map((u) => (
           <div key={u.userId} className="member-row">
@@ -795,9 +1118,9 @@ scrollMessagesToBottom();
               type="button"
               onClick={() => inviteUser(u.userId)}
               className="approve-request-btn"
-              disabled={u.invited}
+              disabled={u.invited || !u.userId}
             >
-              {u.invited ? 'Invited' : 'Invite'}
+              {u.invited ? 'Request Sent' : 'Send Request'}
             </button>
           </div>
         ))
@@ -859,18 +1182,20 @@ scrollMessagesToBottom();
                 placeholder="Room name..."
                 value={newRoomName}
                 onChange={(e) => setNewRoomName(e.target.value)}
+                disabled={creatingRoom}
               />
 
               <select
                 value={newRoomPrivacy}
                 onChange={(e) => setNewRoomPrivacy(e.target.value)}
+                disabled={creatingRoom}
               >
-                <option value="public">🌍 Public Room</option>
-                <option value="private">🔒 Private Room</option>
+                <option value="public"> Public Room</option>
+                <option value="private"> Private Room</option>
               </select>
 
-              <button type="submit" className="approve-request-btn" disabled={creatingRoom}>
-                Create Room
+              <button type="submit" className="approve-request-btn" disabled={creatingRoom || !newRoomName.trim()}>
+                {creatingRoom ? 'Creating...' : 'Create Room'}
               </button>
             </form>
           </div>

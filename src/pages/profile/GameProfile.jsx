@@ -1,7 +1,7 @@
 import { getAchievements } from "../../lib/progressStore";
 import { getAllAchievements } from "../../components/achievements/achievementEngine";
 import './GameProfile.css';
-import { useEffect } from 'react';
+import { useMemo } from "react";
 function getProgress() {
   return JSON.parse(localStorage.getItem("smarty-topic-progress") || "{}");
 }
@@ -19,34 +19,6 @@ function getUnlockPercent(totalXP, requiredXP) {
 }
 
 export default function GameProfile() {
-  useEffect(() => {
-    let startX = 0;
-    let currentX = 0;
-
-    const handleTouchStart = (e) => {
-      startX = e.touches[0].clientX;
-    };
-
-    const handleTouchMove = (e) => {
-      currentX = e.touches[0].clientX;
-    };
-
-    const handleTouchEnd = () => {
-      if (startX < 50 && currentX - startX > 80) {
-        window.history.back();
-      }
-    };
-
-    window.addEventListener('touchstart', handleTouchStart);
-    window.addEventListener('touchmove', handleTouchMove);
-    window.addEventListener('touchend', handleTouchEnd);
-
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, []);
   const progress = getProgress();
   const achievements = getAchievements();
 
@@ -56,12 +28,15 @@ export default function GameProfile() {
   );
 
   const level = Math.max(1, Math.floor(totalXP / 250) + 1);
-  const xpToNextLevel = 250 - (totalXP % 250 || 250);
-  const levelProgress = totalXP % 250 === 0 && totalXP > 0 ? 100 : ((totalXP % 250) / 250) * 100;
+  const xpRemainder = totalXP % 250;
+  const xpToNextLevel = 250 - (xpRemainder || 250);
+  const levelProgress = Math.min(100, Math.max(0,
+    totalXP > 0 && xpRemainder === 0 ? 100 : (xpRemainder / 250) * 100
+  ));
 
   const allAchievements = getAllAchievements();
 
-  const unlocks = [
+  const unlocks = useMemo(() => [
     {
       xp: 50,
       title: "Focus Sprint",
@@ -169,10 +144,19 @@ export default function GameProfile() {
         window.location.href = "/quiz";
       },
     },
-  ];
+  ], []);
 
-  const unlockedCount = unlocks.filter((item) => totalXP >= item.xp).length;
-  const nextUnlock = unlocks.find((item) => totalXP < item.xp);
+  const unlockedCount = useMemo(
+    () => unlocks.filter((item) => totalXP >= item.xp).length,
+    [totalXP]
+  );
+
+  const nextUnlock = useMemo(
+    () => unlocks.find((item) => totalXP < item.xp),
+    [totalXP]
+  );
+
+  const achievementSet = useMemo(() => new Set(achievements.map(a => a.id)), [achievements]);
 
   return (
     <main className="quiz-page">
@@ -236,7 +220,9 @@ export default function GameProfile() {
         <div className="unlock-grid">
           {unlocks.map((item) => {
             const unlocked = totalXP >= item.xp;
-            const percent = getUnlockPercent(totalXP, item.xp);
+            const percent = Number.isFinite(getUnlockPercent(totalXP, item.xp))
+              ? getUnlockPercent(totalXP, item.xp)
+              : 0;
 
             return (
               <article
@@ -261,7 +247,17 @@ export default function GameProfile() {
                 <button
                   className="unlock-action-btn"
                   disabled={!unlocked}
-                  onClick={item.action}
+                  onClick={(e) => {
+                    if (!unlocked) return;
+                    e.currentTarget.disabled = true;
+                    try {
+                      item.action();
+                    } finally {
+                      setTimeout(() => {
+                        if (e.currentTarget) e.currentTarget.disabled = false;
+                      }, 500);
+                    }
+                  }}
                 >
                   {unlocked ? "Use Now" : "Locked"}
                 </button>
@@ -281,7 +277,7 @@ export default function GameProfile() {
 
         <div className="unlock-grid">
           {allAchievements.map((item) => {
-            const unlocked = achievements.some((a) => a.id === item.id);
+            const unlocked = achievementSet.has(item.id);
 
             return (
               <article

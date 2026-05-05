@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { userApi, postApi, creatorApi, roomApi } from '../api/client';
 import './ProfilePage.css';
-const PROFILE_CACHE_KEY = 'smarty.profilePage.cache.v1';
 
 function getPostImage(post) {
   return (
@@ -41,20 +40,6 @@ export default function ProfilePage() {
   const cropDragRef = useRef(null);
 
 useEffect(() => {
-  try {
-    const cached = localStorage.getItem(PROFILE_CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (parsed?.profile) setProfile(parsed.profile);
-      if (Array.isArray(parsed?.myPosts)) setMyPosts(parsed.myPosts);
-      if (Array.isArray(parsed?.following)) {
-        setFollowing(parsed.following);
-      }
-    }
-  } catch (err) {
-    console.warn('Failed to read profile cache', err);
-  }
-
   loadProfileData();
 }, []);
 
@@ -146,6 +131,7 @@ async function inviteFriend(targetUser) {
   async function loadProfileData() {
     try {
       setLoading(true);
+      setStatus('');
 
       const me = await userApi.getMe();
       setProfile(me);
@@ -156,33 +142,27 @@ async function inviteFriend(targetUser) {
           : me.email?.split('@')[0] || me.name || '';
 
       setNewUsername(safeUsername);
+      setLoading(false);
 
       const userId = me.id || me.userId || me.sub;
 
-      const [posts, followingData] = await Promise.all([
+      const [postsResult, followingResult] = await Promise.allSettled([
         postApi.getMyReels(),
         creatorApi.getFollowing(userId),
       ]);
 
-      setMyPosts(Array.isArray(posts) ? posts : []);
-      setFollowing(Array.isArray(followingData) ? followingData : []);
-      try {
-        localStorage.setItem(
-          PROFILE_CACHE_KEY,
-          JSON.stringify({
-            profile: me,
-            myPosts: Array.isArray(posts) ? posts : [],
-            following: Array.isArray(followingData) ? followingData : [],
-            cachedAt: Date.now(),
-          })
-        );
-      } catch (cacheErr) {
-        console.warn('Failed to cache profile page data', cacheErr);
+      if (postsResult.status === 'fulfilled') {
+        const posts = postsResult.value;
+        setMyPosts(Array.isArray(posts) ? posts : []);
+      }
+
+      if (followingResult.status === 'fulfilled') {
+        const followingData = followingResult.value;
+        setFollowing(Array.isArray(followingData) ? followingData : []);
       }
     } catch (err) {
       console.error(err);
       setStatus('Failed to load profile.');
-    } finally {
       setLoading(false);
     }
   }
@@ -401,10 +381,16 @@ async function openApprovedCreator(creator) {
           onClick={() => navigate(`/reel/${postId}`)}
         >
           {getPostImage(post) ? (
-  <img src={getPostImage(post)} alt={post.title || 'Post'} />
-) : (
-  <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
-)}
+            <img
+              src={getPostImage(post)}
+              alt={post.title || 'Post'}
+              loading="eager"
+              decoding="async"
+              fetchpriority="high"
+            />
+          ) : (
+            <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
+          )}
 
           <div className="private-info">
             <h4>{post.title}</h4>
@@ -446,6 +432,9 @@ async function openApprovedCreator(creator) {
                 src={profile.photoUrl || profile.profilePic}
                 alt="Profile"
                 className="avatar-photo"
+                loading="eager"
+                decoding="async"
+                fetchpriority="high"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   e.currentTarget.nextElementSibling.style.display = 'grid';
@@ -693,7 +682,7 @@ const name =
                       <p>Following</p>
                     </div>
 
-                    <span>Open</span>
+                    <span>Open private posts</span>
                   </button>
                 );
               })}
@@ -723,10 +712,16 @@ const name =
                     onClick={() => navigate(`/reel/${postId}`)}
                   >
                     {getPostImage(post) ? (
-  <img src={getPostImage(post)} alt={post.title || 'Post'} />
-) : (
-  <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
-)} 
+                      <img
+                        src={getPostImage(post)}
+                        alt={post.title || 'Post'}
+                        loading="eager"
+                        decoding="async"
+                        fetchpriority="high"
+                      />
+                    ) : (
+                      <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
+                    )}
 
                     <div className="private-info">
                       <h4>{post.title}</h4>

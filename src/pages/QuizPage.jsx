@@ -373,36 +373,6 @@ function getTotalXP(progressMap) {
 
 export default function QuizPage() {
 const [comboCount, setComboCount] = useState(1);
-
-  // Swipe-to-go-back logic
-  useEffect(() => {
-    let startX = 0;
-    let currentX = 0;
-
-    const handleTouchStart = (e) => {
-      startX = e.touches[0].clientX;
-    };
-
-    const handleTouchMove = (e) => {
-      currentX = e.touches[0].clientX;
-    };
-
-    const handleTouchEnd = () => {
-      if (startX < 50 && currentX - startX > 80) {
-        window.history.back();
-      }
-    };
-
-    window.addEventListener('touchstart', handleTouchStart);
-    window.addEventListener('touchmove', handleTouchMove);
-    window.addEventListener('touchend', handleTouchEnd);
-
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, []);
   const survivalMode = localStorage.getItem("smarty-game-mode") === "survival";
 const SURVIVAL_TIME = 12;
 const [survivalTimeLeft, setSurvivalTimeLeft] = useState(SURVIVAL_TIME);

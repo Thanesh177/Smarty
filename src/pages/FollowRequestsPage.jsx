@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { creatorApi, roomApi } from '../api/client';
 import './FollowRequestsPage.css';
 
@@ -8,110 +8,184 @@ export default function FollowRequestsPage() {
   const [status, setStatus] = useState('');
   const [roomInvites, setRoomInvites] = useState([]);
   const [roomJoinRequests, setRoomJoinRequests] = useState([]);
+  const mountedRef = useRef(true);
+  const [processingKey, setProcessingKey] = useState('');
 
   const loadRequests = async () => {
     try {
       setLoading(true);
-      const data = await creatorApi.getFollowRequests();
-      setRequests(Array.isArray(data) ? data : []);
+      setStatus('');
 
-      // 🔥 Load room invites
-      try {
-        const inviteData = await creatorApi.getRoomInvites();
-        setRoomInvites(Array.isArray(inviteData) ? inviteData : []);
-      } catch (err) {
-        console.error('Failed to load room invites', err);
+      const [followResult, inviteResult, roomsResult] = await Promise.allSettled([
+        creatorApi.getFollowRequests(),
+        creatorApi.getRoomInvites(),
+        roomApi.getRooms({ search: '' }),
+      ]);
+
+      if (!mountedRef.current) return;
+
+      if (followResult.status === 'fulfilled') {
+        const data = followResult.value;
+        const followRequests = Array.isArray(data?.requests)
+          ? data.requests
+          : Array.isArray(data)
+            ? data
+            : [];
+        setRequests(followRequests);
+      } else {
+        console.error('Failed to load follow requests', followResult.reason);
       }
 
-      // 🔥 Load room join requests for rooms created by this user
-      try {
-        const roomsData = await roomApi.getRooms({ search: '' });
-        const allRooms = roomsData.rooms || roomsData || [];
-        const ownedRooms = allRooms.filter(
-          (room) => room.ownerId || room.createdBy
-        );
+      if (inviteResult.status === 'fulfilled') {
+        const inviteData = inviteResult.value;
+        const invites = Array.isArray(inviteData?.invites)
+          ? inviteData.invites
+          : Array.isArray(inviteData)
+            ? inviteData
+            : [];
+        setRoomInvites(invites);
+      } else {
+        console.error('Failed to load room invites', inviteResult.reason);
+      }
 
-        const requestsByRoom = await Promise.all(
+      if (roomsResult.status === 'fulfilled') {
+        const roomsData = roomsResult.value;
+        const allRooms = Array.isArray(roomsData?.rooms)
+          ? roomsData.rooms
+          : Array.isArray(roomsData)
+            ? roomsData
+            : [];
+
+        const ownedRooms = allRooms.filter((room) => room?.roomId && (room.ownerId || room.createdBy));
+
+        const requestsByRoom = await Promise.allSettled(
           ownedRooms.map(async (room) => {
-            try {
-              const requestData = await roomApi.getRoomJoinRequests(room.roomId);
-              const roomRequests = requestData.requests || requestData || [];
+            const requestData = await roomApi.getRoomJoinRequests(room.roomId);
+            const roomRequests = Array.isArray(requestData?.requests)
+              ? requestData.requests
+              : Array.isArray(requestData)
+                ? requestData
+                : [];
 
-              return roomRequests.map((request) => ({
-                ...request,
-                roomId: room.roomId,
-                roomName: room.name,
-              }));
-            } catch (err) {
-              console.error('Failed to load join requests for room', room.roomId, err);
-              return [];
-            }
+            return roomRequests.map((request) => ({
+              ...request,
+              roomId: room.roomId,
+              roomName: room.name,
+            }));
           })
         );
 
-        setRoomJoinRequests(requestsByRoom.flat());
-      } catch (err) {
-        console.error('Failed to load room join requests', err);
+        if (!mountedRef.current) return;
+
+        setRoomJoinRequests(
+          requestsByRoom
+            .filter((result) => result.status === 'fulfilled')
+            .flatMap((result) => result.value)
+        );
+
+        requestsByRoom
+          .filter((result) => result.status === 'rejected')
+          .forEach((result) => console.error('Failed to load join requests for room', result.reason));
+      } else {
+        console.error('Failed to load room join requests', roomsResult.reason);
       }
     } catch (err) {
       console.error(err);
-      setStatus('Failed to load follow requests.');
+      if (mountedRef.current) setStatus('Failed to load requests.');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     loadRequests();
+
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   const approve = async (followerId) => {
+    const actionKey = `approve-follow-${followerId}`;
+    if (processingKey) return;
+
     try {
+      setProcessingKey(actionKey);
       await creatorApi.approveFollowRequest(followerId);
+      if (!mountedRef.current) return;
       setRequests((prev) => prev.filter((item) => item.followerId !== followerId));
       setStatus('Request approved.');
     } catch (err) {
       console.error(err);
-      setStatus('Failed to approve request.');
+      if (mountedRef.current) setStatus('Failed to approve request.');
+    } finally {
+      if (mountedRef.current) setProcessingKey('');
     }
   };
 
   const reject = async (followerId) => {
+    const actionKey = `reject-follow-${followerId}`;
+    if (processingKey) return;
+
     try {
+      setProcessingKey(actionKey);
       await creatorApi.rejectFollowRequest(followerId);
+      if (!mountedRef.current) return;
       setRequests((prev) => prev.filter((item) => item.followerId !== followerId));
       setStatus('Request rejected.');
     } catch (err) {
       console.error(err);
-      setStatus('Failed to reject request.');
+      if (mountedRef.current) setStatus('Failed to reject request.');
+    } finally {
+      if (mountedRef.current) setProcessingKey('');
     }
   };
 
   const acceptInvite = async (roomId) => {
+    const actionKey = `accept-invite-${roomId}`;
+    if (processingKey) return;
+
     try {
+      setProcessingKey(actionKey);
       await creatorApi.acceptRoomInvite(roomId);
+      if (!mountedRef.current) return;
       setRoomInvites((prev) => prev.filter((r) => r.roomId !== roomId));
       setStatus('Joined room successfully.');
     } catch (err) {
       console.error(err);
-      setStatus('Failed to accept invite.');
+      if (mountedRef.current) setStatus('Failed to accept invite.');
+    } finally {
+      if (mountedRef.current) setProcessingKey('');
     }
   };
 
   const declineInvite = async (roomId) => {
+    const actionKey = `decline-invite-${roomId}`;
+    if (processingKey) return;
+
     try {
+      setProcessingKey(actionKey);
       await creatorApi.declineRoomInvite(roomId);
+      if (!mountedRef.current) return;
       setRoomInvites((prev) => prev.filter((r) => r.roomId !== roomId));
       setStatus('Invite declined.');
     } catch (err) {
       console.error(err);
-      setStatus('Failed to decline invite.');
+      if (mountedRef.current) setStatus('Failed to decline invite.');
+    } finally {
+      if (mountedRef.current) setProcessingKey('');
     }
   };
 
   const approveRoomJoinRequest = async (roomId, requestUserId) => {
+    const actionKey = `approve-room-${roomId}-${requestUserId}`;
+    if (processingKey) return;
+
     try {
+      setProcessingKey(actionKey);
       await roomApi.approveRoomJoinRequest(roomId, requestUserId);
+      if (!mountedRef.current) return;
       setRoomJoinRequests((prev) =>
         prev.filter(
           (request) =>
@@ -121,16 +195,23 @@ export default function FollowRequestsPage() {
       setStatus('Room join request approved.');
     } catch (err) {
       console.error(err);
-      setStatus('Failed to approve room request.');
+      if (mountedRef.current) setStatus('Failed to approve room request.');
+    } finally {
+      if (mountedRef.current) setProcessingKey('');
     }
   };
 
   const rejectRoomJoinRequest = async (roomId, requestUserId) => {
+    const actionKey = `reject-room-${roomId}-${requestUserId}`;
+    if (processingKey) return;
+
     try {
+      setProcessingKey(actionKey);
       if (roomApi.rejectRoomJoinRequest) {
         await roomApi.rejectRoomJoinRequest(roomId, requestUserId);
       }
 
+      if (!mountedRef.current) return;
       setRoomJoinRequests((prev) =>
         prev.filter(
           (request) =>
@@ -140,7 +221,9 @@ export default function FollowRequestsPage() {
       setStatus('Room join request rejected.');
     } catch (err) {
       console.error(err);
-      setStatus('Failed to reject room request.');
+      if (mountedRef.current) setStatus('Failed to reject room request.');
+    } finally {
+      if (mountedRef.current) setProcessingKey('');
     }
   };
 
@@ -158,11 +241,13 @@ export default function FollowRequestsPage() {
       {!loading && roomJoinRequests.length > 0 && (
         <section className="request-list">
           <h2>Room Join Requests</h2>
-
-          {roomJoinRequests.map((request) => (
+          {roomJoinRequests.map((request, index) => {
+            const requestUserId = request.userId || request.requestUserId || request.followerId;
+            const requestKey = `${request.roomId}-${requestUserId || index}`;
+            return (
             <article
               className="request-card"
-              key={`${request.roomId}-${request.userId}`}
+              key={requestKey}
             >
               <div className="request-avatar">
                 {(request.name || request.email || 'U')[0].toUpperCase()}
@@ -170,7 +255,7 @@ export default function FollowRequestsPage() {
 
               <div className="request-info">
                 <h3>{request.name || 'User'}</h3>
-                <p>{request.email || request.userId}</p>
+                <p>{request.email || requestUserId}</p>
                 <small>Wants to join {request.roomName || 'your room'}</small>
               </div>
 
@@ -178,7 +263,8 @@ export default function FollowRequestsPage() {
                 <button
                   className="approve-btn"
                   type="button"
-                  onClick={() => approveRoomJoinRequest(request.roomId, request.userId)}
+                  disabled={processingKey === `approve-room-${request.roomId}-${requestUserId}`}
+                  onClick={() => approveRoomJoinRequest(request.roomId, requestUserId)}
                 >
                   Approve
                 </button>
@@ -186,13 +272,15 @@ export default function FollowRequestsPage() {
                 <button
                   className="reject-btn"
                   type="button"
-                  onClick={() => rejectRoomJoinRequest(request.roomId, request.userId)}
+                  disabled={processingKey === `reject-room-${request.roomId}-${requestUserId}`}
+                  onClick={() => rejectRoomJoinRequest(request.roomId, requestUserId)}
                 >
                   Reject
                 </button>
               </div>
             </article>
-          ))}
+            );
+          })}
         </section>
       )}
 
@@ -200,9 +288,8 @@ export default function FollowRequestsPage() {
       {!loading && roomInvites.length > 0 && (
         <section className="request-list">
           <h2>Room Invites</h2>
-
-          {roomInvites.map((invite) => (
-            <article className="request-card" key={invite.roomId}>
+          {roomInvites.map((invite, index) => (
+            <article className="request-card" key={invite.roomId || `invite-${index}`}>
               <div className="request-avatar">
                 {(invite.roomName || 'R')[0].toUpperCase()}
               </div>
@@ -215,6 +302,8 @@ export default function FollowRequestsPage() {
               <div className="request-actions">
                 <button
                   className="approve-btn"
+                  type="button"
+                  disabled={processingKey === `accept-invite-${invite.roomId}`}
                   onClick={() => acceptInvite(invite.roomId)}
                 >
                   Join
@@ -222,6 +311,8 @@ export default function FollowRequestsPage() {
 
                 <button
                   className="reject-btn"
+                  type="button"
+                  disabled={processingKey === `decline-invite-${invite.roomId}`}
                   onClick={() => declineInvite(invite.roomId)}
                 >
                   Decline
@@ -241,8 +332,8 @@ export default function FollowRequestsPage() {
         </div>
       ) : (
         <section className="request-list">
-          {requests.map((request) => (
-            <article className="request-card" key={request.followerId}>
+          {requests.map((request, index) => (
+            <article className="request-card" key={request.followerId || `follow-${index}`}>
               <div className="request-avatar">
                 {(request.followerName || request.followerEmail || 'U')[0].toUpperCase()}
               </div>
@@ -262,6 +353,7 @@ export default function FollowRequestsPage() {
                 <button
                   className="approve-btn"
                   type="button"
+                  disabled={processingKey === `approve-follow-${request.followerId}`}
                   onClick={() => approve(request.followerId)}
                 >
                   Approve
@@ -270,6 +362,7 @@ export default function FollowRequestsPage() {
                 <button
                   className="reject-btn"
                   type="button"
+                  disabled={processingKey === `reject-follow-${request.followerId}`}
                   onClick={() => reject(request.followerId)}
                 >
                   Reject

@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function ConfirmPage() {
   const { user, confirmRegistration } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const mountedRef = useRef(true);
+  const redirectTimerRef = useRef(null);
 
   const [form, setForm] = useState({
     email: '',
@@ -14,22 +17,50 @@ export default function ConfirmPage() {
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  if (user) return <Navigate to="/feed" replace />;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (redirectTimerRef.current) {
+        window.clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
+
+  const from = location.state?.from?.pathname || '/feed';
+  if (user) return <Navigate to={from} replace />;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (submitting) return;
+
+    const email = form.email.trim();
+    const code = form.code.trim();
+
+    if (!email || !code) {
+      setError('Please enter both email and verification code.');
+      return;
+    }
+
     setError('');
     setMessage('');
     setSubmitting(true);
 
     try {
-      await confirmRegistration(form.email, form.code);
+      await confirmRegistration(email, code);
+      if (!mountedRef.current) return;
+
       setMessage('Account verified successfully. Redirecting to login...');
-      setTimeout(() => navigate('/login'), 1200);
+
+      redirectTimerRef.current = window.setTimeout(() => {
+        if (mountedRef.current) navigate('/login', { state: { from } });
+      }, 900);
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err?.message || 'Confirmation failed. Please check the code and try again.');
     } finally {
-      setSubmitting(false);
+      if (mountedRef.current) setSubmitting(false);
     }
   };
 
@@ -43,23 +74,32 @@ export default function ConfirmPage() {
           placeholder="Email"
           type="email"
           value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          autoComplete="email"
+          disabled={submitting}
+          onChange={(e) => setForm((cur) => ({ ...cur, email: e.target.value }))}
         />
 
         <input
           placeholder="Verification code"
           value={form.code}
-          onChange={(e) => setForm({ ...form, code: e.target.value })}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          disabled={submitting}
+          onChange={(e) => setForm((cur) => ({ ...cur, code: e.target.value }))}
         />
 
         {error && <p className="status error">{error}</p>}
         {message && <p className="status success">{message}</p>}
 
-        <button className="primary-btn" disabled={submitting} type="submit">
+        <button
+          className="primary-btn"
+          disabled={submitting || !form.email.trim() || !form.code.trim()}
+          type="submit"
+        >
           {submitting ? 'Please wait...' : 'Confirm account'}
         </button>
 
-        <Link className="text-btn" to="/login">
+        <Link className="text-btn" to="/login" state={{ from }}>
           Back to login
         </Link>
       </form>

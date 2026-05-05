@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { isAndroidCognitoLogin, startAndroidGoogleLogin } from '../lib/cognito';
@@ -7,6 +7,8 @@ import './LoginPage.css';
 
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
+  const location = useLocation();
+  const from = location.state?.from?.pathname || '/feed';
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -14,11 +16,13 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) return <p className="status">Loading...</p>;
-  if (user) return <Navigate to="/feed" replace />;
+  if (user) return <Navigate to={from} replace />;
 
   const handleGoogleLogin = async () => {
     setError('');
     setMessage('');
+    if (submitting) return;
+    setSubmitting(true);
 
     try {
       if (isAndroidCognitoLogin()) {
@@ -31,6 +35,7 @@ export default function LoginPage() {
       });
     } catch (err) {
       setError(err?.message || 'Google login failed. Please try again in Chrome or Safari.');
+      setSubmitting(false);
     }
   };
 
@@ -38,10 +43,18 @@ export default function LoginPage() {
     event.preventDefault();
     setError('');
     setMessage('');
+    const email = form.email.trim();
+    const password = form.password;
+
+    if (!email || !password) {
+      setError('Please enter both email and password.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      const result = await login(form.email, form.password);
+      const result = await login(email, password);
 
       if (result?.success === false) {
         const step = result?.nextStep?.signInStep;
@@ -100,7 +113,9 @@ export default function LoginPage() {
               placeholder="you@example.com"
               type="email"
               value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              autoComplete="email"
+              disabled={submitting}
+              onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
             />
           </label>
 
@@ -110,28 +125,31 @@ export default function LoginPage() {
               placeholder="Enter your password"
               type="password"
               value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              autoComplete="current-password"
+              disabled={submitting}
+              onChange={(e) => setForm((current) => ({ ...current, password: e.target.value }))}
             />
           </label>
 
           {error && <p className="status error">{error}</p>}
           {message && <p className="status success">{message}</p>}
 
-          <button className="primary-btn login-submit" disabled={submitting} type="submit">
+          <button className="primary-btn login-submit" disabled={submitting || !form.email.trim() || !form.password} type="submit">
             {submitting ? 'Please wait...' : 'Login'}
           </button>
 
           <button
             type="button"
             className="google-login-btn"
+            disabled={submitting}
             onClick={handleGoogleLogin}
           >
             <span className="google-icon">G</span>
-            Continue with Google
+            {submitting ? 'Opening Google...' : 'Continue with Google'}
           </button>
 
           <div className="login-links">
-            <Link className="text-btn" to="/register">
+            <Link className="text-btn" to="/register" state={{ from }}>
               Need an account? Register
             </Link>
           </div>
