@@ -269,41 +269,6 @@ export default function NewsPage() {
     [saved]
   );
 
-  const renderedArticles = useMemo(
-    () => visibleArticles.map((article, index) => (
-      <NewsCard
-        key={`${article.news_link}-${index}`}
-        article={article}
-        index={index}
-        saved={savedLinks.has(article.news_link)}
-        onToggleSave={toggleSave}
-        onShare={shareArticle}
-      />
-    )),
-    [savedLinks, visibleArticles]
-  );
-
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [language, selectedSection, search]);
-
-  useEffect(() => {
-    if (!loaderRef.current) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, articles.length));
-        }
-      },
-      { rootMargin: '300px' }
-    );
-
-    observer.observe(loaderRef.current);
-
-    return () => observer.disconnect();
-  }, [articles.length]);
-
   const toggleSave = useCallback((article) => {
     setSaved((currentSaved) => {
       const exists = currentSaved.some((item) => item.news_link === article.news_link);
@@ -338,6 +303,41 @@ export default function NewsPage() {
     }
   }, []);
 
+  const renderedArticles = useMemo(
+    () => visibleArticles.map((article, index) => (
+      <NewsCard
+        key={`${article.news_link}-${index}`}
+        article={article}
+        index={index}
+        saved={savedLinks.has(article.news_link)}
+        onToggleSave={toggleSave}
+        onShare={shareArticle}
+      />
+    )),
+    [savedLinks, shareArticle, toggleSave, visibleArticles]
+  );
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [language, selectedSection, search]);
+
+  useEffect(() => {
+    if (!loaderRef.current) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, articles.length));
+        }
+      },
+      { rootMargin: '300px' }
+    );
+
+    observer.observe(loaderRef.current);
+
+    return () => observer.disconnect();
+  }, [articles.length]);
+
   const handleSearchChange = useCallback((e) => {
     setSearch(e.target.value);
   }, []);
@@ -350,6 +350,10 @@ export default function NewsPage() {
   const handleSectionSelect = useCallback((section) => {
     setSelectedSection(section);
   }, []);
+
+  const handleRefreshNews = useCallback(() => {
+    fetchNews(language, true);
+  }, [fetchNews, language]);
 
   return (
     <section className="news-page">
@@ -366,7 +370,7 @@ export default function NewsPage() {
 
         <button
           className="refresh-news-btn"
-          onClick={() => fetchNews(language, true)}
+          onClick={handleRefreshNews}
           disabled={loading}
         >
           Refresh

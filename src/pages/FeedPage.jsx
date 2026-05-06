@@ -22,6 +22,8 @@ const getPostId = (post) => post?.reelId || post?.id || '';
 
 const INITIAL_RENDER_LIMIT = 3;
 const RENDER_BATCH_SIZE = 3;
+const FAST_IMAGE_LIMIT = 6;
+const IMAGE_PRELOAD_MARGIN = '1400px';
 
 const getPostCreatorId = (post) => {
   const authorId = post?.authorId || post?.authorID || post?.author_id || '';
@@ -120,7 +122,7 @@ const TopicPill = memo(function TopicPill({ item, active, onSelect }) {
 // Memoized image component for feed posts with lazy loading and IntersectionObserver
 const FeedImage = memo(function FeedImage({ src, alt, index }) {
   const imgRef = useRef(null);
-  const [shouldLoad, setShouldLoad] = useState(index < INITIAL_RENDER_LIMIT);
+  const [shouldLoad, setShouldLoad] = useState(index < FAST_IMAGE_LIMIT);
 
   useEffect(() => {
     if (shouldLoad || !imgRef.current) return undefined;
@@ -134,7 +136,7 @@ const FeedImage = memo(function FeedImage({ src, alt, index }) {
       },
       {
         root: null,
-        rootMargin: '700px',
+        rootMargin: IMAGE_PRELOAD_MARGIN,
         threshold: 0,
       }
     );
@@ -150,9 +152,9 @@ const FeedImage = memo(function FeedImage({ src, alt, index }) {
       src={shouldLoad ? src : undefined}
       data-src={src}
       alt={alt}
-      loading={index < INITIAL_RENDER_LIMIT ? 'eager' : 'lazy'}
+      loading={index < FAST_IMAGE_LIMIT ? 'eager' : 'lazy'}
       decoding="async"
-      fetchPriority={index < INITIAL_RENDER_LIMIT ? 'high' : shouldLoad ? 'auto' : 'low'}
+      fetchPriority={index < FAST_IMAGE_LIMIT ? 'high' : shouldLoad ? 'auto' : 'low'}
       className="feed-image"
     />
   );
@@ -592,7 +594,7 @@ export default function FeedPage() {
       },
       {
         root: null,
-        rootMargin: '420px',
+        rootMargin: '900px',
         threshold: 0,
       }
     );
