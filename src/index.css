@@ -319,6 +319,8 @@ button {
 .brand-actions button {
   border: 1px solid rgba(255, 255, 255, .08);
   backface-visibility: hidden;
+      box-shadow: 0 3px 3px rgba(52, 211, 153, .22);
+
   padding: 10px 15px;
   border-radius: 999px;
   background: rgba(255, 255, 255, .055);
@@ -340,7 +342,7 @@ button {
   background: linear-gradient(135deg, #20445a, #0d2b4c);
   color: #ffffff;
   border-color: transparent;
-  box-shadow: 0 12px 30px rgba(52, 211, 153, .22);
+  box-shadow: 0 3px 3px rgba(139, 163, 154, 0.836);
 }
 
 .topnav {
@@ -455,6 +457,7 @@ button {
   }
 
   .brand-actions {
+    
     gap: 6px;
   }
 
@@ -462,6 +465,8 @@ button {
   .brand-actions button {
     padding: 8px 10px;
     font-size: 1rem;
+    box-shadow: 0 3px 3px rgba(52, 211, 153, .22);
+
   }
 
   .topnav {

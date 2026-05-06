@@ -578,7 +578,7 @@ export default function ProfilePage() {
                 className="avatar-photo"
                 loading="eager"
                 decoding="async"
-                fetchPriority="high"
+                fetchpriority="high"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   e.currentTarget.nextElementSibling.style.display = 'grid';

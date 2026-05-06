@@ -756,13 +756,28 @@ async editComment(payload) {
     return data;
   },
 
-async deletePost(reelId) {
-  const { data } = await api.post(endpoints.posts.delete, {
-    id: reelId,
-    reelId,
-  });
+async deletePost(post) {
+  const postId = typeof post === 'string'
+    ? post
+    : post?.id || post?.reelId || post?.postId;
 
-  return data;
+const session = await fetchAuthSession();
+
+const userSub =
+  session?.tokens?.idToken?.payload?.sub ||
+  session?.tokens?.accessToken?.payload?.sub ||
+  '';
+
+const { data } = await api.post(endpoints.posts.delete, {
+  id: postId,
+  reelId: postId,
+  postId,
+  userId: userSub,
+  authorId: userSub,
+  ownerId: userSub,
+});
+
+  return parseApiBody(data);
 },
 
 

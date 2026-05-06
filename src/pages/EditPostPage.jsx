@@ -22,6 +22,7 @@ export default function EditPostPage() {
     imageUrl: '',
     videoUrl: '',
   });
+  const [loadedPost, setLoadedPost] = useState(null);
 
   const [imageFile, setImageFile] = useState(null);
   const [videoFile, setVideoFile] = useState(null);
@@ -32,6 +33,27 @@ export default function EditPostPage() {
   const [status, setStatus] = useState('');
   const [uploadStage, setUploadStage] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
+
+  const selectedTopic = useMemo(() => {
+    return topicMode === 'custom' ? form.customTopic.trim() : form.topic;
+  }, [topicMode, form.customTopic, form.topic]);
+
+  const canSubmit = useMemo(
+    () => Boolean(!submitting && selectedTopic && form.title.trim() && form.body.trim()),
+    [form.body, form.title, selectedTopic, submitting]
+  );
+
+  const renderedTopicOptions = useMemo(() => {
+    if (topics.length === 0) {
+      return <option value={form.topic}>{form.topic || 'No topics found'}</option>;
+    }
+
+    return topics.map((topic) => (
+      <option key={topic} value={topic}>
+        {topic}
+      </option>
+    ));
+  }, [form.topic, topics]);
 
   const loadPage = useCallback(async () => {
     try {
@@ -57,6 +79,7 @@ export default function EditPostPage() {
         : [];
 
       setTopics(topicList);
+      setLoadedPost(post || null);
 
       setForm({
         topic: post?.topic || topicList[0] || '',
@@ -103,24 +126,47 @@ export default function EditPostPage() {
       setUploadStage('Deleting post');
       setUploadProgress(80);
 
-      await postApi.deletePost(reelId);
+      await postApi.deletePost({
+        ...(loadedPost || {}),
+        id: reelId,
+        reelId,
+        postId: reelId,
+      });
 
       setUploadStage('Deleted');
       setUploadProgress(100);
 
       navigateTimerRef.current = window.setTimeout(() => {
-        if (mountedRef.current) navigate('/profile');
+        if (mountedRef.current) {
+          if (window.history.length > 1) {
+            navigate(-1);
+          } else {
+            navigate('/profile');
+          }
+        }
       }, 500);
     } catch (err) {
       console.error('Delete failed:', err);
       if (mountedRef.current) {
-        setStatus('Failed to delete post.');
+        const backendError = err?.response?.data?.error || err?.response?.data?.message;
+        const ownerId = err?.response?.data?.ownerId;
+        const currentUser = err?.response?.data?.currentUser;
+
+        if (err?.response?.status === 403) {
+          setStatus(
+            ownerId && currentUser
+              ? `Delete blocked: this post belongs to ${ownerId}, but you are signed in as ${currentUser}.`
+              : backendError || 'Delete blocked: you are not the owner of this post.'
+          );
+        } else {
+          setStatus(backendError || 'Failed to delete post.');
+        }
         setSubmitting(false);
         setUploadStage('');
         setUploadProgress(0);
       }
     }
-  }, [navigate, reelId, submitting]);
+  }, [loadedPost, navigate, reelId, submitting]);
 
   const uploadFile = useCallback(async (file, onProgress) => {
     if (!file) return '';
@@ -221,7 +267,13 @@ export default function EditPostPage() {
       setStatus('Post updated successfully.');
 
       navigateTimerRef.current = window.setTimeout(() => {
-        if (mountedRef.current) navigate(`/reel/${reelId}`);
+        if (mountedRef.current) {
+          if (window.history.length > 1) {
+            navigate(-1);
+          } else {
+            navigate(`/reel/${reelId}`);
+          }
+        }
       }, 500);
     } catch (err) {
       console.error(err);
@@ -273,27 +325,6 @@ export default function EditPostPage() {
   const setPrivateVisibility = useCallback(() => {
     setForm((current) => ({ ...current, visibility: 'private' }));
   }, []);
-
-  const selectedTopic = useMemo(() => {
-    return topicMode === 'custom' ? form.customTopic.trim() : form.topic;
-  }, [topicMode, form.customTopic, form.topic]);
-
-  const canSubmit = useMemo(
-    () => Boolean(!submitting && selectedTopic && form.title.trim() && form.body.trim()),
-    [form.body, form.title, selectedTopic, submitting]
-  );
-
-  const renderedTopicOptions = useMemo(() => {
-    if (topics.length === 0) {
-      return <option value={form.topic}>{form.topic || 'No topics found'}</option>;
-    }
-
-    return topics.map((topic) => (
-      <option key={topic} value={topic}>
-        {topic}
-      </option>
-    ));
-  }, [form.topic, topics]);
 
   if (loading) {
     return (
@@ -405,7 +436,7 @@ export default function EditPostPage() {
                   alt="Current post"
                   loading="lazy"
                   decoding="async"
-                  fetchPriority="auto"
+                  fetchpriority="auto"
                 />
               </div>
             )}

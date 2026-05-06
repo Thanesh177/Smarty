@@ -154,7 +154,7 @@ const FeedImage = memo(function FeedImage({ src, alt, index }) {
       alt={alt}
       loading={index < FAST_IMAGE_LIMIT ? 'eager' : 'lazy'}
       decoding="async"
-      fetchPriority={index < FAST_IMAGE_LIMIT ? 'high' : shouldLoad ? 'auto' : 'low'}
+     fetchpriority={index < FAST_IMAGE_LIMIT ? 'high' : shouldLoad ? 'auto' : 'low'}
       className="feed-image"
     />
   );
