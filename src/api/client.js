@@ -688,7 +688,7 @@ async deleteComment(payload) {
 },
 
 async explainPost(payload) {
-  const { data } = await api.post('/posts/details', payload);
+  const { data } = await api.post('/posts/explain', payload);
   return data;
 },
 

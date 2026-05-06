@@ -174,6 +174,7 @@ const FeedPostCard = memo(function FeedPostCard({
   onTopicClick,
   onSave,
   onAiDetails,
+  onOpenPost,
   onComments,
   onExplain,
   onTranslateChange,
@@ -185,6 +186,15 @@ const FeedPostCard = memo(function FeedPostCard({
     <article
       id={`post-${postId}`}
       className={`snap-post ${!post.imageUrl && !post.videoUrl ? 'no-media' : ''}`}
+      onClick={() => onOpenPost(post, creatorName)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpenPost(post, creatorName);
+        }
+      }}
     >
       {hasMedia && (
         <div className="mini-media">
@@ -209,7 +219,10 @@ const FeedPostCard = memo(function FeedPostCard({
         <button
           type="button"
           className="post-topic clickable-topic"
-          onClick={() => onTopicClick(post.topic)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onTopicClick(post.topic);
+          }}
         >
           {post.topic || 'Smarty'}
         </button>
@@ -221,6 +234,7 @@ const FeedPostCard = memo(function FeedPostCard({
               className="creator-link"
               title={`Open ${creatorName}'s creator profile`}
               aria-label={`Open ${creatorName}'s creator profile`}
+              onClick={(event) => event.stopPropagation()}
               state={{
                 fromPostId: postId,
                 creatorId,
@@ -250,23 +264,17 @@ const FeedPostCard = memo(function FeedPostCard({
             type="button"
             className="icon-action-btn"
             disabled={!postId}
-            onClick={() => onSave(postId)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSave(postId);
+            }}
             title="Save"
             aria-label="Save"
           >
             <Bookmark size={18} strokeWidth={2.2} />
           </button>
 
-          <button
-            type="button"
-            className="icon-action-btn"
-            disabled={!postId}
-            title="AI Details"
-            aria-label="Deep dive"
-            onClick={() => onAiDetails(post, creatorName)}
-          >
-            <Bot size={18} strokeWidth={2.2} />
-          </button>
+
 
           <button
             type="button"
@@ -274,7 +282,10 @@ const FeedPostCard = memo(function FeedPostCard({
             disabled={!postId}
             title="Comments"
             aria-label="Comments"
-            onClick={() => onComments(postId)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onComments(postId);
+            }}
           >
             <MessageCircle size={18} strokeWidth={2.2} />
           </button>
@@ -284,7 +295,10 @@ const FeedPostCard = memo(function FeedPostCard({
             className="icon-action-btn"
             title="Simplify"
             aria-label="Simplify"
-            onClick={() => onExplain(post)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onExplain(post);
+            }}
             disabled={isExplaining}
           >
             {isExplaining ? (
@@ -295,6 +309,7 @@ const FeedPostCard = memo(function FeedPostCard({
           </button>
 
           <select
+            onClick={(event) => event.stopPropagation()}
             onChange={(event) => onTranslateChange(post, event.target.value)}
             value={isTranslated ? 'translated' : ''}
             className="translate-dropdown"
@@ -694,17 +709,16 @@ export default function FeedPage() {
     try {
       setExplaining((prev) => ({ ...prev, [postId]: true }));
 
-      const data = await postApi.translatePost({
+      const data = await postApi.explainPost({
         postId,
         title: post.title,
         body: post.body,
-        targetLang: 'simple English',
       });
       if (!mountedRef.current) return;
 
       setSimpleExplanations((prev) => ({
         ...prev,
-        [postId]: data?.translation || data?.explanation || 'Could not simplify this post.',
+        [postId]: data?.explanation || 'Could not simplify this post.',
       }));
     } catch (err) {
       console.error('Simplify failed:', err);
@@ -764,6 +778,25 @@ export default function FeedPage() {
     [navigate]
   );
 
+  const handleOpenPost = useCallback(
+    (post, creatorName) => {
+      const postId = getPostId(post);
+      if (!postId) return;
+
+      navigate(`/post-ai/${postId}`, {
+        state: {
+          post: {
+            ...post,
+            id: postId,
+            reelId: postId,
+          },
+          creatorName,
+        },
+      });
+    },
+    [navigate]
+  );
+
   const handleTranslateChange = useCallback(
     (post, value) => {
       const postId = getPostId(post);
@@ -816,6 +849,7 @@ export default function FeedPage() {
           onTopicClick={handleTopicClick}
           onSave={handleSave}
           onAiDetails={handleAiDetails}
+          onOpenPost={handleOpenPost}
           onComments={handleComments}
           onExplain={handleExplain}
           onTranslateChange={handleTranslateChange}
@@ -827,6 +861,7 @@ export default function FeedPage() {
       explaining,
       renderedFeedPosts,
       handleAiDetails,
+      handleOpenPost,
       handleComments,
       handleExplain,
       handleSave,
