@@ -8,11 +8,6 @@ const SEARCH_PAGE_SIZE = 24;
 
 const CATEGORIES = [
   { title: 'Popular Classics', search: '' },
-  { title: 'Psychology', search: 'psychology' },
-  { title: 'Fiction', search: 'fiction' },
-  { title: 'Adventure', search: 'adventure' },
-  { title: 'Science', search: 'science' },
-  { title: 'Philosophy', search: 'philosophy' },
 ];
 
 const QUICK_SEARCHES = [
@@ -267,6 +262,7 @@ export default function ReadBookPage() {
   const browseAbort = useRef(null);
   const lastBrowseKeyRef = useRef('');
   const searchAbort = useRef(null);
+  const hasLoadedInitialDataRef = useRef(false);
 
   const cleanQuery = query.trim();
   const cleanAuthorFilter = authorFilter.trim();
@@ -486,53 +482,57 @@ export default function ReadBookPage() {
     }
   }, [categoryFilter, cleanAuthorFilter, cleanYearFilter]);
 
-  useEffect(() => {
-    async function loadRows() {
-      setLoadingRows(true);
-      setError('');
+useEffect(() => {
+  if (hasLoadedInitialDataRef.current) return undefined;
+  hasLoadedInitialDataRef.current = true;
 
-      try {
-        const results = await Promise.all(
-          CATEGORIES.map(async (category) => {
-            const books = await readBooksApi.getBooks({
-              search: category.search,
-              page: 1,
-              page_size: PAGE_SIZE,
-            });
+  async function loadRows() {
+    setLoadingRows(true);
+    setError('');
 
-            return [category.title, books];
-          })
-        );
+    try {
+      const results = await Promise.all(
+        CATEGORIES.map(async (category) => {
+          const books = await readBooksApi.getBooks({
+            search: category.search,
+            page: 1,
+            page_size: PAGE_SIZE,
+          });
 
-        if (!mountedRef.current) return;
-        setRows(Object.fromEntries(results.map(([title, books]) => [title, Array.isArray(books) ? books : []])));
-      } catch (err) {
-        if (mountedRef.current) setError(err.message || 'Failed to load books.');
-      } finally {
-        if (mountedRef.current) setLoadingRows(false);
-      }
+          return [category.title, books];
+        })
+      );
+
+      if (!mountedRef.current) return;
+      setRows(Object.fromEntries(results.map(([title, books]) => [title, Array.isArray(books) ? books : []])));
+    } catch (err) {
+      if (mountedRef.current) setError(err.message || 'Failed to load books.');
+    } finally {
+      if (mountedRef.current) setLoadingRows(false);
     }
+  }
 
-    loadRows();
-    loadBrowsePage(1);
-  }, [loadBrowsePage]);
+  loadRows();
+}, [loadBrowsePage]);
 
-  useEffect(() => {
-    if (!hasActiveFilters) {
-      searchAbort.current?.abort();
-      setSearchResults([]);
-      setSearchPage(1);
-      setHasMoreSearch(false);
+useEffect(() => {
+  if (!hasActiveFilters) {
+    searchAbort.current?.abort();
+    setSearchResults([]);
+    setSearchPage(1);
+    setHasMoreSearch(false);
+    if (browseBooks.length === 0) {
       loadBrowsePage(1);
-      return undefined;
     }
+    return undefined;
+  }
 
-    const timer = window.setTimeout(() => {
-      loadSearchPage(activeSearchText || categoryFilter || 'books', 1);
-    }, 260);
+  const timer = window.setTimeout(() => {
+    loadSearchPage(activeSearchText || categoryFilter || 'books', 1);
+  }, 260);
 
-    return () => window.clearTimeout(timer);
-  }, [activeSearchText, categoryFilter, cleanAuthorFilter, cleanYearFilter, hasActiveFilters, loadBrowsePage, loadSearchPage]);
+  return () => window.clearTimeout(timer);
+}, [activeSearchText, browseBooks.length, categoryFilter, cleanAuthorFilter, cleanYearFilter, hasActiveFilters, loadBrowsePage, loadSearchPage]);
 
   useEffect(() => {
     const node = loadMoreRef.current;
