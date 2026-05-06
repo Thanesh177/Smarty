@@ -1,10 +1,36 @@
-import { useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import './NavbarMenu.css';
-export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
+function NavbarMenu({ user, logout, totalUnread = 0 }) {
   const [open, setOpen] = useState(false);
 
-  const closeMenu = () => setOpen(false);
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const toggleMenu = useCallback(() => {
+    setOpen((prev) => !prev);
+  }, []);
+
+  const stopMenuPropagation = useCallback((event) => {
+    event.stopPropagation();
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    logout?.();
+    closeMenu();
+  }, [closeMenu, logout]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
 
   return (
     <div className="navbar-menu">
@@ -12,7 +38,7 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
       <button
         type="button"
         className={`hamburger-btn ${open ? 'is-open' : ''}`}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={toggleMenu}
         aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
         aria-expanded={open}
       >
@@ -30,8 +56,8 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
           <nav
             className="menu-panel"
             aria-label="Main navigation"
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
+            onClick={stopMenuPropagation}
+            onTouchStart={stopMenuPropagation}
           >
             <div className="menu-header">
               <div className="menu-title">
@@ -71,10 +97,7 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
                 <button
                   type="button"
                   className="logout-pill"
-                  onClick={() => {
-                    logout();
-                    closeMenu();
-                  }}
+                  onClick={handleLogout}
                 >
                   Logout
                 </button>
@@ -90,3 +113,4 @@ export default function NavbarMenu({ user, logout, totalUnread = 0 }) {
     </div>
   );
 }
+export default memo(NavbarMenu);

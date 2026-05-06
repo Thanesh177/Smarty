@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import {
   getProgress,
   getWrongQuestions,
@@ -7,22 +7,117 @@ import {
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import "./ProgressPage.css";
 
+const MistakeReviewCard = memo(function MistakeReviewCard({ topicId, item, index, onRemove }) {
+  const question = item.q || item.question || "Saved mistake";
+  const selectedAnswer = item.selected || "Not saved";
+  const correctAnswer = item.answer || item.correctAnswer || "Not saved";
+  const explanation = item.explanation || "Review this concept and try again.";
+
+  const handleRemove = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onRemove(topicId, item);
+  }, [item, onRemove, topicId]);
+
+  return (
+    <article className="mistake-review-card">
+      <button
+        type="button"
+        className="remove-mistake-btn"
+        onClick={handleRemove}
+        aria-label="Delete mistake question"
+      >
+        🗑️
+      </button>
+
+      <div className="mistake-header">
+        <span className="mistake-label">Mistake Review</span>
+      </div>
+
+      <h4>{question}</h4>
+
+      <div className="mistake-answer-grid">
+        <div>
+          <span>Your answer</span>
+          <strong>{selectedAnswer}</strong>
+        </div>
+
+        <div>
+          <span>Correct answer</span>
+          <strong>{correctAnswer}</strong>
+        </div>
+      </div>
+
+      <div className="mistake-explanation">
+        <strong>Explanation</strong>
+        <p>{explanation}</p>
+      </div>
+
+      <p className="mistake-tip">
+        💡 Learn it better: explain why the correct answer is right, then retry this topic.
+      </p>
+    </article>
+  );
+});
+
+const MistakeTopicBlock = memo(function MistakeTopicBlock({ topicId, items, onRemove }) {
+  const safeItems = useMemo(
+    () => (Array.isArray(items) ? items.slice(-5) : []),
+    [items]
+  );
+
+  if (safeItems.length === 0) return null;
+
+  return (
+    <div className="mistake-topic-block">
+      <h4>{topicId.replaceAll("_", " ")}</h4>
+
+      {safeItems.map((item, index) => (
+        <MistakeReviewCard
+          key={`${item.q || item.question || "mistake"}-${index}`}
+          topicId={topicId}
+          item={item}
+          index={index}
+          onRemove={onRemove}
+        />
+      ))}
+    </div>
+  );
+});
+
 export default function ProgressPage() {
-  const progress = getProgress();
+  const progress = useMemo(() => getProgress(), []);
   const [wrong, setWrong] = useState(() => getWrongQuestions());
 
-  const topics = Object.entries(progress);
+  const topics = useMemo(() => Object.entries(progress), [progress]);
 
-  const chartData = topics.map(([topicId, item]) => ({
-    topic: topicId,
-    xp: item.totalXP || 0,
-    mastery: item.bestPercent || 0,
-  }));
+  const chartData = useMemo(
+    () => topics.map(([topicId, item]) => ({
+      topic: topicId,
+      xp: item.totalXP || 0,
+      mastery: item.bestPercent || 0,
+    })),
+    [topics]
+  );
 
-const handleRemoveMistake = (topicId, item) => {
-  const updatedWrongQuestions = removeWrongQuestion(topicId, item);
-  setWrong(updatedWrongQuestions || getWrongQuestions());
-};
+  const handleRemoveMistake = useCallback((topicId, item) => {
+    const updatedWrongQuestions = removeWrongQuestion(topicId, item);
+    setWrong(updatedWrongQuestions || getWrongQuestions());
+  }, []);
+
+  const wrongEntries = useMemo(() => Object.entries(wrong), [wrong]);
+
+  const renderedWeakAreas = useMemo(
+    () => wrongEntries.map(([topicId, items]) => (
+      <MistakeTopicBlock
+        key={topicId}
+        topicId={topicId}
+        items={items}
+        onRemove={handleRemoveMistake}
+      />
+    )),
+    [handleRemoveMistake, wrongEntries]
+  );
 
   return (
   <main className="quiz-page progress-page">
@@ -57,67 +152,13 @@ const handleRemoveMistake = (topicId, item) => {
             <span>Review mistakes and improve</span>
           </div>
 
-          {Object.entries(wrong).length === 0 ? (
+          {wrongEntries.length === 0 ? (
             <div className="empty-state">
               <h4>No mistakes yet 🎉</h4>
               <p>You’re doing great. Keep practicing to see insights here.</p>
             </div>
           ) : (
-            Object.entries(wrong).map(([topicId, items]) => {
-              const safeItems = Array.isArray(items) ? items.slice(-5) : [];
-
-              if (safeItems.length === 0) return null;
-
-              return (
-                <div key={topicId} className="mistake-topic-block">
-                  <h4>{topicId.replaceAll("_", " ")}</h4>
-
-                  {safeItems.map((item, index) => (
-                    <article key={`${item.q}-${index}`} className="mistake-review-card">
-<button
-  type="button"
-  className="remove-mistake-btn"
-  onClick={(event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    handleRemoveMistake(topicId, item);
-  }}
-  aria-label="Delete mistake question"
->
-  🗑️
-</button>
-
-                      <div className="mistake-header">
-                        <span className="mistake-label">Mistake Review</span>
-                      </div>
-
-                      <h4>{item.q || item.question || "Saved mistake"}</h4>
-
-                      <div className="mistake-answer-grid">
-                        <div>
-                          <span>Your answer</span>
-                          <strong>{item.selected || "Not saved"}</strong>
-                        </div>
-
-                        <div>
-                          <span>Correct answer</span>
-                          <strong>{item.answer || item.correctAnswer || "Not saved"}</strong>
-                        </div>
-                      </div>
-
-                      <div className="mistake-explanation">
-                        <strong>Explanation</strong>
-                        <p>{item.explanation || "Review this concept and try again."}</p>
-                      </div>
-
-                      <p className="mistake-tip">
-                        💡 Learn it better: explain why the correct answer is right, then retry this topic.
-                      </p>
-                    </article>
-                  ))}
-                </div>
-              );
-            })
+            renderedWeakAreas
           )}
         </div>
       </section>

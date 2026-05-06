@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { userApi, postApi, creatorApi, roomApi } from '../api/client';
 import './ProfilePage.css';
@@ -14,6 +14,94 @@ function getPostImage(post) {
     ''
   );
 }
+const ProfilePostCard = memo(function ProfilePostCard({ post, label, onOpen, onEdit, editable = true }) {
+  const postId = post.id || post.reelId;
+  const image = getPostImage(post);
+
+  return (
+    <div className="private-card profile-post-card">
+      <button
+        className="post-card-main"
+        type="button"
+        onClick={() => onOpen(postId)}
+      >
+        {image ? (
+          <img
+            src={image}
+            alt={post.title || 'Post'}
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
+        )}
+
+        <div className="private-info">
+          <h4>{post.title}</h4>
+          <span>{label}</span>
+        </div>
+      </button>
+
+      {editable && (
+        <button
+          className="edit-post-btn"
+          type="button"
+          onClick={() => onEdit(postId)}
+        >
+          Edit
+        </button>
+      )}
+    </div>
+  );
+});
+
+const FriendResultCard = memo(function FriendResultCard({ item, loadingId, onInvite }) {
+  const itemId = item.userId || item.id || item.sub || item.email;
+  const itemName = item.username || item.name || item.email || 'User';
+  const itemInitial = String(itemName).charAt(0).toUpperCase();
+
+  return (
+    <div className="friend-result-card">
+      <div className="friend-result-avatar">{itemInitial}</div>
+
+      <div>
+        <strong>{itemName}</strong>
+        <span>{item.email || 'Smarty user'}</span>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onInvite(item)}
+        disabled={item.invited || loadingId === itemId}
+      >
+        {item.invited ? 'Requested' : loadingId === itemId ? 'Sending...' : 'Follow'}
+      </button>
+    </div>
+  );
+});
+
+const ApprovedCreatorCard = memo(function ApprovedCreatorCard({ creator, onOpen }) {
+  const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
+  const name = creator.username || creator.name || creator.email?.split('@')[0] || 'Creator';
+
+  return (
+    <button
+      key={creatorId || name}
+      type="button"
+      className="approved-creator-card"
+      onClick={() => onOpen(creator)}
+    >
+      <div className="approved-avatar">{name[0].toUpperCase()}</div>
+
+      <div>
+        <h4>{name}</h4>
+        <p>Following</p>
+      </div>
+
+      <span>Open private posts</span>
+    </button>
+  );
+});
 export default function ProfilePage() {
   const navigate = useNavigate();
   const [friendSearch, setFriendSearch] = useState('');
@@ -38,10 +126,29 @@ export default function ProfilePage() {
   const [cropX, setCropX] = useState(50);
   const [cropY, setCropY] = useState(50);
   const cropDragRef = useRef(null);
+  const mountedRef = useRef(false);
+  const profileLoadIdRef = useRef(0);
 
-useEffect(() => {
-  loadProfileData();
-}, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    loadProfileData();
+
+    const handlePageShow = () => loadProfileData({ silent: true });
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadProfileData({ silent: true });
+      }
+    };
+
+    window.addEventListener('pageshow', handlePageShow);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      mountedRef.current = false;
+      window.removeEventListener('pageshow', handlePageShow);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -66,7 +173,21 @@ useEffect(() => {
     return displayName.substring(0, 2).toUpperCase();
   }, [displayName]);
 
-  async function searchFriends() {
+  const withTimeout = useCallback((promise, ms = 12000) => {
+    let timer;
+
+    const timeout = new Promise((_, reject) => {
+      timer = window.setTimeout(() => {
+        reject(new Error('Request timed out. Please check your connection.'));
+      }, ms);
+    });
+
+    return Promise.race([promise, timeout]).finally(() => {
+      window.clearTimeout(timer);
+    });
+  }, []);
+
+  const searchFriends = useCallback(async () => {
     const query = friendSearch.trim();
 
     if (!query) {
@@ -78,7 +199,7 @@ useEffect(() => {
       setSearchingFriends(true);
       setStatus('');
 
-      const data = await roomApi.searchUsers(query);
+      const data = await withTimeout(roomApi.searchUsers(query), 12000);
       const users = data.users || data || [];
       const myId = profile?.id || profile?.userId || profile?.sub;
       const myEmail = profile?.email;
@@ -95,45 +216,54 @@ useEffect(() => {
     } finally {
       setSearchingFriends(false);
     }
-  }
+  }, [friendSearch, profile, withTimeout]);
 
-async function inviteFriend(targetUser) {
-  if (!targetUser) return;
+  async function inviteFriend(targetUser) {
+    if (!targetUser) return;
 
-  const targetId = targetUser.userId || targetUser.id || targetUser.sub;
-  if (!targetId) {
-    setStatus('Could not find this user id.');
-    return;
-  }
+    const targetId = targetUser.userId || targetUser.id || targetUser.sub;
+    if (!targetId) {
+      setStatus('Could not find this user id.');
+      return;
+    }
 
-  try {
-    setFriendActionLoading(targetId);
-    setStatus('Sending follow request...');
-
-    await userApi.followUser(targetId);
-
-    setStatus('Follow request sent. Waiting for approval.');
-    setFriendResults((prev) =>
-      prev.map((item) =>
-        (item.userId || item.id || item.sub) === targetId
-          ? { ...item, invited: true }
-          : item
-      )
-    );
-  } catch (err) {
-    console.error(err);
-    setStatus(err?.response?.data?.error || 'Follow request failed');
-  } finally {
-    setFriendActionLoading('');
-  }
-}
-
-  async function loadProfileData() {
     try {
-      setLoading(true);
-      setStatus('');
+      setFriendActionLoading(targetId);
+      setStatus('Sending follow request...');
 
-      const me = await userApi.getMe();
+      await withTimeout(userApi.followUser(targetId), 12000);
+
+      setStatus('Follow request sent. Waiting for approval.');
+      setFriendResults((prev) =>
+        prev.map((item) =>
+          (item.userId || item.id || item.sub) === targetId
+            ? { ...item, invited: true }
+            : item
+        )
+      );
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.response?.data?.error || 'Follow request failed');
+    } finally {
+      setFriendActionLoading('');
+    }
+  }
+
+  async function loadProfileData(options = {}) {
+    const { silent = false } = options;
+    const loadId = profileLoadIdRef.current + 1;
+    profileLoadIdRef.current = loadId;
+
+    try {
+      if (!silent) {
+        setLoading(true);
+        setStatus('');
+      }
+
+      const me = await withTimeout(userApi.getMe(), 12000);
+
+      if (!mountedRef.current || profileLoadIdRef.current !== loadId) return;
+
       setProfile(me);
 
       const safeUsername =
@@ -147,32 +277,41 @@ async function inviteFriend(targetUser) {
       const userId = me.id || me.userId || me.sub;
 
       const [postsResult, followingResult] = await Promise.allSettled([
-        postApi.getMyReels(),
-        creatorApi.getFollowing(userId),
+        withTimeout(postApi.getMyReels(), 12000),
+        userId ? withTimeout(creatorApi.getFollowing(userId), 12000) : Promise.resolve([]),
       ]);
+
+      if (!mountedRef.current || profileLoadIdRef.current !== loadId) return;
 
       if (postsResult.status === 'fulfilled') {
         const posts = postsResult.value;
         setMyPosts(Array.isArray(posts) ? posts : []);
+      } else if (!silent) {
+        console.error(postsResult.reason);
       }
 
       if (followingResult.status === 'fulfilled') {
         const followingData = followingResult.value;
         setFollowing(Array.isArray(followingData) ? followingData : []);
+      } else if (!silent) {
+        console.error(followingResult.reason);
       }
     } catch (err) {
       console.error(err);
-      setStatus('Failed to load profile.');
+
+      if (!mountedRef.current || profileLoadIdRef.current !== loadId) return;
+
+      setStatus(err?.message || 'Failed to load profile.');
       setLoading(false);
     }
   }
 
-  function openProfileEditor() {
+  const openProfileEditor = useCallback(() => {
     setEditingProfile(true);
     setStatus('');
-  }
+  }, []);
 
-  function handlePhotoSelect(file) {
+  const handlePhotoSelect = useCallback((file) => {
     if (!file) return;
 
     if (photoPreview) URL.revokeObjectURL(photoPreview);
@@ -183,9 +322,9 @@ async function inviteFriend(targetUser) {
     setCropX(50);
     setCropY(50);
     setEditingProfile(true);
-  }
+  }, [photoPreview]);
 
-  function startCropDrag(event) {
+  const startCropDrag = useCallback((event) => {
     const pointer = event.touches?.[0] || event;
 
     cropDragRef.current = {
@@ -196,9 +335,9 @@ async function inviteFriend(targetUser) {
     };
 
     event.currentTarget.setPointerCapture?.(event.pointerId);
-  }
+  }, [cropX, cropY]);
 
-  function moveCropDrag(event) {
+  const moveCropDrag = useCallback((event) => {
     if (!cropDragRef.current) return;
 
     const pointer = event.touches?.[0] || event;
@@ -208,13 +347,13 @@ async function inviteFriend(targetUser) {
 
     setCropX(Math.max(0, Math.min(100, cropDragRef.current.cropX - deltaX * sensitivity)));
     setCropY(Math.max(0, Math.min(100, cropDragRef.current.cropY - deltaY * sensitivity)));
-  }
+  }, []);
 
-  function endCropDrag() {
+  const endCropDrag = useCallback(() => {
     cropDragRef.current = null;
-  }
+  }, []);
 
-  async function createCroppedProfileImage(file) {
+  const createCroppedProfileImage = useCallback(async (file) => {
     if (!file) return null;
 
     const imageUrl = URL.createObjectURL(file);
@@ -267,7 +406,7 @@ async function inviteFriend(targetUser) {
     } finally {
       URL.revokeObjectURL(imageUrl);
     }
-  }
+  }, [cropX, cropY, cropZoom]);
 
   const myPrivatePosts = useMemo(() => {
     return myPosts.filter((item) => {
@@ -283,92 +422,98 @@ async function inviteFriend(targetUser) {
     });
   }, [myPosts]);
 
-async function saveProfile() {
-  try {
-    setSavingProfile(true);
-    setStatus('Saving profile...');
+  async function saveProfile() {
+    try {
+      setSavingProfile(true);
+      setStatus('Saving profile...');
 
-    let photoValue = profile?.photoKey || profile?.photoUrl || profile?.profilePic || '';
+      let photoValue = profile?.photoKey || profile?.photoUrl || profile?.profilePic || '';
 
-    if (newPhoto) {
-      const croppedPhoto = await createCroppedProfileImage(newPhoto);
+      if (newPhoto) {
+        const croppedPhoto = await createCroppedProfileImage(newPhoto);
 
-      const upload = await postApi.getUploadUrl({
-        fileName: croppedPhoto.name,
-        fileType: croppedPhoto.type,
-      });
+        const upload = await withTimeout(
+          postApi.getUploadUrl({
+            fileName: croppedPhoto.name,
+            fileType: croppedPhoto.type,
+          }),
+          12000
+        );
 
-      await fetch(upload.uploadUrl, {
-        method: 'PUT',
-        body: croppedPhoto,
-        headers: { 'Content-Type': croppedPhoto.type },
-      });
+        await withTimeout(
+          fetch(upload.uploadUrl, {
+            method: 'PUT',
+            body: croppedPhoto,
+            headers: { 'Content-Type': croppedPhoto.type },
+          }),
+          20000
+        );
 
-      photoValue = upload.fileKey || upload.fileUrl;
+        photoValue = upload.fileKey || upload.fileUrl;
+      }
+
+      const payload = {
+        username: newUsername.trim(),
+        name: newUsername.trim(),
+        photoUrl: photoValue,
+        profilePic: photoValue,
+        photoKey: photoValue,
+      };
+
+      const updated = await withTimeout(userApi.updateProfile(payload), 12000);
+
+      console.log('UPDATED PROFILE:', updated);
+
+      setProfile((prev) => ({
+        ...prev,
+        ...updated,
+      }));
+
+      setEditingProfile(false);
+      setNewPhoto(null);
+      setPhotoPreview('');
+      setCropZoom(1);
+      setCropX(50);
+      setCropY(50);
+      setStatus('Profile updated.');
+    } catch (err) {
+      console.error(err);
+      setStatus('Failed to update profile.');
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function openApprovedCreator(creator) {
+    const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
+
+    if (!creatorId) {
+      setStatus('Could not find this creator id.');
+      return;
     }
 
-    const payload = {
-      username: newUsername.trim(),
-      name: newUsername.trim(),
-      photoUrl: photoValue,
-      profilePic: photoValue,
-      photoKey: photoValue,
-    };
+    try {
+      setLoadingCreator(true);
+      setStatus('');
+      setTab('approved-private');
 
-    const updated = await userApi.updateProfile(payload);
+      const posts = await withTimeout(postApi.getCreatorPrivatePosts(creatorId), 12000);
+      setCreatorPrivatePosts(Array.isArray(posts) ? posts : []);
+    } catch (err) {
+      console.error(err);
 
-    console.log('UPDATED PROFILE:', updated);
+      if (err?.response?.status === 403) {
+        setStatus('This creator has not approved your follow request yet.');
+      } else {
+        setStatus(err?.response?.data?.error || 'Could not load creator posts.');
+      }
 
-    setProfile((prev) => ({
-      ...prev,
-      ...updated,
-    }));
-
-    setEditingProfile(false);
-    setNewPhoto(null);
-    setPhotoPreview('');
-    setCropZoom(1);
-    setCropX(50);
-    setCropY(50);
-    setStatus('Profile updated.');
-  } catch (err) {
-    console.error(err);
-    setStatus('Failed to update profile.');
-  } finally {
-    setSavingProfile(false);
-  }
-}
-
-async function openApprovedCreator(creator) {
-  const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
-
-  if (!creatorId) {
-    setStatus('Could not find this creator id.');
-    return;
-  }
-
-  try {
-    setLoadingCreator(true);
-    setStatus('');
-    setTab('approved-private');
-
-    const posts = await postApi.getCreatorPrivatePosts(creatorId);
-    setCreatorPrivatePosts(Array.isArray(posts) ? posts : []);
-  } catch (err) {
-    console.error(err);
-
-    if (err?.response?.status === 403) {
-      setStatus('This creator has not approved your follow request yet.');
-    } else {
-      setStatus(err?.response?.data?.error || 'Could not load creator posts.');
+      setCreatorPrivatePosts([]);
+      setTab('approved');
+    } finally {
+      setLoadingCreator(false);
     }
-
-    setCreatorPrivatePosts([]);
-    setTab('approved');
-  } finally {
-    setLoadingCreator(false);
   }
-}
 
   function renderOwnPost(post, label) {
     const postId = post.id || post.reelId;
@@ -384,9 +529,8 @@ async function openApprovedCreator(creator) {
             <img
               src={getPostImage(post)}
               alt={post.title || 'Post'}
-              loading="eager"
+              loading="lazy"
               decoding="async"
-              fetchpriority="high"
             />
           ) : (
             <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
@@ -434,7 +578,7 @@ async function openApprovedCreator(creator) {
                 className="avatar-photo"
                 loading="eager"
                 decoding="async"
-                fetchpriority="high"
+                fetchPriority="high"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   e.currentTarget.nextElementSibling.style.display = 'grid';
@@ -715,9 +859,8 @@ const name =
                       <img
                         src={getPostImage(post)}
                         alt={post.title || 'Post'}
-                        loading="eager"
+                        loading="lazy"
                         decoding="async"
-                        fetchpriority="high"
                       />
                     ) : (
                       <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>

@@ -7,6 +7,7 @@
   width: 100%;
   overflow: hidden;
   position: relative;
+  contain: layout style;
   background:
     radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.13), transparent 30%),
     radial-gradient(circle at 88% 20%, rgba(139, 92, 246, 0.11), transparent 34%),
@@ -19,6 +20,7 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
+  will-change: transform;
   background:
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
@@ -29,9 +31,12 @@
 .snap-feed {
   height: 100%;
   overflow-y: auto;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   padding: 26px 0 96px;
   scroll-snap-type: y proximity;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  contain: layout;
 }
 
 .snap-feed::-webkit-scrollbar {
@@ -74,14 +79,15 @@
   box-shadow:
     0 30px 90px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout paint;
   transition:
-    transform 0.26s ease,
-    border-color 0.26s ease,
-    box-shadow 0.26s ease,
-    background 0.26s ease;
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .snap-post::before {
@@ -93,7 +99,7 @@
   background:
     radial-gradient(circle at 20% 0%, rgba(56, 189, 248, 0.26), transparent 32%),
     radial-gradient(circle at 90% 20%, rgba(139, 92, 246, 0.2), transparent 36%);
-  transition: opacity 0.26s ease;
+  transition: opacity 0.18s ease;
 }
 
 .snap-post::after {
@@ -101,7 +107,7 @@
 }
 
 .snap-post:hover {
-  transform: translateY(-5px) scale(1.002);
+  transform: translate3d(0, -2px, 0) scale(1.001);
   border-color: rgba(125, 211, 252, 0.28);
   box-shadow:
     0 34px 100px rgba(0, 0, 0, 0.42),
@@ -149,6 +155,7 @@
   overflow: hidden;
   position: relative;
   background: #020617;
+  contain: paint;
 }
 
 .mini-media::after {
@@ -173,13 +180,12 @@
   image-rendering: auto;
   transform: translateZ(0);
   backface-visibility: hidden;
-  transition: transform 0.45s ease, filter 0.45s ease;
+  transition: transform 0.22s ease;
 }
 
 .snap-post:hover .mini-media img,
 .snap-post:hover .mini-media video {
-  transform: scale(1.025);
-  filter: saturate(1.05) contrast(1.03);
+  transform: translateZ(0) scale(1.01);
 }
 
 /* =========================
@@ -189,6 +195,7 @@
 .snap-post.no-media .post-content {
   width: min(100%, 1120px);
   padding: clamp(36px, 7vw, 92px);
+  contain: content;
 }
 
 .snap-post:not(.no-media) .post-content {
@@ -196,6 +203,7 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
+  contain: content;
 }
 
 .post-topic {
@@ -365,23 +373,30 @@
 .post-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 24px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 26px;
 }
 
-.post-actions button {
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 999px;
-  padding: 8px 12px;
+.post-actions button,
+.icon-action-btn {
   position: relative;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.065);
-  color: #fff;
-  font-weight: 850;
-  font-size: 0.78rem;
-  line-height: 1.1;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  overflow: visible;
+  background: rgba(255, 255, 255, 0.075);
+  color: #ffffff;
+  font-size: 1.08rem;
+  line-height: 1;
+  font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.14);
   transition:
     transform 0.2s ease,
     background 0.2s ease,
@@ -389,28 +404,59 @@
     box-shadow 0.2s ease;
 }
 
-.post-actions button::after {
-  content: "";
+.post-actions button::before,
+.icon-action-btn::before {
+  content: attr(aria-label);
   position: absolute;
-  inset: 0;
-  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.22), transparent);
-  transform: translateX(-120%);
-  transition: transform 0.45s ease;
+  left: 50%;
+  bottom: calc(100% + 9px);
+  z-index: 20;
+  max-width: 150px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e0f2fe;
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
 }
 
-.post-actions button:hover {
+.post-actions button:hover,
+.icon-action-btn:hover {
   transform: translateY(-2px);
-  background: rgba(167, 243, 208, 0.16);
-  border-color: rgba(167, 243, 208, 0.28);
-  box-shadow: 0 16px 34px rgba(34, 197, 94, 0.09);
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(125, 211, 252, 0.32);
+  box-shadow: 0 16px 34px rgba(14, 165, 233, 0.14);
 }
 
-.post-actions button:hover::after {
-  transform: translateX(120%);
+.post-actions button:hover::before,
+.icon-action-btn:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
-.post-actions button:active {
-  transform: translateY(0) scale(0.98);
+.post-actions button:active,
+.icon-action-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.post-actions button:disabled,
+.icon-action-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.post-actions .translate-dropdown {
+  min-height: 44px;
+  max-width: 145px;
 }
 
 /* =========================
@@ -715,16 +761,24 @@
   }
 
   .post-actions {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 7px;
-    margin-top: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin-top: 20px;
   }
 
-  .post-actions button {
-    width: 100%;
-    padding: 8px 5px;
-    font-size: 0.74rem;
+  .post-actions button,
+  .icon-action-btn {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    border-radius: 15px;
+    font-size: 1rem;
+  }
+
+  .post-actions .translate-dropdown {
+    flex: 1 1 140px;
+    min-width: 135px;
   }
 
   .topic-rail {
@@ -777,13 +831,40 @@
   }
 
   .post-actions {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
+    gap: 8px;
   }
 
-  .post-actions button {
-    padding: 7px 4px;
-    font-size: 0.7rem;
+  .post-actions button,
+  .icon-action-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 14px;
+    font-size: 0.98rem;
+  }
+
+  .post-actions button::before,
+  .icon-action-btn::before {
+    display: none;
+  }
+
+  .spin-icon {
+  animation: spinIcon 1s linear infinite;
+}
+
+@keyframes spinIcon {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+  .post-actions .translate-dropdown {
+    min-height: 40px;
+    flex: 1 1 125px;
+    min-width: 125px;
   }
 
   .floating-create-btn {

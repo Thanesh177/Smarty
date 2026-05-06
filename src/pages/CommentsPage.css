@@ -3,6 +3,7 @@
   display: grid;
   grid-template-columns: 1fr auto auto;
   gap: 8px;
+  contain: layout;
 }
 
 .comment-edit-box input {
@@ -12,6 +13,7 @@
   outline: none;
   background: rgba(255,255,255,.95);
   color: #07111f;
+  transition: background 0.16s ease, border-color 0.16s ease;
 }
 
 .comment-edit-box button {
@@ -20,11 +22,18 @@
   padding: 9px 12px;
   font-weight: 900;
   cursor: pointer;
+  transition: transform 0.16s ease, opacity 0.16s ease, background 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .comment-edit-box button:first-of-type {
   background: #a7f3d0;
   color: #07111f;
+}
+
+.comment-edit-box button:hover {
+  transform: translate3d(0, -1px, 0);
 }
 
 .comment-actions button:last-child {
@@ -40,6 +49,8 @@
   color: white;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
+  contain: layout style;
 }
 
 .comments-topbar {
@@ -52,7 +63,8 @@
   gap: 12px;
   padding: 14px 18px;
   background: rgba(7, 17, 31, 0.78);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
+  contain: layout;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -80,16 +92,22 @@
   color: white;
   cursor: pointer;
   font-weight: 900;
+  transition: background 0.16s ease, transform 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .icon-btn:hover {
   background: rgba(167, 243, 208, 0.18);
+  transform: translate3d(0, -1px, 0);
 }
 
 .comments-body {
   flex: 1;
   overflow-y: auto;
   padding: 22px 16px 112px;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .comments-list {
@@ -97,6 +115,7 @@
   margin: 0 auto;
   display: grid;
   gap: 16px;
+  contain: layout;
 }
 
 .comment-row {
@@ -104,7 +123,8 @@
   grid-template-columns: 44px minmax(0, 1fr);
   gap: 12px;
   align-items: end;
-  animation: commentIn 0.28s ease;
+  animation: commentIn 0.18s ease;
+  contain: layout;
 }
 
 .comment-row.mine {
@@ -114,7 +134,7 @@
 @keyframes commentIn {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.98);
+    transform: translate3d(0, 4px, 0) scale(0.99);
   }
 
   to {
@@ -133,7 +153,9 @@
   font-weight: 950;
   color: #07111f;
   background: linear-gradient(145deg, #a7f3d0, #93c5fd);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .mine-avatar {
@@ -149,7 +171,8 @@
     radial-gradient(circle at top left, rgba(96, 165, 250, 0.12), transparent 42%),
     rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.075);
-  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.14);
+  contain: content;
 }
 
 .comment-bubble.mine {
@@ -164,6 +187,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  contain: layout;
 }
 
 .comment-username {
@@ -173,6 +197,7 @@
   color: white;
   font-weight: 950;
   cursor: pointer;
+  transition: color 0.16s ease;
 }
 
 .comment-username:hover {
@@ -189,6 +214,7 @@
 
 .comment-actions {
   margin-top: 10px;
+  contain: layout;
 }
 
 .comment-actions button {
@@ -200,11 +226,15 @@
   font-size: 0.76rem;
   font-weight: 900;
   cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .comment-actions button:hover {
   background: rgba(167, 243, 208, 0.18);
   color: white;
+  transform: translate3d(0, -1px, 0);
 }
 
 .comments-loading,
@@ -214,6 +244,7 @@
   place-items: center;
   text-align: center;
   gap: 12px;
+  contain: content;
 }
 
 .loader-ring {
@@ -222,7 +253,8 @@
   border-radius: 50%;
   border: 4px solid rgba(255, 255, 255, 0.12);
   border-top-color: #a7f3d0;
-  animation: spin 0.85s linear infinite;
+  animation: spin 1.5s linear infinite;
+  transform: translateZ(0);
 }
 
 @keyframes spin {
@@ -263,7 +295,8 @@
   gap: 12px;
   padding: 10px 18px;
   background: rgba(167, 243, 208, 0.12);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(8px);
+  contain: layout style;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   color: white;
   font-weight: 900;
@@ -281,6 +314,13 @@
   color: white;
   font-weight: 950;
   cursor: pointer;
+  transition: background 0.16s ease, transform 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.replying-bar button:hover {
+  transform: translate3d(0, -1px, 0);
 }
 
 .comment-compose {
@@ -295,7 +335,8 @@
   align-items: center;
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
   background: rgba(7, 17, 31, 0.88);
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(8px);
+  contain: layout style;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -309,6 +350,7 @@
   background: rgba(255, 255, 255, 0.94);
   color: #07111f;
   font-size: 0.96rem;
+  transition: background 0.16s ease;
 }
 
 .send-btn {
@@ -321,11 +363,19 @@
   font-weight: 950;
   background: #a7f3d0;
   color: #07111f;
+  transition: transform 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .send-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: translate3d(0, -1px, 0);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
 }
 
 .comment-toast {
@@ -339,14 +389,15 @@
   background: #a7f3d0;
   color: #07111f;
   font-weight: 950;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+  contain: content;
   animation: toastIn 1.6s ease forwards;
 }
 
 @keyframes toastIn {
   0% {
     opacity: 0;
-    transform: translate(-50%, -10px) scale(0.95);
+    transform: translate3d(-50%, -6px, 0) scale(0.98);
   }
 
   15% {
@@ -365,6 +416,16 @@
 }
 
 @media (max-width: 640px) {
+  .comment-row,
+  .comment-actions button,
+  .send-btn,
+  .icon-btn,
+  .replying-bar button,
+  .comment-edit-box button {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+
   .comments-topbar {
     grid-template-columns: 42px 1fr 42px;
     padding: 12px;
@@ -420,5 +481,31 @@
     min-width: 66px;
     height: 42px;
     padding: 0 14px;
+  }
+}
+
+@supports (content-visibility: auto) {
+  .comment-row,
+  .comment-bubble,
+  .comments-loading,
+  .comments-empty {
+    content-visibility: auto;
+    contain-intrinsic-size: 120px 80px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loader-ring,
+  .comment-row,
+  .comment-toast {
+    animation: none !important;
+  }
+
+  .comment-actions button,
+  .send-btn,
+  .icon-btn,
+  .replying-bar button,
+  .comment-edit-box button {
+    transition-duration: 0.01ms !important;
   }
 }

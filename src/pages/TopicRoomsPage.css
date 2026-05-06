@@ -7,6 +7,7 @@
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   overflow: hidden;
+  contain: layout style;
   color: #e5e7eb;
   background:
     radial-gradient(circle at 12% 0%, rgba(29, 76, 152, 0.06), transparent 34%),
@@ -51,6 +52,11 @@
   color: #020617;
   font-weight: 900;
   cursor: pointer;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.create-room-btn:hover {
+  transform: translate3d(0, -1px, 0);
 }
 
 .room-search-wrap {
@@ -108,6 +114,7 @@
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  contain: layout style;
 }
 
 .sidebar h2 {
@@ -150,10 +157,12 @@
   cursor: pointer;
   box-shadow: 0 10px 24px rgba(248, 250, 252, 0.14);
   transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .rooms-create-plus-btn:hover {
-  transform: translateY(-1px) scale(1.03);
+  transform: translate3d(0, -1px, 0) scale(1.03);
   box-shadow: 0 14px 30px rgba(248, 250, 252, 0.2);
 }
 
@@ -176,10 +185,12 @@
   font-weight: 900;
   cursor: pointer;
   transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .rooms-menu-btn:hover {
-  transform: translateY(-1px);
+  transform: translate3d(0, -1px, 0);
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(248, 250, 252, 0.18);
 }
@@ -217,6 +228,7 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   animation: roomMenuIn 0.16s ease both;
+  contain: content;
 }
 
 .rooms-menu-popover button {
@@ -241,7 +253,7 @@
 .rooms-menu-popover button:hover {
   background: rgba(255, 255, 255, 0.075);
   color: #f8fafc;
-  transform: translateX(2px);
+  transform: translate3d(2px, 0, 0);
 }
 
 .rooms-invite-count {
@@ -277,7 +289,7 @@
   padding: 12px 13px;
   font-size: 0.92rem;
   outline: none;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition: border-color 0.16s ease, background 0.16s ease;
 }
 
 .create-form select option {
@@ -290,7 +302,6 @@
 .input input:focus {
   background: rgba(255, 255, 255, 0.065);
   border-color: rgba(203, 213, 225, 0.22);
-  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.1);
 }
 
 .create-form button,
@@ -308,8 +319,8 @@
 
 .create-form button:hover,
 .input button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.24);
+  transform: translate3d(0, -1px, 0);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
 }
 
 /* ===== INVITE SEARCH ===== */
@@ -358,7 +369,7 @@
 }
 
 .invite-search-row button:hover {
-  transform: translateY(-1px);
+  transform: translate3d(0, -1px, 0);
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
 }
 .request-btn {
@@ -384,6 +395,7 @@
   max-height: 220px;
   overflow-y: auto;
   padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 /* ===== ROOM LIST ===== */
@@ -394,53 +406,192 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-right: 3px;
+  gap: 14px;
+  padding: 3px 6px 12px 1px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  contain: layout;
 }
 
 .room-item {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  gap: 14px;
   align-items: center;
-  padding: 17px;
-  padding-right: 48px;
-  border-radius: 16px;
+  min-height: 76px;
+  padding: 16px 15px;
+  border-radius: 21px;
   cursor: pointer;
+  overflow: visible;
+  isolation: isolate;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
-  position: relative;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout paint;
+}
+
+.room-item::before,
+.room-item::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.72;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.room-item::before {
+  inset: -42px -36px auto auto;
+  width: 112px;
+  height: 112px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.12), transparent 58%),
+    conic-gradient(from 90deg, transparent, rgba(56, 189, 248, 0.22), transparent 54%);
+  animation: roomOrbit 7s linear infinite;
+}
+
+.room-item::after {
+  left: -28px;
+  bottom: -30px;
+  width: 96px;
+  height: 70px;
+  border-radius: 60% 42% 55% 38%;
+  border-top: 1px solid rgba(34, 197, 94, 0.28);
+  border-right: 1px solid rgba(34, 197, 94, 0.18);
+  background:
+    radial-gradient(circle at 22% 42%, rgba(34, 197, 94, 0.18) 0 8px, transparent 9px),
+    radial-gradient(circle at 58% 18%, rgba(125, 211, 252, 0.14) 0 6px, transparent 7px);
+  transform: rotate(-13deg);
+  animation: roomVineFloat 4.8s ease-in-out infinite alternate;
+}
+
+.room-item:nth-child(3n + 1)::before {
+  border-color: rgba(56, 189, 248, 0.22);
+  border-left-color: transparent;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.13), transparent 58%),
+    conic-gradient(from 90deg, transparent, rgba(56, 189, 248, 0.24), transparent 54%);
+}
+
+.room-item:nth-child(3n + 2)::before {
+  border-color: rgba(168, 85, 247, 0.2);
+  border-left-color: transparent;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.13), transparent 58%),
+    conic-gradient(from 120deg, transparent, rgba(168, 85, 247, 0.22), transparent 54%);
+}
+
+.room-item:nth-child(3n + 3)::before {
+  border-color: rgba(34, 197, 94, 0.2);
+  border-left-color: transparent;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(34, 197, 94, 0.13), transparent 58%),
+    conic-gradient(from 40deg, transparent, rgba(34, 197, 94, 0.22), transparent 54%);
+}
+
+.room-item:nth-child(4n + 1)::after {
+  border-top-color: rgba(34, 197, 94, 0.32);
+  border-right-color: rgba(34, 197, 94, 0.18);
+}
+
+.room-item:nth-child(4n + 2)::after {
+  left: auto;
+  right: -28px;
+  bottom: -26px;
+  transform: rotate(18deg) scaleX(-1);
+  border-top-color: rgba(125, 211, 252, 0.28);
+  border-right-color: rgba(125, 211, 252, 0.16);
+}
+
+.room-item:nth-child(4n + 3)::after {
+  border-top-color: rgba(250, 204, 21, 0.26);
+  border-right-color: rgba(250, 204, 21, 0.14);
+}
+
+.room-item:nth-child(4n + 4)::after {
+  left: auto;
+  right: -30px;
+  transform: rotate(-22deg) scaleX(-1);
+  border-top-color: rgba(244, 114, 182, 0.28);
+  border-right-color: rgba(244, 114, 182, 0.16);
+}
+
+.room-item:hover::before,
+.room-item:hover::after,
+.room-item.active::before,
+.room-item.active::after {
+  opacity: 1;
+}
+
+.room-item:hover::after,
+.room-item.active::after {
+  transform: rotate(-8deg) translateY(-3px) scale(1.04);
+}
+
+.room-item:nth-child(4n + 2):hover::after,
+.room-item:nth-child(4n + 2).active::after,
+.room-item:nth-child(4n + 4):hover::after,
+.room-item:nth-child(4n + 4).active::after {
+  transform: rotate(12deg) translateY(-3px) scaleX(-1) scale(1.04);
 }
 
 .room-item:hover {
-  transform: translateY(-1px);
-  border-color: rgba(203, 213, 225, 0.12);
-  background: rgba(255, 255, 255, 0.055);
+  transform: translate3d(0, -1px, 0);
+  border-color: rgba(56, 189, 248, 0.24);
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: 0 16px 34px rgba(14, 165, 233, 0.1);
 }
 
 .room-item.active {
-  background: rgba(248, 250, 252, 0.1);
-  border-color: rgba(248, 250, 252, 0.28);
+  background: rgba(14, 165, 233, 0.16);
+  border-color: rgba(56, 189, 248, 0.34);
+  box-shadow:
+    inset 4px 0 0 rgba(56, 189, 248, 0.85),
+    0 16px 34px rgba(14, 165, 233, 0.12);
+}
+
+.room-item:has(.room-card-menu-btn[aria-expanded="true"]) {
+  z-index: 80;
 }
 
 .room-card-menu-wrap {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 10;
+  position: relative;
+  z-index: 10000;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  width: 44px;
+  min-width: 44px;
+  pointer-events: auto;
+}
+
+.room-info,
+.room-card-menu-wrap {
+  position: relative;
+  z-index: 5;
 }
 
 .room-card-menu-btn {
-  width: 30px;
-  height: 30px;
+  position: relative;
+  z-index: 10001;
+  width: 36px;
+  height: 36px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 50%;
+  border-radius: 13px;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.065);
+  background: rgba(255, 255, 255, 0.075);
   color: #f8fafc;
-  font-size: 1rem;
+  font-size: 1.15rem;
   line-height: 1;
   font-weight: 950;
   cursor: pointer;
@@ -464,32 +615,39 @@
 
 .room-card-menu-popover {
   position: absolute;
-  top: calc(100% + 8px);
+  top: 42px;
   right: 0;
-  z-index: 30;
-  width: 132px;
-  padding: 6px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+  z-index: 10002;
+  width: 148px;
+  padding: 7px;
+  display: grid;
+  gap: 6px;
+  border-radius: 15px;
+  background: rgba(15, 23, 42, 0.99);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.46);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+  pointer-events: auto;
   animation: roomMenuIn 0.16s ease both;
+  contain: content;
 }
 
 .room-card-menu-popover button {
+  position: relative;
+  z-index: 1000;
   width: 100%;
-  min-height: 34px;
+  min-height: 38px;
   border: 0;
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: transparent;
+  border-radius: 11px;
+  padding: 0 11px;
+  background: rgba(255, 255, 255, 0.07);
   color: #e5e7eb;
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   font-weight: 850;
   text-align: left;
   cursor: pointer;
+  pointer-events: auto;
   transition: background 0.16s ease, color 0.16s ease;
 }
 
@@ -510,7 +668,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 7px;
 }
 
 .room-info strong {
@@ -548,7 +706,7 @@
 .room-actions button:hover,
 .hidden-rooms-btn:hover,
 .approve-request-btn:hover {
-  transform: translateY(-1px);
+  transform: translate3d(0, -1px, 0);
   background: rgba(255, 255, 255, 0.1);
   color: #f8fafc;
 }
@@ -573,7 +731,7 @@
 }
 
 .delete-room-btn:hover {
-  transform: scale(1.06);
+  transform: translateZ(0) scale(1.04);
   background: rgba(220, 38, 38, 0.9);
   color: #fff;
 }
@@ -609,6 +767,7 @@
   overflow: hidden;
   position: relative;
   background: #01040b;
+  contain: layout style;
 }
 
 .chat-header {
@@ -625,6 +784,7 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
+  contain: layout style;
 }
 
 .messages {
@@ -637,6 +797,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  -webkit-overflow-scrolling: touch;
+  contain: layout;
 }
 
 .msg {
@@ -647,7 +809,8 @@
   color: #e5e7eb;
   background: rgba(10, 22, 40, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.045);
-  animation: messageIn 0.2s ease both;
+  animation: messageIn 0.14s ease both;
+  contain: content;
 }
 
 .msg.mine {
@@ -712,8 +875,8 @@
   display: grid;
   place-items: center;
   background: rgba(2, 6, 23, 0.74);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .members-card {
@@ -726,6 +889,8 @@
   position: relative;
   overflow-y: auto;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+  contain: content;
+  overscroll-behavior: contain;
 }
 
 .members-card h3 {
@@ -799,6 +964,26 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes roomOrbit {
+  from {
+    transform: rotate(0deg) scale(1);
+  }
+
+  to {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes roomVineFloat {
+  from {
+    transform: rotate(-13deg) translateY(0);
+  }
+
+  to {
+    transform: rotate(-7deg) translateY(-4px);
   }
 }
 
@@ -889,12 +1074,18 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    gap: 12px;
+    padding: 2px 4px 14px 0;
   }
 
   .room-item {
-    padding: 16px;
-    padding-right: 46px;
-    border-radius: 14px;
+    grid-template-columns: minmax(0, 1fr) 42px;
+    gap: 12px;
+    align-items: center;
+    min-height: 70px;
+    padding: 13px 12px;
+    border-radius: 19px;
+    overflow: visible;
   }
 
   .room-actions {
@@ -973,7 +1164,7 @@
 
 /* ===== Final room chat polish ===== */
 .messages {
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   align-items: stretch;
 }
 
@@ -1012,8 +1203,8 @@
 }
 
 .input {
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .input input {
@@ -1032,5 +1223,59 @@
 @media (max-width: 760px) {
   .msg::before {
     display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .room-item::before,
+  .room-item::after {
+    animation: none !important;
+  }
+}
+
+@supports (content-visibility: auto) {
+  .room-item,
+  .msg,
+  .member-row {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 88px;
+  }
+}
+
+@media (max-width: 760px), (prefers-reduced-motion: reduce) {
+  .room-item::before,
+  .room-item::after {
+    animation: none !important;
+  }
+
+  .room-item::before,
+  .room-item::after {
+    opacity: 0.42;
+  }
+}
+
+.room-item {
+  contain: layout !important;
+}
+
+.room-card-menu-wrap {
+  pointer-events: auto !important;
+  z-index: 99999 !important;
+}
+
+.room-card-menu-btn {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: translateY(0) !important;
+  z-index: 100000 !important;
+}
+
+.room-card-menu-popover {
+  z-index: 100001 !important;
+  contain: layout style !important;
+}
+
+@supports (content-visibility: auto) {
+  .room-item {
+    content-visibility: visible !important;
   }
 }

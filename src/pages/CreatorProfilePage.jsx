@@ -1,7 +1,50 @@
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useEffect, useRef } from 'react';
 import { creatorApi, postApi } from '../api/client';
 import './CreatorProfile.css';
+
+const CreatorPostCard = memo(function CreatorPostCard({ post, index, onOpen }) {
+  const postId = post.id || post.reelId;
+
+  return (
+    <button
+      className="mini-post-card"
+      type="button"
+      disabled={!postId}
+      onClick={() => onOpen(postId)}
+    >
+      {post.imageUrl ? (
+        <img
+          src={post.imageUrl}
+          alt={post.title || 'Creator post'}
+          loading={index < 2 ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchPriority={index < 2 ? 'high' : 'auto'}
+        />
+      ) : (
+        <div className="mini-placeholder">
+          {post.topic?.[0] || 'S'}
+        </div>
+      )}
+
+      <div className="mini-card-overlay">
+        <span>{post.topic}</span>
+        <h4>{post.title}</h4>
+      </div>
+    </button>
+  );
+});
+
+const PersonRow = memo(function PersonRow({ item, fallbackLabel, onOpen }) {
+  const id = item.userId || item.followerId || item.followingId;
+
+  return (
+    <button disabled={!id} onClick={() => onOpen(id)}>
+      <strong>{item.name || item.email || id}</strong>
+      <span>{item.email || fallbackLabel}</span>
+    </button>
+  );
+});
 
 export default function CreatorProfilePage() {
   const { userId } = useParams();
@@ -17,11 +60,14 @@ export default function CreatorProfilePage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [postsLoading, setPostsLoading] = useState(false);
 
-  const displayName =
-    profile?.name ||
-    profile?.username ||
-    profile?.email ||
-    (userId?.length > 20 ? `Creator_${userId.substring(0, 5)}` : userId);
+  const displayName = useMemo(
+    () =>
+      profile?.name ||
+      profile?.username ||
+      profile?.email ||
+      (userId?.length > 20 ? `Creator_${userId.substring(0, 5)}` : userId),
+    [profile, userId]
+  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -95,7 +141,7 @@ export default function CreatorProfilePage() {
     };
   }, [userId]);
 
-  const handleStartChat = () => {
+  const handleStartChat = useCallback(() => {
     if (!userId) return;
 
     navigate('/chat', {
@@ -110,49 +156,115 @@ export default function CreatorProfilePage() {
         },
       },
     });
-  };
+  }, [displayName, navigate, profile, userId]);
 
-const handleFollow = async () => {
-  if (!profile || !userId || actionLoading || profile.requestPending) return;
+  const handleFollow = useCallback(async () => {
+    if (!profile || !userId || actionLoading || profile.requestPending) return;
 
-  setActionLoading(true);
+    setActionLoading(true);
 
-  try {
-    if (profile.isFollowing) {
-      await creatorApi.unfollow(userId);
+    try {
+      if (profile.isFollowing) {
+        await creatorApi.unfollow(userId);
+        if (!mountedRef.current) return;
+
+        setProfile((prev) => ({
+          ...prev,
+          isFollowing: false,
+          requestPending: false,
+          followersCount: Math.max(0, Number(prev?.followersCount || 0) - 1),
+        }));
+
+        return;
+      }
+
+      await creatorApi.follow(userId);
       if (!mountedRef.current) return;
 
       setProfile((prev) => ({
         ...prev,
+        requestPending: true,
         isFollowing: false,
-        requestPending: false,
-        followersCount: Math.max(0, Number(prev?.followersCount || 0) - 1),
       }));
-
-      return;
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (mountedRef.current) setActionLoading(false);
     }
+  }, [actionLoading, profile, userId]);
 
-    await creatorApi.follow(userId);
-    if (!mountedRef.current) return;
+  const followButtonText = useMemo(() => {
+    if (actionLoading) return 'Please wait...';
+    if (profile?.requestPending) return 'Requested';
+    if (profile?.isFollowing) return 'Following';
+    return 'Follow';
+  }, [actionLoading, profile]);
 
-    setProfile((prev) => ({
-      ...prev,
-      requestPending: true,
-      isFollowing: false,
-    }));
-  } catch (err) {
-    console.error(err);
-  } finally {
-    if (mountedRef.current) setActionLoading(false);
-  }
-};
+  const goBack = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
 
-const getFollowButtonText = () => {
-  if (actionLoading) return 'Please wait...';
-  if (profile?.requestPending) return 'Requested';
-  if (profile?.isFollowing) return 'Following';
-  return 'Follow';
-};
+  const openCreator = useCallback(
+    (id) => {
+      if (id) navigate(`/creator/${id}`);
+    },
+    [navigate]
+  );
+
+  const openPost = useCallback(
+    (postId) => {
+      if (postId) navigate(`/reel/${postId}`);
+    },
+    [navigate]
+  );
+
+  const showPosts = useCallback(() => {
+    setActiveTab('posts');
+  }, []);
+
+  const showFollowers = useCallback(() => {
+    setActiveTab('followers');
+  }, []);
+
+  const showFollowing = useCallback(() => {
+    setActiveTab('following');
+  }, []);
+
+  const renderedPosts = useMemo(
+    () => creatorPosts.map((post, index) => (
+      <CreatorPostCard
+        key={post.id || post.reelId || `creator-post-${index}`}
+        post={post}
+        index={index}
+        onOpen={openPost}
+      />
+    )),
+    [creatorPosts, openPost]
+  );
+
+  const renderedFollowers = useMemo(
+    () => followers.map((item, index) => (
+      <PersonRow
+        key={item.userId || item.followerId || `follower-${index}`}
+        item={item}
+        fallbackLabel="Follower"
+        onOpen={openCreator}
+      />
+    )),
+    [followers, openCreator]
+  );
+
+  const renderedFollowing = useMemo(
+    () => following.map((item, index) => (
+      <PersonRow
+        key={item.userId || item.followingId || `following-${index}`}
+        item={item}
+        fallbackLabel="Following"
+        onOpen={openCreator}
+      />
+    )),
+    [following, openCreator]
+  );
 
   if (loading) {
     return (
@@ -167,7 +279,7 @@ const getFollowButtonText = () => {
   return (
     <main className="creator-profile-container">
       <div className="profile-card">
-        <button className="back-link" onClick={() => navigate(-1)}>
+        <button className="back-link" onClick={goBack}>
           ← Back to Feed
         </button>
 
@@ -180,7 +292,7 @@ const getFollowButtonText = () => {
                 alt={displayName}
                 loading="eager"
                 decoding="async"
-                fetchpriority="high"
+                fetchPriority="high"
                 referrerPolicy="no-referrer"
               />
             ) : (
@@ -211,24 +323,24 @@ const getFollowButtonText = () => {
                 onClick={handleFollow}
                 disabled={actionLoading || profile?.requestPending}
               >
-                {getFollowButtonText()}
+                {followButtonText}
               </button>
             )}
           </div>
         </header>
 
         <div className="stats-bar">
-          <button className="stat" onClick={() => setActiveTab('posts')}>
+          <button className="stat" onClick={showPosts}>
             <strong>{creatorPosts.length || profile?.postsCount || profile?.reelsCount || 0}</strong>
             posts
           </button>
 
-          <button className="stat" onClick={() => setActiveTab('followers')}>
+          <button className="stat" onClick={showFollowers}>
             <strong>{followers.length || profile?.followersCount || 0}</strong>
             followers
           </button>
 
-          <button className="stat" onClick={() => setActiveTab('following')}>
+          <button className="stat" onClick={showFollowing}>
             <strong>{following.length || profile?.followingCount || 0}</strong>
             following
           </button>
@@ -244,38 +356,7 @@ const getFollowButtonText = () => {
               </div>
             ) : creatorPosts.length > 0 ? (
               <div className="creator-grid">
-                {creatorPosts.map((post, index) => {
-                  const postId = post.id || post.reelId;
-
-                  return (
-                    <button
-                      key={postId || `creator-post-${index}`}
-                      className="mini-post-card"
-                      type="button"
-                      disabled={!postId}
-                      onClick={() => postId && navigate(`/reel/${postId}`)}
-                    >
-                      {post.imageUrl ? (
-                        <img
-                          src={post.imageUrl}
-                          alt={post.title || 'Creator post'}
-                          loading={index < 4 ? 'eager' : 'lazy'}
-                          decoding="async"
-                          fetchpriority={index < 4 ? 'high' : 'auto'}
-                        />
-                      ) : (
-                        <div className="mini-placeholder">
-                          {post.topic?.[0] || 'S'}
-                        </div>
-                      )}
-
-                      <div className="mini-card-overlay">
-                        <span>{post.topic}</span>
-                        <h4>{post.title}</h4>
-                      </div>
-                    </button>
-                  );
-                })}
+                {renderedPosts}
               </div>
             ) : (
               <div className="empty-state">
@@ -291,16 +372,7 @@ const getFollowButtonText = () => {
 
             {followers.length > 0 ? (
               <div className="people-list">
-                {followers.map((item, index) => {
-                  const id = item.userId || item.followerId;
-
-                  return (
-                    <button key={id || `follower-${index}`} disabled={!id} onClick={() => id && navigate(`/creator/${id}`)}>
-                      <strong>{item.name || item.email || id}</strong>
-                      <span>{item.email || 'Follower'}</span>
-                    </button>
-                  );
-                })}
+                {renderedFollowers}
               </div>
             ) : (
               <div className="empty-state">
@@ -315,17 +387,8 @@ const getFollowButtonText = () => {
             <h3>Following</h3>
 
             {following.length > 0 ? (
-              <div classNfame="people-list">
-                {following.map((item, index) => {
-                  const id = item.userId || item.followingId;
-
-                  return (
-                    <button key={id || `following-${index}`} disabled={!id} onClick={() => id && navigate(`/creator/${id}`)}>
-                      <strong>{item.name || item.email || id}</strong>
-                      <span>{item.email || 'Following'}</span>
-                    </button>
-                  );
-                })}
+              <div className="people-list">
+                {renderedFollowing}
               </div>
             ) : (
               <div className="empty-state">

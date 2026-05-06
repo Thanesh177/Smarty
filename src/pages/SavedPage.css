@@ -5,6 +5,8 @@
     radial-gradient(circle at top left, rgba(148,163,184,0.08), transparent 32%),
     #020617;
   color: white;
+  overflow-x: hidden;
+  contain: layout style;
 }
 
 .saved-hero {
@@ -59,6 +61,7 @@
   border: 1px solid rgba(255,255,255,.08);
   text-align: center;
   backdrop-filter: blur(12px);
+  contain: content;
 }
 
 .saved-summary strong {
@@ -88,6 +91,7 @@
   background: rgba(255,255,255,.92);
   color: #07111f;
   font-weight: 700;
+  transition: background 0.16s ease, border-color 0.16s ease;
 }
 
 .saved-topics {
@@ -103,12 +107,19 @@
   background: rgba(255,255,255,.065);
   color: rgba(255,255,255,.78);
   font-weight: 800;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .saved-topics button.active,
 .saved-topics button:hover {
   background: #f8fafc;
   color: #020617;
+}
+
+.saved-topics button:hover {
+  transform: translate3d(0, -1px, 0);
 }
 
 .saved-content {
@@ -129,6 +140,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 18px;
+  contain: layout;
 }
 
 .saved-card {
@@ -140,11 +152,14 @@
   grid-template-columns: 140px 1fr;
   min-height: 220px;
   box-shadow: 0 16px 40px rgba(0,0,0,.28);
-  transition: all 0.22s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout paint;
 }
 
 .saved-card:hover {
-  transform: translateY(-4px);
+  transform: translate3d(0, -2px, 0);
   box-shadow: 0 26px 60px rgba(0,0,0,.4);
   border-color: rgba(255,255,255,.14);
 }
@@ -155,6 +170,7 @@
   cursor: pointer;
   background: rgba(255,255,255,.04);
   overflow: hidden;
+  contain: paint;
 }
 
 .saved-card-media img,
@@ -168,12 +184,13 @@
 
 .saved-card-media img,
 .saved-card-media video {
-  transition: transform 0.35s ease;
+  transition: transform 0.22s ease;
+  transform: translateZ(0);
 }
 
 .saved-card:hover .saved-card-media img,
 .saved-card:hover .saved-card-media video {
-  transform: scale(1.05);
+  transform: translateZ(0) scale(1.02);
 }
 
 .saved-placeholder {
@@ -189,6 +206,7 @@
   padding: 18px;
   display: flex;
   flex-direction: column;
+  contain: content;
 }
 
 .saved-title-btn {
@@ -202,6 +220,7 @@
   font-size: 1.2rem;
   font-weight: 900;
   line-height: 1.25;
+  transition: color 0.16s ease;
 }
 
 .saved-title-btn:hover {
@@ -236,11 +255,12 @@
   background: rgba(255,255,255,.05);
   border: 1px solid rgba(255,255,255,.08);
   color: #e5e7eb;
-  transition: all 0.18s ease;
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+  transform: translateZ(0);
 }
 
 .saved-card-actions button:hover {
-  transform: translateY(-2px);
+  transform: translate3d(0, -1px, 0);
   background: #f8fafc;
   color: #020617;
 }
@@ -257,6 +277,7 @@
   font-weight: 900;
   box-shadow: 0 18px 60px rgba(0,0,0,.28);
   animation: savedToast 1.6s ease forwards;
+  contain: content;
 }
 
 @keyframes savedToast {
@@ -270,12 +291,13 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: 18px;
+  contain: layout;
 }
 
 .saved-skeleton {
   height: 220px;
   background: linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.09), rgba(255,255,255,.04));
-  animation: savedPulse 1.2s infinite;
+  animation: savedPulse 1.6s ease-in-out infinite;
 }
 
 @keyframes savedPulse {
@@ -323,5 +345,28 @@
   .saved-card-media video,
   .saved-placeholder {
     height: 220px;
+  }
+}
+
+@supports (content-visibility: auto) {
+  .saved-card,
+  .saved-skeleton {
+    content-visibility: auto;
+    contain-intrinsic-size: 220px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .saved-card,
+  .saved-card-media img,
+  .saved-card-media video,
+  .saved-card-actions button,
+  .saved-topics button {
+    transition: none !important;
+  }
+
+  .saved-skeleton,
+  .saved-toast {
+    animation: none !important;
   }
 }

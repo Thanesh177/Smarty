@@ -8,6 +8,8 @@
     #030712;
   color: #fff;
   position: relative;
+  overflow-x: hidden;
+  contain: layout style;
 }
 
 /* Quiz page back button (replaces .hero-back for QuizPage) */
@@ -21,15 +23,17 @@
 
 .quiz-page-back .arrow {
   display: inline-block;
-  transition: transform 0.25s ease;
+  transition: transform 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .quiz-page-back:hover .arrow {
-  transform: translateX(-4px) scale(1.1);
+  transform: translate3d(-3px, 0, 0) scale(1.04);
 }
 
 .quiz-page-back:active .arrow {
-  transform: translateX(-6px) scale(1.15) rotate(-5deg);
+  transform: translate3d(-4px, 0, 0) scale(1.04);
 }
 
 .streak-card {
@@ -38,7 +42,7 @@
 /* ===== ANIMATION PACK ===== */
 
 .brain-game {
-  animation: gameEnter 0.45s ease both;
+  animation: gameEnter 0.28s ease both;
 }
 
 @keyframes gameEnter {
@@ -60,9 +64,9 @@
   border-radius: inherit;
   background: linear-gradient(135deg, rgba(56, 189, 248, 0.35), rgba(168, 85, 247, 0.25), rgba(34, 197, 94, 0.2));
   opacity: 0.25;
-  filter: blur(18px);
+  filter: blur(8px);
   z-index: -1;
-  animation: glowPulse 2.8s ease-in-out infinite;
+  animation: glowPulse 4s ease-in-out infinite;
 }
 
 @keyframes glowPulse {
@@ -76,7 +80,7 @@
 
 /* button pop */
 .decision-btn {
-  animation: buttonRise 0.35s ease both;
+  animation: buttonRise 0.22s ease both;
 }
 
 .decision-btn:nth-child(1) {
@@ -103,7 +107,7 @@
 }
 
 .decision-btn.selected {
-  animation: selectedPulse 0.35s ease both;
+  animation: selectedPulse 0.22s ease both;
 }
 
 @keyframes selectedPulse {
@@ -111,7 +115,7 @@
     transform: scale(1);
   }
   55% {
-    transform: scale(1.06);
+    transform: scale(1.025);
   }
   100% {
     transform: scale(1);
@@ -120,7 +124,7 @@
 
 /* candle animation */
 .candle {
-  animation: candleGrow 0.55s ease both;
+  animation: candleGrow 0.28s ease both;
   transform-origin: bottom;
 }
 
@@ -145,7 +149,7 @@
 /* feedback slide */
 .trade-feedback,
 .survival-feedback {
-  animation: feedbackPop 0.4s ease both;
+  animation: feedbackPop 0.24s ease both;
 }
 
 @keyframes feedbackPop {
@@ -177,7 +181,7 @@
 }
 
 .game-main-btn:hover::after {
-  animation: shineSweep 0.8s ease;
+  animation: shineSweep 0.5s ease;
 }
 
 @keyframes shineSweep {
@@ -188,7 +192,7 @@
 
 /* XP burst */
 .xp-orb {
-  animation: xpBurst 1.4s ease both;
+  animation: xpBurst 1s ease both;
 }
 .survival-timer {
   display: flex;
@@ -259,6 +263,8 @@
 
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  contain: content;
+  transform: translateZ(0);
 }
 
 /* ===== HEADER ===== */
@@ -290,6 +296,7 @@
   flex-wrap: wrap;
 }
 
+/* ===== DECISION BUTTONS ===== */
 .decision-btn {
   flex: 1;
   min-width: 110px;
@@ -305,12 +312,14 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   cursor: pointer;
 
-  transition: all 0.2s ease;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 /* HOVER */
 .decision-btn:hover {
-  transform: translateY(-2px);
+  transform: translate3d(0, -1px, 0);
   background: rgba(255, 255, 255, 0.12);
 }
 
@@ -322,6 +331,7 @@
   box-shadow: 0 10px 30px rgba(56, 189, 248, 0.4);
 }
 
+/* ===== MAIN BUTTON ===== */
 /* ===== MAIN BUTTON ===== */
 .game-main-btn {
   margin-top: 20px;
@@ -338,7 +348,9 @@
   border: none;
   cursor: pointer;
 
-  transition: all 0.2s ease;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 /* DISABLED */
@@ -349,7 +361,7 @@
 
 /* HOVER */
 .game-main-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: translate3d(0, -1px, 0);
   box-shadow: 0 12px 30px rgba(34, 197, 94, 0.4);
 }
 
@@ -433,7 +445,7 @@
 /* Flame Animation */
 .streak-flame {
   font-size: 1.8rem;
-  animation: flameFlicker 1.2s infinite ease-in-out;
+  animation: flameFlicker 2.4s infinite ease-in-out;
   transform-origin: center;
 }
 
@@ -441,23 +453,18 @@
 @keyframes flameFlicker {
   0% {
     transform: scale(1) rotate(0deg);
-    filter: drop-shadow(0 0 4px orange);
   }
   25% {
     transform: scale(1.05) rotate(-2deg);
-    filter: drop-shadow(0 0 8px #ff6a00);
   }
   50% {
     transform: scale(0.95) rotate(2deg);
-    filter: drop-shadow(0 0 6px #ff8c00);
   }
   75% {
     transform: scale(1.1) rotate(-1deg);
-    filter: drop-shadow(0 0 10px #ff4500);
   }
   100% {
     transform: scale(1) rotate(0deg);
-    filter: drop-shadow(0 0 4px orange);
   }
 }
 .progress-dashboard {
@@ -483,23 +490,25 @@
 .profile-mini-btn {
   border: none;
   background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(4px);
   color: #fff;
   font-size: 1.2rem;
   border-radius: 10px;
   width: 40px;
   height: 40px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .profile-mini-btn:hover {
   background: rgba(139, 92, 246, 0.25);
-  transform: scale(1.1);
+  transform: translateZ(0) scale(1.04);
 }
 
 .profile-mini-btn:active {
-  transform: scale(0.92);
+  transform: translateZ(0) scale(0.96);
 }
 /* ===== Hero Action Button ===== */
 .hero-actions {
@@ -510,6 +519,7 @@
   flex-wrap: wrap;
 }
 
+/* ===== Profile Button ===== */
 .profile-btn {
   padding: 10px 18px;
   border-radius: 14px;
@@ -520,7 +530,9 @@
   font-size: 0.9rem;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
   box-shadow: 0 10px 24px rgba(99, 102, 241, 0.35);
 }
 
@@ -540,6 +552,8 @@
 
   animation: xpFloat 1.8s ease forwards;
   z-index: 999;
+  contain: content;
+  transform: translateZ(0);
 }
 
 @keyframes xpFloat {
@@ -557,13 +571,14 @@
   }
 }
 
+/* Profile Button Hover/Active */
 .profile-btn:hover {
-  transform: translateY(-2px) scale(1.02);
+  transform: translate3d(0, -1px, 0) scale(1.01);
   box-shadow: 0 16px 32px rgba(139, 92, 246, 0.45);
 }
 
 .profile-btn:active {
-  transform: scale(0.96);
+  transform: translateZ(0) scale(0.98);
 }
 /* Glow effect on hover */
 .profile-mini-btn:hover {
@@ -613,7 +628,10 @@
     linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.62));
   border: 1px solid rgba(255, 255, 255, 0.11);
   box-shadow: 0 22px 65px rgba(0, 0, 0, 0.28);
-  transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease, opacity 0.24s ease;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout paint;
 }
 
 .unlock-card::before {
@@ -630,7 +648,7 @@
 }
 
 .unlock-card:hover {
-  transform: translateY(-5px);
+  transform: translate3d(0, -2px, 0);
   border-color: rgba(147, 197, 253, 0.36);
 }
 
@@ -797,11 +815,13 @@
   cursor: pointer;
   background: linear-gradient(135deg, #38bdf8, #8b5cf6);
   box-shadow: 0 14px 32px rgba(56, 189, 248, 0.18);
-  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .unlock-action-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
+  transform: translate3d(0, -1px, 0);
   box-shadow: 0 18px 42px rgba(139, 92, 246, 0.28);
 }
 
@@ -860,9 +880,10 @@
   border: 1px solid rgba(255, 255, 255, 0.11);
   background:
     linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(15, 23, 42, 0.58));
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
   border-radius: 28px;
+  contain: content;
 }
 
 .streak-card {
@@ -905,6 +926,7 @@
   background: rgba(15, 23, 42, 0.94);
   border: 1px solid rgba(147, 197, 253, 0.25);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  contain: content;
 }
 
 .achievement-toast span {
@@ -920,7 +942,7 @@
   color: rgba(255,255,255,0.68);
 }
 .streak-icon {
-  animation: bounceFire 1.8s infinite;
+  animation: bounceFire 3s infinite;
 }
 
 .streak-mini-stats,
@@ -983,6 +1005,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(18px, 2.2vw, 28px);
+  contain: layout;
 }
 
 .topic-card {
@@ -992,7 +1015,9 @@
   color: white;
   padding: clamp(22px, 2.2vw, 30px);
   cursor: pointer;
-  transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .topic-card::before {
@@ -1009,7 +1034,7 @@
 }
 
 .topic-card:hover {
-  transform: translateY(-6px);
+  transform: translate3d(0, -2px, 0);
   border-color: rgba(147, 197, 253, 0.48);
 }
 
@@ -1078,6 +1103,7 @@
   max-width: 920px;
   margin: 0 auto;
   padding: 34px;
+  transform: translateZ(0);
 }
 
 .quiz-top-row,
@@ -1126,13 +1152,19 @@
   text-align: left;
   cursor: pointer;
   font-weight: 800;
-  transition: 0.2s ease;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .option-btn:hover,
 .option-btn.selected {
   background: rgba(56, 189, 248, 0.22);
   border-color: rgba(147, 197, 253, 0.7);
+}
+
+.option-btn:hover {
+  transform: translate3d(0, -1px, 0);
 }
 
 .submit-answer-btn,
@@ -1144,11 +1176,19 @@
   color: white;
   cursor: pointer;
   background: linear-gradient(135deg, #38bdf8, #8b5cf6);
+  transition: transform 0.16s ease, opacity 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .submit-answer-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.submit-answer-btn:hover:not(:disabled),
+.result-actions button:hover {
+  transform: translate3d(0, -1px, 0);
 }
 
 .result-card {
@@ -1157,7 +1197,7 @@
 
 .result-animation {
   font-size: 5rem;
-  animation: popIn 0.7s ease, floatPrize 2s infinite ease-in-out;
+  animation: popIn 0.38s ease, floatPrize 3.5s infinite ease-in-out;
 }
 
 .result-card h1 {
@@ -1201,7 +1241,8 @@
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  animation: slideUp 0.45s ease;
+  animation: slideUp 0.28s ease;
+  contain: content;
 }
 
 .progress-insight h3 {
@@ -1213,6 +1254,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 18px;
+  contain: layout;
 }
 
 .stat-grid div {
@@ -1253,6 +1295,7 @@
   margin-top: 12px;
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  contain: content;
 }
 
 .review-item.correct {
@@ -1402,5 +1445,50 @@
 
   .quiz-page-back {
     margin-bottom: 14px;
+  }
+}
+
+@supports (content-visibility: auto) {
+  .topic-card,
+  .unlock-card,
+  .review-item,
+  .question-card,
+  .result-card {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 320px;
+  }
+}
+
+@media (max-width: 760px), (prefers-reduced-motion: reduce) {
+  .brain-game,
+  .brain-game::before,
+  .decision-btn,
+  .decision-btn.selected,
+  .candle,
+  .trade-feedback,
+  .survival-feedback,
+  .game-main-btn:hover::after,
+  .xp-orb,
+  .streak-flame,
+  .streak-icon,
+  .result-animation,
+  .progress-insight {
+    animation: none !important;
+  }
+
+  .brain-game::before {
+    display: none;
+  }
+
+  .topic-card,
+  .unlock-card,
+  .decision-btn,
+  .game-main-btn,
+  .profile-btn,
+  .profile-mini-btn,
+  .option-btn,
+  .submit-answer-btn,
+  .result-actions button {
+    transition-duration: 0.01ms !important;
   }
 }

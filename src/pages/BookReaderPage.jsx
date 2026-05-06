@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { readBooksApi } from '../api/client';
 import './BookReaderPage.css';
@@ -67,9 +67,25 @@ function addToHistory(bookId, title, extra = {}) {
   }
 }
 
+const ReaderParagraph = memo(function ReaderParagraph({ line }) {
+  return <p>{line}</p>;
+});
+
+const BookmarkButton = memo(function BookmarkButton({ chapter, currentChapter, onChangeChapter }) {
+  const handleClick = useCallback(() => {
+    onChangeChapter(chapter, chapter > currentChapter ? 'next' : 'prev');
+  }, [chapter, currentChapter, onChangeChapter]);
+
+  return (
+    <button type="button" onClick={handleClick}>
+      Chapter {chapter + 1}
+    </button>
+  );
+});
+
 export default function BookReaderPage() {
   const { bookId } = useParams();
-  const savedSettings = getReaderSettings();
+  const savedSettings = useMemo(() => getReaderSettings(), []);
   const loadedBookRef = useRef('');
   const mountedRef = useRef(true);
   const chapterTimerRef = useRef(null);
@@ -103,7 +119,7 @@ export default function BookReaderPage() {
     };
   }, []);
 
-  async function loadBookText(forceRefresh = false) {
+  const loadBookText = useCallback(async (forceRefresh = false) => {
     setLoading(true);
     setError('');
 
@@ -173,7 +189,7 @@ export default function BookReaderPage() {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }
+  }, [bookId]);
 
   useEffect(() => {
     if (!bookId) return;
@@ -188,7 +204,7 @@ export default function BookReaderPage() {
       setBookmarks([]);
     }
     loadBookText();
-  }, [bookId]);
+  }, [bookId, loadBookText]);
 
   useEffect(() => {
     try {
@@ -207,33 +223,40 @@ export default function BookReaderPage() {
     return chapters[currentChapter] || 'No readable content available.';
   }, [chapters, currentChapter]);
 
-  const progress = chapters.length
-    ? Math.round(((currentChapter + 1) / chapters.length) * 100)
-    : 0;
-
-  const estimatedMinutesLeft = useMemo(() => {
-    const wordsLeft = chapters
-      .slice(currentChapter)
-      .join(' ')
-      .split(/\s+/)
-      .filter(Boolean).length;
-
-    return Math.max(1, Math.ceil(wordsLeft / 220));
-  }, [chapters, currentChapter]);
-
-  const currentChapterWordCount = useMemo(
-    () => currentText.split(/\s+/).filter(Boolean).length,
-    [currentText]
+  const chapterWordCounts = useMemo(
+    () => chapters.map((chapter) => chapter.split(/\s+/).filter(Boolean).length),
+    [chapters]
   );
 
-  const isBookmarked = bookmarks.includes(currentChapter);
+  const progress = useMemo(
+    () => (chapters.length ? Math.round(((currentChapter + 1) / chapters.length) * 100) : 0),
+    [chapters.length, currentChapter]
+  );
+
+  const estimatedMinutesLeft = useMemo(() => {
+    const wordsLeft = chapterWordCounts
+      .slice(currentChapter)
+      .reduce((total, count) => total + count, 0);
+
+    return Math.max(1, Math.ceil(wordsLeft / 220));
+  }, [chapterWordCounts, currentChapter]);
+
+  const currentChapterWordCount = useMemo(
+    () => chapterWordCounts[currentChapter] || 0,
+    [chapterWordCounts, currentChapter]
+  );
+
+  const isBookmarked = useMemo(
+    () => bookmarks.includes(currentChapter),
+    [bookmarks, currentChapter]
+  );
 
   const currentParagraphs = useMemo(
     () => currentText.split('\n').map((line) => line.trim() || '\u00A0'),
     [currentText]
   );
 
-  function changeChapter(nextChapter, direction) {
+  const changeChapter = useCallback((nextChapter, direction) => {
     if (!chapters.length) return;
 
     const safeChapter = Math.min(Math.max(nextChapter, 0), chapters.length - 1);
@@ -254,19 +277,19 @@ export default function BookReaderPage() {
         if (mountedRef.current) setPageAnimation('');
       }, 220);
     }, 120);
-  }
+  }, [chapters.length, currentChapter]);
 
-  function goToPreviousChapter() {
+  const goToPreviousChapter = useCallback(() => {
     if (currentChapter === 0) return;
     changeChapter(currentChapter - 1, 'prev');
-  }
+  }, [changeChapter, currentChapter]);
 
-  function goToNextChapter() {
+  const goToNextChapter = useCallback(() => {
     if (currentChapter >= chapters.length - 1) return;
     changeChapter(currentChapter + 1, 'next');
-  }
+  }, [changeChapter, chapters.length, currentChapter]);
 
-  function toggleBookmark() {
+  const toggleBookmark = useCallback(() => {
     setBookmarks((currentBookmarks) => {
       const exists = currentBookmarks.includes(currentChapter);
 
@@ -283,7 +306,78 @@ export default function BookReaderPage() {
 
       return updated;
     });
-  }
+  }, [bookId, currentChapter]);
+
+  const toggleMenu = useCallback(() => {
+    setShowMenu((prev) => !prev);
+  }, []);
+
+  const refreshBook = useCallback(() => {
+    loadBookText(true);
+  }, [loadBookText]);
+
+  const openLibraryBook = useCallback((openLibraryUrl) => {
+    window.open(openLibraryUrl, '_blank');
+  }, []);
+
+  const openCurrentLibraryBook = useCallback(() => {
+    const openLibraryUrl = String(bookId).startsWith('OL') && String(bookId).endsWith('W')
+      ? `https://openlibrary.org/works/${bookId}`
+      : '';
+
+    if (openLibraryUrl) openLibraryBook(openLibraryUrl);
+  }, [bookId, openLibraryBook]);
+
+  const goBack = useCallback(() => {
+    window.history.back();
+  }, []);
+
+  const setDarkTheme = useCallback(() => {
+    setTheme('dark');
+  }, []);
+
+  const setSepiaTheme = useCallback(() => {
+    setTheme('sepia');
+  }, []);
+
+  const setLightTheme = useCallback(() => {
+    setTheme('light');
+  }, []);
+
+  const decreaseFontSize = useCallback(() => {
+    setFontSize((value) => Math.max(14, value - 1));
+  }, []);
+
+  const increaseFontSize = useCallback(() => {
+    setFontSize((value) => Math.min(28, value + 1));
+  }, []);
+
+  const tightenLineHeight = useCallback(() => {
+    setLineHeight((value) => Math.max(1.4, Number((value - 0.1).toFixed(1))));
+  }, []);
+
+  const loosenLineHeight = useCallback(() => {
+    setLineHeight((value) => Math.min(2.4, Number((value + 0.1).toFixed(1))));
+  }, []);
+
+  const renderedParagraphs = useMemo(
+    () => currentParagraphs.map((line, index) => (
+      <ReaderParagraph key={`${currentChapter}-${index}`} line={line} />
+    )),
+    [currentChapter, currentParagraphs]
+  );
+
+  const renderedBookmarks = useMemo(
+    () => bookmarks.map((chapter, index) => (
+      <BookmarkButton
+        key={`${chapter}-${index}`}
+        chapter={chapter}
+        currentChapter={currentChapter}
+        onChangeChapter={changeChapter}
+      />
+    )),
+    [bookmarks, changeChapter, currentChapter]
+  );
 
   if (loading) {
     return (
@@ -322,7 +416,7 @@ export default function BookReaderPage() {
               <button
                 type="button"
                 className="reader-retry-btn"
-                onClick={() => loadBookText(true)}
+                onClick={refreshBook}
               >
                 Try Again
               </button>
@@ -331,7 +425,7 @@ export default function BookReaderPage() {
                 <button
                   type="button"
                   className="reader-retry-btn secondary"
-                  onClick={() => window.open(openLibraryUrl, '_blank')}
+                  onClick={openCurrentLibraryBook}
                 >
                   View on OpenLibrary
                 </button>
@@ -340,7 +434,7 @@ export default function BookReaderPage() {
               <button
                 type="button"
                 className="reader-retry-btn secondary"
-                onClick={() => window.history.back()}
+                onClick={goBack}
               >
                 Browse More Books
               </button>
@@ -359,7 +453,7 @@ export default function BookReaderPage() {
             className="menu-btn"
             type="button"
             aria-label="Reader settings"
-            onClick={() => setShowMenu((prev) => !prev)}
+            onClick={toggleMenu}
           >
             Aa
           </button>
@@ -369,7 +463,7 @@ export default function BookReaderPage() {
             <span>{progress}% complete · Chapter {currentChapter + 1} of {chapters.length}</span>
           </div>
 
-          <button className="reader-icon-btn" type="button" aria-label="Refresh book" disabled={loading} onClick={() => loadBookText(true)}>
+          <button className="reader-icon-btn" type="button" aria-label="Refresh book" disabled={loading} onClick={refreshBook}>
             ⟳
           </button>
         </div>
@@ -412,26 +506,26 @@ export default function BookReaderPage() {
         {showMenu && (
           <div className="reader-menu reader-surface-card">
             <div className="menu-row">
-              <button type="button" onClick={() => setTheme('dark')}>Dark</button>
-              <button type="button" onClick={() => setTheme('sepia')}>Sepia</button>
-              <button type="button" onClick={() => setTheme('light')}>Light</button>
+              <button type="button" onClick={setDarkTheme}>Dark</button>
+              <button type="button" onClick={setSepiaTheme}>Sepia</button>
+              <button type="button" onClick={setLightTheme}>Light</button>
             </div>
 
             <div className="menu-group">
-              <button type="button" onClick={() => setFontSize((value) => Math.max(14, value - 1))}>
+              <button type="button" onClick={decreaseFontSize}>
                 A-
               </button>
               <span>{fontSize}px</span>
-              <button type="button" onClick={() => setFontSize((value) => Math.min(28, value + 1))}>
+              <button type="button" onClick={increaseFontSize}>
                 A+
               </button>
             </div>
 
             <div className="menu-row">
-              <button type="button" onClick={() => setLineHeight((value) => Math.max(1.4, Number((value - 0.1).toFixed(1))))}>
+              <button type="button" onClick={tightenLineHeight}>
                 Tight
               </button>
-              <button type="button" onClick={() => setLineHeight((value) => Math.min(2.4, Number((value + 0.1).toFixed(1))))}>
+              <button type="button" onClick={loosenLineHeight}>
                 Loose
               </button>
               <button type="button" className={isBookmarked ? 'reader-menu-active' : ''} disabled={!chapters.length} onClick={toggleBookmark}>
@@ -467,15 +561,7 @@ export default function BookReaderPage() {
           <div className="bookmark-list reader-surface-card">
             <strong>Saved chapters</strong>
             <div>
-              {bookmarks.map((chapter, index) => (
-                <button
-                  type="button"
-                  key={`${chapter}-${index}`}
-                  onClick={() => changeChapter(chapter, chapter > currentChapter ? 'next' : 'prev')}
-                >
-                  Chapter {chapter + 1}
-                </button>
-              ))}
+              {renderedBookmarks}
             </div>
           </div>
         )}
@@ -493,9 +579,7 @@ export default function BookReaderPage() {
             lineHeight,
           }}
         >
-          {currentParagraphs.map((line, index) => (
-            <p key={`${currentChapter}-${index}`}>{line}</p>
-          ))}
+          {renderedParagraphs}
         </article>
 
         <div className="reader-controls bottom reader-surface-card">

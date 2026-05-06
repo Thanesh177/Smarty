@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { readBooksApi } from '../api/client';
 import './ReadBookPage.css';
@@ -138,6 +138,109 @@ function getReadBookId(book) {
   return book.gutenberg_id || book.book_id || book.ia || getBookId(book);
 }
 
+const BookCard = memo(function BookCard({ book, saved, onToggleSave }) {
+  const id = getBookId(book);
+  const title = getTitle(book);
+  const readId = getReadBookId(book);
+  const author = getAuthor(book);
+  const cover = getBookCover(book);
+  const readable = isBookReadable(book);
+  const previewUrl = getBookPreviewUrl(book);
+
+  return (
+    <article className="read-book-card">
+      <div className="book-cover-placeholder">
+        {cover && (
+          <img
+            src={cover}
+            alt={`${title} cover`}
+            loading="lazy"
+            decoding="async"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none';
+            }}
+          />
+        )}
+        <span>{title.slice(0, 1)}</span>
+      </div>
+
+      <div className="read-book-body">
+        <h3>{title}</h3>
+        <p>{author}</p>
+        <small>
+          {readable
+            ? 'Readable text available'
+            : 'Preview only · opens externally'}
+        </small>
+        <div className="read-book-actions">
+          {id && readable ? (
+            <Link to={`/read-book/${readId}`}>Read</Link>
+          ) : id ? (
+            <a href={previewUrl} target="_blank" rel="noreferrer">
+              Preview
+            </a>
+          ) : (
+            <button type="button" disabled>Unavailable</button>
+          )}
+          <button type="button" onClick={() => onToggleSave(book)}>
+            {saved ? 'Saved' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+});
+
+const BookRow = memo(function BookRow({ title, books, savedBookIds, onToggleSave }) {
+  if (!books?.length) return null;
+
+  return (
+    <section className="book-row">
+      <h2>{title}</h2>
+
+      <div className="book-row-scroll">
+        {books.map((book, index) => {
+          const id = getBookId(book);
+
+          return (
+            <BookCard
+              key={`${title}-${id || getTitle(book)}-${index}`}
+              book={book}
+              saved={savedBookIds.has(String(id))}
+              onToggleSave={onToggleSave}
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+});
+
+const BookGrid = memo(function BookGrid({ title, books, savedBookIds, onToggleSave }) {
+  if (!books?.length) return null;
+
+  return (
+    <section className="book-row">
+      <h2>{title}</h2>
+
+      <div className="book-results-grid">
+        {books.map((book, index) => {
+          const id = getBookId(book);
+
+          return (
+            <BookCard
+              key={`${title}-${id || getTitle(book)}-${index}`}
+              book={book}
+              saved={savedBookIds.has(String(id))}
+              onToggleSave={onToggleSave}
+            />
+          );
+        })}
+      </div>
+    </section>
+  );
+});
+
 export default function ReadBookPage() {
   const location = useLocation();
   const isPreviewPage = location.pathname === '/preview-books';
@@ -170,6 +273,10 @@ export default function ReadBookPage() {
   const cleanYearFilter = yearFilter.trim();
   const activeSearchText = cleanQuery;
   const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanYearFilter || categoryFilter);
+  const savedBookIds = useMemo(
+    () => new Set(savedBooks.map((book) => String(getBookId(book)))),
+    [savedBooks]
+  );
   useEffect(() => {
     mountedRef.current = true;
 
@@ -466,15 +573,15 @@ export default function ReadBookPage() {
     cleanYearFilter,
   ]);
 
-  function handleSubmitSearch(event) {
+  const handleSubmitSearch = useCallback((event) => {
     event.preventDefault();
 
     if (hasActiveFilters) {
       loadSearchPage(activeSearchText || categoryFilter || 'books', 1);
     }
-  }
+  }, [activeSearchText, categoryFilter, hasActiveFilters, loadSearchPage]);
 
-  function clearSearch() {
+  const clearSearch = useCallback(() => {
     setAccessFilter(isPreviewPage ? 'preview' : 'read');
     setQuery('');
     setAuthorFilter('');
@@ -485,9 +592,9 @@ export default function ReadBookPage() {
     setHasMoreSearch(false);
     setError('');
     searchAbort.current?.abort();
-  }
+  }, [isPreviewPage]);
 
-  function runQuickSearch(searchText) {
+  const runQuickSearch = useCallback((searchText) => {
     setAccessFilter(isPreviewPage ? 'preview' : 'read');
     setQuery(searchText);
     setCategoryFilter('');
@@ -495,9 +602,9 @@ export default function ReadBookPage() {
     setYearFilter('');
     searchAbort.current?.abort();
     loadSearchPage(searchText, 1);
-  }
+  }, [isPreviewPage, loadSearchPage]);
 
-  function toggleSave(book) {
+  const toggleSave = useCallback((book) => {
     const id = getBookId(book);
     if (!id) return;
 
@@ -510,106 +617,17 @@ export default function ReadBookPage() {
       saveSavedBooks(updated);
       return updated;
     });
-  }
+  }, []);
 
-  function isSaved(book) {
-    const id = getBookId(book);
-    return savedBooks.some((item) => getBookId(item) === id);
-  }
 
-  function applyCategoryFilter(value) {
+  const applyCategoryFilter = useCallback((value) => {
     setCategoryFilter(value);
     setQuery('');
     setAccessFilter(isPreviewPage ? 'preview' : 'read');
     setAuthorFilter('');
     setYearFilter('');
-  }
+  }, [isPreviewPage]);
 
-  function BookCard({ book }) {
-    const id = getBookId(book);
-    const title = getTitle(book);
-    const readId = getReadBookId(book);
-    const author = getAuthor(book);
-    const cover = getBookCover(book);
-    const readable = isBookReadable(book);
-    const previewUrl = getBookPreviewUrl(book);
-
-    return (
-      <article className="read-book-card">
-        <div className="book-cover-placeholder">
-          {cover && (
-            <img
-              src={cover}
-              alt={`${title} cover`}
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
-              onError={(event) => {
-                event.currentTarget.style.display = 'none';
-              }}
-            />
-          )}
-          <span>{title.slice(0, 1)}</span>
-        </div>
-
-        <div className="read-book-body">
-          <h3>{title}</h3>
-          <p>{author}</p>
-          <small>
-            {readable
-              ? 'Readable text available'
-              : 'Preview only · opens externally'}
-          </small>
-          <div className="read-book-actions">
-            {id && readable ? (
-              <Link to={`/read-book/${readId}`}>Read</Link>
-            ) : id ? (
-              <a href={previewUrl} target="_blank" rel="noreferrer">
-                Preview
-              </a>
-            ) : (
-              <button type="button" disabled>Unavailable</button>
-            )}
-            <button type="button" onClick={() => toggleSave(book)}>
-              {isSaved(book) ? 'Saved' : 'Save'}
-            </button>
-          </div>
-        </div>
-      </article>
-    );
-  }
-
-  function BookRow({ title, books }) {
-    if (!books?.length) return null;
-
-    return (
-      <section className="book-row">
-        <h2>{title}</h2>
-
-        <div className="book-row-scroll">
-          {books.map((book, index) => (
-            <BookCard key={`${title}-${getBookId(book)}-${index}`} book={book} />
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  function BookGrid({ title, books }) {
-    if (!books?.length) return null;
-
-    return (
-      <section className="book-row">
-        <h2>{title}</h2>
-
-        <div className="book-results-grid">
-          {books.map((book, index) => (
-            <BookCard key={`${title}-${getBookId(book)}-${index}`} book={book} />
-          ))}
-        </div>
-      </section>
-    );
-  }
 
   return (
     <section className="read-books-page">
@@ -720,7 +738,12 @@ export default function ReadBookPage() {
       )}
 
       {hasActiveFilters && visibleInstantMatches.length > 0 && visibleSearchResults.length === 0 && (
-        <BookRow title="Instant matches from your library" books={visibleInstantMatches} />
+        <BookRow
+          title="Instant matches from your library"
+          books={visibleInstantMatches}
+          savedBookIds={savedBookIds}
+          onToggleSave={toggleSave}
+        />
       )}
 
       {hasActiveFilters && (
@@ -731,6 +754,8 @@ export default function ReadBookPage() {
               : `${visibleSearchResults.length} result${visibleSearchResults.length === 1 ? '' : 's'} found`
           }
           books={visibleSearchResults}
+          savedBookIds={savedBookIds}
+          onToggleSave={toggleSave}
         />
       )}
 
@@ -741,17 +766,32 @@ export default function ReadBookPage() {
     </p>
 
     {suggestedBooks.length > 0 && (
-      <BookRow title="You might be looking for" books={suggestedBooks} />
+      <BookRow
+        title="You might be looking for"
+        books={suggestedBooks}
+        savedBookIds={savedBookIds}
+        onToggleSave={toggleSave}
+      />
     )}
   </>
 )}
 
       {!hasActiveFilters && visibleReadingHistory.length > 0 && (
-        <BookRow title="Continue Reading" books={visibleReadingHistory} />
+        <BookRow
+          title="Continue Reading"
+          books={visibleReadingHistory}
+          savedBookIds={savedBookIds}
+          onToggleSave={toggleSave}
+        />
       )}
 
       {!hasActiveFilters && visibleSavedBooks.length > 0 && (
-        <BookRow title="Saved Books" books={visibleSavedBooks} />
+        <BookRow
+          title="Saved Books"
+          books={visibleSavedBooks}
+          savedBookIds={savedBookIds}
+          onToggleSave={toggleSave}
+        />
       )}
 
       {loadingRows && <BooksLoading message="Building your book shelves..." />}
@@ -759,10 +799,23 @@ export default function ReadBookPage() {
       {!loadingRows &&
         !hasActiveFilters &&
         Object.entries(visibleRows).map(([title, books]) => (
-          <BookRow key={title} title={title} books={books} />
+          <BookRow
+            key={title}
+            title={title}
+            books={books}
+            savedBookIds={savedBookIds}
+            onToggleSave={toggleSave}
+          />
         ))}
 
-      {!hasActiveFilters && <BookGrid title="More Books" books={visibleBrowseBooks} />}
+      {!hasActiveFilters && (
+        <BookGrid
+          title="More Books"
+          books={visibleBrowseBooks}
+          savedBookIds={savedBookIds}
+          onToggleSave={toggleSave}
+        />
+      )}
 
       <div ref={loadMoreRef} className="book-load-sentinel" />
 

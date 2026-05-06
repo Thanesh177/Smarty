@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import imageCompression from 'browser-image-compression';
 import { postApi } from '../api/client';
 import './CreatePostPage.css';
@@ -74,13 +74,18 @@ export default function CreatePostPage() {
             ? data
             : [];
 
-        const topicList = rawTopics
-          .map((item) =>
-            typeof item === 'string'
-              ? item
-              : item?.topic || item?.name || item?.title
+        const topicList = Array.from(
+          new Set(
+            rawTopics
+              .map((item) =>
+                typeof item === 'string'
+                  ? item
+                  : item?.topic || item?.name || item?.title
+              )
+              .filter(Boolean)
+              .map((item) => String(item).trim())
           )
-          .filter(Boolean);
+        ).sort((a, b) => a.localeCompare(b));
 
         setTopics(topicList);
 
@@ -112,7 +117,7 @@ export default function CreatePostPage() {
     return topicMode === 'custom' ? form.customTopic.trim() : form.topic;
   }, [topicMode, form.customTopic, form.topic]);
 
-  const uploadFile = async (file, onProgress) => {
+  const uploadFile = useCallback(async (file, onProgress) => {
     if (!file) return { url: '', key: '' };
 
     const uploadData = await postApi.getUploadUrl({
@@ -156,9 +161,9 @@ export default function CreatePostPage() {
       url: uploadData.fileUrl || uploadData.url || '',
       key: uploadData.key || uploadData.fileKey || uploadData.imageKey || '',
     };
-  };
+  }, []);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setForm({
       topic: topics[0] || '',
       customTopic: '',
@@ -170,9 +175,9 @@ export default function CreatePostPage() {
     setImageFile(null);
     setVideoFile(null);
     setTopicMode('existing');
-  };
+  }, [topics]);
 
-  const submit = async (event) => {
+  const submit = useCallback(async (event) => {
     event.preventDefault();
     if (submitting) return;
     setSubmitting(true);
@@ -270,7 +275,64 @@ export default function CreatePostPage() {
         setUploadProgress(0);
       }
     }
-  };
+  }, [form, imageFile, resetForm, selectedTopic, submitting, uploadFile, videoFile]);
+
+  const handleTopicModeChange = useCallback((event) => {
+    setTopicMode(event.target.value);
+  }, []);
+
+  const handleTopicChange = useCallback((event) => {
+    setForm((current) => ({ ...current, topic: event.target.value }));
+  }, []);
+
+  const handleCustomTopicChange = useCallback((event) => {
+    setForm((current) => ({ ...current, customTopic: event.target.value }));
+  }, []);
+
+  const handleTitleChange = useCallback((event) => {
+    setForm((current) => ({ ...current, title: event.target.value }));
+  }, []);
+
+  const handleBodyChange = useCallback((event) => {
+    setForm((current) => ({ ...current, body: event.target.value }));
+  }, []);
+
+  const handleImageFileChange = useCallback((event) => {
+    const file = event.target.files?.[0] || null;
+    setImageFile(file);
+    if (file) setVideoFile(null);
+  }, []);
+
+  const handleVideoFileChange = useCallback((event) => {
+    const file = event.target.files?.[0] || null;
+    setVideoFile(file);
+    if (file) setImageFile(null);
+  }, []);
+
+  const setPublicVisibility = useCallback(() => {
+    setForm((current) => ({ ...current, visibility: 'public' }));
+  }, []);
+
+  const setPrivateVisibility = useCallback(() => {
+    setForm((current) => ({ ...current, visibility: 'private' }));
+  }, []);
+
+  const renderedTopicOptions = useMemo(() => {
+    if (topics.length === 0) {
+      return <option value="">No topics found</option>;
+    }
+
+    return topics.map((topic) => (
+      <option key={topic} value={topic}>
+        {topic}
+      </option>
+    ));
+  }, [topics]);
+
+  const canSubmit = useMemo(
+    () => Boolean(!submitting && selectedTopic && form.title.trim() && form.body.trim()),
+    [form.body, form.title, selectedTopic, submitting]
+  );
 
   return (
     <main className="create-page">
@@ -323,7 +385,7 @@ export default function CreatePostPage() {
               <select
                 value={topicMode}
                 disabled={submitting}
-                onChange={(e) => setTopicMode(e.target.value)}
+                onChange={handleTopicModeChange}
               >
                 <option value="existing">Choose topic</option>
                 <option value="custom">Custom topic</option>
@@ -333,28 +395,16 @@ export default function CreatePostPage() {
                 <select
                   value={form.topic}
                   disabled={submitting}
-                  onChange={(e) =>
-                    setForm((current) => ({ ...current, topic: e.target.value }))
-                  }
+                  onChange={handleTopicChange}
                 >
-                  {topics.length === 0 ? (
-                    <option value="">No topics found</option>
-                  ) : (
-                    topics.map((topic) => (
-                      <option key={topic} value={topic}>
-                        {topic}
-                      </option>
-                    ))
-                  )}
+                  {renderedTopicOptions}
                 </select>
               ) : (
                 <input
                   placeholder="Example: Neuroscience, Space, Finance..."
                   value={form.customTopic}
                   disabled={submitting}
-                  onChange={(e) =>
-                    setForm((current) => ({ ...current, customTopic: e.target.value }))
-                  }
+                  onChange={handleCustomTopicChange}
                 />
               )}
             </div>
@@ -366,7 +416,7 @@ export default function CreatePostPage() {
               placeholder="Example: Your brain predicts the world before you see it"
               value={form.title}
               disabled={submitting}
-              onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
+              onChange={handleTitleChange}
             />
           </div>
 
@@ -377,7 +427,7 @@ export default function CreatePostPage() {
               placeholder="Write a short, engaging educational post..."
               value={form.body}
               disabled={submitting}
-              onChange={(e) => setForm((current) => ({ ...current, body: e.target.value }))}
+              onChange={handleBodyChange}
             />
           </div>
 
@@ -392,11 +442,7 @@ export default function CreatePostPage() {
                   type="file"
                   accept="image/*"
                   disabled={submitting}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null;
-                    setImageFile(file);
-                    if (file) setVideoFile(null);
-                  }}
+                  onChange={handleImageFileChange}
                 />
 
                 {imageFile ? (
@@ -406,7 +452,7 @@ export default function CreatePostPage() {
                       src={imagePreviewUrl}
                       alt="Selected preview"
                       className="image-preview"
-                      loading="eager"
+                      loading="lazy"
                       decoding="async"
                     />
                   </>
@@ -422,11 +468,7 @@ export default function CreatePostPage() {
                   type="file"
                   accept="video/*"
                   disabled={submitting}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null;
-                    setVideoFile(file);
-                    if (file) setImageFile(null);
-                  }}
+                  onChange={handleVideoFileChange}
                 />
 
                 <small>{videoFile ? videoFile.name : 'Upload video'}</small>
@@ -443,7 +485,7 @@ export default function CreatePostPage() {
                   type="button"
                   className={form.visibility === 'public' ? 'active' : ''}
                   disabled={submitting}
-                  onClick={() => setForm((current) => ({ ...current, visibility: 'public' }))}
+                  onClick={setPublicVisibility}
                 >
                    Public
                 </button>
@@ -452,7 +494,7 @@ export default function CreatePostPage() {
                   type="button"
                   className={form.visibility === 'private' ? 'active' : ''}
                   disabled={submitting}
-                  onClick={() => setForm((current) => ({ ...current, visibility: 'private' }))}
+                  onClick={setPrivateVisibility}
                 >
                    Private
                 </button>
@@ -461,7 +503,7 @@ export default function CreatePostPage() {
 
             <button
               className="primary-btn publish-btn"
-              disabled={submitting || !selectedTopic || !form.title.trim() || !form.body.trim()}
+              disabled={!canSubmit}
               type="submit"
             >
               {submitting ? 'Publishing...' : 'Publish reel'}

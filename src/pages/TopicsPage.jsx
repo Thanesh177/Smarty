@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import useFeed from "../hooks/useFeed";
 import "./TopicsPage.css";
@@ -9,14 +9,41 @@ const slugify = (value) =>
     .trim()
     .replace(/\s+/g, "-");
 
+const TopicCard = ({ topic, onNavigate }) => (
+  <button
+    type="button"
+    className="feed-topic-card"
+    onClick={() => onNavigate(topic)}
+  >
+    <span className="feed-topic-icon">#</span>
+    <strong>{topic}</strong>
+    <small>View posts →</small>
+  </button>
+);
+
 export default function TopicsPage() {
   const navigate = useNavigate();
   const { posts, loading, error } = useFeed();
 
   const topics = useMemo(() => {
-    const list = posts.map((post) => post.topic).filter(Boolean);
-    return [...new Set(list)];
+    if (!Array.isArray(posts) || posts.length === 0) return [];
+
+    const uniqueTopics = new Set();
+
+    for (const post of posts) {
+      if (!post?.topic) continue;
+      uniqueTopics.add(post.topic.trim());
+    }
+
+    return Array.from(uniqueTopics).sort((a, b) => a.localeCompare(b));
   }, [posts]);
+
+  const handleNavigate = useCallback(
+    (topic) => {
+      navigate(`/feed/${slugify(topic)}`);
+    },
+    [navigate]
+  );
 
   return (
     <main className="feed-topics-page">
@@ -35,16 +62,11 @@ export default function TopicsPage() {
 
       <section className="feed-topics-grid">
         {topics.map((topic) => (
-          <button
+          <TopicCard
             key={topic}
-            type="button"
-            className="feed-topic-card"
-            onClick={() => navigate(`/feed/${slugify(topic)}`)}
-          >
-            <span className="feed-topic-icon">#</span>
-            <strong>{topic}</strong>
-            <small>View posts →</small>
-          </button>
+            topic={topic}
+            onNavigate={handleNavigate}
+          />
         ))}
       </section>
     </main>

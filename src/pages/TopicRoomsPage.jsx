@@ -35,6 +35,9 @@ export default function TopicRoomsPage() {
   const [showRoomMenu, setShowRoomMenu] = useState(false);
   const [openRoomActionMenuId, setOpenRoomActionMenuId] = useState('');
 
+  const roomMenuRef = useRef(null);
+  const roomActionMenuRef = useRef(null);
+
   const [roomSearch, setRoomSearch] = useState('');
   const [modalTitle, setModalTitle] = useState('Group Members');
   const [modalMode, setModalMode] = useState('members');
@@ -50,6 +53,26 @@ export default function TopicRoomsPage() {
   useEffect(() => {
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
+
+  useEffect(() => {
+    const handleOutsidePointerDown = (event) => {
+      const target = event.target;
+
+      if (roomMenuRef.current && !roomMenuRef.current.contains(target)) {
+        setShowRoomMenu(false);
+      }
+
+      if (roomActionMenuRef.current && !roomActionMenuRef.current.contains(target)) {
+        setOpenRoomActionMenuId('');
+      }
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePointerDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown);
+    };
+  }, []);
 
   useEffect(() => {
   mountedRef.current = true;
@@ -710,13 +733,22 @@ function sendMessage(e) {
         <div className="rooms-title-row">
           <h2>Rooms</h2>
 
-          <div className="rooms-menu-wrap">
+          <div
+            className="rooms-menu-wrap"
+            ref={roomMenuRef}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <button
               type="button"
               className="rooms-create-plus-btn"
               aria-label="Create room"
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.nativeEvent?.stopImmediatePropagation?.();
                 setShowRoomMenu(false);
+                setOpenRoomActionMenuId('');
                 setShowCreateModal(true);
               }}
             >
@@ -727,7 +759,13 @@ function sendMessage(e) {
               className="rooms-menu-btn"
               aria-label="Room options"
               aria-expanded={showRoomMenu}
-              onClick={() => setShowRoomMenu((prev) => !prev)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.nativeEvent?.stopImmediatePropagation?.();
+                setOpenRoomActionMenuId('');
+                setShowRoomMenu((prev) => !prev);
+              }}
             >
               ⋯
               {roomInvites.length > 0 && (
@@ -741,7 +779,9 @@ function sendMessage(e) {
               <div className="rooms-menu-popover">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     setShowRoomMenu(false);
                     openHiddenRooms();
                   }}
@@ -749,7 +789,14 @@ function sendMessage(e) {
                   Hidden Groups
                 </button>
 
-                <button type="button" onClick={openRoomInvites}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openRoomInvites();
+                  }}
+                >
                   Room Invites
                   {roomInvites.length > 0 && (
                     <span className="rooms-invite-count">
@@ -798,101 +845,109 @@ function sendMessage(e) {
                     )}
                   </div>
                   <span>{room.privacy === 'private' ? ' Private' : ' Public'}</span>
+                </div>
 
-                  <div
-                    className="room-card-menu-wrap"
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
+                <div
+                  className="room-card-menu-wrap"
+                  ref={openRoomActionMenuId === room.roomId ? roomActionMenuRef : null}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="room-card-menu-btn"
+                    aria-label="Room actions"
+                    aria-expanded={openRoomActionMenuId === room.roomId}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.nativeEvent?.stopImmediatePropagation?.();
+                      setShowRoomMenu(false);
+                      setOpenRoomActionMenuId((current) =>
+                        current === room.roomId ? '' : room.roomId
+                      );
+                    }}
                   >
-                    <button
-                      type="button"
-                      className="room-card-menu-btn"
-                      aria-label="Room actions"
-                      aria-expanded={openRoomActionMenuId === room.roomId}
-                      onClick={() =>
-                        setOpenRoomActionMenuId((current) =>
-                          current === room.roomId ? '' : room.roomId
-                        )
-                      }
+                    ⋯
+                  </button>
+
+                  {openRoomActionMenuId === room.roomId && (
+                    <div
+                      className="room-card-menu-popover"
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
                     >
-                      ⋯
-                    </button>
-
-                    {openRoomActionMenuId === room.roomId && (
-                      <div className="room-card-menu-popover">
-                        {room.privacy === 'private' && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setOpenRoomActionMenuId('');
-                              openMembers(room);
-                            }}
-                          >
-                            Members
-                          </button>
-                        )}
-
-                        {canViewRequests && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setOpenRoomActionMenuId('');
-                              openJoinRequests(room);
-                            }}
-                          >
-                            Requests
-                          </button>
-                        )}
-
-                        {canLeave && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setOpenRoomActionMenuId('');
-                              leaveRoom(room);
-                            }}
-                          >
-                            Leave
-                          </button>
-                        )}
-
+                      {room.privacy === 'private' && (
                         <button
                           type="button"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             setOpenRoomActionMenuId('');
-                            hideRoom(room);
+                            openMembers(room);
                           }}
                         >
-                          Hide
+                          Members
                         </button>
+                      )}
 
-                        {canDelete && (
-                          <button
-                            type="button"
-                            className="danger-menu-item"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setOpenRoomActionMenuId('');
-                              deleteRoom(room);
-                            }}
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                      {canViewRequests && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setOpenRoomActionMenuId('');
+                            openJoinRequests(room);
+                          }}
+                        >
+                          Requests
+                        </button>
+                      )}
+
+                      {canLeave && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setOpenRoomActionMenuId('');
+                            leaveRoom(room);
+                          }}
+                        >
+                          Leave
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setOpenRoomActionMenuId('');
+                          hideRoom(room);
+                        }}
+                      >
+                        Hide
+                      </button>
+
+                      {canDelete && (
+                        <button
+                          type="button"
+                          className="danger-menu-item"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setOpenRoomActionMenuId('');
+                            deleteRoom(room);
+                          }}
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
-
               </div>
             );
           })}

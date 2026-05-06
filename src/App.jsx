@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
-import { useState, useEffect, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense, Component } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
 import { notificationApi, chatApi } from './api/client';
@@ -9,6 +9,11 @@ import {
 } from './firebase';
 import AuthRedirectHandler from './components/AuthRedirectHandler';
 import InstallPrompt from "./components/InstallPrompt";
+import {
+  CircleUserRound,
+  MessagesSquare,
+  BrainCircuit,
+} from 'lucide-react';
 
 
 const Booksinfo = lazy(() => import('./pages/Booksinfo'));
@@ -36,9 +41,37 @@ const ReelDetailPage = lazy(() => import('./pages/ReelDetailPage'));
 const NewsPage = lazy(() => import('./pages/NewsPage'));
 const ReadBookPage = lazy(() => import('./pages/ReadBookPage'));
 const BookReaderPage = lazy(() => import('./pages/BookReaderPage'));
+const PostAiPage = lazy(() => import('./pages/PostAiPage'));
 
 function PageLoader() {
   return <p className="status">Loading page...</p>;
+}
+
+class RouteErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Route failed to render:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="status" role="alert">
+          Something went wrong loading this page. Please refresh or try again.
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 function ProtectedRoute({ children }) {
@@ -54,6 +87,7 @@ function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [totalUnread, setTotalUnread] = useState(0);
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/confirm';
 
   // Keep chat notification badge updated globally, even when user is not on Chat page
   useEffect(() => {
@@ -65,7 +99,7 @@ function Layout() {
     let cancelled = false;
 
     const refreshChatUnread = async () => {
-      if (document.visibilityState === 'hidden') return;
+      if (document.visibilityState === 'hidden' || !navigator.onLine) return;
 
       try {
         const chats = await chatApi.getChats();
@@ -83,7 +117,7 @@ function Layout() {
 
     refreshChatUnread();
 
-    const intervalId = window.setInterval(refreshChatUnread, 30000);
+    const intervalId = window.setInterval(refreshChatUnread, 120000);
 
     window.addEventListener('focus', refreshChatUnread);
     window.addEventListener('chat-unread-refresh', refreshChatUnread);
@@ -131,7 +165,7 @@ useEffect(() => {
   // ✅ Push notifications (ONLY after PWA install)
   useEffect(() => {
     async function setupPush() {
-      if (!user) return;
+      if (!user || !navigator.onLine) return;
 
       const isStandalone =
         window.matchMedia('(display-mode: standalone)').matches ||
@@ -157,18 +191,30 @@ useEffect(() => {
 
   useEffect(() => {
     const preloadCommonPages = () => {
-      FeedPage.preload?.();
-      ProfilePage.preload?.();
-      ChatPage.preload?.();
-      SavedPage.preload?.();
+      if (document.visibilityState === 'hidden' || !navigator.onLine) return;
+
+      const preloadTasks = [
+        () => import('./pages/FeedPage'),
+        () => import('./pages/ProfilePage'),
+        () => import('./pages/ChatPage'),
+        () => import('./pages/SavedPage'),
+      ];
+
+      preloadTasks.forEach((preloadTask, index) => {
+        window.setTimeout(() => {
+          preloadTask().catch((error) => {
+            console.warn('Page preload failed:', error);
+          });
+        }, index * 700);
+      });
     };
 
     if ('requestIdleCallback' in window) {
-      const idleId = window.requestIdleCallback(preloadCommonPages, { timeout: 3000 });
+      const idleId = window.requestIdleCallback(preloadCommonPages, { timeout: 5000 });
       return () => window.cancelIdleCallback?.(idleId);
     }
 
-    const timeoutId = window.setTimeout(preloadCommonPages, 1200);
+    const timeoutId = window.setTimeout(preloadCommonPages, 2500);
     return () => window.clearTimeout(timeoutId);
   }, []);
 
@@ -176,8 +222,7 @@ useEffect(() => {
     <>
       <AuthRedirectHandler />
 
-      {/* Install popup */}
-      <InstallPrompt />
+      {!isAuthPage && <InstallPrompt />}
 
       <div className="app-shell">
         <header className="topbar glass-topbar">
@@ -192,7 +237,65 @@ useEffect(() => {
                 }
               }}
             >
-              <div className="brand-mark">S</div>
+              <div
+                className="brand-mark"
+                aria-hidden="true"
+                style={{
+                  position: 'relative',
+                  width: '52px',
+                  height: '52px',
+                  borderRadius: '18px',
+                  display: 'grid',
+                  placeItems: 'center',
+                  overflow: 'hidden',
+                  background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(241,245,249,0.94))',
+                  border: '1px solid rgba(255,255,255,0.95)',
+                  boxShadow: '0 14px 34px rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.95)',
+                  backdropFilter: 'blur(16px)',
+                  WebkitBackdropFilter: 'blur(16px)',
+                }}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: '-30%',
+                    background: 'conic-gradient(from 90deg, rgba(56,189,248,0), rgba(56,189,248,0.28), rgba(168,85,247,0.22), rgba(56,189,248,0))',
+                  }}
+                />
+
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: '1px',
+                    borderRadius: '17px',
+                    background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95))',
+                  }}
+                />
+
+                <div
+                  style={{
+                    position: 'relative',
+                    zIndex: 2,
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '14px',
+                    display: 'grid',
+                    placeItems: 'center',
+                    background: 'linear-gradient(145deg, rgba(240,249,255,0.95), rgba(255,255,255,0.92))',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95)',
+                  }}
+                >
+                  <BrainCircuit
+                    size={22}
+                    strokeWidth={2.5}
+                    color="#0f172a"
+                    style={{
+                      filter: 'drop-shadow(0 2px 6px rgba(56,189,248,0.22))',
+                    }}
+                  />
+                </div>
+
+              </div>
               <div>
                 <h1>Smarty</h1>
                 <p>Learn while you scroll</p>
@@ -200,12 +303,22 @@ useEffect(() => {
             </NavLink>
 
             <div className="brand-actions">
-              <NavLink to="/profile" className="quick-icon-link">
-                👤
+              <NavLink
+                to="/profile"
+                className="quick-icon-link"
+                aria-label="Profile"
+                title="Profile"
+              >
+                <CircleUserRound size={21} strokeWidth={2.15} />
               </NavLink>
 
-              <NavLink to="/chat" className="quick-icon-link">
-                💬
+              <NavLink
+                to="/chat"
+                className="quick-icon-link"
+                aria-label="Chat"
+                title="Chat"
+              >
+                <MessagesSquare size={21} strokeWidth={2.15} />
                 {totalUnread > 0 && (
                   <span className="nav-badge">{totalUnread}</span>
                 )}
@@ -221,16 +334,17 @@ useEffect(() => {
         </header>
 
         <main className="content">
-          <Suspense fallback={<PageLoader />}>
-            <Routes>
-<Route
-  path="/"
-  element={
-    location.search.includes('code=')
-      ? <p className="status">Completing login...</p>
-      : <Navigate to="/feed" replace />
-  }
-/>
+          <RouteErrorBoundary key={location.pathname}>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route
+                  path="/"
+                  element={
+                    location.search.includes('code=')
+                      ? <p className="status">Completing login...</p>
+                      : <Navigate to="/feed" replace />
+                  }
+                />
               <Route path="/feed" element={<FeedPage />} />
               <Route path="/feed/:topic" element={<FeedPage />} />
 
@@ -306,6 +420,8 @@ useEffect(() => {
                 }
               />
 
+              <Route path="/post-ai/:postId" element={<PostAiPage />} />
+
               <Route
                 path="/creator-dashboard"
                 element={
@@ -334,8 +450,9 @@ useEffect(() => {
               />
 
               <Route path="*" element={<Navigate to="/feed" replace />} />
-            </Routes>
-          </Suspense>
+              </Routes>
+            </Suspense>
+          </RouteErrorBoundary>
         </main>
       </div>
     </>

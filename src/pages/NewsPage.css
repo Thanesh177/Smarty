@@ -5,6 +5,8 @@
     #020617;
   color: #e5e7eb;
   padding: 28px 16px 90px;
+  overflow-x: hidden;
+  contain: layout style;
 }
 
 .news-hero {
@@ -16,6 +18,7 @@
   gap: 18px;
   padding-bottom: 6px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
+  contain: layout;
 }
 
 .news-kicker {
@@ -30,6 +33,7 @@
   margin: 8px 0;
   font-size: clamp(2rem, 5vw, 4rem);
   letter-spacing: -0.05em;
+  text-wrap: balance;
 }
 
 .news-hero p {
@@ -54,11 +58,13 @@
   padding: 11px 16px;
   font-weight: 800;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .refresh-news-btn:hover {
-  transform: translateY(-2px);
+  transform: translate3d(0, -1px, 0);
   background: rgba(255,255,255,0.08);
   border-color: rgba(255,255,255,0.2);
 }
@@ -74,6 +80,7 @@
   display: grid;
   grid-template-columns: 1fr 170px;
   gap: 12px;
+  contain: layout;
 }
 
 .news-controls input,
@@ -85,6 +92,7 @@
   padding: 16px 18px;
   font-size: 1rem;
   outline: none;
+  transition: border-color 0.16s ease, background 0.16s ease;
 }
 
 .news-controls input:focus,
@@ -111,6 +119,9 @@
   gap: 10px;
   overflow-x: auto;
   padding-bottom: 12px;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+  contain: layout;
 }
 
 .section-tabs button {
@@ -122,12 +133,18 @@
   padding: 9px 14px;
   font-weight: 800;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .section-tabs button:hover {
   background: rgba(255,255,255,0.08);
   color: #e2e8f0;
+}
+
+.section-tabs button:hover {
+  transform: translate3d(0, -1px, 0);
 }
 
 .section-tabs button.active {
@@ -141,6 +158,7 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 18px;
+  contain: layout;
 }
 
 .news-card {
@@ -149,11 +167,14 @@
   border-radius: 22px;
   overflow: hidden;
   box-shadow: 0 16px 40px rgba(0,0,0,0.28);
-  transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout paint;
 }
 
 .news-card:hover {
-  transform: translateY(-4px);
+  transform: translate3d(0, -2px, 0);
   box-shadow: 0 26px 60px rgba(0,0,0,0.4);
   border-color: rgba(255,255,255,0.14);
 }
@@ -169,11 +190,13 @@
   height: 210px;
   object-fit: cover;
   background: #0f172a;
-  transition: transform 0.35s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  transition: transform 0.22s ease;
 }
 
 .news-card:hover img {
-  transform: scale(1.04);
+  transform: translateZ(0) scale(1.02);
 }
 
 .news-card.featured img,
@@ -190,6 +213,7 @@
 
 .news-card-body {
   padding: 16px;
+  contain: content;
 }
 
 .section-label {
@@ -223,6 +247,7 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 16px;
+  contain: layout;
 }
 
 .news-actions a,
@@ -232,7 +257,9 @@
   font-weight: 800;
   cursor: pointer;
   text-decoration: none;
-  transition: all 0.18s ease;
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .news-actions a {
@@ -241,7 +268,7 @@
 }
 
 .news-actions a:hover {
-  transform: translateY(-2px);
+  transform: translate3d(0, -1px, 0);
 }
 
 .news-actions button {
@@ -252,6 +279,10 @@
 
 .news-actions button:hover {
   background: rgba(255,255,255,0.1);
+}
+
+.news-actions button:hover {
+  transform: translate3d(0, -1px, 0);
 }
 
 .news-status,
@@ -268,6 +299,7 @@
 
 .skeleton-card {
   pointer-events: none;
+  contain: content;
 }
 
 .skeleton-image,
@@ -304,7 +336,7 @@
     rgba(255, 255, 255, 0.08),
     transparent
   );
-  animation: shimmer 1.3s infinite;
+  animation: shimmer 2.2s infinite;
 }
 
 @keyframes shimmer {
@@ -334,5 +366,28 @@
   .news-hero {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@supports (content-visibility: auto) {
+  .news-card,
+  .skeleton-card {
+    content-visibility: auto;
+    contain-intrinsic-size: 320px 420px;
+  }
+}
+
+@media (max-width: 760px), (prefers-reduced-motion: reduce) {
+  .skeleton-image::after,
+  .skeleton-line::after {
+    animation: none !important;
+  }
+
+  .news-card,
+  .section-tabs button,
+  .news-actions a,
+  .news-actions button,
+  .refresh-news-btn {
+    transition-duration: 0.01ms !important;
   }
 }

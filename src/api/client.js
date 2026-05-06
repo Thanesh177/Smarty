@@ -6,11 +6,18 @@ import { requestNotificationToken } from '../firebase';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT || 20000);
+const AUTH_TOKEN_CACHE_MS = 45 * 1000;
+
+let cachedAuthToken = '';
+let cachedAuthTokenAt = 0;
+let pendingAuthTokenPromise = null;
 
 const mockFeed = [];
 const mockUser = null;
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -25,10 +32,67 @@ const NEWS_API_BASE_URL =
 const OPENLIBRARY_BASE_URL =
   import.meta.env.VITE_OPENLIBRARY_BASE_URL || 'https://openlibrary.org';
 
+const getStoredToken = () => {
+  try {
+    return localStorage.getItem('eduscroll_token') || '';
+  } catch {
+    return '';
+  }
+};
+
+const setStoredToken = (token) => {
+  try {
+    if (token) localStorage.setItem('eduscroll_token', token);
+  } catch {
+    // Ignore private browsing/storage failures.
+  }
+};
+
+const getAuthToken = async () => {
+  const now = Date.now();
+
+  if (cachedAuthToken && now - cachedAuthTokenAt < AUTH_TOKEN_CACHE_MS) {
+    return cachedAuthToken;
+  }
+
+  if (pendingAuthTokenPromise) {
+    return pendingAuthTokenPromise;
+  }
+
+  pendingAuthTokenPromise = (async () => {
+    try {
+      const session = await fetchAuthSession();
+      const token = session?.tokens?.idToken?.toString() || getStoredToken();
+
+      if (token) {
+        cachedAuthToken = token;
+        cachedAuthTokenAt = Date.now();
+        setStoredToken(token);
+      }
+
+      return token;
+    } catch {
+      const token = getStoredToken();
+
+      if (token) {
+        cachedAuthToken = token;
+        cachedAuthTokenAt = Date.now();
+      }
+
+      return token;
+    } finally {
+      pendingAuthTokenPromise = null;
+    }
+  })();
+
+  return pendingAuthTokenPromise;
+};
+
 export const newsApi = {
   async getLatestNews(lang = 'english') {
     const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
       params: { lang },
+      timeout: API_TIMEOUT,
     });
 
     if (data?.status && data.status !== 200) {
@@ -40,30 +104,12 @@ export const newsApi = {
 };
 
 api.interceptors.request.use(async (config) => {
-  try {
-    const session = await fetchAuthSession();
+  const token = await getAuthToken();
 
-    let token = session?.tokens?.idToken?.toString();
-
-    // 🔥 fallback (VERY IMPORTANT)
-    if (!token) {
-      token = localStorage.getItem('eduscroll_token');
-    }
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-      localStorage.setItem('eduscroll_token', token);
-    } else {
-      console.warn('⚠️ No auth token found');
-    }
-  } catch (err) {
-    console.warn('⚠️ Auth session failed, using fallback');
-
-    const token = localStorage.getItem('eduscroll_token');
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else if (import.meta.env.DEV) {
+    console.warn('⚠️ No auth token found');
   }
 
   return config;
@@ -72,40 +118,31 @@ api.interceptors.request.use(async (config) => {
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const normalizeList = (data) => {
-  if (Array.isArray(data)) return data;
+  const parsed = parseApiBody(data);
 
-  if (typeof data?.body === 'string') {
-    try {
-      return normalizeList(JSON.parse(data.body));
-    } catch {
-      return [];
-    }
-  }
-
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.reels)) return data.reels;
-  if (Array.isArray(data?.posts)) return data.posts;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.savedReels)) return data.savedReels;
-  if (Array.isArray(data?.comments)) return data.comments;
-  if (Array.isArray(data?.users)) return data.users;
-  if (Array.isArray(data?.chats)) return data.chats;
-  if (Array.isArray(data?.messages)) return data.messages;
-  if (Array.isArray(data?.rooms)) return data.rooms;
+  if (Array.isArray(parsed)) return parsed;
+  if (Array.isArray(parsed?.items)) return parsed.items;
+  if (Array.isArray(parsed?.reels)) return parsed.reels;
+  if (Array.isArray(parsed?.posts)) return parsed.posts;
+  if (Array.isArray(parsed?.data)) return parsed.data;
+  if (Array.isArray(parsed?.savedReels)) return parsed.savedReels;
+  if (Array.isArray(parsed?.comments)) return parsed.comments;
+  if (Array.isArray(parsed?.users)) return parsed.users;
+  if (Array.isArray(parsed?.chats)) return parsed.chats;
+  if (Array.isArray(parsed?.messages)) return parsed.messages;
+  if (Array.isArray(parsed?.rooms)) return parsed.rooms;
 
   return [];
 };
 
 const parseApiBody = (data) => {
-  if (typeof data?.body === 'string') {
-    try {
-      return JSON.parse(data.body);
-    } catch {
-      return data;
-    }
-  }
+  if (typeof data?.body !== 'string') return data;
 
-  return data;
+  try {
+    return JSON.parse(data.body);
+  } catch {
+    return data;
+  }
 };
 
 export const authApi = {
@@ -347,7 +384,7 @@ export const readBooksApi = {
       `${OPENLIBRARY_BASE_URL}/search.json?${queryParams.toString()}`,
       {
         signal: options.signal,
-        timeout: 20000,
+        timeout: API_TIMEOUT,
       }
     );
 
@@ -427,7 +464,7 @@ readable: Boolean(
 
     const { data } = await axios.get(
       `${OPENLIBRARY_BASE_URL}/works/${encodeURIComponent(bookId)}.json`,
-      { timeout: 20000 }
+      { timeout: API_TIMEOUT }
     );
 
     return data;
@@ -522,7 +559,7 @@ readable: Boolean(
 
     const { data } = await axios.get(
       `${OPENLIBRARY_BASE_URL}/works/${encodeURIComponent(cleanWorkId)}/editions.json?limit=50`,
-      { timeout: 20000 }
+      { timeout: API_TIMEOUT }
     );
 
     const editions = Array.isArray(data?.entries) ? data.entries : [];
@@ -650,6 +687,16 @@ async deleteComment(payload) {
   }
 },
 
+async explainPost(payload) {
+  const { data } = await api.post('/posts/details', payload);
+  return data;
+},
+
+async askPostDoubt(payload) {
+  const { data } = await api.post('/posts/ask-doubt', payload);
+  return data;
+},
+
 async editComment(payload) {
   try {
     const { data } = await api.put('/comments/edit', payload);
@@ -660,10 +707,6 @@ async editComment(payload) {
   }
 },
 
-async explainPost(payload) {
-  const { data } = await api.post('/posts/explain', payload);
-  return data;
-},
 
   async getPostsByCreator(userId) {
     if (USE_MOCK) {
@@ -884,6 +927,11 @@ export const chatApi = {
     return normalizeList(data);
   },
 
+  async deleteChat(chatId) {
+    const { data } = await api.delete(`/chats/${encodeURIComponent(chatId)}`);
+    return data;
+  },
+
   async getMediaViewUrl({ mediaKey }) {
     const { data } = await api.post('/media/view-url', {
       mediaKey,
@@ -908,7 +956,9 @@ unblockUser: async (blockedId) => {
   return res.data;
 },
 checkBlockStatus: async (userId) => {
-  const res = await api.get(`/users/block-status?userId=${encodeURIComponent(userId)}`);
+  const res = await api.get('/users/block-status', {
+    params: { userId },
+  });
   return res.data;
 },
 
@@ -1048,7 +1098,9 @@ export const notificationApi = {
 
       await userApi.savePushToken(token);
 
-      console.log('✅ Push token saved:', token);
+      if (import.meta.env.DEV) {
+        console.log('✅ Push token saved');
+      }
       return token;
     } catch (err) {
       console.error('❌ Push notification setup failed:', err);

@@ -1,11 +1,42 @@
 let socket = null;
 let messageHandler = null;
 let connected = false;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let currentUserId = '';
+let manuallyClosed = false;
+
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BASE_RECONNECT_DELAY = 1200;
+const MAX_RECONNECT_DELAY = 10000;
 
 const WS_URL = import.meta.env.VITE_WS_CHAT_URL;
 
+const clearReconnectTimer = () => {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+};
+
+const safeParseMessage = (value) => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const getReconnectDelay = () => {
+  const delay = BASE_RECONNECT_DELAY * 2 ** reconnectAttempts;
+  return Math.min(delay, MAX_RECONNECT_DELAY);
+};
+
 export function connectChatSocket(userId, onMessage) {
   if (!userId) return null;
+
+  manuallyClosed = false;
+  currentUserId = userId;
 
   messageHandler = onMessage;
 
@@ -18,46 +49,99 @@ export function connectChatSocket(userId, onMessage) {
     return socket;
   }
 
+  clearReconnectTimer();
+
   socket = new WebSocket(`${WS_URL}?userId=${encodeURIComponent(userId)}`);
 
   socket.onopen = () => {
     connected = true;
-    console.log('Chat WebSocket connected as:', userId);
-  };
+    reconnectAttempts = 0;
 
-  socket.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      if (messageHandler) messageHandler(data);
-    } catch (err) {
-      console.error('Invalid WebSocket message:', err);
+    if (import.meta.env.DEV) {
+      console.log('Chat WebSocket connected as:', userId);
     }
   };
 
-  socket.onerror = (event) => {
-    console.error('Chat WebSocket error:', event);
+  socket.onmessage = (event) => {
+    const data = safeParseMessage(event.data);
+
+    if (!data) {
+      if (import.meta.env.DEV) {
+        console.error('Invalid WebSocket message');
+      }
+      return;
+    }
+
+    if (messageHandler) {
+      messageHandler(data);
+    }
+  };
+
+  socket.onerror = () => {
+    if (import.meta.env.DEV) {
+      console.error('Chat WebSocket error');
+    }
   };
 
   socket.onclose = () => {
     connected = false;
-    console.log('Chat WebSocket disconnected');
+    socket = null;
+
+    if (import.meta.env.DEV) {
+      console.log('Chat WebSocket disconnected');
+    }
+
+    if (
+      manuallyClosed ||
+      !currentUserId ||
+      reconnectAttempts >= MAX_RECONNECT_ATTEMPTS
+    ) {
+      return;
+    }
+
+    reconnectAttempts += 1;
+
+    clearReconnectTimer();
+
+    reconnectTimer = setTimeout(() => {
+      connectChatSocket(currentUserId, messageHandler);
+    }, getReconnectDelay());
   };
 
   return socket;
 }
 
 export function disconnectChatSocket() {
-  // Do not close immediately while moving between pages/components
-  // This prevents React dev mode from killing the socket.
+  clearReconnectTimer();
 }
 
 export function forceDisconnectChatSocket() {
+  manuallyClosed = true;
+
+  clearReconnectTimer();
+
   if (socket) {
     socket.close();
     socket = null;
-    connected = false;
   }
+
+  connected = false;
+  reconnectAttempts = 0;
+  currentUserId = '';
 }
+
+const sendSocketPayload = (payload) => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  try {
+    socket.send(JSON.stringify(payload));
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export function sendChatMessage({
   chatId,
@@ -69,51 +153,38 @@ export function sendChatMessage({
   mediaType = '',
   clientId = '',
 }) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) return;
-
-  socket.send(
-    JSON.stringify({
-      action: 'sendMessage',
-      chatId,
-      receiverId,
-      text,
-      mediaKey,
-      mediaUrl,
-      mediaName,
-      mediaType,
-      clientId,
-    })
-  );
+  sendSocketPayload({
+    action: 'sendMessage',
+    chatId,
+    receiverId,
+    text,
+    mediaKey,
+    mediaUrl,
+    mediaName,
+    mediaType,
+    clientId,
+  });
 }
 
 export function setActiveChat(chatId) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    return;
-  }
-
-  socket.send(
-    JSON.stringify({
-      action: 'setActiveChat',
-      type: 'setActiveChat',
-      chatId: chatId || null,
-    })
-  );
+  sendSocketPayload({
+    action: 'setActiveChat',
+    type: 'setActiveChat',
+    chatId: chatId || null,
+  });
 }
 
 export function sendRoomMessage(payload) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    console.warn('WebSocket not connected');
-    return;
-  }
+  const success = sendSocketPayload({
+    action: 'sendRoomMessage',
+    roomId: payload.roomId,
+    text: payload.text,
+    clientId: payload.clientId,
+  });
 
-  socket.send(
-    JSON.stringify({
-      action: 'sendRoomMessage',
-      roomId: payload.roomId,
-      text: payload.text,
-      clientId: payload.clientId,
-    })
-  );
+  if (!success && import.meta.env.DEV) {
+    console.warn('WebSocket not connected');
+  }
 }
 
 export function isChatSocketConnected() {

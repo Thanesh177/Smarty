@@ -1,9 +1,13 @@
+import { memo, useCallback, useMemo } from "react";
 import { getAchievements } from "../../lib/progressStore";
 import { getAllAchievements } from "../../components/achievements/achievementEngine";
 import './GameProfile.css';
-import { useMemo } from "react";
 function getProgress() {
-  return JSON.parse(localStorage.getItem("smarty-topic-progress") || "{}");
+  try {
+    return JSON.parse(localStorage.getItem("smarty-topic-progress") || "{}");
+  } catch {
+    return {};
+  }
 }
 
 function clearAIQuestionCache() {
@@ -18,23 +22,96 @@ function getUnlockPercent(totalXP, requiredXP) {
   return Math.min(100, Math.round((totalXP / requiredXP) * 100));
 }
 
-export default function GameProfile() {
-  const progress = getProgress();
-  const achievements = getAchievements();
+const UnlockCard = memo(function UnlockCard({ item, totalXP }) {
+  const unlocked = totalXP >= item.xp;
+  const rawPercent = getUnlockPercent(totalXP, item.xp);
+  const percent = Number.isFinite(rawPercent) ? rawPercent : 0;
 
-  const totalXP = Object.values(progress).reduce(
-    (sum, item) => sum + (item.totalXP || 0),
-    0
+  const handleUse = useCallback((event) => {
+    if (!unlocked) return;
+
+    event.currentTarget.disabled = true;
+
+    try {
+      item.action();
+    } finally {
+      window.setTimeout(() => {
+        if (event.currentTarget) event.currentTarget.disabled = false;
+      }, 500);
+    }
+  }, [item, unlocked]);
+
+  return (
+    <article
+      className={unlocked ? "unlock-card unlocked" : "unlock-card locked"}
+      style={{ "--unlock-progress": `${percent}%` }}
+    >
+      <div className="unlock-card-top">
+        <span>{item.icon}</span>
+        <small>{item.category}</small>
+      </div>
+
+      <h3>{item.title}</h3>
+      <p>{item.desc}</p>
+
+      <strong className="unlock-status">
+        {unlocked ? "Unlocked" : `${totalXP}/${item.xp} XP`}
+      </strong>
+
+      <button
+        className="unlock-action-btn"
+        disabled={!unlocked}
+        onClick={handleUse}
+      >
+        {unlocked ? "Use Now" : "Locked"}
+      </button>
+    </article>
+  );
+});
+
+const AchievementCard = memo(function AchievementCard({ item, unlocked }) {
+  return (
+    <article
+      className={unlocked ? "unlock-card unlocked" : "unlock-card locked"}
+    >
+      <div className="unlock-card-top">
+        <span>{item.icon}</span>
+        <small>{unlocked ? "Earned" : "Locked"}</small>
+      </div>
+
+      <h3>{item.title}</h3>
+      <p className="achievement-desc">{item.desc}</p>
+      <strong className="unlock-status">
+        {unlocked ? "Unlocked" : "Locked"}
+      </strong>
+    </article>
+  );
+});
+
+export default function GameProfile() {
+  const progress = useMemo(() => getProgress(), []);
+  const achievements = useMemo(() => getAchievements(), []);
+
+  const totalXP = useMemo(
+    () => Object.values(progress).reduce(
+      (sum, item) => sum + (item.totalXP || 0),
+      0
+    ),
+    [progress]
   );
 
-  const level = Math.max(1, Math.floor(totalXP / 250) + 1);
-  const xpRemainder = totalXP % 250;
-  const xpToNextLevel = 250 - (xpRemainder || 250);
-  const levelProgress = Math.min(100, Math.max(0,
-    totalXP > 0 && xpRemainder === 0 ? 100 : (xpRemainder / 250) * 100
-  ));
+  const levelStats = useMemo(() => {
+    const level = Math.max(1, Math.floor(totalXP / 250) + 1);
+    const xpRemainder = totalXP % 250;
+    const xpToNextLevel = 250 - (xpRemainder || 250);
+    const levelProgress = Math.min(100, Math.max(0,
+      totalXP > 0 && xpRemainder === 0 ? 100 : (xpRemainder / 250) * 100
+    ));
 
-  const allAchievements = getAllAchievements();
+    return { level, xpToNextLevel, levelProgress };
+  }, [totalXP]);
+
+  const allAchievements = useMemo(() => getAllAchievements(), []);
 
   const unlocks = useMemo(() => [
     {
@@ -148,28 +225,54 @@ export default function GameProfile() {
 
   const unlockedCount = useMemo(
     () => unlocks.filter((item) => totalXP >= item.xp).length,
-    [totalXP]
+    [totalXP, unlocks]
   );
 
   const nextUnlock = useMemo(
     () => unlocks.find((item) => totalXP < item.xp),
-    [totalXP]
+    [totalXP, unlocks]
   );
 
   const achievementSet = useMemo(() => new Set(achievements.map(a => a.id)), [achievements]);
+
+  const goBack = useCallback(() => {
+    window.history.back();
+  }, []);
+
+  const renderedUnlocks = useMemo(
+    () => unlocks.map((item) => (
+      <UnlockCard
+        key={item.title}
+        item={item}
+        totalXP={totalXP}
+      />
+    )),
+    [totalXP, unlocks]
+  );
+
+  const renderedAchievements = useMemo(
+    () => allAchievements.map((item) => (
+      <AchievementCard
+        key={item.id}
+        item={item}
+        unlocked={achievementSet.has(item.id)}
+      />
+    )),
+    [achievementSet, allAchievements]
+  );
 
   return (
     <main className="quiz-page">
       <button
         className="back-btn"
-        onClick={() => window.history.back()}
+        onClick={goBack}
       >
         <span className="arrow">←</span> Back
       </button>
       <section className="quiz-hero game-profile-hero">
         <div>
           <p className="quiz-kicker">GAME PROFILE</p>
-          <h1>Level {level} Learner</h1>
+          <h1>Level {levelStats.level} Learner</h1>
           <p>
             {totalXP} total XP earned. Keep winning challenges to unlock harder
             modes, boss levels, review tools, and elite learner rewards.
@@ -178,12 +281,12 @@ export default function GameProfile() {
 
         <div className="streak-card streak-game-card game-profile-stat-card">
           <h3>{totalXP} XP</h3>
-          <p>{xpToNextLevel} XP to next level</p>
+          <p>{levelStats.xpToNextLevel} XP to next level</p>
 
           <div className="profile-level-track">
             <div
               className="profile-level-fill"
-              style={{ width: `${levelProgress}%` }}
+              style={{ width: `${levelStats.levelProgress}%` }}
             />
           </div>
         </div>
@@ -218,52 +321,7 @@ export default function GameProfile() {
         </div>
 
         <div className="unlock-grid">
-          {unlocks.map((item) => {
-            const unlocked = totalXP >= item.xp;
-            const percent = Number.isFinite(getUnlockPercent(totalXP, item.xp))
-              ? getUnlockPercent(totalXP, item.xp)
-              : 0;
-
-            return (
-              <article
-                key={item.title}
-                className={unlocked ? "unlock-card unlocked" : "unlock-card locked"}
-              >
-                <div className="unlock-card-top">
-                  <span>{item.icon}</span>
-                  <small>{item.category}</small>
-                </div>
-
-                <h3>{item.title}</h3>
-                <p>{item.desc}</p>
-
-
-
-
-                <strong className="unlock-status">
-                  {unlocked ? "Unlocked" : `${totalXP}/${item.xp} XP`}
-                </strong>
-
-                <button
-                  className="unlock-action-btn"
-                  disabled={!unlocked}
-                  onClick={(e) => {
-                    if (!unlocked) return;
-                    e.currentTarget.disabled = true;
-                    try {
-                      item.action();
-                    } finally {
-                      setTimeout(() => {
-                        if (e.currentTarget) e.currentTarget.disabled = false;
-                      }, 500);
-                    }
-                  }}
-                >
-                  {unlocked ? "Use Now" : "Locked"}
-                </button>
-              </article>
-            );
-          })}
+          {renderedUnlocks}
         </div>
       </section>
 
@@ -276,27 +334,7 @@ export default function GameProfile() {
         </div>
 
         <div className="unlock-grid">
-          {allAchievements.map((item) => {
-            const unlocked = achievementSet.has(item.id);
-
-            return (
-              <article
-                key={item.id}
-                className={unlocked ? "unlock-card unlocked" : "unlock-card locked"}
-              >
-                <div className="unlock-card-top">
-                  <span>{item.icon}</span>
-                  <small>{unlocked ? "Earned" : "Locked"}</small>
-                </div>
-
-                <h3>{item.title}</h3>
-                <p style={{ padding: 0 }}>{item.desc}</p>
-                <strong className="unlock-status">
-                  {unlocked ? "Unlocked" : "Locked"}
-                </strong>
-              </article>
-            );
-          })}
+          {renderedAchievements}
         </div>
       </section>
     </main>

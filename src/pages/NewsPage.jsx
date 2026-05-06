@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { newsApi } from '../api/client';
 import './NewsPage.css';
 
@@ -55,6 +55,65 @@ function NewsSkeleton() {
   );
 }
 
+const NewsCard = memo(function NewsCard({
+  article,
+  index,
+  saved,
+  onToggleSave,
+  onShare,
+}) {
+  return (
+    <article className={`news-card ${index === 0 ? 'featured' : ''}`}>
+      {article.image_link ? (
+        <img
+          src={article.image_link}
+          alt={article.title || 'BBC News'}
+          loading={index < 2 ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchPriority={index < 2 ? 'high' : 'auto'}
+        />
+      ) : (
+        <div className="missing-news-image">BBC News</div>
+      )}
+
+      <div className="news-card-body">
+        <span className="section-label">{article.section}</span>
+
+        <h3>{article.title || 'Untitled news'}</h3>
+
+        <p>{article.summary || 'No summary available.'}</p>
+
+        <div className="news-actions">
+          <a
+            href={article.news_link}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Read
+          </a>
+
+          <button onClick={() => onToggleSave(article)}>
+            {saved ? 'Saved' : 'Save'}
+          </button>
+
+          <button onClick={() => onShare(article)}>Share</button>
+        </div>
+      </div>
+    </article>
+  );
+});
+
+const SectionTab = memo(function SectionTab({ section, active, onSelect }) {
+  return (
+    <button
+      className={active ? 'active' : ''}
+      onClick={() => onSelect(section)}
+    >
+      {section}
+    </button>
+  );
+});
+
 export default function NewsPage() {
   const [news, setNews] = useState({});
   const [language, setLanguage] = useState('english');
@@ -86,7 +145,7 @@ export default function NewsPage() {
     };
   }, []);
 
-  async function fetchNews(lang = language, forceRefresh = false) {
+  const fetchNews = useCallback(async (lang = language, forceRefresh = false) => {
     setError('');
     setVisibleCount(PAGE_SIZE);
 
@@ -164,11 +223,11 @@ export default function NewsPage() {
         setLoading(false);
       }
     }
-  }
+  }, [language]);
 
   useEffect(() => {
     fetchNews(language);
-  }, [language]);
+  }, [fetchNews, language]);
 
   const sections = useMemo(() => {
     return Object.entries(news).filter(([, value]) => Array.isArray(value));
@@ -205,6 +264,25 @@ export default function NewsPage() {
     return articles.slice(0, visibleCount);
   }, [articles, visibleCount]);
 
+  const savedLinks = useMemo(
+    () => new Set(saved.map((item) => item.news_link)),
+    [saved]
+  );
+
+  const renderedArticles = useMemo(
+    () => visibleArticles.map((article, index) => (
+      <NewsCard
+        key={`${article.news_link}-${index}`}
+        article={article}
+        index={index}
+        saved={savedLinks.has(article.news_link)}
+        onToggleSave={toggleSave}
+        onShare={shareArticle}
+      />
+    )),
+    [savedLinks, visibleArticles]
+  );
+
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [language, selectedSection, search]);
@@ -226,7 +304,7 @@ export default function NewsPage() {
     return () => observer.disconnect();
   }, [articles.length]);
 
-  function toggleSave(article) {
+  const toggleSave = useCallback((article) => {
     setSaved((currentSaved) => {
       const exists = currentSaved.some((item) => item.news_link === article.news_link);
 
@@ -242,13 +320,9 @@ export default function NewsPage() {
 
       return updated;
     });
-  }
+  }, []);
 
-  function isSaved(article) {
-    return saved.some((item) => item.news_link === article.news_link);
-  }
-
-  async function shareArticle(article) {
+  const shareArticle = useCallback(async (article) => {
     try {
       if (navigator.share) {
         await navigator.share({
@@ -262,7 +336,20 @@ export default function NewsPage() {
     } catch {
       // user cancelled share
     }
-  }
+  }, []);
+
+  const handleSearchChange = useCallback((e) => {
+    setSearch(e.target.value);
+  }, []);
+
+  const handleLanguageChange = useCallback((e) => {
+    setLanguage(e.target.value);
+    setSelectedSection('All');
+  }, []);
+
+  const handleSectionSelect = useCallback((section) => {
+    setSelectedSection(section);
+  }, []);
 
   return (
     <section className="news-page">
@@ -291,15 +378,12 @@ export default function NewsPage() {
           type="search"
           placeholder="Search news..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={handleSearchChange}
         />
 
         <select
           value={language}
-          onChange={(e) => {
-            setLanguage(e.target.value);
-            setSelectedSection('All');
-          }}
+          onChange={handleLanguageChange}
         >
           {LANGUAGES.map((lang) => (
             <option key={lang} value={lang}>
@@ -316,13 +400,12 @@ export default function NewsPage() {
       {!loading && !error && sectionNames.length > 1 && (
         <div className="section-tabs">
           {sectionNames.map((section) => (
-            <button
+            <SectionTab
               key={section}
-              className={selectedSection === section ? 'active' : ''}
-              onClick={() => setSelectedSection(section)}
-            >
-              {section}
-            </button>
+              section={section}
+              active={selectedSection === section}
+              onSelect={handleSectionSelect}
+            />
           ))}
         </div>
       )}
@@ -344,48 +427,7 @@ export default function NewsPage() {
       {!loading && !error && visibleArticles.length > 0 && (
         <>
           <div className="news-grid">
-            {visibleArticles.map((article, index) => (
-              <article
-                className={`news-card ${index === 0 ? 'featured' : ''}`}
-                key={`${article.news_link}-${index}`}
-              >
-                {article.image_link ? (
-                  <img
-                    src={article.image_link}
-                    alt={article.title || 'BBC News'}
-                    loading={index < 3 ? 'eager' : 'lazy'}
-                    decoding="async"
-                    fetchPriority={index < 3 ? 'high' : 'auto'}
-                  />
-                ) : (
-                  <div className="missing-news-image">BBC News</div>
-                )}
-
-                <div className="news-card-body">
-                  <span className="section-label">{article.section}</span>
-
-                  <h3>{article.title || 'Untitled news'}</h3>
-
-                  <p>{article.summary || 'No summary available.'}</p>
-
-                  <div className="news-actions">
-                    <a
-                      href={article.news_link}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Read
-                    </a>
-
-                    <button onClick={() => toggleSave(article)}>
-                      {isSaved(article) ? 'Saved' : 'Save'}
-                    </button>
-
-                    <button onClick={() => shareArticle(article)}>Share</button>
-                  </div>
-                </div>
-              </article>
-            ))}
+            {renderedArticles}
           </div>
 
           <div ref={loaderRef} className="scroll-loader">

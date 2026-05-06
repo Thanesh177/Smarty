@@ -1,7 +1,79 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { creatorApi, postApi, userApi } from '../api/client';
 import './CreatorDashboardPage.css';
+
+const RequestRow = memo(function RequestRow({ request, index, processingKey, onApprove, onReject }) {
+  const followerId = request.followerId || request.userId || request.id;
+  const followerName = request.followerName || 'User';
+  const followerEmail = request.followerEmail || followerId;
+
+  return (
+    <article className="request-row">
+      <div className="request-avatar">
+        {(request.followerName || request.followerEmail || 'U')[0].toUpperCase()}
+      </div>
+
+      <div>
+        <h3>{followerName}</h3>
+        <p>{followerEmail}</p>
+      </div>
+
+      <div className="request-actions">
+        <button
+          type="button"
+          disabled={processingKey === `approve-${followerId}`}
+          onClick={() => onApprove(followerId)}
+        >
+          Approve
+        </button>
+
+        <button
+          type="button"
+          className="muted"
+          disabled={processingKey === `reject-${followerId}`}
+          onClick={() => onReject(followerId)}
+        >
+          Reject
+        </button>
+      </div>
+    </article>
+  );
+});
+
+const DashboardPostCard = memo(function DashboardPostCard({ post, index, onOpen }) {
+  const postId = post.id || post.reelId;
+  const isPrivate = post.visibility === 'private' || post.isPrivate === true || post.private === true;
+
+  return (
+    <button
+      className="dashboard-post-card"
+      type="button"
+      disabled={!postId}
+      onClick={() => onOpen(postId)}
+    >
+      {post.imageUrl ? (
+        <img
+          src={post.imageUrl}
+          alt={post.title || 'Post'}
+          loading={index < 2 ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchPriority={index < 2 ? 'high' : 'auto'}
+        />
+      ) : (
+        <div className="dashboard-post-placeholder">
+          {post.topic?.[0] || 'S'}
+        </div>
+      )}
+
+      <div>
+        <span>{isPrivate ? '🔒 Private' : '🌍 Public'}</span>
+        <h3>{post.title}</h3>
+        <p>{post.topic || 'Smarty'}</p>
+      </div>
+    </button>
+  );
+});
 
 export default function CreatorDashboardPage() {
   const navigate = useNavigate();
@@ -15,7 +87,7 @@ export default function CreatorDashboardPage() {
   const [contentLoading, setContentLoading] = useState(false);
   const [processingKey, setProcessingKey] = useState('');
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setContentLoading(false);
@@ -71,7 +143,7 @@ export default function CreatorDashboardPage() {
         setContentLoading(false);
       }
     }
-  };
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -80,7 +152,7 @@ export default function CreatorDashboardPage() {
     return () => {
       mountedRef.current = false;
     };
-  }, []);
+  }, [loadDashboard]);
 
   const privatePosts = useMemo(
     () =>
@@ -104,7 +176,7 @@ export default function CreatorDashboardPage() {
     [myPosts]
   );
 
-  const approve = async (followerId) => {
+  const approve = useCallback(async (followerId) => {
     if (!followerId || processingKey) return;
 
     const actionKey = `approve-${followerId}`;
@@ -122,9 +194,9 @@ export default function CreatorDashboardPage() {
     } finally {
       if (mountedRef.current) setProcessingKey('');
     }
-  };
+  }, [processingKey]);
 
-  const reject = async (followerId) => {
+  const reject = useCallback(async (followerId) => {
     if (!followerId || processingKey) return;
 
     const actionKey = `reject-${followerId}`;
@@ -142,9 +214,9 @@ export default function CreatorDashboardPage() {
     } finally {
       if (mountedRef.current) setProcessingKey('');
     }
-  };
+  }, [processingKey]);
 
-  const approveAll = async () => {
+  const approveAll = useCallback(async () => {
     const pendingIds = requests.map((item) => item.followerId).filter(Boolean);
     if (pendingIds.length === 0 || processingKey) return;
 
@@ -170,7 +242,53 @@ export default function CreatorDashboardPage() {
     } finally {
       if (mountedRef.current) setProcessingKey('');
     }
-  };
+  }, [processingKey, requests]);
+
+  const goCreatePost = useCallback(() => {
+    navigate('/create');
+  }, [navigate]);
+
+  const goPublicProfile = useCallback(() => {
+    const profileId = profile?.id || profile?.userId || profile?.sub;
+    if (profileId) navigate(`/creator/${profileId}`);
+  }, [navigate, profile]);
+
+  const openPost = useCallback(
+    (postId) => {
+      if (postId) navigate(`/reel/${postId}`);
+    },
+    [navigate]
+  );
+
+  const renderedRequests = useMemo(
+    () => requests.map((request, index) => {
+      const followerId = request.followerId || request.userId || request.id;
+
+      return (
+        <RequestRow
+          key={followerId || `request-${index}`}
+          request={request}
+          index={index}
+          processingKey={processingKey}
+          onApprove={approve}
+          onReject={reject}
+        />
+      );
+    }),
+    [approve, processingKey, reject, requests]
+  );
+
+  const renderedPosts = useMemo(
+    () => myPosts.map((post, index) => (
+      <DashboardPostCard
+        key={post.id || post.reelId || `dashboard-post-${index}`}
+        post={post}
+        index={index}
+        onOpen={openPost}
+      />
+    )),
+    [myPosts, openPost]
+  );
 
   if (loading) {
     return (
@@ -191,7 +309,7 @@ export default function CreatorDashboardPage() {
           </p>
         </div>
 
-        <button className="dashboard-primary" type="button" onClick={() => navigate('/create')}>
+        <button className="dashboard-primary" type="button" onClick={goCreatePost}>
           Create New Post
         </button>
       </section>
@@ -247,28 +365,7 @@ export default function CreatorDashboardPage() {
             </div>
           ) : (
             <div className="request-list">
-              {requests.map((request, index) => {
-                const followerId = request.followerId || request.userId || request.id;
-                return (
-                <article className="request-row" key={followerId || `request-${index}`}>
-                  <div className="request-avatar">
-                    {(request.followerName || request.followerEmail || 'U')[0].toUpperCase()}
-                  </div>
-
-                  <div>
-                    <h3>{request.followerName || 'User'}</h3>
-                    <p>{request.followerEmail || followerId}</p>
-                  </div>
-
-                  <div className="request-actions">
-                    <button type="button" disabled={processingKey === `approve-${followerId}`} onClick={() => approve(followerId)}>Approve</button>
-                    <button type="button" className="muted" disabled={processingKey === `reject-${followerId}`} onClick={() => reject(followerId)}>
-                      Reject
-                    </button>
-                  </div>
-                </article>
-                );
-              })}
+              {renderedRequests}
             </div>
           )}
         </div>
@@ -280,10 +377,7 @@ export default function CreatorDashboardPage() {
           <button
             className="dashboard-secondary"
             disabled={!(profile?.id || profile?.userId || profile?.sub)}
-            onClick={() => {
-              const profileId = profile?.id || profile?.userId || profile?.sub;
-              if (profileId) navigate(`/creator/${profileId}`);
-            }}
+            onClick={goPublicProfile}
           >
             View Public Profile
           </button>
@@ -310,43 +404,7 @@ export default function CreatorDashboardPage() {
           </div>
         ) : (
           <div className="dashboard-post-grid">
-            {myPosts.map((post, index) => {
-              const postId = post.id || post.reelId;
-              const isPrivate =
-                post.visibility === 'private' ||
-                post.isPrivate === true ||
-                post.private === true;
-
-              return (
-                <button
-                  key={postId || `dashboard-post-${index}`}
-                  className="dashboard-post-card"
-                  type="button"
-                  disabled={!postId}
-                  onClick={() => postId && navigate(`/reel/${postId}`)}
-                >
-                  {post.imageUrl ? (
-                    <img
-                      src={post.imageUrl}
-                      alt={post.title || 'Post'}
-                      loading={index < 4 ? 'eager' : 'lazy'}
-                      decoding="async"
-                      fetchpriority={index < 4 ? 'high' : 'auto'}
-                    />
-                  ) : (
-                    <div className="dashboard-post-placeholder">
-                      {post.topic?.[0] || 'S'}
-                    </div>
-                  )}
-
-                  <div>
-                    <span>{isPrivate ? '🔒 Private' : '🌍 Public'}</span>
-                    <h3>{post.title}</h3>
-                    <p>{post.topic || 'Smarty'}</p>
-                  </div>
-                </button>
-              );
-            })}
+            {renderedPosts}
           </div>
         )}
       </section>

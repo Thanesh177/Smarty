@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { postApi } from '../api/client';
 import './ReelDetailPage.css';
@@ -13,6 +13,47 @@ function getPostImage(post) {
     ''
   );
 }
+
+const ReelMedia = memo(function ReelMedia({ post, image }) {
+  if (post.videoUrl) {
+    return (
+      <video
+        src={post.videoUrl}
+        controls
+        playsInline
+        preload="metadata"
+      />
+    );
+  }
+
+  if (image) {
+    return (
+      <img
+        src={image}
+        alt={post.title || 'Post'}
+        loading="eager"
+        decoding="async"
+        fetchPriority="high"
+      />
+    );
+  }
+
+  return (
+    <div className="reel-media-placeholder">
+      {post.topic?.[0] || 'S'}
+    </div>
+  );
+});
+
+const CommentItem = memo(function CommentItem({ item, index }) {
+  return (
+    <div className="reel-comment">
+      <strong>{item.author || item.user || item.username || 'User'}</strong>
+      <p>{item.comment || item.text || item.body}</p>
+    </div>
+  );
+});
+
 export default function ReelDetailPage() {
   const { reelId } = useParams();
   const navigate = useNavigate();
@@ -23,6 +64,7 @@ export default function ReelDetailPage() {
   const [comment, setComment] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
+  const image = useMemo(() => getPostImage(post), [post]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -36,6 +78,8 @@ export default function ReelDetailPage() {
         if (!mountedRef.current) return;
         setPost(postData || null);
         setLoading(false);
+
+        if (!postData) return;
 
         try {
           const commentsData = await postApi.getComments(reelId);
@@ -68,7 +112,7 @@ export default function ReelDetailPage() {
     };
   }, [reelId]);
 
-const handleLike = async () => {
+const handleLike = useCallback(async () => {
   if (!post) return;
 
   try {
@@ -89,9 +133,9 @@ const handleLike = async () => {
     console.error('Like failed:', err);
     if (mountedRef.current) setStatus('Like failed.');
   }
-};
+}, [post, reelId]);
 
-const handleShare = async () => {
+const handleShare = useCallback(async () => {
   const currentLink = window.location.href;
 
   if (navigator.share) {
@@ -114,9 +158,9 @@ const handleShare = async () => {
     console.error('Share failed:', err);
     if (mountedRef.current) setStatus('Could not copy link.');
   }
-};
+}, [post]);
 
-const handleSave = async () => {
+const handleSave = useCallback(async () => {
   if (!post) return;
 
   try {
@@ -131,14 +175,14 @@ const handleSave = async () => {
       };
     });
 
-    setStatus(post.saved ? 'Removed from saved.' : 'Saved successfully.');
+    setStatus(Boolean(post.saved) ? 'Removed from saved.' : 'Saved successfully.');
   } catch (err) {
     console.error('Save failed:', err);
     if (mountedRef.current) setStatus('Save failed.');
   }
-};
+}, [post, reelId]);
 
-  const handleComment = async (e) => {
+  const handleComment = useCallback(async (e) => {
     e.preventDefault();
 
     const cleanComment = comment.trim();
@@ -167,7 +211,21 @@ const handleSave = async () => {
       setComment(cleanComment);
       setStatus('Comment failed.');
     }
-  };
+  }, [comment, reelId]);
+
+  const renderedComments = useMemo(() => {
+    if (comments.length === 0) {
+      return <p className="empty-comments">No comments yet.</p>;
+    }
+
+    return comments.map((item, index) => (
+      <CommentItem
+        key={item.id || item.commentId || `${item.createdAt || 'comment'}-${index}`}
+        item={item}
+        index={index}
+      />
+    ));
+  }, [comments]);
 
   if (loading) {
     return <p className="reel-status">Loading post...</p>;
@@ -185,22 +243,8 @@ const handleSave = async () => {
 
       <section className="reel-detail-layout">
         <div className="reel-media-panel">
-  {post.videoUrl ? (
-    <video src={post.videoUrl} controls playsInline preload="metadata" />
-  ) : getPostImage(post) ? (
-    <img
-      src={getPostImage(post)}
-      alt={post.title || 'Post'}
-      loading="eager"
-      decoding="async"
-      fetchPriority="high"
-    />
-  ) : (
-    <div className="reel-media-placeholder">
-      {post.topic?.[0] || 'S'}
-    </div>
-  )}
-</div>
+          <ReelMedia post={post} image={image} />
+        </div>
 
         <div className="reel-content-panel">
           <span className="reel-topic">{post.topic || 'Smarty'}</span>
@@ -238,16 +282,7 @@ const handleSave = async () => {
             </form>
 
             <div className="reel-comment-list">
-              {comments.length === 0 ? (
-                <p className="empty-comments">No comments yet.</p>
-              ) : (
-                comments.map((item, index) => (
-                  <div className="reel-comment" key={item.id || item.commentId || `${item.createdAt || 'comment'}-${index}`}>
-                    <strong>{item.author || item.user || item.username || 'User'}</strong>
-                    <p>{item.comment || item.text || item.body}</p>
-                  </div>
-                ))
-              )}
+              {renderedComments}
             </div>
           </section>
         </div>

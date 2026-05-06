@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { userApi, postApi } from '../api/client';
+import { postApi } from '../api/client';
 import EmptyState from '../components/EmptyState';
 import './SavedPage.css';
 function getPostImage(post) {
@@ -14,6 +14,71 @@ function getPostImage(post) {
     ''
   );
 }
+const SavedCard = memo(function SavedCard({
+  post,
+  onOpen,
+  onLike,
+  onSave,
+}) {
+  const postId = post.id || post.reelId;
+  const image = getPostImage(post);
+
+  return (
+    <article className="saved-card">
+      <button
+        className="saved-card-media"
+        type="button"
+        onClick={() => onOpen(postId)}
+      >
+        {post.videoUrl ? (
+          <video
+            src={post.videoUrl}
+            muted
+            playsInline
+            preload="none"
+          />
+        ) : image ? (
+          <img
+            src={image}
+            alt={post.title || 'Saved post'}
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className="saved-placeholder">{post.topic?.[0] || 'S'}</div>
+        )}
+      </button>
+
+      <div className="saved-card-body">
+        <span className="saved-topic">{post.topic || 'Smarty'}</span>
+
+        <button
+          className="saved-title-btn"
+          type="button"
+          onClick={() => onOpen(postId)}
+        >
+          {post.title || 'Untitled post'}
+        </button>
+
+        <p>{post.body || post.description || 'No description available.'}</p>
+
+        <div className="saved-card-actions">
+          <button type="button" onClick={() => onLike(postId)}>
+            ❤️ {post.likes || 0}
+          </button>
+
+          <button type="button" onClick={() => onSave(postId)}>
+            ✅ Saved
+          </button>
+
+          <button type="button" onClick={() => onOpen(postId)}>
+            Open →
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+});
 export default function SavedPage() {
   const navigate = useNavigate();
 
@@ -80,11 +145,23 @@ export default function SavedPage() {
   }, []);
 
   const topics = useMemo(() => {
-    const list = posts.map((post) => post.topic).filter(Boolean);
-    return ['All', ...new Set(list)];
+    if (!Array.isArray(posts) || posts.length === 0) {
+      return ['All'];
+    }
+
+    const uniqueTopics = new Set();
+
+    for (const post of posts) {
+      if (!post?.topic) continue;
+      uniqueTopics.add(post.topic.trim());
+    }
+
+    return ['All', ...Array.from(uniqueTopics).sort((a, b) => a.localeCompare(b))];
   }, [posts]);
 
   const filteredPosts = useMemo(() => {
+    if (!Array.isArray(posts) || posts.length === 0) return [];
+
     const normalizedQuery = query.trim().toLowerCase();
 
     return posts.filter((post) => {
@@ -94,11 +171,12 @@ export default function SavedPage() {
       if (!normalizedQuery) return true;
 
       const text = `${post.title || ''} ${post.body || ''} ${post.description || ''} ${post.topic || ''}`.toLowerCase();
+
       return text.includes(normalizedQuery);
     });
   }, [posts, activeTopic, query]);
 
-  const handleLike = async (postId) => {
+  const handleLike = useCallback(async (postId) => {
     try {
       await postApi.toggleLike(postId);
 
@@ -122,9 +200,9 @@ export default function SavedPage() {
       console.error('Like failed:', err);
       showToast('Like failed');
     }
-  };
+  }, []);
 
-  const handleSave = async (postId) => {
+  const handleSave = useCallback(async (postId) => {
     try {
       await postApi.toggleSave(postId);
       if (!mountedRef.current) return;
@@ -138,7 +216,14 @@ export default function SavedPage() {
       console.error('Save failed:', err);
       showToast('Save failed');
     }
-  };
+  }, []);
+
+  const handleOpen = useCallback(
+    (postId) => {
+      navigate(`/reel/${postId}`);
+    },
+    [navigate]
+  );
 
   return (
     <main className="saved-page">
@@ -190,7 +275,7 @@ export default function SavedPage() {
 
         {loading ? (
           <div className="saved-skeleton-grid">
-            {Array.from({ length: 6 }).map((_, index) => (
+            {Array.from({ length: 4 }).map((_, index) => (
               <div className="saved-skeleton" key={index} />
             ))}
           </div>
@@ -208,61 +293,15 @@ export default function SavedPage() {
           />
         ) : (
           <div className="saved-grid">
-            {filteredPosts.map((post) => {
-              const postId = post.id || post.reelId;
-
-              return (
-                <article className="saved-card" key={postId}>
-                  <button
-                    className="saved-card-media"
-                    type="button"
-                    onClick={() => navigate(`/reel/${postId}`)}
-                  >
-                    {post.videoUrl ? (
-                      <video src={post.videoUrl} muted playsInline preload="metadata" />
-                    ) : getPostImage(post) ? (
-                      <img
-                        src={getPostImage(post)}
-                        alt={post.title || 'Saved post'}
-                        loading="eager"
-                        decoding="async"
-                        fetchPriority="high"
-                      />
-                    ) : (
-                      <div className="saved-placeholder">{post.topic?.[0] || 'S'}</div>
-                    )}
-                  </button>
-
-                  <div className="saved-card-body">
-                    <span className="saved-topic">{post.topic || 'Smarty'}</span>
-
-                    <button
-                      className="saved-title-btn"
-                      type="button"
-                      onClick={() => navigate(`/reel/${postId}`)}
-                    >
-                      {post.title || 'Untitled post'}
-                    </button>
-
-                    <p>{post.body || post.description || 'No description available.'}</p>
-
-                    <div className="saved-card-actions">
-                      <button type="button" onClick={() => handleLike(postId)}>
-                        ❤️ {post.likes || 0}
-                      </button>
-
-                      <button type="button" onClick={() => handleSave(postId)}>
-                        ✅ Saved
-                      </button>
-
-                      <button type="button" onClick={() => navigate(`/reel/${postId}`)}>
-                        Open →
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+            {filteredPosts.map((post) => (
+              <SavedCard
+                key={post.id || post.reelId}
+                post={post}
+                onOpen={handleOpen}
+                onLike={handleLike}
+                onSave={handleSave}
+              />
+            ))}
           </div>
         )}
       </section>

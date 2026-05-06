@@ -48,15 +48,15 @@ button {
   background:
     radial-gradient(
       circle at 12% 8%,
-      rgba(29, 76, 152, 0.18),
-      transparent 26rem
+      rgba(56, 189, 248, 0.16),
+      transparent 28rem
     ),
     radial-gradient(
-      circle at 86% 16%,
-      rgba(15, 23, 42, 0.5),
-      transparent 22rem
+      circle at 88% 14%,
+      rgba(14, 165, 233, 0.14),
+      transparent 24rem
     ),
-    linear-gradient(145deg, #06111f, #020617 72%);
+    linear-gradient(145deg, #081525, #020617 72%);
 }
 
 .chat-page::before {
@@ -79,20 +79,12 @@ button {
 .chat-window {
   min-height: 0;
   overflow: hidden;
-  border-radius: 26px;
-  background: linear-gradient(
-    145deg,
-    rgba(12, 28, 55, 0.94),
-    rgba(2, 6, 23, 0.97)
-  );
-  border: 1px solid rgba(148, 163, 184, 0.09);
-  box-shadow:
-    0 8px 0 rgba(2, 6, 23, 0.38),
-    0 24px 54px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -12px 22px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  border-radius: 28px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 /* =========================
@@ -112,10 +104,9 @@ button {
 .chat-header h1 {
   margin: 0;
   color: #ffffff;
-  font-size: clamp(1.6rem, 3vw, 2.25rem);
+  font-size: clamp(1.7rem, 3vw, 2.35rem);
   line-height: 1;
   letter-spacing: -0.055em;
-  text-shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
 }
 
 .chat-search-wrap {
@@ -134,20 +125,15 @@ button {
 .message-form input {
   min-width: 0;
   outline: none;
-  border-radius: 999px;
-  border: 1px solid rgba(125, 211, 252, 0.16);
-  background: linear-gradient(
-    145deg,
-    rgba(226, 232, 240, 0.96),
-    rgba(191, 219, 254, 0.86)
-  );
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.92);
   color: #07111f;
-  box-shadow:
-    inset 0 2px 7px rgba(2, 6, 23, 0.14),
-    0 6px 14px rgba(0, 0, 0, 0.12);
+  box-shadow: none;
   transition:
     border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    box-shadow 0.2s ease,
+    background 0.2s ease;
 }
 
 .chat-search input {
@@ -158,10 +144,9 @@ button {
 
 .chat-search input:focus,
 .message-form input:focus {
-  border-color: rgba(56, 189, 248, 0.65);
-  box-shadow:
-    0 0 0 4px rgba(56, 189, 248, 0.12),
-    inset 0 2px 7px rgba(2, 6, 23, 0.14);
+  border-color: rgba(255, 255, 255, 0.933);
+  background: #ffffff;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.14);
 }
 
 .chat-search button,
@@ -174,26 +159,17 @@ button {
 .voice-record-btn,
 .voice-stop-btn,
 .voice-delete-btn {
-  border: 1px solid rgba(186, 230, 253, 0.16);
-  border-radius: 999px;
-  background: linear-gradient(
-    145deg,
-    rgba(56, 132, 201, 0.92),
-    rgba(14, 48, 91, 0.98)
-  );
-  color: #f8fafc;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #123747, #1e6383);
+  color: #ffffff;
   font-weight: 900;
   cursor: pointer;
-  box-shadow:
-    0 4px 0 rgba(2, 6, 23, 0.42),
-    0 13px 24px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.11),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 7px 7px rgba(14, 165, 233, 0.28);
   transition:
-    transform 0.16s ease,
-    box-shadow 0.16s ease,
-    background 0.16s ease,
-    opacity 0.16s ease;
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .chat-search button {
@@ -213,11 +189,7 @@ button {
 .voice-stop-btn:hover,
 .voice-delete-btn:hover {
   transform: translateY(-2px);
-  box-shadow:
-    0 6px 0 rgba(2, 6, 23, 0.42),
-    0 17px 30px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 10px rgba(14, 165, 233, 0.36);
 }
 
 .chat-search button:active,
@@ -230,10 +202,8 @@ button {
 .voice-record-btn:active,
 .voice-stop-btn:active,
 .voice-delete-btn:active {
-  transform: translateY(2px);
-  box-shadow:
-    0 2px 0 rgba(2, 6, 23, 0.54),
-    inset 0 4px 12px rgba(0, 0, 0, 0.34);
+  transform: translateY(0);
+  box-shadow: 0 8px 22px rgba(14, 165, 233, 0.24);
 }
 
 .chat-list {
@@ -241,9 +211,9 @@ button {
   min-height: 0;
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: 14px;
   overflow-y: auto;
-  padding-right: 3px;
+  padding: 3px 6px 12px 1px;
 }
 
 .chat-list h3,
@@ -256,38 +226,44 @@ button {
   text-transform: uppercase;
 }
 
-.chat-list > button {
+.chat-list-item {
   width: 100%;
-  min-height: 66px;
-  padding: 13px 15px !important;
-  overflow: hidden;
-  border-radius: 18px;
+  min-height: 76px;
+  padding: 16px 15px;
+  overflow: visible;
+  border-radius: 21px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.045);
   color: #ffffff;
   text-align: left;
   cursor: pointer;
-  box-shadow: none;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
   transition:
     transform 0.18s ease,
     background 0.18s ease,
-    border-color 0.18s ease;
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
-.chat-list > button:hover {
+.chat-list-item:hover {
   transform: translateY(-2px);
   background: rgba(255, 255, 255, 0.075);
   border-color: rgba(56, 189, 248, 0.24);
+  box-shadow: 0 16px 34px rgba(14, 165, 233, 0.1);
 }
 
-.chat-list > button.active {
+.chat-list-item.active {
   background: rgba(14, 165, 233, 0.16);
   border-color: rgba(56, 189, 248, 0.34);
-  box-shadow: inset 4px 0 0 rgba(56, 189, 248, 0.85);
+  box-shadow:
+    inset 4px 0 0 rgba(56, 189, 248, 0.85),
+    0 16px 34px rgba(14, 165, 233, 0.12);
 }
 
 .chat-list button::before,
-.chat-list button::after {
+.chat-list button::after,
+.chat-list-item::before,
+.chat-list-item::after {
   display: none !important;
 }
 
@@ -296,7 +272,7 @@ button {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
 }
 
 .chat-avatar {
@@ -307,6 +283,77 @@ button {
   object-fit: cover;
   background: linear-gradient(145deg, #a7f3d0, #7dd3fc);
   border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.chat-avatar-wrap {
+  position: relative;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.chat-avatar-fallback {
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(125, 211, 252, 0.26);
+  background:
+    radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.42), transparent 28%),
+    linear-gradient(145deg, rgba(56, 189, 248, 0.42), rgba(14, 165, 233, 0.16));
+  color: #ffffff;
+  font-size: 1.18rem;
+  cursor: pointer;
+}
+
+.chat-avatar-picker {
+  position: absolute;
+  top: 52px;
+  left: 0;
+  z-index: 120;
+  width: 218px;
+  padding: 10px;
+  border-radius: 20px;
+  background: rgba(7, 17, 31, 0.98);
+  border: 1px solid rgba(125, 211, 252, 0.18);
+  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.44);
+  backdrop-filter: blur(18px);
+}
+
+.chat-avatar-picker > span {
+  display: block;
+  margin: 1px 4px 9px;
+  color: rgba(226, 232, 240, 0.68);
+  font-size: 0.68rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chat-avatar-options {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.chat-avatar-options button {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  padding: 0;
+  border-radius: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+  font-size: 1.15rem;
+  cursor: pointer;
+}
+
+.chat-avatar-options button.active {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.9), rgba(14, 165, 233, 0.72));
+  border-color: rgba(186, 230, 253, 0.42);
 }
 
 .chat-content {
@@ -541,12 +588,12 @@ button {
 }
 
 .chat-actions button {
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  min-height: 38px;
+  padding: 0 13px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.84);
   font-size: 0.74rem;
   font-weight: 850;
   cursor: pointer;
@@ -671,20 +718,9 @@ button {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 7px;
   padding: 18px 16px 104px;
-  background:
-    radial-gradient(
-      circle at 15% 10%,
-      rgba(29, 76, 152, 0.08),
-      transparent 22rem
-    ),
-    radial-gradient(
-      circle at 90% 80%,
-      rgba(15, 23, 42, 0.34),
-      transparent 24rem
-    ),
-    rgba(2, 6, 23, 0.24);
+  background: rgba(2, 6, 23, 0.22);
 }
 
 .date-divider {
@@ -726,37 +762,29 @@ button {
   width: fit-content;
   max-width: min(72%, 520px);
   padding: 10px 13px 8px;
-  border-radius: 17px 17px 17px 6px;
-  background: linear-gradient(
-    145deg,
-    rgba(13, 31, 58, 0.72),
-    rgba(2, 6, 23, 0.82)
-  );
-  border: 1px solid rgba(148, 163, 184, 0.08);
+  border-radius: 18px 18px 18px 6px;
+  background: rgba(255, 255, 255, 0.075);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: #f8fafc;
   line-height: 1.45;
   text-align: left;
   word-break: break-word;
   overflow-wrap: anywhere;
-  box-shadow:
-    0 4px 0 rgba(2, 6, 23, 0.3),
-    0 12px 24px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.045),
-    inset 0 -6px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
   animation: messagePop 0.22s ease both;
 }
 
 .message.mine,
 .message-row.mine .message-bubble {
   margin-left: auto;
-  border-radius: 17px 17px 6px 17px;
+  border-radius: 18px 18px 6px 18px;
   background: linear-gradient(
-    145deg,
-    rgba(28, 76, 129, 0.58),
-    rgba(8, 28, 56, 0.84),
-    rgba(2, 6, 23, 0.86)
+    135deg,
+    rgba(56, 189, 248, 0.9),
+    rgba(14, 165, 233, 0.88)
   );
-  border-color: rgba(125, 211, 252, 0.14);
+  border-color: rgba(125, 211, 252, 0.32);
+  color: #ffffff;
 }
 
 .message:not(.mine) {
@@ -890,15 +918,9 @@ button {
   bottom: 0;
   z-index: 30;
   padding: 12px 14px 14px;
-  background: linear-gradient(
-    145deg,
-    rgba(12, 28, 55, 0.82),
-    rgba(2, 6, 23, 0.96)
-  );
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    inset 0 -6px 14px rgba(0, 0, 0, 0.18);
+  background: rgba(15, 23, 42, 0.86);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -16px 38px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -1304,9 +1326,9 @@ button {
 
 @media (max-width: 980px) {
   .chat-page {
-    grid-template-columns: minmax(250px, 310px) minmax(0, 1fr);
-    gap: 10px;
-    padding: 10px;
+    grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
   }
 
   .chat-sidebar,
@@ -1367,8 +1389,8 @@ button {
   }
 
   .chat-search {
-    gap: 7px;
-    margin: 10px 0 12px;
+    gap: 8px;
+    margin: 12px 0 14px;
   }
 
   .chat-search input {
@@ -1382,17 +1404,18 @@ button {
   }
 
   .chat-list {
-    gap: 7px;
+    gap: 12px;
+    padding: 2px 4px 14px 0;
   }
 
   .chat-list h3 {
     display: none;
   }
 
-  .chat-list > button {
-    min-height: 58px;
-    padding: 8px 10px !important;
-    border-radius: 17px;
+  .chat-list-item {
+    min-height: 70px;
+    padding: 13px 12px;
+    border-radius: 19px;
   }
 
   .chat-avatar {
@@ -1448,22 +1471,22 @@ button {
   .messages {
     min-height: 0;
     height: 100%;
-    padding: 12px 10px 92px;
-    gap: 5px;
+    padding: 12px 10px 94px;
+    gap: 6px;
     overflow-y: auto;
   }
 
   .message,
   .message-bubble {
     max-width: 88%;
-    padding: 6px 9px 4px;
-    border-radius: 15px 15px 15px 5px;
-    font-size: 0.88rem;
+    padding: 8px 10px 6px;
+    border-radius: 16px 16px 16px 5px;
+    font-size: 0.9rem;
   }
 
   .message.mine,
   .message-row.mine .message-bubble {
-    border-radius: 15px 15px 5px 15px;
+    border-radius: 16px 16px 5px 16px;
   }
 
   .timestamp {
@@ -1477,7 +1500,7 @@ button {
   }
 
   .composer-shell {
-    padding: 7px 8px max(10px, env(safe-area-inset-bottom));
+    padding: 9px 10px max(12px, env(safe-area-inset-bottom));
   }
 
   .message-form {
@@ -1485,8 +1508,8 @@ button {
   }
 
   .message-form input {
-    height: 40px;
-    padding: 0 12px;
+    height: 42px;
+    padding: 0 13px;
     font-size: 16px;
   }
 
@@ -1494,9 +1517,9 @@ button {
   .voice-btn,
   .voice-cancel-btn,
   .media-tool-btn {
-    min-width: 39px;
-    height: 39px;
-    padding: 0 10px;
+    min-width: 42px;
+    height: 42px;
+    padding: 0 11px;
   }
 
   .message-media-preview {
@@ -1559,8 +1582,8 @@ button {
     padding: 12px;
   }
 
-  .chat-list > button {
-    min-height: 62px;
+  .chat-list-item {
+    min-height: 68px;
   }
 
   .message,
@@ -1642,27 +1665,27 @@ button {
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
 }
 
-.audio-mini-card {
-  width: min(245px, 68vw);
-  min-height: 44px;
+ .audio-mini-card {
+  width: min(250px, 68vw);
+  min-height: 46px;
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 9px;
-  padding: 7px 10px;
+  gap: 10px;
+  padding: 8px 11px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-}
+  background: rgba(255, 255, 255, 0.085);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+ }
 
 .message.mine .audio-mini-card {
   background: rgba(255, 255, 255, 0.1);
 }
 
-.audio-mini-play {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+ .audio-mini-play {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
   border: 0;
   border-radius: 999px;
   background: #f8fafc;
@@ -1673,7 +1696,7 @@ button {
   display: grid;
   place-items: center;
   padding: 0;
-}
+ }
 
 .audio-mini-wave {
   height: 24px;
@@ -1815,17 +1838,17 @@ button {
 
 @media (max-width: 720px) {
   .audio-mini-card {
-    width: min(225px, 72vw);
-    grid-template-columns: 30px minmax(0, 1fr) auto;
-    gap: 7px;
-    min-height: 42px;
-    padding: 6px 8px;
+    width: min(230px, 72vw);
+    grid-template-columns: 31px minmax(0, 1fr) auto;
+    gap: 8px;
+    min-height: 43px;
+    padding: 7px 9px;
   }
 
   .audio-mini-play {
-    width: 30px;
-    height: 30px;
-    min-width: 30px;
+    width: 31px;
+    height: 31px;
+    min-width: 31px;
   }
 
   .audio-mini-wave {

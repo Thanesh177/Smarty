@@ -6,6 +6,8 @@
   min-height: calc(100vh - 72px);
   padding: 2rem clamp(16px, 4vw, 56px) 4rem;
   color: #f8fafc;
+  overflow-x: hidden;
+  contain: layout style;
   background:
     radial-gradient(circle at 12% 0%, rgba(148, 163, 184, 0.08), transparent 34%),
     radial-gradient(circle at 88% 12%, rgba(56, 189, 248, 0.055), transparent 30%),
@@ -17,6 +19,7 @@
   width: min(100%, 1120px);
   margin-left: auto;
   margin-right: auto;
+  contain: layout;
 }
 
 /* ===== HERO ===== */
@@ -34,9 +37,10 @@
     radial-gradient(circle at top left, rgba(56, 189, 248, 0.1), transparent 36%),
     rgba(15, 23, 42, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.075);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  contain: content;
 }
 
 .progress-hero::after {
@@ -49,6 +53,7 @@
   border-radius: 999px;
   background: radial-gradient(circle, rgba(255, 255, 255, 0.075), transparent 68%);
   pointer-events: none;
+  will-change: transform;
 }
 
 .progress-hero > div {
@@ -78,6 +83,7 @@
   font-size: clamp(2.1rem, 5vw, 4rem);
   line-height: 0.96;
   letter-spacing: -0.065em;
+  text-wrap: balance;
 }
 
 .progress-hero p:not(.quiz-kicker) {
@@ -94,6 +100,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  contain: layout;
 }
 
 .analytics-card {
@@ -107,16 +114,19 @@
   color: #f8fafc;
   background: rgba(15, 23, 42, 0.72);
   border: 1px solid rgba(255, 255, 255, 0.075);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: content;
 }
 
 .analytics-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(203, 213, 225, 0.16);
-  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.3);
+  transform: translate3d(0, -1px, 0);
+  border-color: rgba(203, 213, 225, 0.14);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
 }
 
 .card-header {
@@ -125,6 +135,7 @@
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 14px;
+  contain: layout;
 }
 
 .card-header h3,
@@ -145,6 +156,7 @@
 .analytics-card .recharts-responsive-container,
 .analytics-card .recharts-wrapper {
   min-height: 220px;
+  contain: layout paint;
 }
 
 /* ===== EMPTY STATE ===== */
@@ -155,6 +167,7 @@
   text-align: center;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
+  contain: content;
 }
 
 .empty-state h4 {
@@ -176,6 +189,7 @@
   margin-top: 10px;
   display: grid;
   gap: 12px;
+  contain: layout;
 }
 
 .mistake-topic-block > h4 {
@@ -190,6 +204,7 @@
   font-weight: 850;
   letter-spacing: 0.03em;
   text-transform: capitalize;
+  contain: content;
 }
 
 .mistake-review-card {
@@ -199,13 +214,16 @@
   position: relative;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.065);
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout paint;
 }
 
 .mistake-review-card:hover {
-  transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.055);
-  border-color: rgba(203, 213, 225, 0.14);
+  transform: translate3d(0, -1px, 0);
+  background: rgba(255, 255, 255, 0.052);
+  border-color: rgba(203, 213, 225, 0.12);
 }
 
 .mistake-header {
@@ -214,6 +232,7 @@
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 9px;
+  contain: layout;
 }
 
 .mistake-label {
@@ -227,6 +246,7 @@
   font-weight: 900;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  contain: content;
 }
 
 .mistake-review-card h4 {
@@ -242,6 +262,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  contain: layout;
 }
 
 .mistake-answer-grid div {
@@ -250,6 +271,7 @@
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid rgba(255, 255, 255, 0.055);
+  contain: content;
 }
 
 .mistake-answer-grid span {
@@ -274,6 +296,7 @@
   border-radius: 14px;
   background: rgba(148, 163, 184, 0.075);
   border: 1px solid rgba(255, 255, 255, 0.06);
+  contain: content;
 }
 
 .mistake-explanation strong {
@@ -299,17 +322,17 @@
 /* ===== ANIMATION ===== */
 
 .fade-in {
-  animation: fadeInUp 0.28s ease both;
+  animation: fadeInUp 0.18s ease both;
 }
 
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translate3d(0, 4px, 0);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -342,6 +365,8 @@
     padding: 18px;
     border-radius: 22px;
     margin-bottom: 14px;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .progress-hero h1 {
@@ -359,7 +384,9 @@
   .analytics-card {
     padding: 14px;
     border-radius: 18px;
-    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .card-header {
@@ -412,6 +439,11 @@
   .mistake-tip {
     font-size: 0.8rem;
   }
+
+  .analytics-card,
+  .mistake-review-card {
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media (max-width: 420px) {
@@ -435,11 +467,22 @@
   }
 }
 
+@supports (content-visibility: auto) {
+  .analytics-card,
+  .mistake-review-card,
+  .empty-state {
+    content-visibility: auto;
+    contain-intrinsic-size: 240px 260px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .fade-in,
+  .fade-in {
+    animation: none !important;
+  }
+
   .analytics-card,
   .mistake-review-card {
-    animation: none;
-    transition: none;
+    transition-duration: 0.01ms !important;
   }
 }

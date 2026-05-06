@@ -3,6 +3,8 @@
   padding: 28px;
   background: #07111f;
   color: white;
+  overflow-x: hidden;
+  contain: layout style;
 }
 
 .reel-back-btn {
@@ -12,6 +14,14 @@
   padding: 12px 16px;
   cursor: pointer;
   margin-bottom: 22px;
+  transition: transform 0.16s ease, background 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.reel-back-btn:hover {
+  transform: translate3d(0, -1px, 0);
+  background: rgba(255,255,255,.12);
 }
 
 .reel-detail-layout {
@@ -19,6 +29,7 @@
   grid-template-columns: minmax(320px, 520px) 1fr;
   gap: 34px;
   align-items: start;
+  contain: layout;
 }
 
 .reel-media-panel {
@@ -27,6 +38,8 @@
   display: grid;
   place-items: center;
   overflow: hidden;
+  contain: paint;
+  transform: translateZ(0);
 }
 
 .reel-media-panel img,
@@ -36,6 +49,8 @@
   max-height: 620px;
   object-fit: contain;
   background: #07111f;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .reel-media-placeholder {
@@ -45,10 +60,12 @@
   place-items: center;
   font-size: 5rem;
   background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+  contain: content;
 }
 
 .reel-content-panel {
   max-width: 780px;
+  contain: content;
 }
 
 .reel-topic {
@@ -60,6 +77,7 @@
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: .08em;
+  contain: content;
 }
 
 .reel-content-panel h1 {
@@ -67,12 +85,18 @@
   line-height: 1;
   margin: 20px 0 14px;
   letter-spacing: -0.06em;
+  text-wrap: balance;
 }
 
 .reel-author-row a {
   color: #93c5fd;
   text-decoration: none;
   font-weight: 800;
+  transition: opacity 0.16s ease;
+}
+
+.reel-author-row a:hover {
+  opacity: .85;
 }
 
 .reel-body {
@@ -88,6 +112,7 @@
   gap: 12px;
   flex-wrap: wrap;
   margin: 26px 0;
+  contain: layout;
 }
 
 .reel-actions button,
@@ -98,6 +123,15 @@
   font-weight: 900;
   padding: 12px 16px;
   cursor: pointer;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.reel-actions button:hover,
+.reel-comment-form button:hover {
+  transform: translate3d(0, -1px, 0);
+  opacity: .96;
 }
 
 .reel-status {
@@ -112,6 +146,7 @@
 
 .reel-comments {
   margin-top: 30px;
+  contain: layout;
 }
 
 .reel-comments h3 {
@@ -129,16 +164,24 @@
   border: 0;
   outline: 0;
   padding: 14px 16px;
+  transition: background 0.16s ease;
+}
+
+.reel-comment-form input:focus {
+  background: rgba(255,255,255,.96);
 }
 
 .reel-comment-list {
   display: grid;
   gap: 12px;
+  contain: layout;
 }
 
 .reel-comment {
   background: rgba(255,255,255,.06);
   padding: 14px 16px;
+  contain: content;
+  transform: translateZ(0);
 }
 
 .reel-comment strong {
@@ -171,5 +214,23 @@
 
   .reel-comment-form {
     grid-template-columns: 1fr;
+  }
+}
+
+@supports (content-visibility: auto) {
+  .reel-comment,
+  .reel-media-panel,
+  .reel-content-panel {
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 400px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reel-back-btn,
+  .reel-actions button,
+  .reel-comment-form button,
+  .reel-author-row a {
+    transition: none !important;
   }
 }

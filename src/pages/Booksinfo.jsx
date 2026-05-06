@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { LibraryBig } from 'lucide-react';
 import './Booksinfo.css';
 
 function getReadingHistory() {
@@ -134,6 +135,58 @@ function getSavedBookCover(bookId, fallbackBook = {}, historyCache = null) {
   return '';
 }
 
+const MiniBookButton = memo(function MiniBookButton({
+  book,
+  index,
+  history,
+  navigate,
+  bookmarkMode = false,
+}) {
+  const title = bookmarkMode
+    ? book.title
+    : getSavedBookTitle(book.id, book, history);
+
+  const cover = getSavedBookCover(book.id, book, history) || '/default-book-cover.png';
+  const progress = getBookProgress(book.id);
+
+  const handleOpen = () => {
+    if (book.id) navigate(`/read-book/${book.id}`);
+  };
+
+  return (
+    <button
+      disabled={!book.id}
+      onClick={handleOpen}
+    >
+      <span className="mini-cover" aria-hidden="true">
+        <img
+          src={cover}
+          alt=""
+          loading={index < 2 ? 'eager' : 'lazy'}
+          decoding="async"
+          fetchPriority={index < 2 ? 'high' : 'auto'}
+        />
+      </span>
+
+      <span className="mini-book-info">
+        <strong>{title}</strong>
+
+        {bookmarkMode ? (
+          <small>
+            {book.count} bookmark{book.count > 1 ? 's' : ''}
+          </small>
+        ) : (
+          <small>Continue →</small>
+        )}
+
+        <span className="book-progress-track">
+          <span style={{ width: `${progress}%` }} />
+        </span>
+      </span>
+    </button>
+  );
+});
+
 export default function Booksinfo() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -242,7 +295,54 @@ export default function Booksinfo() {
   const bookmarkedBooks = useMemo(() => getAllBookmarkedBooks(history), [history]);
   const totalBookmarks = useMemo(() => getTotalBookmarkCount(bookmarkedBooks), [bookmarkedBooks]);
   const latestBook = history[0];
-  const latestBookTitle = latestBook ? getSavedBookTitle(latestBook.id, latestBook, history) : '';
+  const latestBookTitle = useMemo(
+    () => (latestBook ? getSavedBookTitle(latestBook.id, latestBook, history) : ''),
+    [history, latestBook]
+  );
+
+  const goReadBooks = useCallback(() => {
+    navigate('/read-books');
+  }, [navigate]);
+
+  const goPreviewBooks = useCallback(() => {
+    navigate('/preview-books');
+  }, [navigate]);
+
+  const goContinueReading = useCallback(() => {
+    if (latestBook?.id) {
+      navigate(`/read-book/${latestBook.id}`);
+      return;
+    }
+
+    navigate('/read-books');
+  }, [latestBook, navigate]);
+
+  const renderedHistoryBooks = useMemo(
+    () => history.slice(0, 6).map((book, index) => (
+      <MiniBookButton
+        key={book.id || `history-${index}`}
+        book={book}
+        index={index}
+        history={history}
+        navigate={navigate}
+      />
+    )),
+    [history, navigate]
+  );
+
+  const renderedBookmarks = useMemo(
+    () => bookmarkedBooks.slice(0, 6).map((book, index) => (
+      <MiniBookButton
+        key={book.id || `bookmark-${index}`}
+        book={book}
+        index={index}
+        history={history}
+        navigate={navigate}
+        bookmarkMode
+      />
+    )),
+    [bookmarkedBooks, history, navigate]
+  );
 
   return (
     <main className="books-page">
@@ -255,18 +355,20 @@ export default function Booksinfo() {
           </p>
 
           <div className="books-actions">
-            <button onClick={() => navigate('/read-books')}>
+            <button onClick={goReadBooks}>
               Start Reading
             </button>
 
-            <button className="secondary" onClick={() => navigate('/read-books')}>
+            <button className="secondary" onClick={goReadBooks}>
               Open Library
             </button>
           </div>
         </div>
 
         <div className="books-hero-card">
-          <div className="book-glow">📚</div>
+          <div className="book-glow" aria-hidden="true">
+            <LibraryBig size={34} strokeWidth={2.1} />
+          </div>
           <h3>{latestBook ? latestBookTitle : 'Ready to read?'}</h3>
           <p>
             {latestBook
@@ -287,20 +389,20 @@ export default function Booksinfo() {
         </div>
       </section>
       <section className="books-quick-strip">
-        <button type="button" onClick={() => navigate('/read-books')}>
+        <button type="button" onClick={goReadBooks}>
           <span>Browse</span>
           <strong>Find something new</strong>
         </button>
 
         <button
           type="button"
-          onClick={() => latestBook ? navigate(`/read-book/${latestBook.id}`) : navigate('/read-books')}
+          onClick={goContinueReading}
         >
           <span>Continue</span>
           <strong>{latestBook ? latestBookTitle : 'No book yet'}</strong>
         </button>
 
-        <button type="button" onClick={() => navigate('/read-books')}>
+        <button type="button" onClick={goReadBooks}>
           <span>Library</span>
           <strong>Open book search</strong>
         </button>
@@ -317,11 +419,11 @@ export default function Booksinfo() {
         </div>
 
         <div className="books-discover-actions">
-          <button type="button" onClick={() => navigate('/preview-books')}>
+          <button type="button" onClick={goPreviewBooks}>
             Preview Only Books
           </button>
 
-          <button className="secondary" type="button" onClick={() => navigate('/read-books')}>
+          <button className="secondary" type="button" onClick={goReadBooks}>
             Read Now Books
           </button>
         </div>
@@ -337,36 +439,11 @@ export default function Booksinfo() {
             <div className="books-empty-state">
               <strong>No recent books yet</strong>
               <p>Choose a book from the library and it will appear here automatically.</p>
-              <button type="button" onClick={() => navigate('/read-books')}>Browse Books</button>
+              <button type="button" onClick={goReadBooks}>Browse Books</button>
             </div>
           ) : (
             <div className="mini-book-list">
-              {history.slice(0, 6).map((book, index) => (
-                <button
-                  key={book.id || `history-${index}`}
-                  disabled={!book.id}
-                  onClick={() => book.id && navigate(`/read-book/${book.id}`)}
-                >
-                  <span className="mini-cover" aria-hidden="true">
-                    <img
-  src={getSavedBookCover(book.id, book, history) || '/default-book-cover.png'}
-  alt=""
-  loading={index < 3 ? 'eager' : 'lazy'}
-  decoding="async"
-  fetchPriority={index < 3 ? 'high' : 'auto'}
-/>
-                  </span>
-
-                  <span className="mini-book-info">
-                    <strong>{getSavedBookTitle(book.id, book, history)}</strong>
-                    <small>Continue →</small>
-
-                    <span className="book-progress-track">
-                      <span style={{ width: `${getBookProgress(book.id)}%` }} />
-                    </span>
-                  </span>
-                </button>
-              ))}
+              {renderedHistoryBooks}
             </div>
           )}
         </article>
@@ -379,36 +456,11 @@ export default function Booksinfo() {
             <div className="books-empty-state">
               <strong>No bookmarks yet</strong>
               <p>Save important chapters while reading so you can return to them later.</p>
-              <button type="button" onClick={() => navigate('/read-books')}>Find a Book</button>
+              <button type="button" onClick={goReadBooks}>Find a Book</button>
             </div>
           ) : (
             <div className="mini-book-list">
-              {bookmarkedBooks.slice(0, 6).map((book, index) => (
-                <button
-                  key={book.id || `bookmark-${index}`}
-                  disabled={!book.id}
-                  onClick={() => book.id && navigate(`/read-book/${book.id}`)}
-                >
-                  <span className="mini-cover" aria-hidden="true">
-                    <img
-                      src={getSavedBookCover(book.id, book, history) || '/default-book-cover.png'}
-                      alt=""
-                      loading={index < 3 ? 'eager' : 'lazy'}
-                      decoding="async"
-                      fetchPriority={index < 3 ? 'high' : 'auto'}
-                    />
-                  </span>
-
-                  <span className="mini-book-info">
-                    <strong>{book.title}</strong>
-                    <small>{book.count} bookmark{book.count > 1 ? 's' : ''}</small>
-
-                    <span className="book-progress-track">
-                      <span style={{ width: `${getBookProgress(book.id)}%` }} />
-                    </span>
-                  </span>
-                </button>
-              ))}
+              {renderedBookmarks}
             </div>
           )}
         </article>

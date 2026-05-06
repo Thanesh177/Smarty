@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { postApi } from '../api/client';
 import './CreatePostPage.css';
@@ -33,6 +33,48 @@ export default function EditPostPage() {
   const [uploadStage, setUploadStage] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
 
+  const loadPage = useCallback(async () => {
+    try {
+      setLoading(true);
+
+      const [topicData, post] = await Promise.all([
+        postApi.getTopics(),
+        postApi.getSingleReel(reelId),
+      ]);
+      if (!mountedRef.current) return;
+
+      const topicList = Array.isArray(topicData)
+        ? Array.from(
+            new Set(
+              topicData
+                .map((item) =>
+                  typeof item === 'string' ? item : item.topic || item.name || item.title
+                )
+                .filter(Boolean)
+                .map((item) => String(item).trim())
+            )
+          )
+        : [];
+
+      setTopics(topicList);
+
+      setForm({
+        topic: post?.topic || topicList[0] || '',
+        customTopic: '',
+        title: post?.title || '',
+        body: post?.body || '',
+        visibility: post?.visibility || 'public',
+        imageUrl: post?.imageUrl || '',
+        videoUrl: post?.videoUrl || '',
+      });
+    } catch (err) {
+      console.error(err);
+      if (mountedRef.current) setStatus('Could not load post.');
+    } finally {
+      if (mountedRef.current) setLoading(false);
+    }
+  }, [reelId]);
+
   useEffect(() => {
     mountedRef.current = true;
     loadPage();
@@ -46,9 +88,9 @@ export default function EditPostPage() {
         activeUploadRef.current.abort();
       }
     };
-  }, [reelId]);
+  }, [loadPage]);
 
-  const deletePost = async () => {
+  const deletePost = useCallback(async () => {
     const confirmDelete = window.confirm(
       'Delete this post permanently? This cannot be undone.'
     );
@@ -78,50 +120,9 @@ export default function EditPostPage() {
         setUploadProgress(0);
       }
     }
-  };
+  }, [navigate, reelId, submitting]);
 
-  const loadPage = async () => {
-    try {
-      setLoading(true);
-
-      const [topicData, post] = await Promise.all([
-        postApi.getTopics(),
-        postApi.getSingleReel(reelId),
-      ]);
-      if (!mountedRef.current) return;
-
-      const topicList = Array.isArray(topicData)
-        ? topicData
-            .map((item) =>
-              typeof item === 'string' ? item : item.topic || item.name || item.title
-            )
-            .filter(Boolean)
-        : [];
-
-      setTopics(topicList);
-
-      setForm({
-        topic: post?.topic || topicList[0] || '',
-        customTopic: '',
-        title: post?.title || '',
-        body: post?.body || '',
-        visibility: post?.visibility || 'public',
-        imageUrl: post?.imageUrl || '',
-        videoUrl: post?.videoUrl || '',
-      });
-    } catch (err) {
-      console.error(err);
-      if (mountedRef.current) setStatus('Could not load post.');
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  };
-
-  const selectedTopic = useMemo(() => {
-    return topicMode === 'custom' ? form.customTopic.trim() : form.topic;
-  }, [topicMode, form.customTopic, form.topic]);
-
-  const uploadFile = async (file, onProgress) => {
+  const uploadFile = useCallback(async (file, onProgress) => {
     if (!file) return '';
 
     const uploadData = await postApi.getUploadUrl({
@@ -162,9 +163,9 @@ export default function EditPostPage() {
     });
 
     return uploadData.fileUrl;
-  };
+  }, []);
 
-  const submit = async (event) => {
+  const submit = useCallback(async (event) => {
     event.preventDefault();
     if (submitting) return;
 
@@ -231,7 +232,68 @@ export default function EditPostPage() {
         setUploadProgress(0);
       }
     }
-  };
+  }, [form, imageFile, navigate, reelId, selectedTopic, submitting, uploadFile, videoFile]);
+
+  const handleTopicModeChange = useCallback((event) => {
+    setTopicMode(event.target.value);
+  }, []);
+
+  const handleTopicChange = useCallback((event) => {
+    setForm((current) => ({ ...current, topic: event.target.value }));
+  }, []);
+
+  const handleCustomTopicChange = useCallback((event) => {
+    setForm((current) => ({ ...current, customTopic: event.target.value }));
+  }, []);
+
+  const handleImageFileChange = useCallback((event) => {
+    const file = event.target.files?.[0] || null;
+    setImageFile(file);
+    if (file) setVideoFile(null);
+  }, []);
+
+  const handleVideoFileChange = useCallback((event) => {
+    const file = event.target.files?.[0] || null;
+    setVideoFile(file);
+    if (file) setImageFile(null);
+  }, []);
+
+  const handleTitleChange = useCallback((event) => {
+    setForm((current) => ({ ...current, title: event.target.value }));
+  }, []);
+
+  const handleBodyChange = useCallback((event) => {
+    setForm((current) => ({ ...current, body: event.target.value }));
+  }, []);
+
+  const setPublicVisibility = useCallback(() => {
+    setForm((current) => ({ ...current, visibility: 'public' }));
+  }, []);
+
+  const setPrivateVisibility = useCallback(() => {
+    setForm((current) => ({ ...current, visibility: 'private' }));
+  }, []);
+
+  const selectedTopic = useMemo(() => {
+    return topicMode === 'custom' ? form.customTopic.trim() : form.topic;
+  }, [topicMode, form.customTopic, form.topic]);
+
+  const canSubmit = useMemo(
+    () => Boolean(!submitting && selectedTopic && form.title.trim() && form.body.trim()),
+    [form.body, form.title, selectedTopic, submitting]
+  );
+
+  const renderedTopicOptions = useMemo(() => {
+    if (topics.length === 0) {
+      return <option value={form.topic}>{form.topic || 'No topics found'}</option>;
+    }
+
+    return topics.map((topic) => (
+      <option key={topic} value={topic}>
+        {topic}
+      </option>
+    ));
+  }, [form.topic, topics]);
 
   if (loading) {
     return (
@@ -283,7 +345,7 @@ export default function EditPostPage() {
               <label>Topic</label>
 
               <div className="topic-row">
-                <select value={topicMode} disabled={submitting} onChange={(e) => setTopicMode(e.target.value)}>
+                <select value={topicMode} disabled={submitting} onChange={handleTopicModeChange}>
                   <option value="existing">Choose topic</option>
                   <option value="custom">Custom topic</option>
                 </select>
@@ -292,24 +354,16 @@ export default function EditPostPage() {
                   <select
                     value={form.topic}
                     disabled={submitting}
-                    onChange={(e) => setForm((current) => ({ ...current, topic: e.target.value }))}
+                    onChange={handleTopicChange}
                   >
-                    {topics.length === 0 ? (
-                      <option value={form.topic}>{form.topic || 'No topics found'}</option>
-                    ) : (
-                      topics.map((topic) => (
-                        <option key={topic} value={topic}>
-                          {topic}
-                        </option>
-                      ))
-                    )}
+                    {renderedTopicOptions}
                   </select>
                 ) : (
                   <input
                     placeholder="Custom topic"
                     value={form.customTopic}
                     disabled={submitting}
-                    onChange={(e) => setForm((current) => ({ ...current, customTopic: e.target.value }))}
+                    onChange={handleCustomTopicChange}
                   />
                 )}
               </div>
@@ -325,10 +379,7 @@ export default function EditPostPage() {
                     type="file"
                     accept="image/*"
                     disabled={submitting}
-                    onChange={(e) => {
-                      setImageFile(e.target.files?.[0] || null);
-                      if (e.target.files?.[0]) setVideoFile(null);
-                    }}
+                    onChange={handleImageFileChange}
                   />
                 </label>
 
@@ -338,10 +389,7 @@ export default function EditPostPage() {
                     type="file"
                     accept="video/*"
                     disabled={submitting}
-                    onChange={(e) => {
-                      setVideoFile(e.target.files?.[0] || null);
-                      if (e.target.files?.[0]) setImageFile(null);
-                    }}
+                    onChange={handleVideoFileChange}
                   />
                 </label>
               </div>
@@ -355,9 +403,9 @@ export default function EditPostPage() {
                 <img
                   src={form.imageUrl}
                   alt="Current post"
-                  loading="eager"
+                  loading="lazy"
                   decoding="async"
-                  fetchPriority="high"
+                  fetchPriority="auto"
                 />
               </div>
             )}
@@ -375,7 +423,7 @@ export default function EditPostPage() {
             <input
               value={form.title}
               disabled={submitting}
-              onChange={(e) => setForm((current) => ({ ...current, title: e.target.value }))}
+              onChange={handleTitleChange}
             />
           </div>
 
@@ -385,7 +433,7 @@ export default function EditPostPage() {
               rows="10"
               value={form.body}
               disabled={submitting}
-              onChange={(e) => setForm((current) => ({ ...current, body: e.target.value }))}
+              onChange={handleBodyChange}
             />
           </div>
 
@@ -398,7 +446,7 @@ export default function EditPostPage() {
                   type="button"
                   disabled={submitting}
                   className={form.visibility === 'public' ? 'active' : ''}
-                  onClick={() => setForm((current) => ({ ...current, visibility: 'public' }))}
+                  onClick={setPublicVisibility}
                 >
                   🌍 Public
                 </button>
@@ -407,7 +455,7 @@ export default function EditPostPage() {
                   type="button"
                   disabled={submitting}
                   className={form.visibility === 'private' ? 'active' : ''}
-                  onClick={() => setForm((current) => ({ ...current, visibility: 'private' }))}
+                  onClick={setPrivateVisibility}
                 >
                   🔒 Private
                 </button>
@@ -415,7 +463,7 @@ export default function EditPostPage() {
             </div>
 
             <div className="edit-action-row">
-              <button className="primary-btn publish-btn" disabled={submitting || !selectedTopic || !form.title.trim() || !form.body.trim()} type="submit">
+              <button className="primary-btn publish-btn" disabled={!canSubmit} type="submit">
                 {submitting ? 'Updating...' : 'Update reel'}
               </button>
 

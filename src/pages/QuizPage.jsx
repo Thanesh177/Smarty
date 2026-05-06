@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import confetti from "canvas-confetti";
 import BrainGameEngine from "../components/games/BrainGameEngine";
 import { saveWrongQuestion, getWrongQuestions } from "../lib/progressStore";
@@ -175,6 +175,67 @@ const TOPICS = [
 
 const QUESTIONS = {};
 
+const TopicCard = memo(function TopicCard({ item, progress, onStart }) {
+  return (
+    <button
+      className={`topic-card ${item.color}`}
+      onClick={() => onStart(item)}
+    >
+      <div className="topic-card-top">
+        <span className="topic-emoji">{item.emoji}</span>
+
+        <div className="topic-mini-stats">
+          <span className="level-badge">LVL {progress.level}</span>
+
+          <div className="mini-bar-group">
+            <div className="mini-bar-row">
+              <span>Mastery</span>
+              <strong>{progress.bestPercent}%</strong>
+            </div>
+            <div className="mini-progress-track">
+              <div
+                className="mini-progress-fill"
+                style={{ width: `${progress.bestPercent}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="mini-bar-group">
+            <div className="mini-bar-row">
+              <span>XP</span>
+              <strong>{progress.xpInLevel}/100</strong>
+            </div>
+            <div className="mini-progress-track">
+              <div
+                className="mini-progress-fill xp-fill"
+                style={{ width: `${progress.xpInLevel}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3>{item.title}</h3>
+      <p>{item.desc}</p>
+      <strong>Start challenge →</strong>
+    </button>
+  );
+});
+
+const ReviewItem = memo(function ReviewItem({ answer, answerIndex }) {
+  return (
+    <article className={answer.isCorrect ? "review-item correct" : "review-item wrong"}>
+      <div>
+        <strong>Q{answerIndex + 1}. {answer.q}</strong>
+        <p>Your answer: {answer.selected}</p>
+        {!answer.isCorrect && <p>Correct answer: {answer.correctAnswer}</p>}
+        <small>{answer.explanation}</small>
+      </div>
+      <span>{answer.isCorrect ? "✅" : "❌"}</span>
+    </article>
+  );
+});
+
 const GAME_STEPS = {
   memory: [
     { type: "game", gameType: "sequence" },
@@ -322,7 +383,11 @@ function getVisitStreak() {
 }
 
 function getStoredTopicProgress() {
-  return JSON.parse(localStorage.getItem("smarty-topic-progress") || "{}");
+  try {
+    return JSON.parse(localStorage.getItem("smarty-topic-progress") || "{}");
+  } catch {
+    return {};
+  }
 }
 
 function saveStoredTopicProgress(topicId, data) {
@@ -373,20 +438,20 @@ function getTotalXP(progressMap) {
 
 export default function QuizPage() {
 const [comboCount, setComboCount] = useState(1);
-  const survivalMode = localStorage.getItem("smarty-game-mode") === "survival";
 const SURVIVAL_TIME = 12;
 const [survivalTimeLeft, setSurvivalTimeLeft] = useState(SURVIVAL_TIME);
 const [newAchievements, setNewAchievements] = useState([]);
 const sounds = useSoundFeedback();
+const survivalMode = useMemo(() => localStorage.getItem("smarty-game-mode") === "survival", []);
 const [bossMode, setBossMode] = useState(false);
 const [xpGained, setXpGained] = useState(0);
 
-const showXPGain = (xp) => {
+const showXPGain = useCallback((xp) => {
   setXpGained(0);
   requestAnimationFrame(() => {
     setXpGained(xp);
   });
-};
+}, []);
 
   const [topic, setTopic] = useState(null);
 
@@ -432,52 +497,33 @@ const games = GAME_STEPS[topic.id] || [];
 const streakGoal = 7;
 const streakPercent = Math.min((visitProgress.streak / streakGoal) * 100, 100);
 
+const topicProgressDetails = useMemo(() => {
+  const details = {};
+
+  for (const item of TOPICS) {
+    details[item.id] = getTopicProgressDetails(item.id, topicProgressMap);
+  }
+
+  return details;
+}, [topicProgressMap]);
+
+
+const renderedReviewItems = useMemo(
+  () => answers.map((answer, answerIndex) => (
+    <ReviewItem
+      key={answer.id || `${answer.q}-${answerIndex}`}
+      answer={answer}
+      answerIndex={answerIndex}
+    />
+  )),
+  [answers]
+);
+
 
   const current = mixedSteps[index];
-  useEffect(() => {
-  if (!topic || finished || !current || !survivalMode) return;
-
-  setSurvivalTimeLeft(SURVIVAL_TIME);
-
-  const timer = setInterval(() => {
-    setSurvivalTimeLeft((prev) => {
-      if (prev <= 1) {
-        clearInterval(timer);
-
-        const timeoutAnswer = {
-          id: current.id || `timeout-${topic.id}-${index}`,
-          q: current.q || current.gameType || "Survival Challenge",
-          selected: "Timed out",
-          correctAnswer: current.answer || "Time ran out",
-          explanation: "You ran out of time. Survival mode trains fast thinking.",
-          difficulty: current.difficulty || "Survival",
-          isCorrect: false,
-          xp: 0,
-        };
-
-        const nextAnswers = [...answers, timeoutAnswer];
-        setAnswers(nextAnswers);
-
-        if (index + 1 < mixedSteps.length) {
-          setIndex((prev) => prev + 1);
-          setSelected("");
-        } else {
-          setFinished(true);
-          saveQuizProgress(score, nextAnswers);
-        }
-
-        return 0;
-      }
-
-      return prev - 1;
-    });
-  }, 1000);
-
-  return () => clearInterval(timer);
-}, [topic, index, finished, current, survivalMode]);
   const currentTopicHasAIQuestions = topic ? Array.isArray(aiQuestions[topic.id]) && aiQuestions[topic.id].length > 0 : false;
 
-  const loadAIQuestions = async (topicId) => {
+  const loadAIQuestions = useCallback(async (topicId) => {
   if (!API_BASE_URL) {
     setSaveError("AI API is not configured. Add VITE_API_BASE_URL to your .env file.");
     return;
@@ -543,46 +589,45 @@ setAiQuestions((prev) => ({
   } finally {
     setLoadingAI(false);
   }
-};
+}, [topicProgressMap]);
 
-  const startQuiz = (item) => {
-
+  const startQuiz = useCallback((item) => {
     const bossPractice = localStorage.getItem("smarty-boss-practice") === "true";
-const shouldStartBoss = visitProgress.streak >= 7 || bossPractice;
+    const shouldStartBoss = visitProgress.streak >= 7 || bossPractice;
 
-setBossMode(shouldStartBoss);
+    setBossMode(shouldStartBoss);
 
-if (bossPractice) {
-  localStorage.removeItem("smarty-boss-practice");
-}
+    if (bossPractice) {
+      localStorage.removeItem("smarty-boss-practice");
+    }
 
     setTopic(item);
-
     setIndex(0);
-
     setScore(0);
-
     setAnswers([]);
-
     setSelected("");
-
     setFinished(false);
-
     setProgress(null);
-
     setSaveError("");
-
     setLocked(false);
-
     setXpGained(0);
-
     setComboCount(1);
-
     loadAIQuestions(item.id);
+  }, [loadAIQuestions, visitProgress.streak]);
 
-  };
+const renderedTopics = useMemo(
+  () => TOPICS.map((item) => (
+    <TopicCard
+      key={item.id}
+      item={item}
+      progress={topicProgressDetails[item.id]}
+      onStart={startQuiz}
+    />
+  )),
+  [topicProgressDetails, startQuiz]
+);
 
-const saveQuizProgress = async (finalScore, finalAnswers) => {
+const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
   setSaving(true);
 
   setSaveError("");
@@ -707,69 +752,101 @@ clearActiveQuiz(topic.id);
       setSaving(false);
     }
 
-  };
+  }, [mixedSteps.length, overallLevel, sounds, topic, topicProgressMap, visitProgress.streak]);
 
-const submitAnswer = () => {
+useEffect(() => {
+  if (!topic || finished || !current || !survivalMode) return;
+
+  setSurvivalTimeLeft(SURVIVAL_TIME);
+
+  const timer = setInterval(() => {
+    setSurvivalTimeLeft((prev) => {
+      if (prev <= 1) {
+        clearInterval(timer);
+
+        const timeoutAnswer = {
+          id: current.id || `timeout-${topic.id}-${index}`,
+          q: current.q || current.gameType || "Survival Challenge",
+          selected: "Timed out",
+          correctAnswer: current.answer || "Time ran out",
+          explanation: "You ran out of time. Survival mode trains fast thinking.",
+          difficulty: current.difficulty || "Survival",
+          isCorrect: false,
+          xp: 0,
+        };
+
+        const nextAnswers = [...answers, timeoutAnswer];
+        setAnswers(nextAnswers);
+
+        if (index + 1 < mixedSteps.length) {
+          setIndex((prevIndex) => prevIndex + 1);
+          setSelected("");
+        } else {
+          setFinished(true);
+          saveQuizProgress(score, nextAnswers);
+        }
+
+        return 0;
+      }
+
+      return prev - 1;
+    });
+  }, 1000);
+
+  return () => clearInterval(timer);
+}, [answers, current, finished, index, mixedSteps.length, saveQuizProgress, score, survivalMode, topic]);
+
+const submitAnswer = useCallback(() => {
   if (locked || !selected || !current) return;
 
   setLocked(true);
 
   const isCorrect = selected === current.answer;
 
-if (isCorrect) {
-  sounds.correct();
-  setComboCount((prev) => prev + 1);
-  showXPGain(10);
-} else {
-  sounds.wrong();
-  setComboCount(1);
-  setXpGained(0);
-}
+  if (isCorrect) {
+    sounds.correct();
+    setComboCount((prev) => prev + 1);
+    showXPGain(10);
+  } else {
+    sounds.wrong();
+    setComboCount(1);
+    setXpGained(0);
+  }
 
   if (!isCorrect && current.type === "mcq") {
     saveWrongQuestion(topic.id, current);
   }
 
-    const nextScore = score + (isCorrect ? 1 : 0);
+  const nextScore = score + (isCorrect ? 1 : 0);
 
-    const nextAnswers = [
-      ...answers,
-      {
-        id: current.id,
-        q: current.q,
-        selected,
-        correctAnswer: current.answer,
-        explanation: current.explanation,
-        difficulty: current.difficulty,
-        isCorrect,
-        xp: isCorrect ? 10 : 0,
-      },
-    ];
+  const nextAnswers = [
+    ...answers,
+    {
+      id: current.id,
+      q: current.q,
+      selected,
+      correctAnswer: current.answer,
+      explanation: current.explanation,
+      difficulty: current.difficulty,
+      isCorrect,
+      xp: isCorrect ? 10 : 0,
+    },
+  ];
 
-    setAnswers(nextAnswers);
+  setAnswers(nextAnswers);
+  setScore(nextScore);
 
-    setScore(nextScore);
-    
+  if (index + 1 < mixedSteps.length) {
+    setIndex((prev) => prev + 1);
+    setSelected("");
+    setLocked(false);
+  } else {
+    setFinished(true);
+    saveQuizProgress(nextScore, nextAnswers);
+  }
+}, [answers, current, index, locked, mixedSteps.length, saveQuizProgress, score, selected, showXPGain, sounds, topic]);
 
-    if (index + 1 < mixedSteps.length) {
-
-      setIndex((prev) => prev + 1);
-
-      setSelected("");
-
-      setLocked(false);
-
-    } else {
-
-      setFinished(true);
-
-      saveQuizProgress(nextScore, nextAnswers);
-
-    }
-
-  };
-
-const restart = () => {
+const restart = useCallback(() => {
   setBossMode(false);
   localStorage.removeItem("smarty-boss-practice");
   localStorage.removeItem("smarty-game-mode");
@@ -785,7 +862,7 @@ const restart = () => {
   setLocked(false);
   setXpGained(0);
   setComboCount(1);
-};
+}, []);
 
   const finalScore = score;
 
@@ -798,6 +875,79 @@ const restart = () => {
   const previousScore = progress?.previousScore ?? null;
 
   const improvement = progress?.improvement ?? (previousScore === null ? 0 : finalScore - previousScore);
+const handleBossComplete = useCallback((result) => {
+  if (result.success) {
+    sounds.correct();
+    setComboCount((prev) => prev + 1);
+    showXPGain(10);
+  } else {
+    sounds.wrong();
+    setComboCount(1);
+    setXpGained(0);
+  }
+
+  const bossScore = result.success ? score + 2 : score;
+
+  const nextAnswers = [
+    ...answers,
+    {
+      id: `boss-${topic.id}-${Date.now()}`,
+      q: "Boss Level",
+      selected: result.success ? "Completed" : "Failed",
+      correctAnswer: "Boss challenge",
+      explanation: result.message,
+      difficulty: "Boss",
+      isCorrect: result.success,
+      xp: result.success ? 10 : 0,
+    },
+  ];
+
+  setScore(bossScore);
+  setAnswers(nextAnswers);
+  setBossMode(false);
+  localStorage.removeItem("smarty-boss-practice");
+  setIndex(0);
+  setFinished(true);
+  saveQuizProgress(bossScore, nextAnswers);
+}, [answers, saveQuizProgress, score, showXPGain, sounds, topic]);
+
+const handleGameComplete = useCallback((result) => {
+  if (result.success) {
+    sounds.correct();
+    setComboCount((prev) => prev + 1);
+    showXPGain(10);
+  } else {
+    sounds.wrong();
+    setComboCount(1);
+    setXpGained(0);
+  }
+
+  const nextScore = score + (result.success ? 1 : 0);
+  const nextAnswers = [
+    ...answers,
+    {
+      id: `game-${topic.id}-${current.gameType}-${index}`,
+      q: current.gameType,
+      selected: result.success ? "Completed" : "Failed",
+      correctAnswer: "Game challenge",
+      explanation: result.message,
+      difficulty: "Game",
+      isCorrect: result.success,
+      xp: result.success ? 10 : 0,
+    },
+  ];
+
+  setScore(nextScore);
+  setAnswers(nextAnswers);
+
+  if (index + 1 < mixedSteps.length) {
+    setIndex((prev) => prev + 1);
+  } else {
+    setFinished(true);
+    saveQuizProgress(nextScore, nextAnswers);
+  }
+}, [answers, current, index, mixedSteps.length, saveQuizProgress, score, showXPGain, sounds, topic]);
+
 if (topic && bossMode && !finished) {
   return (
     <main className="quiz-page">
@@ -809,41 +959,7 @@ if (topic && bossMode && !finished) {
 
         <BossChallenge
           topicId={topic.id}
-          onComplete={(result) => {
-            if (result.success) {
-  sounds.correct();
-  setComboCount((prev) => prev + 1);
-  showXPGain(10);
-} else {
-  sounds.wrong();
-  setComboCount(1);
-  setXpGained(0);
-}
-
-            const bossScore = result.success ? score + 2 : score;
-
-            const nextAnswers = [
-              ...answers,
-              {
-                id: `boss-${topic.id}-${Date.now()}`,
-                q: "Boss Level",
-                selected: result.success ? "Completed" : "Failed",
-                correctAnswer: "Boss challenge",
-                explanation: result.message,
-                difficulty: "Boss",
-                isCorrect: result.success,
-                xp: result.success ? 10 : 0,
-              },
-            ];
-
-            setScore(bossScore);
-            setAnswers(nextAnswers);
-            setBossMode(false);
-            localStorage.removeItem("smarty-boss-practice");
-            setIndex(0);
-            setFinished(true);
-            saveQuizProgress(bossScore, nextAnswers);
-          }}
+          onComplete={handleBossComplete}
         />
       </section>
 
@@ -961,57 +1077,7 @@ if (topic && bossMode && !finished) {
         </section>
 
         <section className="topic-grid">
-
-{TOPICS.map((item) => {
-  const cardProgress = getTopicProgressDetails(item.id, topicProgressMap);
-
-  return (
-    <button key={item.id} className={`topic-card ${item.color}`} onClick={() => {
-startQuiz(item);
-}}>
-<div className="topic-card-top">
-  <span className="topic-emoji">{item.emoji}</span>
-
-  <div className="topic-mini-stats">
-    <span className="level-badge">LVL {cardProgress.level}</span>
-
-    <div className="mini-bar-group">
-      <div className="mini-bar-row">
-        <span>Mastery</span>
-        <strong>{cardProgress.bestPercent}%</strong>
-      </div>
-      <div className="mini-progress-track">
-        <div
-          className="mini-progress-fill"
-          style={{ width: `${cardProgress.bestPercent}%` }}
-        />
-      </div>
-    </div>
-
-    <div className="mini-bar-group">
-      <div className="mini-bar-row">
-        <span>XP</span>
-        <strong>{cardProgress.xpInLevel}/100</strong>
-      </div>
-      <div className="mini-progress-track">
-        <div
-          className="mini-progress-fill xp-fill"
-          style={{ width: `${cardProgress.xpInLevel}%` }}
-        />
-      </div>
-    </div>
-  </div>
-</div>
-
-<h3>{item.title}</h3>
-<p>{item.desc}</p>
-
-
-<strong>Start challenge →</strong>
-    </button>
-  );
-})}
-
+{renderedTopics}
         </section>
 <AchievementToast achievements={newAchievements} />
 <XPOrb xp={xpGained} combo={comboCount} />
@@ -1117,27 +1183,7 @@ startQuiz(item);
 
             <h3>Review Your Answers</h3>
 
-            {answers.map((answer, answerIndex) => (
-
-              <article key={answer.id || `${answer.q}-${answerIndex}`} className={answer.isCorrect ? "review-item correct" : "review-item wrong"}>
-
-                <div>
-
-                  <strong>Q{answerIndex + 1}. {answer.q}</strong>
-
-                  <p>Your answer: {answer.selected}</p>
-
-                  {!answer.isCorrect && <p>Correct answer: {answer.correctAnswer}</p>}
-
-                  <small>{answer.explanation}</small>
-
-                </div>
-
-                <span>{answer.isCorrect ? "✅" : "❌"}</span>
-
-              </article>
-
-            ))}
+            {renderedReviewItems}
 
           </div>
 
@@ -1192,41 +1238,7 @@ startQuiz(item);
         <BrainGameEngine
           game={current}
           topicId={topic.id}
-          onComplete={(result) => {
-if (result.success) {
-  sounds.correct();
-  setComboCount((prev) => prev + 1);
-  showXPGain(10);
-} else {
-  sounds.wrong();
-  setComboCount(1);
-  setXpGained(0);
-}
-            const nextScore = score + (result.success ? 1 : 0);
-            const nextAnswers = [
-              ...answers,
-              {
-                id: `game-${topic.id}-${current.gameType}-${index}`,
-                q: current.gameType,
-                selected: result.success ? "Completed" : "Failed",
-                correctAnswer: "Game challenge",
-                explanation: result.message,
-                difficulty: "Game",
-                isCorrect: result.success,
-                xp: result.success ? 10 : 0,
-              },
-            ];
-
-            setScore(nextScore);
-            setAnswers(nextAnswers);
-
-            if (index + 1 < mixedSteps.length) {
-              setIndex((prev) => prev + 1);
-            } else {
-              setFinished(true);
-              saveQuizProgress(nextScore, nextAnswers);
-            }
-          }}
+          onComplete={handleGameComplete}
         />
       </section>
       <AchievementToast achievements={newAchievements} />

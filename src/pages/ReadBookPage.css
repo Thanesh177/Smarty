@@ -12,6 +12,7 @@
   position: relative;
   isolation: isolate;
   overflow-x: hidden;
+  contain: layout style;
   background:
     radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.1), transparent 30%),
     radial-gradient(circle at 88% 12%, rgba(139, 92, 246, 0.075), transparent 32%),
@@ -24,6 +25,7 @@
   inset: 0;
   z-index: -1;
   pointer-events: none;
+  will-change: transform;
   background:
     linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
@@ -59,8 +61,9 @@
     linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(15, 23, 42, 0.58));
   border: 1px solid rgba(255, 255, 255, 0.085);
   box-shadow: 0 22px 62px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  contain: content;
 }
 
 .read-books-hero::after {
@@ -124,8 +127,9 @@
     linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(15, 23, 42, 0.62));
   border: 1px solid rgba(255, 255, 255, 0.085);
   box-shadow: 0 20px 56px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  contain: layout style;
 }
 
 .read-books-search-box {
@@ -137,7 +141,7 @@
   background: rgba(255, 255, 255, 0.055);
   border-radius: 18px;
   padding: 7px 8px 7px 15px;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition: border-color 0.16s ease, background 0.16s ease;
 }
 
 .books-loading-card {
@@ -147,7 +151,8 @@
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 22px;
   background: rgba(15, 23, 42, 0.72);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(8px);
+  contain: content;
   color: #e5edf8;
   display: flex;
   align-items: center;
@@ -165,6 +170,7 @@
   box-shadow: inset 5px 0 0 rgba(15, 23, 42, 0.14);
   overflow: hidden;
   animation: premiumBookFloat 1.8s ease-in-out infinite;
+  transform: translateZ(0);
 }
 
 .premium-book-loader::after {
@@ -208,7 +214,6 @@
 .read-books-search-box:focus-within {
   border-color: rgba(56, 189, 248, 0.46);
   background: rgba(255, 255, 255, 0.075);
-  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.08);
 }
 
 .read-books-search input,
@@ -235,7 +240,9 @@
   border-radius: 999px;
   font-weight: 900;
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .search-clear-btn {
@@ -249,7 +256,7 @@
 .quick-searches button:hover,
 .read-book-actions a:hover,
 .read-book-actions button:hover {
-  transform: translateY(-2px);
+  transform: translate3d(0, -1px, 0);
 }
 
 .quick-searches {
@@ -257,6 +264,7 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+  contain: layout;
 }
 
 .quick-searches button {
@@ -283,6 +291,9 @@
   margin-top: 14px;
   overflow-x: auto;
   padding-bottom: 6px;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+  contain: layout;
 }
 
 .category-bar::-webkit-scrollbar {
@@ -305,14 +316,16 @@
   font-weight: 800;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .category-btn:hover {
   background: rgba(56, 189, 248, 0.12);
   border-color: rgba(125, 211, 252, 0.25);
   color: #fff;
-  transform: translateY(-2px);
+  transform: translate3d(0, -1px, 0);
 }
 
 .category-btn.active {
@@ -338,14 +351,13 @@
   padding: 12px 13px;
   font-weight: 820;
   outline: none;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition: border-color 0.16s ease, background 0.16s ease;
 }
 
 .book-filters input:focus,
 .book-filters select:focus {
   border-color: rgba(56, 189, 248, 0.46);
   background: rgba(255, 255, 255, 0.075);
-  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.08);
 }
 
 .book-filters select option {
@@ -369,6 +381,7 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 14px 34px rgba(0, 0, 0, 0.14);
+  contain: layout;
 }
 
 .access-filter-btn {
@@ -384,11 +397,13 @@
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .access-filter-btn:hover {
-  transform: translateY(-1px);
+  transform: translate3d(0, -1px, 0);
   background: rgba(255, 255, 255, 0.065);
   color: #ffffff;
 }
@@ -405,6 +420,7 @@
 
 .book-row {
   margin-bottom: 42px;
+  contain: layout;
 }
 
 .book-row h2 {
@@ -424,6 +440,9 @@
   scroll-snap-type: x proximity;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.3) rgba(15, 23, 42, 0.8);
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+  contain: layout;
 }
 
 .book-row-scroll::-webkit-scrollbar {
@@ -444,6 +463,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 22px;
+  contain: layout;
 }
 
 /* =========================
@@ -462,9 +482,12 @@
     linear-gradient(145deg, rgba(15, 23, 42, 0.84), rgba(15, 23, 42, 0.56));
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.26);
   scroll-snap-align: start;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout paint;
   padding-bottom: 4px;
 }
 
@@ -475,7 +498,7 @@
 }
 
 .read-book-card:hover {
-  transform: translateY(-6px);
+  transform: translate3d(0, -2px, 0);
   border-color: rgba(125, 211, 252, 0.22);
   box-shadow: 0 28px 72px rgba(0, 0, 0, 0.38);
 }
@@ -486,6 +509,7 @@
   place-items: center;
   position: relative;
   overflow: hidden;
+  contain: paint;
   background:
     radial-gradient(circle at top, rgba(56, 189, 248, 0.18), transparent 46%),
     linear-gradient(145deg, #0f172a, #1e293b);
@@ -501,6 +525,8 @@
   padding: 10px;
   box-sizing: border-box;
   background: linear-gradient(145deg, #0f172a, #1e293b);
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .book-cover-placeholder::after {
@@ -509,7 +535,7 @@
   inset: 0;
   background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.08), transparent);
   transform: translateX(-120%);
-  transition: transform 0.55s ease;
+  transition: transform 0.28s ease;
 }
 
 .read-book-card:hover .book-cover-placeholder::after {
@@ -527,6 +553,7 @@
   font-size: 2rem;
   font-weight: 950;
   box-shadow: 0 18px 40px rgba(56, 189, 248, 0.22);
+  contain: content;
 }
 
 .read-book-body {
@@ -535,6 +562,7 @@
   flex-direction: column;
   padding: 18px 16px;
   gap: 6px;
+  contain: content;
 }
 
 .read-book-body h3 {
@@ -581,6 +609,7 @@
   gap: 10px;
   margin-top: auto;
   padding-top: 16px;
+  contain: layout;
 }
 
 .read-book-actions a,
@@ -607,12 +636,12 @@
 
 .read-book-actions a:hover,
 .read-book-actions button:hover {
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
 }
 
 .read-book-actions a:active,
 .read-book-actions button:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateZ(0) scale(0.98);
   opacity: 0.84;
 }
 
@@ -639,9 +668,9 @@
    MOTION
 ========================= */
 
-@media (prefers-reduced-motion: no-preference) {
+@media (min-width: 900px) and (prefers-reduced-motion: no-preference) {
   .read-books-page::before {
-    animation: readBooksAmbient 12s ease-in-out infinite alternate;
+    animation: readBooksAmbient 18s ease-in-out infinite alternate;
   }
 }
 
@@ -791,4 +820,25 @@
 }
 .read-book-card:hover .read-book-body h3 {
   color: #e0f2fe;
+}
+
+@supports (content-visibility: auto) {
+  .read-book-card,
+  .book-row {
+    content-visibility: auto;
+    contain-intrinsic-size: 260px 460px;
+  }
+}
+
+@media (max-width: 720px), (prefers-reduced-motion: reduce) {
+  .read-books-page::before,
+  .book-cover-placeholder::after,
+  .premium-book-loader,
+  .premium-book-loader::after {
+    animation: none !important;
+  }
+
+  .book-cover-placeholder::after {
+    display: none;
+  }
 }

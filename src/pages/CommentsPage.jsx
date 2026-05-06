@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,6 +17,107 @@ const displayName = (item) => {
   return value.includes('@') ? value.split('@')[0] : value || 'User';
 };
 
+const initials = (name) =>
+  String(name || 'U').trim().slice(0, 1).toUpperCase();
+
+const CommentRow = memo(function CommentRow({
+  item,
+  index,
+  commentId,
+  name,
+  textValue,
+  mine,
+  editing,
+  editingText,
+  processingCommentId,
+  onCreatorOpen,
+  onEditingTextChange,
+  onSaveEdit,
+  onCancelEdit,
+  onReply,
+  onStartEdit,
+  onDelete,
+}) {
+  const ownerId = item.userId || item.authorId || item.senderId;
+  const disabledCreator = mine || !ownerId;
+
+  return (
+    <article className={mine ? 'comment-row mine' : 'comment-row'}>
+      {!mine && <div className="avatar">{initials(name)}</div>}
+
+      <div className={mine ? 'comment-bubble mine' : 'comment-bubble'}>
+        <div className="comment-head">
+          <button
+            type="button"
+            className="comment-username"
+            disabled={disabledCreator}
+            onClick={() => onCreatorOpen(ownerId, mine)}
+          >
+            {mine ? 'You' : `@${name}`}
+          </button>
+        </div>
+
+        {editing ? (
+          <div className="comment-edit-box">
+            <input
+              value={editingText}
+              disabled={processingCommentId === commentId}
+              autoComplete="off"
+              onChange={onEditingTextChange}
+              autoFocus
+            />
+
+            <button
+              type="button"
+              disabled={processingCommentId === commentId || !editingText.trim()}
+              onClick={() => onSaveEdit(item, index)}
+            >
+              {processingCommentId === commentId ? 'Saving...' : 'Save'}
+            </button>
+
+            <button
+              type="button"
+              disabled={processingCommentId === commentId}
+              onClick={onCancelEdit}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <p>{textValue}</p>
+        )}
+
+        <div className="comment-actions">
+          <button type="button" onClick={() => onReply(item, index)}>
+            Reply
+          </button>
+
+          {mine && (
+            <>
+              <button
+                type="button"
+                onClick={() => onStartEdit(commentId, textValue)}
+              >
+                Edit
+              </button>
+
+              <button
+                type="button"
+                disabled={processingCommentId === commentId}
+                onClick={() => onDelete(item, index)}
+              >
+                {processingCommentId === commentId ? 'Deleting...' : 'Delete'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {mine && <div className="avatar mine-avatar">Y</div>}
+    </article>
+  );
+});
+
 export default function CommentsPage() {
   const { reelId } = useParams();
   const navigate = useNavigate();
@@ -28,7 +129,10 @@ export default function CommentsPage() {
   const toastTimerRef = useRef(null);
   const { user } = useAuth();
 
-  const currentUserId = user?.id || user?.userId || user?.sub;
+  const currentUserId = useMemo(
+    () => user?.id || user?.userId || user?.sub,
+    [user]
+  );
 
   const [comments, setComments] = useState([]);
   const [text, setText] = useState('');
@@ -40,28 +144,7 @@ export default function CommentsPage() {
   const [processingCommentId, setProcessingCommentId] = useState('');
   const [toast, setToast] = useState('');
 
-  useEffect(() => {
-    mountedRef.current = true;
-    loadComments();
-
-    if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
-    focusTimerRef.current = window.setTimeout(() => {
-      if (mountedRef.current) inputRef.current?.focus();
-    }, 250);
-
-    return () => {
-      mountedRef.current = false;
-      if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
-      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
-      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    };
-  }, [reelId]);
-
-  useEffect(() => {
-    if (!loading) scrollToBottom(false);
-  }, [loading]);
-
-  const scrollToBottom = (smooth = true) => {
+  const scrollToBottom = useCallback((smooth = true) => {
     if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
 
     scrollTimerRef.current = window.setTimeout(() => {
@@ -71,9 +154,9 @@ export default function CommentsPage() {
         block: 'end',
       });
     }, 60);
-  };
+  }, []);
 
-  const showToast = (msg) => {
+  const showToast = useCallback((msg) => {
     if (!mountedRef.current) return;
 
     setToast(msg);
@@ -82,17 +165,19 @@ export default function CommentsPage() {
     toastTimerRef.current = window.setTimeout(() => {
       if (mountedRef.current) setToast('');
     }, 1400);
-  };
+  }, []);
 
-  const getCommentId = (item, index) =>
-    item.commentId || item.id || `${item.createdAt || 'comment'}-${index}`;
+  const getCommentId = useCallback(
+    (item, index) => item.commentId || item.id || `${item.createdAt || 'comment'}-${index}`,
+    []
+  );
 
-  const isMine = (item) => {
+  const isMine = useCallback((item) => {
     const ownerId = item.userId || item.authorId || item.senderId;
     return Boolean(ownerId && currentUserId && ownerId === currentUserId);
-  };
+  }, [currentUserId]);
 
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -116,9 +201,30 @@ export default function CommentsPage() {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  };
+  }, [reelId, showToast]);
 
-  const submit = async () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    loadComments();
+
+    if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) inputRef.current?.focus();
+    }, 250);
+
+    return () => {
+      mountedRef.current = false;
+      if (focusTimerRef.current) window.clearTimeout(focusTimerRef.current);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
+  }, [loadComments]);
+
+  useEffect(() => {
+    if (!loading) scrollToBottom(false);
+  }, [loading, scrollToBottom]);
+
+  const submit = useCallback(async () => {
     const cleanText = text.trim();
     if (!cleanText || posting) return;
 
@@ -164,9 +270,9 @@ export default function CommentsPage() {
     } finally {
       if (mountedRef.current) setPosting(false);
     }
-  };
+  }, [currentUserId, posting, reelId, replyingTo, scrollToBottom, showToast, text, user]);
 
-  const editComment = async (item, index) => {
+  const editComment = useCallback(async (item, index) => {
     const cleanText = editingText.trim();
     const commentId = item.commentId || item.id || getCommentId(item, index);
 
@@ -204,9 +310,9 @@ export default function CommentsPage() {
     } finally {
       if (mountedRef.current) setProcessingCommentId('');
     }
-  };
+  }, [editingText, getCommentId, processingCommentId, reelId, showToast]);
 
-  const deleteComment = async (item, index) => {
+  const deleteComment = useCallback(async (item, index) => {
     const commentId = item.commentId || item.id || getCommentId(item, index);
     if (!commentId || processingCommentId) return;
 
@@ -234,9 +340,9 @@ export default function CommentsPage() {
     } finally {
       if (mountedRef.current) setProcessingCommentId('');
     }
-  };
+  }, [getCommentId, processingCommentId, reelId, showToast]);
 
-  const startReply = (item, index) => {
+  const startReply = useCallback((item, index) => {
     const name = displayName(item);
 
     setReplyingTo({
@@ -249,22 +355,110 @@ export default function CommentsPage() {
     focusTimerRef.current = window.setTimeout(() => {
       if (mountedRef.current) inputRef.current?.focus();
     }, 80);
-  };
+  }, [getCommentId]);
 
-  const cancelReply = () => {
+  const cancelReply = useCallback(() => {
     setReplyingTo(null);
     setText('');
-  };
+  }, []);
 
-  const initials = (name) =>
-    String(name || 'U').trim().slice(0, 1).toUpperCase();
+  const goBack = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
+  const focusInput = useCallback(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleTextChange = useCallback((e) => {
+    setText(e.target.value);
+  }, []);
+
+  const handleEditingTextChange = useCallback((e) => {
+    setEditingText(e.target.value);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) submit();
+    },
+    [submit]
+  );
+
+  const openCreator = useCallback(
+    (ownerId, mine) => {
+      if (!mine && ownerId) navigate(`/creator/${ownerId}`);
+    },
+    [navigate]
+  );
+
+  const cancelEdit = useCallback(() => {
+    setEditingCommentId(null);
+    setEditingText('');
+  }, []);
+
+  const startEdit = useCallback((commentId, value) => {
+    setEditingCommentId(commentId);
+    setEditingText(value);
+  }, []);
+
+  const renderedComments = useMemo(
+    () => comments.map((item, index) => {
+      const commentId = getCommentId(item, index);
+      const name = displayName(item);
+      const textValue = item.text || item.comment || item.body || '';
+      const mine = isMine(item);
+
+      return (
+        <CommentRow
+          key={commentId}
+          item={item}
+          index={index}
+          commentId={commentId}
+          name={name}
+          textValue={textValue}
+          mine={mine}
+          editing={editingCommentId === commentId}
+          editingText={editingText}
+          processingCommentId={processingCommentId}
+          onCreatorOpen={openCreator}
+          onEditingTextChange={handleEditingTextChange}
+          onSaveEdit={editComment}
+          onCancelEdit={cancelEdit}
+          onReply={startReply}
+          onStartEdit={startEdit}
+          onDelete={deleteComment}
+        />
+      );
+    }),
+    [
+      cancelEdit,
+      comments,
+      deleteComment,
+      editComment,
+      editingCommentId,
+      editingText,
+      getCommentId,
+      handleEditingTextChange,
+      isMine,
+      openCreator,
+      processingCommentId,
+      startEdit,
+      startReply,
+    ]
+  );
+
+  const canSend = useMemo(
+    () => Boolean(!posting && text.trim()),
+    [posting, text]
+  );
 
   return (
     <main className="comments-page">
       {toast && <div className="comment-toast">{toast}</div>}
 
       <header className="comments-topbar">
-        <button type="button" className="icon-btn" onClick={() => navigate(-1)}>
+        <button type="button" className="icon-btn" onClick={goBack}>
           ←
         </button>
 
@@ -276,7 +470,7 @@ export default function CommentsPage() {
         <button
           type="button"
           className="icon-btn"
-          onClick={() => inputRef.current?.focus()}
+          onClick={focusInput}
         >
           ✎
         </button>
@@ -296,100 +490,7 @@ export default function CommentsPage() {
           </div>
         ) : (
           <div className="comments-list">
-            {comments.map((item, index) => {
-              const commentId = getCommentId(item, index);
-              const name = displayName(item);
-              const textValue = item.text || item.comment || item.body || '';
-              const mine = isMine(item);
-
-              return (
-                <article
-                  key={commentId}
-                  className={mine ? 'comment-row mine' : 'comment-row'}
-                >
-                  {!mine && <div className="avatar">{initials(name)}</div>}
-
-                  <div className={mine ? 'comment-bubble mine' : 'comment-bubble'}>
-                    <div className="comment-head">
-                      <button
-                        type="button"
-                        className="comment-username"
-                        disabled={mine || !(item.userId || item.authorId || item.senderId)}
-                        onClick={() => {
-                          const ownerId = item.userId || item.authorId || item.senderId;
-                          if (!mine && ownerId) navigate(`/creator/${ownerId}`);
-                        }}
-                      >
-                        {mine ? 'You' : `@${name}`}
-                      </button>
-                    </div>
-
-                    {editingCommentId === commentId ? (
-                      <div className="comment-edit-box">
-                        <input
-                          value={editingText}
-                          disabled={processingCommentId === commentId}
-                          autoComplete="off"
-                          onChange={(e) => setEditingText(e.target.value)}
-                          autoFocus
-                        />
-
-                        <button
-                          type="button"
-                          disabled={processingCommentId === commentId || !editingText.trim()}
-                          onClick={() => editComment(item, index)}
-                        >
-                          {processingCommentId === commentId ? 'Saving...' : 'Save'}
-                        </button>
-
-                        <button
-                          type="button"
-                          disabled={processingCommentId === commentId}
-                          onClick={() => {
-                            setEditingCommentId(null);
-                            setEditingText('');
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <p>{textValue}</p>
-                    )}
-
-                    <div className="comment-actions">
-                      <button type="button" onClick={() => startReply(item, index)}>
-                        Reply
-                      </button>
-
-                      {mine && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingCommentId(commentId);
-                              setEditingText(textValue);
-                            }}
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={processingCommentId === commentId}
-                            onClick={() => deleteComment(item, index)}
-                          >
-                            {processingCommentId === commentId ? 'Deleting...' : 'Delete'}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {mine && <div className="avatar mine-avatar">Y</div>}
-                </article>
-              );
-            })}
+            {renderedComments}
 
             <div ref={bottomRef} />
           </div>
@@ -418,16 +519,14 @@ export default function CommentsPage() {
           value={text}
           autoComplete="off"
           disabled={posting}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) submit();
-          }}
+          onChange={handleTextChange}
+          onKeyDown={handleKeyDown}
         />
 
         <button
           type="button"
           className="send-btn"
-          disabled={posting || !text.trim()}
+          disabled={!canSend}
           onClick={submit}
         >
           {posting ? '...' : replyingTo ? 'Reply' : 'Post'}

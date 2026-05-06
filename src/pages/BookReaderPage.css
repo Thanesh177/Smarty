@@ -16,6 +16,7 @@
     radial-gradient(circle at 88% 8%, rgba(99, 102, 241, 0.14), transparent 32%),
     linear-gradient(180deg, #07111f 0%, #020617 100%);
   overflow-x: hidden;
+  contain: layout style;
 }
 
 .reader-page::before {
@@ -23,6 +24,7 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
+  will-change: transform;
   background-image:
     linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
@@ -35,13 +37,15 @@
   z-index: 1;
   width: min(980px, 100%);
   margin: 0 auto;
+  contain: layout;
 }
 
 .reader-surface-card {
   border: 1px solid rgba(148, 163, 184, 0.14);
   background: rgba(15, 23, 42, 0.64);
-  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(18px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(8px);
+  contain: content;
 }
 
 /* =========================
@@ -66,8 +70,9 @@
   border-radius: 28px;
   background: rgba(15, 23, 42, 0.72);
   text-align: center;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(18px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(8px);
+  contain: content;
 }
 
 .reader-loading-card p {
@@ -88,7 +93,8 @@
   border-radius: 999px;
   border: 3px solid rgba(148, 163, 184, 0.22);
   border-top-color: #38bdf8;
-  animation: readerSpin 0.8s linear infinite;
+  animation: readerSpin 1.4s linear infinite;
+  transform: translateZ(0);
 }
 
 @keyframes readerSpin {
@@ -112,6 +118,7 @@
   margin-bottom: 18px;
   padding: 10px;
   border-radius: 24px;
+  contain: layout;
 }
 
 .menu-btn,
@@ -125,16 +132,18 @@
   color: #f8fafc;
   font-weight: 950;
   cursor: pointer;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
-  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.14);
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .menu-btn:hover,
 .reader-icon-btn:hover,
 .reader-topbar > button:hover {
-  transform: translateY(-1px);
-  background: rgba(56, 189, 248, 0.16);
-  box-shadow: 0 12px 26px rgba(56, 189, 248, 0.16);
+  transform: translate3d(0, -1px, 0);
+  background: rgba(56, 189, 248, 0.14);
+  box-shadow: 0 7px 16px rgba(56, 189, 248, 0.12);
 }
 
 .reader-progress-text {
@@ -172,6 +181,7 @@
   padding: clamp(20px, 4vw, 34px);
   border-radius: 34px;
   overflow: hidden;
+  contain: content;
   background:
     radial-gradient(circle at 88% 10%, rgba(56, 189, 248, 0.2), transparent 30%),
     linear-gradient(135deg, rgba(15, 23, 42, 0.86), rgba(30, 41, 59, 0.5));
@@ -214,6 +224,7 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 18px;
+  contain: layout;
 }
 
 .reader-chip-row span {
@@ -231,6 +242,7 @@
   align-items: center;
   gap: 10px;
   margin-top: 18px;
+  contain: layout;
 }
 
 .reader-bookmark-btn,
@@ -248,22 +260,24 @@
   font-size: 0.86rem;
   font-weight: 950;
   cursor: pointer;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
-  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .reader-bookmark-btn:hover,
 .reader-hero-bookmark-btn:hover {
-  transform: translateY(-1px);
-  background: rgba(56, 189, 248, 0.16);
-  box-shadow: 0 14px 32px rgba(56, 189, 248, 0.14);
+  transform: translate3d(0, -1px, 0);
+  background: rgba(56, 189, 248, 0.14);
+  box-shadow: 0 7px 18px rgba(56, 189, 248, 0.12);
 }
 
 .reader-bookmark-btn.active,
 .reader-hero-bookmark-btn.active {
   background: linear-gradient(135deg, #38bdf8, #6366f1);
   color: #ffffff;
-  box-shadow: 0 16px 34px rgba(56, 189, 248, 0.22);
+  box-shadow: 0 8px 20px rgba(56, 189, 248, 0.16);
 }
 
 .reader-orbit-progress {
@@ -275,7 +289,8 @@
   background:
     radial-gradient(circle, #0f172a 58%, transparent 60%),
     conic-gradient(#38bdf8 var(--reader-progress), rgba(148, 163, 184, 0.18) 0);
-  box-shadow: 0 18px 46px rgba(56, 189, 248, 0.16);
+  box-shadow: 0 8px 20px rgba(56, 189, 248, 0.12);
+  contain: content;
 }
 
 .reader-orbit-progress div {
@@ -306,6 +321,7 @@
   margin: 14px 0;
   padding: 14px;
   border-radius: 24px;
+  contain: layout;
 }
 
 .menu-row,
@@ -350,16 +366,18 @@
   font-size: 0.86rem;
   font-weight: 950;
   cursor: pointer;
-  transition: transform 0.18s ease, background 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.16s ease, background 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .reader-menu button:hover,
 .reader-controls button:hover:not(:disabled),
 .bookmark-list button:hover,
 .reader-retry-btn:hover {
-  transform: translateY(-1px);
-  background: rgba(56, 189, 248, 0.16);
-  box-shadow: 0 12px 26px rgba(56, 189, 248, 0.14);
+  transform: translate3d(0, -1px, 0);
+  background: rgba(56, 189, 248, 0.14);
+  box-shadow: 0 7px 18px rgba(56, 189, 248, 0.1);
 }
 
 .reader-menu-active {
@@ -394,17 +412,20 @@
   margin: 16px 0;
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.16);
+  contain: paint;
 }
 
 .reader-progress > div {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #38bdf8, #6366f1);
-  transition: width 0.28s ease;
+  transition: width 0.16s ease;
 }
 
 .bookmark-list {
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bookmark-list strong {
@@ -418,6 +439,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  contain: layout;
 }
 
 .reader-focus-strip {
@@ -426,6 +448,7 @@
   gap: 10px;
   align-items: center;
   justify-content: space-between;
+  contain: layout;
 }
 
 .reader-focus-strip span,
@@ -455,7 +478,8 @@
   color: rgba(248, 250, 252, 0.92);
   font-family: Georgia, "Times New Roman", serif;
   transform-origin: center left;
-  will-change: transform, opacity;
+  will-change: auto;
+  contain: content;
 }
 
 .reader-content p {
@@ -463,6 +487,7 @@
   margin: 0 auto 0.42em;
   letter-spacing: 0.01em;
   word-spacing: 0.04em;
+  contain: content;
 }
 
 .reader-content p:empty,
@@ -471,11 +496,11 @@
 }
 
 .page-flip-next {
-  animation: pageFlipNext 0.34s ease;
+  animation: pageFlipNext 0.22s ease;
 }
 
 .page-flip-prev {
-  animation: pageFlipPrev 0.34s ease;
+  animation: pageFlipPrev 0.22s ease;
 }
 
 @keyframes pageFlipNext {
@@ -486,7 +511,7 @@
 
   50% {
     opacity: 0.45;
-    transform: translateX(-12px);
+    transform: translate3d(-6px, 0, 0);
   }
 
   100% {
@@ -503,7 +528,7 @@
 
   50% {
     opacity: 0.45;
-    transform: translateX(12px);
+    transform: translate3d(6px, 0, 0);
   }
 
   100% {
@@ -522,6 +547,7 @@
   margin: clamp(44px, 10vh, 90px) auto 0;
   padding: clamp(24px, 5vw, 46px);
   border-radius: 34px;
+  contain: content;
 }
 
 .reader-error-card h1 {
@@ -531,6 +557,7 @@
   font-size: clamp(2.2rem, 6vw, 4.5rem);
   line-height: 0.95;
   letter-spacing: -0.07em;
+  text-wrap: balance;
 }
 
 .reader-error {
@@ -554,6 +581,7 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 20px;
+  contain: layout;
 }
 
 .reader-retry-btn {
@@ -579,7 +607,7 @@
   background: rgba(255, 255, 255, 0.78);
   color: #0f172a;
   border-color: rgba(15, 23, 42, 0.08);
-  box-shadow: 0 22px 54px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
 }
 
 .reader-theme-light .reader-content,
@@ -632,6 +660,32 @@
     padding: 12px 12px 74px;
   }
 
+  .reader-page::before {
+    display: none;
+  }
+
+  .reader-topbar,
+  .reader-hero-card,
+  .reader-content,
+  .reader-menu,
+  .reader-controls,
+  .bookmark-list,
+  .reader-focus-strip {
+    backdrop-filter: none;
+  }
+
+  .menu-btn,
+  .reader-icon-btn,
+  .reader-topbar > button,
+  .reader-bookmark-btn,
+  .reader-hero-bookmark-btn,
+  .reader-menu button,
+  .reader-controls button,
+  .bookmark-list button,
+  .reader-retry-btn {
+    transition-duration: 0.01ms !important;
+  }
+
   .reader-topbar {
     top: 8px;
     border-radius: 20px;
@@ -676,6 +730,18 @@
 
   .reader-chip-row span {
     font-size: 0.72rem;
+  }
+}
+
+@supports (content-visibility: auto) {
+  .reader-content,
+  .reader-menu,
+  .reader-controls,
+  .bookmark-list,
+  .reader-focus-strip,
+  .reader-hero-card {
+    content-visibility: auto;
+    contain-intrinsic-size: 320px 520px;
   }
 }
 
@@ -793,12 +859,22 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
+  .reader-spinner,
+  .page-flip-next,
+  .page-flip-prev {
+    animation: none !important;
+  }
+
+  .menu-btn,
+  .reader-icon-btn,
+  .reader-topbar > button,
+  .reader-bookmark-btn,
+  .reader-hero-bookmark-btn,
+  .reader-menu button,
+  .reader-controls button,
+  .bookmark-list button,
+  .reader-retry-btn,
+  .reader-progress > div {
     transition-duration: 0.01ms !important;
   }
 }

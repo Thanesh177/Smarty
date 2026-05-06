@@ -8,6 +8,8 @@
   margin: 0 auto;
   padding: 2rem clamp(16px, 4vw, 56px) 5rem;
   color: #fff;
+  overflow-x: hidden;
+  contain: layout style;
 }
 
 .back-btn {
@@ -19,11 +21,13 @@
   color: #f8fafc;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .back-btn:hover {
-  transform: translateX(-2px);
+  transform: translate3d(-1px, 0, 0);
   background: rgba(255,255,255,0.1);
 }
 
@@ -55,8 +59,9 @@
     linear-gradient(145deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.88));
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
-    0 28px 90px rgba(0, 0, 0, 0.36),
+    0 12px 34px rgba(0, 0, 0, 0.24),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  contain: content;
 }
 
 .quiz-hero.game-profile-hero::before {
@@ -65,7 +70,8 @@
   inset: -2px;
   background: linear-gradient(120deg, transparent, rgba(56, 189, 248, 0.24), transparent);
   transform: translateX(-100%);
-  animation: heroShimmer 5s ease-in-out infinite;
+  animation: heroShimmer 9s ease-in-out infinite;
+  will-change: transform;
   pointer-events: none;
 }
 
@@ -78,8 +84,9 @@
   bottom: -100px;
   border-radius: 999px;
   background: radial-gradient(circle, rgba(34, 197, 94, 0.2), transparent 68%);
-  filter: blur(2px);
-  animation: softFloat 5s ease-in-out infinite;
+  filter: blur(1px);
+  animation: softFloat 8s ease-in-out infinite;
+  will-change: transform;
   pointer-events: none;
 }
 
@@ -96,6 +103,7 @@
   letter-spacing: -0.075em;
   color: #fff;
   text-shadow: 0 18px 45px rgba(0, 0, 0, 0.38);
+  text-wrap: balance;
 }
 
 .quiz-hero.game-profile-hero p:not(.quiz-kicker) {
@@ -119,7 +127,8 @@
   border: 1px solid rgba(34, 197, 94, 0.24);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 22px 50px rgba(0, 0, 0, 0.28);
+    0 10px 26px rgba(0, 0, 0, 0.18);
+  contain: content;
 }
 
 .game-profile-stat-card h3 {
@@ -145,6 +154,7 @@
   overflow: hidden;
   background: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.35);
+  contain: paint;
 }
 
 .profile-level-fill {
@@ -153,9 +163,10 @@
   position: relative;
   overflow: hidden;
   background: linear-gradient(90deg, #38bdf8, #22c55e, #a3e635);
-  box-shadow: 0 0 22px rgba(34, 197, 94, 0.55);
-  animation: xpPulse 1.7s ease-in-out infinite;
-  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.32);
+  animation: xpPulse 3.2s ease-in-out infinite;
+  transition: width 0.22s ease;
+  transform: translateZ(0);
 }
 
 .profile-level-fill::after {
@@ -163,7 +174,7 @@
   position: absolute;
   inset: 0;
   background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.52) 35%, transparent 70%);
-  animation: xpShine 1.6s linear infinite;
+  animation: xpShine 3.4s linear infinite;
 }
 
 /* =========================
@@ -175,6 +186,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   margin: 24px auto;
+  contain: layout;
 }
 
 .profile-overview-card {
@@ -189,8 +201,11 @@
     radial-gradient(circle at top, rgba(56, 189, 248, 0.16), transparent 42%),
     linear-gradient(145deg, rgba(15, 23, 42, 0.86), rgba(2, 6, 23, 0.7));
   border: 1px solid rgba(255, 255, 255, 0.11);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
-  transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
+  box-shadow: 0 9px 24px rgba(0, 0, 0, 0.16);
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: content;
 }
 
 .profile-overview-card::before {
@@ -199,13 +214,13 @@
   inset: 0;
   opacity: 0;
   background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.18), transparent 42%);
-  transition: opacity 0.24s ease;
+  transition: opacity 0.16s ease;
 }
 
 .profile-overview-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(56, 189, 248, 0.34);
-  box-shadow: 0 22px 60px rgba(56, 189, 248, 0.1);
+  transform: translate3d(0, -1px, 0);
+  border-color: rgba(56, 189, 248, 0.24);
+  box-shadow: 0 10px 26px rgba(56, 189, 248, 0.08);
 }
 
 .profile-overview-card:hover::before {
@@ -248,10 +263,12 @@
 
 .unlock-section {
   margin: 42px auto;
+  contain: layout;
 }
 
 .section-heading-row {
   margin-bottom: 18px;
+  contain: layout;
 }
 
 .unlock-section h2 {
@@ -269,6 +286,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 18px;
+  contain: layout;
 }
 
 .unlock-card {
@@ -285,8 +303,11 @@
     radial-gradient(circle at top right, rgba(147, 197, 253, 0.13), transparent 34%),
     linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.62));
   border: 1px solid rgba(255, 255, 255, 0.11);
-  box-shadow: 0 22px 65px rgba(0, 0, 0, 0.28);
-  transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease, opacity 0.24s ease, filter 0.24s ease;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout paint;
 }
 
 .unlock-card::before {
@@ -297,7 +318,7 @@
   background:
     radial-gradient(circle at 20% 0%, rgba(56, 189, 248, 0.32), transparent 34%),
     radial-gradient(circle at 90% 20%, rgba(139, 92, 246, 0.26), transparent 34%);
-  transition: opacity 0.24s ease;
+  transition: opacity 0.16s ease;
   pointer-events: none;
 }
 
@@ -307,13 +328,13 @@
   inset: -80px;
   background: conic-gradient(from 180deg, transparent, rgba(56, 189, 248, 0.18), transparent, rgba(34, 197, 94, 0.18), transparent);
   opacity: 0;
-  animation: cardGlowSpin 6s linear infinite;
+  animation: cardGlowSpin 12s linear infinite;
   pointer-events: none;
 }
 
 .unlock-card:hover {
-  transform: translateY(-6px);
-  border-color: rgba(147, 197, 253, 0.36);
+  transform: translate3d(0, -2px, 0);
+  border-color: rgba(147, 197, 253, 0.26);
 }
 
 .unlock-card:hover::before,
@@ -324,18 +345,18 @@
 .unlock-card.unlocked {
   border-color: rgba(34, 197, 94, 0.42);
   box-shadow:
-    0 24px 70px rgba(34, 197, 94, 0.13),
+    0 10px 28px rgba(34, 197, 94, 0.09),
     0 0 0 1px rgba(34, 197, 94, 0.08);
 }
 
 .unlock-card.locked {
   opacity: 0.62;
-  filter: grayscale(0.32);
+  filter: none;
 }
 
 .unlock-card.locked:hover {
   opacity: 0.76;
-  filter: grayscale(0.18);
+  filter: none;
 }
 
 .unlock-card > * {
@@ -347,6 +368,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  contain: layout;
 }
 
 .unlock-card-top span {
@@ -359,12 +381,13 @@
   font-size: 1.9rem;
   background: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  contain: content;
 }
 
 .unlock-card.unlocked .unlock-card-top span {
-  animation: iconPulse 1.8s ease-in-out infinite;
+  animation: iconPulse 3.4s ease-in-out infinite;
   box-shadow:
-    0 0 22px rgba(34, 197, 94, 0.22),
+    0 0 12px rgba(34, 197, 94, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
@@ -423,8 +446,10 @@
   font-weight: 950;
   cursor: pointer;
   background: linear-gradient(135deg, #38bdf8, #8b5cf6);
-  box-shadow: 0 14px 34px rgba(56, 189, 248, 0.2);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  box-shadow: 0 8px 18px rgba(56, 189, 248, 0.14);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, opacity 0.16s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .unlock-action-btn::after {
@@ -433,12 +458,12 @@
   inset: 0;
   background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.32), transparent);
   transform: translateX(-120%);
-  transition: transform 0.4s ease;
+  transition: transform 0.24s ease;
 }
 
 .unlock-action-btn:not(:disabled):hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 44px rgba(139, 92, 246, 0.28);
+  transform: translate3d(0, -1px, 0);
+  box-shadow: 0 10px 24px rgba(139, 92, 246, 0.18);
 }
 
 .unlock-action-btn:not(:disabled):hover::after {
@@ -460,6 +485,7 @@
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 12px;
   margin: 20px 0;
+  contain: layout;
 }
 
 .memory-tile {
@@ -472,19 +498,22 @@
   cursor: pointer;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.2s ease;
-  animation: tileFadeIn 0.3s ease;
+  transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+  animation: tileFadeIn 0.18s ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: content;
 }
 
 .memory-tile:hover {
-  transform: translateY(-2px);
+  transform: translate3d(0, -1px, 0);
   background: rgba(255, 255, 255, 0.1);
 }
 
 .memory-tile.selected {
   background: linear-gradient(135deg, #38bdf8, #8b5cf6);
   border-color: transparent;
-  box-shadow: 0 6px 18px rgba(56, 189, 248, 0.4);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.24);
 }
 
 .memory-tile.study {
@@ -520,17 +549,17 @@
     opacity: 0.72;
   }
   50% {
-    transform: translateY(-18px) scale(1.08);
+    transform: translate3d(0, -8px, 0) scale(1.03);
     opacity: 1;
   }
 }
 
 @keyframes xpPulse {
   0%, 100% {
-    box-shadow: 0 0 16px rgba(34, 197, 94, 0.38);
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.24);
   }
   50% {
-    box-shadow: 0 0 30px rgba(56, 189, 248, 0.65);
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.32);
   }
 }
 
@@ -554,18 +583,18 @@
     transform: scale(1);
   }
   50% {
-    transform: scale(1.08);
+    transform: scale(1.025);
   }
 }
 
 @keyframes tileFadeIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translate3d(0, 4px, 0);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -599,6 +628,7 @@
   .quiz-hero.game-profile-hero {
     padding: 22px;
     border-radius: 28px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
   }
 
   .quiz-hero.game-profile-hero h1 {
@@ -616,6 +646,8 @@
     padding-bottom: 4px;
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-inline: contain;
+    contain: layout;
   }
 
   .profile-overview-card {
@@ -649,6 +681,35 @@
     min-height: auto;
     padding: 18px;
     border-radius: 26px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+  }
+
+  .quiz-hero.game-profile-hero::before,
+  .quiz-hero.game-profile-hero::after,
+  .profile-level-fill,
+  .profile-level-fill::after,
+  .unlock-card::after,
+  .unlock-card.unlocked .unlock-card-top span,
+  .memory-tile {
+    animation: none !important;
+  }
+
+  .back-btn,
+  .profile-overview-card,
+  .unlock-card,
+  .unlock-action-btn,
+  .memory-tile {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@supports (content-visibility: auto) {
+  .profile-overview-card,
+  .unlock-card,
+  .game-profile-stat-card,
+  .memory-tile {
+    content-visibility: auto;
+    contain-intrinsic-size: 220px 260px;
   }
 }
 
@@ -660,12 +721,14 @@
   .unlock-card::after,
   .unlock-card.unlocked .unlock-card-top span,
   .memory-tile {
-    animation: none;
+    animation: none !important;
   }
 
+  .back-btn,
   .unlock-card,
   .profile-overview-card,
-  .unlock-action-btn {
-    transition: none;
+  .unlock-action-btn,
+  .memory-tile {
+    transition-duration: 0.01ms !important;
   }
 }

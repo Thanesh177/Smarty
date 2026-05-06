@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const STORAGE_KEY = "smarty_install_prompt_seen";
 
@@ -22,19 +22,34 @@ function safeSetStorage(key, value) {
 }
 
 function isStandaloneMode() {
+  if (typeof window === "undefined") return false;
+
   return Boolean(
-    window.navigator.standalone === true ||
+    window.navigator?.standalone === true ||
       window.matchMedia?.("(display-mode: standalone)")?.matches
   );
 }
 
-export default function InstallPrompt() {
+function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [show, setShow] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const mountedRef = useRef(true);
   const timerRef = useRef(null);
   const [installing, setInstalling] = useState(false);
+
+  const installTitle = useMemo(
+    () => (isIOS ? "Install Smarty" : "Install Smarty App"),
+    [isIOS]
+  );
+
+  const installDescription = useMemo(
+    () =>
+      isIOS
+        ? "Tap the Share button at the bottom, then choose Add to Home Screen."
+        : "Add Smarty to your home screen for a faster app experience.",
+    [isIOS]
+  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -46,7 +61,7 @@ export default function InstallPrompt() {
 
     if (seen || Date.now() < snoozedUntil || isStandaloneMode()) return undefined;
 
-    const ua = navigator.userAgent.toLowerCase();
+    const ua = navigator.userAgent?.toLowerCase?.() || "";
     const iosDevice = /iphone|ipad|ipod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 
     setIsIOS(iosDevice);
@@ -84,7 +99,7 @@ export default function InstallPrompt() {
     };
   }, []);
 
-  const installApp = async () => {
+  const installApp = useCallback(async () => {
     if (!deferredPrompt || installing) return;
 
     try {
@@ -109,24 +124,20 @@ export default function InstallPrompt() {
         setDeferredPrompt(null);
       }
     }
-  };
+  }, [deferredPrompt, installing]);
 
-  const closePopup = () => {
+  const closePopup = useCallback(() => {
     safeSetStorage(SNOOZE_KEY, String(Date.now() + SNOOZE_DURATION));
     setShow(false);
-  };
+  }, []);
 
   if (!show) return null;
 
   return (
     <div className="install-popup">
       <div>
-        <p>{isIOS ? "Install Smarty" : "Install Smarty App"}</p>
-        <p>
-          {isIOS
-            ? "Tap the Share button at the bottom, then choose Add to Home Screen."
-            : "Add Smarty to your home screen for a faster app experience."}
-        </p>
+        <p>{installTitle}</p>
+        <p>{installDescription}</p>
       </div>
 
       {!isIOS && deferredPrompt && (
@@ -145,3 +156,5 @@ export default function InstallPrompt() {
     </div>
   );
 }
+
+export default memo(InstallPrompt);
