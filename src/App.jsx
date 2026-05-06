@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
-import { useState, useEffect, lazy, Suspense, Component } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense, Component } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
 import { notificationApi, chatApi } from './api/client';
@@ -87,7 +87,43 @@ function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [totalUnread, setTotalUnread] = useState(0);
+  const touchStartXRef = useRef(null);
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/confirm';
+
+  const goBack = useCallback(() => {
+    window.history.back();
+  }, []);
+
+  useEffect(() => {
+    const isMobileView = () => window.matchMedia('(max-width: 768px)').matches;
+
+    const handleTouchStart = (event) => {
+      if (!isMobileView()) return;
+      touchStartXRef.current = event.touches[0]?.clientX ?? null;
+    };
+
+    const handleTouchEnd = (event) => {
+      if (!isMobileView() || touchStartXRef.current === null) return;
+
+      const touchEndX = event.changedTouches[0]?.clientX ?? touchStartXRef.current;
+      const swipeDistance = touchEndX - touchStartXRef.current;
+      const startedNearLeftEdge = touchStartXRef.current <= 45;
+
+      touchStartXRef.current = null;
+
+      if (startedNearLeftEdge && swipeDistance > 80 && window.history.length > 1) {
+        goBack();
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [goBack]);
 
   // Keep chat notification badge updated globally, even when user is not on Chat page
   useEffect(() => {
