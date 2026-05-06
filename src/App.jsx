@@ -273,24 +273,24 @@ useEffect(() => {
                 }
               }}
             >
-              <div
-                className="brand-mark"
-                aria-hidden="true"
-                style={{
-                  position: 'relative',
-                  width: '52px',
-                  height: '52px',
-                  borderRadius: '18px',
-                  display: 'grid',
-                  placeItems: 'center',
-                  overflow: 'hidden',
-                  background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(241,245,249,0.94))',
-                  border: '1px solid rgba(255,255,255,0.95)',
-                  boxShadow: '0 14px 34px rgba(255,255,255,0.18), 0 8px 20px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.95)',
-                  backdropFilter: 'blur(16px)',
-                  WebkitBackdropFilter: 'blur(16px)',
-                }}
-              >
+            <div
+              className="brand-mark"
+              aria-hidden="true"
+              style={{
+                position: 'relative',
+                width: '46px',        // ↓ smaller
+                height: '46px',
+                borderRadius: '12px', // keep proportions
+                display: 'grid',
+                placeItems: 'center',
+                overflow: 'hidden',
+                background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(241,245,249,0.94))',
+                border: '1px solid rgba(255,255,255,0.95)',
+                boxShadow: '5px 5px 5px rgba(255, 255, 255, 0.54), 0 4px 10px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.9)', // ↓ lighter shadow
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+              }}
+            >
                 <div
                   style={{
                     position: 'absolute',

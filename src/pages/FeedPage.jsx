@@ -321,7 +321,7 @@ const FeedPostCard = memo(function FeedPostCard({
             disabled={isTranslating}
           >
             <option value="" disabled>
-              🌍 {isTranslating ? 'Translating...' : 'Translate'}
+               {isTranslating ? 'Translating...' : 'Translate'}
             </option>
             {hasTranslation && <option value="original">Original</option>}
             {hasTranslation && isTranslated && (

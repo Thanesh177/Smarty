@@ -296,10 +296,18 @@ button {
 
 .brand-logo h1 {
   margin: 0;
-  font-size: 1.45rem;
+  font-size: 1.7rem;
   line-height: 1;
   letter-spacing: -0.04em;
   color: #f8fafc;
+
+  text-shadow:
+    1px 1px 0 #94a3b8,
+    2px 2px 0 #64748b,
+    3px 3px 0 #475569,
+    4px 4px 6px rgba(0, 0, 0, 0.4),
+    0 0 12px rgba(52, 211, 153, 0.6),
+    0 0 25px rgba(96, 165, 250, 0.4);
 }
 
 .brand-logo p {
@@ -319,7 +327,7 @@ button {
 .brand-actions button {
   border: 1px solid rgba(255, 255, 255, .08);
   backface-visibility: hidden;
-      box-shadow: 0 3px 3px rgba(52, 211, 153, .22);
+      box-shadow: 0 3px 3px rgba(157, 157, 157, 0.708);
 
   padding: 10px 15px;
   border-radius: 999px;
@@ -444,7 +452,7 @@ button {
   }
 
   .brand-logo h1 {
-    font-size: 1.3rem;
+    font-size: 1.8rem;
   }
 
   .brand-logo p {

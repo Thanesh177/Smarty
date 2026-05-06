@@ -85,7 +85,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
   padding: 0 18px;
-  background: linear-gradient(135deg, #38bdf8, #8b5cf6);
+  background: linear-gradient(135deg, #38bff89b, #8a5cf697);
   color: #ffffff;
   font-weight: 950;
   cursor: pointer;
@@ -114,7 +114,7 @@
 .friend-result-card button:hover {
   transform: translateY(-2px);
   border-color: rgba(125, 211, 252, 0.28);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.26);
+  box-shadow: 0 3px 3px rgba(164, 157, 157, 0.735);
 }
 
 .friend-search-row button:active,
@@ -160,7 +160,7 @@
   place-items: center;
   font-weight: 950;
   color: #ffffff;
-  background: linear-gradient(135deg, #38bdf8, #8b5cf6);
+  background: linear-gradient(135deg, #38bff892, #8a5cf683);
   box-shadow: 0 12px 28px rgba(56, 189, 248, 0.14);
 }
 
@@ -188,7 +188,7 @@
   z-index: -1;
   background:
     radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.14), transparent 30%),
-    radial-gradient(circle at 88% 14%, rgba(139, 92, 246, 0.13), transparent 34%),
+    radial-gradient(circle at 88% 14%, rgba(155, 112, 255, 0.13), transparent 34%),
     radial-gradient(circle at 50% 100%, rgba(34, 197, 94, 0.08), transparent 34%);
 }
 
@@ -296,7 +296,7 @@
   color: white;
   background:
     radial-gradient(circle at 25% 15%, rgba(255, 255, 255, 0.3), transparent 34%),
-    linear-gradient(135deg, #38bdf8, #8b5cf6);
+    linear-gradient(135deg, #38bff888, #8a5cf67f);
   box-shadow:
     0 0 0 10px rgba(255, 255, 255, 0.035),
     0 0 0 1px rgba(255, 255, 255, 0.18),
@@ -569,6 +569,7 @@
 .profile-edit-box button:hover::after,
 .edit-post-btn:hover::after {
   transform: translateX(120%);
+
 }
 
 .profile-edit-btn {
@@ -654,7 +655,7 @@
   border: 0;
   border-radius: 17px;
   padding: 13px;
-  background: linear-gradient(135deg, #38bdf8, #8b5cf6);
+  background: linear-gradient(135deg, #38bff880, #8a5cf665);
   color: white;
   font-weight: 950;
   cursor: pointer;
@@ -773,6 +774,7 @@
   border: 0;
   background: transparent;
   color: rgba(248, 250, 252, 0.72);
+  
   padding: 11px 18px;
   border-radius: 999px;
   cursor: pointer;
@@ -987,8 +989,8 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   padding: 9px 13px;
-  background: rgba(7, 17, 31, 0.72);
-  color: white;
+  background: rgba(255, 255, 255, 0.536);
+  color: rgb(0, 0, 0);
   font-weight: 950;
   cursor: pointer;
   backdrop-filter: blur(14px);
