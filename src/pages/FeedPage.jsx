@@ -166,6 +166,7 @@ const FeedPostCard = memo(function FeedPostCard({
   creatorName,
   creatorId,
   postId,
+  isSaved,
   translatedText,
   isTranslated,
   isTranslating,
@@ -262,16 +263,20 @@ const FeedPostCard = memo(function FeedPostCard({
         <div className="post-actions">
           <button
             type="button"
-            className="icon-action-btn"
+            className={isSaved ? 'icon-action-btn saved' : 'icon-action-btn'}
             disabled={!postId}
             onClick={(event) => {
               event.stopPropagation();
-              onSave(postId);
+              onSave(postId, isSaved);
             }}
-            title="Save"
-            aria-label="Save"
+            title={isSaved ? 'Saved' : 'Save'}
+            aria-label={isSaved ? 'Saved' : 'Save'}
           >
-            <Bookmark size={18} strokeWidth={2.2} />
+            <Bookmark
+              size={18}
+              strokeWidth={2.2}
+              fill={isSaved ? 'currentColor' : 'none'}
+            />
           </button>
 
 
@@ -392,6 +397,7 @@ export default function FeedPage() {
   const [toast, setToast] = useState('');
   const [simpleExplanations, setSimpleExplanations] = useState({});
   const [explaining, setExplaining] = useState({});
+  const [savedPostIds, setSavedPostIds] = useState({});
   const [creatorProfiles, setCreatorProfiles] = useState({});
   const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER_LIMIT);
   useEffect(() => {
@@ -588,6 +594,7 @@ export default function FeedPage() {
     setTranslating(pruneByRenderedPosts);
     setSimpleExplanations(pruneByRenderedPosts);
     setExplaining(pruneByRenderedPosts);
+    setSavedPostIds(pruneByRenderedPosts);
   }, [renderedPostIdSet]);
 
   useEffect(() => {
@@ -689,14 +696,26 @@ export default function FeedPage() {
     };
   }, []);
 
-  const handleSave = useCallback(async (postId) => {
+  const handleSave = useCallback(async (postId, isCurrentlySaved = false) => {
     if (!postId) return;
+
     try {
-      await savePost(postId);
-      showToast('Saved successfully 🔖');
+      const data = await savePost(postId);
+      if (!mountedRef.current) return;
+
+      const nextSavedState = typeof data?.isSaved === 'boolean'
+        ? data.isSaved
+        : !isCurrentlySaved;
+
+      setSavedPostIds((prev) => ({
+        ...prev,
+        [postId]: nextSavedState,
+      }));
+
+      showToast(nextSavedState ? 'Saved successfully 🔖' : 'Removed from saved');
     } catch (err) {
-      console.error('Save failed:', err);
-      showToast('Save failed');
+      console.error('Save toggle failed:', err);
+      showToast('Bookmark update failed');
     }
   }, [savePost, showToast]);
 
@@ -832,6 +851,16 @@ export default function FeedPage() {
       const creatorId = getPostCreatorId(post);
       const creatorProfile = creatorId ? creatorProfiles[creatorId] : null;
       const creatorName = getDisplayUsername(post, creatorProfile);
+      const hasLocalSavedState = Object.prototype.hasOwnProperty.call(savedPostIds, postId);
+      const isSaved = hasLocalSavedState
+        ? Boolean(savedPostIds[postId])
+        : Boolean(
+            post.saved ||
+              post.isSaved ||
+              post.bookmarked ||
+              post.isBookmarked ||
+              post.savedByCurrentUser
+          );
 
       return (
         <FeedPostCard
@@ -839,6 +868,7 @@ export default function FeedPage() {
           post={post}
           index={index}
           postId={postId}
+          isSaved={isSaved}
           creatorId={creatorId}
           creatorName={creatorName}
           translatedText={translations[postId]}
@@ -857,6 +887,7 @@ export default function FeedPage() {
       );
     }),
     [
+      savedPostIds,
       creatorProfiles,
       explaining,
       renderedFeedPosts,

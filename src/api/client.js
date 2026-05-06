@@ -811,7 +811,7 @@ async toggleSave(reelId) {
     postId: reelId,
   });
 
-  return data;
+  return parseApiBody(data);
 },
 
   
