@@ -275,14 +275,31 @@ export const roomApi = {
   },
 
   uploadRoomImage: async (roomId, payload) => {
-    const encodedRoomId = encodePathSegment(roomId);
+    const cleanRoomId = String(roomId || '').trim();
+    const encodedRoomId = encodePathSegment(cleanRoomId);
 
-    if (!encodedRoomId) {
+    if (!cleanRoomId || !encodedRoomId) {
       throw new Error('Room ID is required to upload room image.');
     }
 
-    const { data } = await api.post(`/rooms/${encodedRoomId}/image`, payload);
-    return parseApiBody(data);
+    if (!payload?.imageBase64) {
+      throw new Error('Image data is required to upload room image.');
+    }
+
+    const { data } = await api.post(`/rooms/${encodedRoomId}/image`, {
+      fileName: payload.fileName || 'room-image.jpg',
+      contentType: payload.contentType || 'image/jpeg',
+      imageBase64: payload.imageBase64,
+    });
+
+    const parsed = parseApiBody(data);
+
+    return {
+      ...parsed,
+      imageUrl: parsed?.imageUrl || parsed?.roomImageUrl || parsed?.coverImageUrl || parsed?.room?.imageUrl || '',
+      roomImageUrl: parsed?.roomImageUrl || parsed?.imageUrl || parsed?.coverImageUrl || parsed?.room?.roomImageUrl || '',
+      coverImageUrl: parsed?.coverImageUrl || parsed?.imageUrl || parsed?.roomImageUrl || parsed?.room?.coverImageUrl || '',
+    };
   },
 
   getRoomInvites: async () => {

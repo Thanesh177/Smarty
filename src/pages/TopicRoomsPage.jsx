@@ -6,6 +6,9 @@ import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
 import './TopicRoomsPage.css';
 
 const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
+const API_ORIGIN = 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com';
+const ROOM_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
+const ROOM_IMAGE_PICKER_MAX_BYTES = 8 * 1024 * 1024;
 
 function getStoredRoomImages() {
   try {
@@ -27,10 +30,132 @@ function persistStoredRoomImage(roomId, imageUrl) {
   }
 }
 
+function removeStoredRoomImage(roomId) {
+  if (!roomId) return;
+
+  try {
+    const current = getStoredRoomImages();
+    delete current[roomId];
+    localStorage.setItem(ROOM_IMAGE_CACHE_KEY, JSON.stringify(current));
+  } catch {
+    // Ignore storage errors in private mode or low-storage environments.
+  }
+}
+
+function normalizeRoomImageUrl(imageUrl) {
+  const cleanUrl = String(imageUrl || '').trim();
+  if (!cleanUrl) return '';
+
+  if (cleanUrl.startsWith('blob:') || cleanUrl.startsWith('data:')) return cleanUrl;
+  if (/^https?:\/\//i.test(cleanUrl)) return cleanUrl;
+
+  if (cleanUrl.startsWith('//')) {
+    return `${window.location.protocol}${cleanUrl}`;
+  }
+
+  if (cleanUrl.startsWith('/')) {
+    return `${API_ORIGIN}${cleanUrl}`;
+  }
+
+  return cleanUrl;
+}
+
+function parseApiPayload(payload) {
+  let parsedPayload = payload;
+
+  try {
+    parsedPayload = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  } catch {
+    parsedPayload = payload;
+  }
+
+  let parsedBody = parsedPayload?.body;
+
+  try {
+    parsedBody = typeof parsedBody === 'string' ? JSON.parse(parsedBody) : parsedBody;
+  } catch {
+    parsedBody = parsedPayload?.body;
+  }
+
+  return {
+    payload: parsedPayload,
+    body: parsedBody,
+  };
+}
+
+function getUploadedRoomImageUrl(uploadResponse) {
+  const { payload, body } = parseApiPayload(uploadResponse);
+
+  return normalizeRoomImageUrl(
+    payload?.imageUrl ||
+      payload?.roomImageUrl ||
+      payload?.coverImageUrl ||
+      payload?.room?.imageUrl ||
+      payload?.room?.roomImageUrl ||
+      payload?.room?.coverImageUrl ||
+      payload?.url ||
+      payload?.location ||
+      payload?.data?.imageUrl ||
+      payload?.data?.roomImageUrl ||
+      payload?.data?.coverImageUrl ||
+      payload?.data?.room?.imageUrl ||
+      payload?.data?.room?.roomImageUrl ||
+      payload?.data?.room?.coverImageUrl ||
+      payload?.data?.url ||
+      payload?.data?.location ||
+      body?.imageUrl ||
+      body?.roomImageUrl ||
+      body?.coverImageUrl ||
+      body?.room?.imageUrl ||
+      body?.room?.roomImageUrl ||
+      body?.room?.coverImageUrl ||
+      body?.url ||
+      body?.location ||
+      body?.data?.imageUrl ||
+      body?.data?.roomImageUrl ||
+      body?.data?.coverImageUrl ||
+      body?.data?.room?.imageUrl ||
+      body?.data?.room?.roomImageUrl ||
+      body?.data?.room?.coverImageUrl ||
+      body?.data?.url ||
+      body?.data?.location ||
+      ''
+  );
+}
+
+function getApproxBase64SizeBytes(base64Value) {
+  const cleanBase64 = String(base64Value || '')
+    .replace(/^data:[^,]+,/, '')
+    .replace(/\s/g, '');
+
+  if (!cleanBase64) return 0;
+
+  const padding = cleanBase64.endsWith('==')
+    ? 2
+    : cleanBase64.endsWith('=')
+      ? 1
+      : 0;
+
+  return Math.max(0, Math.floor((cleanBase64.length * 3) / 4) - padding);
+}
+
+function validatePreparedRoomImagePayload(payload) {
+  if (!payload?.imageBase64) {
+    throw new Error('Image data is missing');
+  }
+
+  if (getApproxBase64SizeBytes(payload.imageBase64) > ROOM_IMAGE_MAX_BYTES) {
+    throw new Error('Image must be smaller than 4 MB after optimization');
+  }
+
+  return payload;
+}
+
 export default function TopicRoomsPage() {
   const { user } = useAuth();
   const userId = user?.id || user?.userId || user?.sub;
   const [roomImageCache, setRoomImageCache] = useState(() => getStoredRoomImages());
+  const [failedRoomImageIds, setFailedRoomImageIds] = useState(() => new Set());
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const activeRoomRef = useRef(null);
   const messagesRef = useRef(null);
@@ -53,8 +178,11 @@ export default function TopicRoomsPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteSearch, setInviteSearch] = useState('');
   const [inviteResults, setInviteResults] = useState([]);
+  const [pendingInviteUserIds, setPendingInviteUserIds] = useState(() => new Set());
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomPrivacy, setNewRoomPrivacy] = useState('public');
+  const [newRoomImageFile, setNewRoomImageFile] = useState(null);
+  const [newRoomImagePreview, setNewRoomImagePreview] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRoomMenu, setShowRoomMenu] = useState(false);
   const [openRoomActionMenuId, setOpenRoomActionMenuId] = useState('');
@@ -75,19 +203,23 @@ export default function TopicRoomsPage() {
   // Prevent duplicate room creation submissions
   const [creatingRoom, setCreatingRoom] = useState(false);
 
-  const getRoomImageUrl = useCallback((room) => {
-    if (!room) return '';
+const getRoomImageUrl = useCallback((room) => {
+  if (!room?.roomId) return '';
 
-    return (
-      room.imageUrl ||
+  const imageUrl = normalizeRoomImageUrl(
+    room.imageUrl ||
       room.roomImageUrl ||
-      room.avatarUrl ||
       room.coverImageUrl ||
+      room.avatarUrl ||
       room.coverUrl ||
       roomImageCache[room.roomId] ||
       ''
-    );
-  }, [roomImageCache]);
+  );
+
+  if (!imageUrl) return '';
+
+  return imageUrl;
+}, [roomImageCache]);
 
   const sortedVisibleRooms = useMemo(() => rooms, [rooms]);
 
@@ -173,6 +305,14 @@ useEffect(() => {
   };
 }, [activeRoom, scrollMessagesToBottom]);
 
+useEffect(() => {
+  return () => {
+    if (newRoomImagePreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(newRoomImagePreview);
+    }
+  };
+}, [newRoomImagePreview]);
+
   async function loadRooms(searchValue = roomSearch) {
     try {
       setStatus('');
@@ -189,13 +329,14 @@ useEffect(() => {
       const allRoomsRaw = Array.isArray(data?.rooms) ? data.rooms : Array.isArray(data) ? data : [];
       const allRooms = allRoomsRaw.map((room) => {
         const cachedImageUrl = cachedRoomImages[room.roomId];
-        const imageUrl = room.imageUrl || room.roomImageUrl || room.avatarUrl || room.coverImageUrl || room.coverUrl || cachedImageUrl || '';
+        const imageUrl = normalizeRoomImageUrl(room.imageUrl || room.roomImageUrl || room.avatarUrl || room.coverImageUrl || room.coverUrl || cachedImageUrl || '');
 
         return {
-          ...room,
-          imageUrl,
-          roomImageUrl: room.roomImageUrl || imageUrl,
-        };
+  ...room,
+  imageUrl,
+  roomImageUrl: room.roomImageUrl || imageUrl,
+  coverImageUrl: room.coverImageUrl || imageUrl,
+};
       });
       const normalizedSearch = searchValue.trim().toLowerCase();
 
@@ -311,7 +452,7 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
     if (creatingRoom) return false;
     setCreatingRoom(true);
 
-    const name = newRoomName.trim();
+    const name = newRoomName.trim().replace(/\s+/g, ' ');
     if (!name) {
       setStatus('Room name required');
       setCreatingRoom(false);
@@ -326,18 +467,7 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
         privacy: newRoomPrivacy,
       });
 
-      console.log('CREATE ROOM RESPONSE:', data);
-
-      let parsedData = data;
-      try {
-        parsedData = typeof data === 'string' ? JSON.parse(data) : data;
-      } catch {
-        parsedData = data;
-      }
-      const parsedBody =
-        typeof parsedData?.body === 'string'
-          ? JSON.parse(parsedData.body)
-          : parsedData?.body;
+      const { payload: parsedData, body: parsedBody } = parseApiPayload(data);
 
       const createdRoom =
         parsedData?.room ||
@@ -355,6 +485,62 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
         return false;
       }
 
+      let finalCreatedRoom = createdRoom;
+
+      let roomImageUploadFailed = false;
+
+      if (newRoomImageFile) {
+        try {
+          const optimizedImage = validatePreparedRoomImagePayload(
+            await prepareRoomImageFile(newRoomImageFile)
+          );
+
+          const imageData = await roomApi.uploadRoomImage(createdRoom.roomId, optimizedImage);
+          const imageUrl = getUploadedRoomImageUrl(imageData);
+
+          if (imageUrl) {
+            persistStoredRoomImage(createdRoom.roomId, imageUrl);
+            setFailedRoomImageIds((prev) => {
+              if (!prev.has(createdRoom.roomId)) return prev;
+              const next = new Set(prev);
+              next.delete(createdRoom.roomId);
+              return next;
+            });
+            setRoomImageCache((prev) => ({
+              ...prev,
+              [createdRoom.roomId]: imageUrl,
+            }));
+
+            finalCreatedRoom = {
+              ...createdRoom,
+              imageUrl,
+              roomImageUrl: imageUrl,
+              coverImageUrl: imageUrl,
+            };
+
+            setRooms((prev) =>
+              prev.map((item) =>
+                item.roomId === createdRoom.roomId
+                  ? { ...item, imageUrl, roomImageUrl: imageUrl, coverImageUrl: imageUrl }
+                  : item
+              )
+            );
+          } else {
+            setStatus('Room created, but no image URL was returned.');
+          }
+        } catch (imageErr) {
+          roomImageUploadFailed = true;
+          console.error('Could not upload room image during creation:', imageErr);
+          setStatus(
+            imageErr?.response?.data?.error ||
+              imageErr?.response?.data?.message ||
+              imageErr?.message ||
+              'Room created, but image upload failed'
+          );
+        }
+      }
+
+      removeNewRoomImage();
       setNewRoomName('');
       setNewRoomPrivacy('public');
       setShowCreateModal(false);
@@ -362,15 +548,15 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
       await loadRooms();
 
       // Creator is already added as owner/member by backend, so do not call joinRoom here.
-      setActiveRoom(createdRoom);
-      activeRoomRef.current = createdRoom;
+      setActiveRoom(finalCreatedRoom);
+      activeRoomRef.current = finalCreatedRoom;
       setMessages([]);
       setMobileChatOpen(true);
 
-      if (createdRoom.privacy === 'private') {
-        setModalTitle(`Invite users to ${createdRoom.name}`);
+      if (finalCreatedRoom.privacy === 'private') {
+        setModalTitle(`Invite users to ${finalCreatedRoom.name}`);
         setModalMode('members');
-        setModalRoom(createdRoom);
+        setModalRoom(finalCreatedRoom);
         setMembers([]);
         setInviteSearch('');
         setInviteResults([]);
@@ -379,12 +565,12 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
       }
       setRoomUnreadCounts((prev) => ({
         ...prev,
-        [createdRoom.roomId]: 0,
+        [finalCreatedRoom.roomId]: 0,
       }));
 
       try {
         setMessagesLoading(true);
-        const messageData = await roomApi.getRoomMessages(createdRoom.roomId);
+        const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId);
         if (mountedRef.current) {
           const loadedMessages = Array.isArray(messageData?.messages)
             ? messageData.messages
@@ -399,7 +585,9 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
         if (mountedRef.current) setMessagesLoading(false);
       }
 
-      setStatus('Room created successfully');
+      if (!roomImageUploadFailed) {
+        setStatus(newRoomImageFile ? 'Room created successfully with image' : 'Room created successfully');
+      }
       return true;
     } catch (err) {
       console.error(err);
@@ -410,7 +598,7 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
       }
       return false;
     } finally {
-      setCreatingRoom(false);
+      if (mountedRef.current) setCreatingRoom(false);
     }
   }
 
@@ -547,11 +735,11 @@ async function prepareRoomImageFile(file) {
   }
 
   if (file.size <= 1024 * 1024 || typeof createImageBitmap !== 'function') {
-    return {
+    return validatePreparedRoomImagePayload({
       fileName: file.name || 'room-image.jpg',
       contentType: file.type || 'image/jpeg',
       imageBase64: await readFileAsBase64(file),
-    };
+    });
   }
 
   const bitmap = await createImageBitmap(file);
@@ -567,11 +755,11 @@ async function prepareRoomImageFile(file) {
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) {
     bitmap.close?.();
-    return {
+    return validatePreparedRoomImagePayload({
       fileName: file.name || 'room-image.jpg',
       contentType: file.type || 'image/jpeg',
       imageBase64: await readFileAsBase64(file),
-    };
+    });
   }
 
   ctx.drawImage(bitmap, 0, 0, width, height);
@@ -583,11 +771,11 @@ async function prepareRoomImageFile(file) {
 
   if (!blob) throw new Error('Could not optimize image');
 
-  return {
+  return validatePreparedRoomImagePayload({
     fileName: `${String(file.name || 'room-image').replace(/\.[^.]+$/, '')}.jpg`,
     contentType: 'image/jpeg',
     imageBase64: await readFileAsBase64(blob),
-  };
+  });
 }
 
 async function uploadRoomImage(room, file) {
@@ -598,8 +786,8 @@ async function uploadRoomImage(room, file) {
     return;
   }
 
-  if (file.size > 8 * 1024 * 1024) {
-    setStatus('Image must be smaller than 8 MB');
+  if (file.size > ROOM_IMAGE_PICKER_MAX_BYTES) {
+    setStatus('Image must be smaller than 8 MB before optimization');
     return;
   }
 
@@ -607,10 +795,12 @@ async function uploadRoomImage(room, file) {
     setStatus('');
     setUploadingRoomImageId(room.roomId);
 
-    const optimizedImage = await prepareRoomImageFile(file);
+    const optimizedImage = validatePreparedRoomImagePayload(
+      await prepareRoomImageFile(file)
+    );
     const data = await roomApi.uploadRoomImage(room.roomId, optimizedImage);
 
-    const imageUrl = data?.imageUrl || data?.room?.imageUrl;
+    const imageUrl = getUploadedRoomImageUrl(data);
 
     if (!imageUrl) {
       setStatus('Image uploaded, but no image URL was returned');
@@ -619,6 +809,12 @@ async function uploadRoomImage(room, file) {
     }
 
     persistStoredRoomImage(room.roomId, imageUrl);
+    setFailedRoomImageIds((prev) => {
+      if (!prev.has(room.roomId)) return prev;
+      const next = new Set(prev);
+      next.delete(room.roomId);
+      return next;
+    });
     setRoomImageCache((prev) => ({
       ...prev,
       [room.roomId]: imageUrl,
@@ -627,7 +823,7 @@ async function uploadRoomImage(room, file) {
     setRooms((prev) =>
       prev.map((item) =>
         item.roomId === room.roomId
-          ? { ...item, imageUrl, roomImageUrl: imageUrl }
+          ? { ...item, imageUrl, roomImageUrl: imageUrl, coverImageUrl: imageUrl }
           : item
       )
     );
@@ -637,6 +833,7 @@ async function uploadRoomImage(room, file) {
         ...activeRoomRef.current,
         imageUrl,
         roomImageUrl: imageUrl,
+        coverImageUrl: imageUrl,
       };
 
       activeRoomRef.current = updatedRoom;
@@ -646,11 +843,58 @@ async function uploadRoomImage(room, file) {
     setOpenRoomActionMenuId('');
     setStatus('Room image updated');
   } catch (err) {
-    console.error(err);
+  console.error(err);
+
+  if (err?.response?.status === 403) {
+    setStatus('Only the room creator can change this room image');
+  } else {
     setStatus(err?.response?.data?.error || 'Could not upload room image');
-  } finally {
+  }
+} finally {
     if (mountedRef.current) setUploadingRoomImageId('');
   }
+}
+
+function handleNewRoomImageChange(event) {
+  const file = event.target.files?.[0] || null;
+  event.target.value = '';
+
+  if (newRoomImagePreview?.startsWith('blob:')) {
+    URL.revokeObjectURL(newRoomImagePreview);
+  }
+
+  if (!file) {
+    setNewRoomImageFile(null);
+    setNewRoomImagePreview('');
+    return;
+  }
+
+  if (!file.type?.startsWith('image/')) {
+    setNewRoomImageFile(null);
+    setNewRoomImagePreview('');
+    setStatus('Please choose an image file');
+    return;
+  }
+
+  if (file.size > ROOM_IMAGE_PICKER_MAX_BYTES) {
+    setNewRoomImageFile(null);
+    setNewRoomImagePreview('');
+    setStatus('Image must be smaller than 8 MB before optimization');
+    return;
+  }
+
+  setStatus('');
+  setNewRoomImageFile(file);
+  setNewRoomImagePreview(URL.createObjectURL(file));
+}
+
+function removeNewRoomImage() {
+  if (newRoomImagePreview?.startsWith('blob:')) {
+    URL.revokeObjectURL(newRoomImagePreview);
+  }
+
+  setNewRoomImageFile(null);
+  setNewRoomImagePreview('');
 }
 
   async function openRoom(room) {
@@ -702,6 +946,7 @@ async function uploadRoomImage(room, file) {
       setShowInvite(false);
       setInviteSearch('');
       setInviteResults([]);
+      setPendingInviteUserIds(new Set());
 
       const data = await roomApi.getRoomMembers(room.roomId);
 
@@ -734,29 +979,124 @@ async function searchUsers() {
   }
 }
 
-async function inviteUser(userIdToInvite) {
-  if (!modalRoom?.roomId || !userIdToInvite) return;
-if (inviteResults.some((item) => item.userId === userIdToInvite && item.invited)) return;
+
+function getInviteUserId(user) {
+  if (typeof user === 'string') return user;
+  return user?.userId || user?.id || user?.sub || user?.invitedUserId || '';
+}
+
+function getInviteUserEmail(user) {
+  return String(user?.email || '').trim().toLowerCase();
+}
+
+function isExistingRoomMember(user) {
+  const targetId = getInviteUserId(user);
+  const targetEmail = getInviteUserEmail(user);
+
+  return members.some((member) => {
+    const memberId = getInviteUserId(member);
+    const memberEmail = getInviteUserEmail(member);
+
+    return (
+      (targetId && memberId && targetId === memberId) ||
+      (targetEmail && memberEmail && targetEmail === memberEmail)
+    );
+  });
+}
+
+function isRoomOwnerUser(user, room = modalRoom || activeRoom) {
+  const targetId = getInviteUserId(user);
+  const ownerId = room?.ownerId || room?.createdBy || '';
+
+  return Boolean(targetId && ownerId && targetId === ownerId);
+}
+
+function canInviteUserToCurrentRoom(user) {
+  const targetId = getInviteUserId(user);
+  if (!targetId) return false;
+
+  return (
+    !pendingInviteUserIds.has(targetId) &&
+    !isExistingRoomMember(user) &&
+    !isRoomOwnerUser(user)
+  );
+}
+
+async function inviteUser(userToInvite) {
+  const targetUserId = getInviteUserId(userToInvite);
+
+  if (!modalRoom?.roomId || !targetUserId) {
+    setStatus('Could not find user to invite');
+    return;
+  }
+
+  const selectedUser =
+    typeof userToInvite === 'string'
+      ? inviteResults.find((item) => getInviteUserId(item) === userToInvite) || { userId: userToInvite }
+      : userToInvite;
+
+  if (!canInviteUserToCurrentRoom(selectedUser)) {
+    setPendingInviteUserIds((prev) => {
+      const next = new Set(prev);
+      next.add(targetUserId);
+      return next;
+    });
+    setStatus('This user is already invited or already a member.');
+    return;
+  }
+
   try {
     setStatus('');
 
     const data = await roomApi.inviteUserToRoom(
       modalRoom.roomId,
-      userIdToInvite
+      targetUserId
     );
 
-    setStatus(data?.message || 'Invite request sent. The user must accept before joining.');
+    setPendingInviteUserIds((prev) => {
+      const next = new Set(prev);
+      next.add(targetUserId);
+      return next;
+    });
 
     setInviteResults((prev) =>
       prev.map((item) =>
-        item.userId === userIdToInvite
+        getInviteUserId(item) === targetUserId
           ? { ...item, invited: true }
           : item
       )
     );
+
+    setStatus(data?.message || 'Invite request sent. The user must accept before joining.');
   } catch (err) {
     console.error(err);
-    setStatus(err?.response?.data?.error || 'Invite failed');
+
+    const message =
+      err?.response?.data?.error ||
+      err?.response?.data?.message ||
+      '';
+
+    if (err?.response?.status === 409) {
+      setPendingInviteUserIds((prev) => {
+        const next = new Set(prev);
+        next.add(targetUserId);
+        return next;
+      });
+
+      setInviteResults((prev) =>
+        prev.map((item) =>
+          getInviteUserId(item) === targetUserId
+            ? { ...item, invited: true }
+            : item
+        )
+      );
+
+      setStatus(message || 'Invite already sent');
+    } else if (err?.response?.status === 403) {
+      setStatus(message || 'Only the room creator can invite users.');
+    } else {
+      setStatus(message || 'Invite failed');
+    }
   }
 }
 
@@ -766,6 +1106,7 @@ if (inviteResults.some((item) => item.userId === userIdToInvite && item.invited)
       setShowInvite(false);
       setInviteSearch('');
       setInviteResults([]);
+      setPendingInviteUserIds(new Set());
 
       const data = await roomApi.getRoomJoinRequests(room.roomId);
 
@@ -954,6 +1295,7 @@ function sendMessage(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 e.nativeEvent?.stopImmediatePropagation?.();
+                setStatus('');
                 setShowRoomMenu(false);
                 setOpenRoomActionMenuId('');
                 setShowCreateModal(true);
@@ -1026,9 +1368,10 @@ function sendMessage(e) {
           ) : sortedVisibleRooms.map((room) => {
             const isOwner = room.ownerId === userId || room.createdBy === userId;
             const isPrivateCustom = room.type === 'custom' && room.privacy === 'private';
-            const canLeave = isPrivateCustom && !isOwner;
-            const canDelete = room.type === 'custom' && isOwner;
-            const canViewRequests = isPrivateCustom && isOwner;
+const canLeave = isPrivateCustom && !isOwner;
+const canDelete = room.type === 'custom' && isOwner;
+const canChangeImage = room.type === 'custom' && isOwner;
+const canViewRequests = isPrivateCustom && isOwner;
             const unreadCount = roomUnreadCounts[room.roomId] || room.unreadCount || 0;
             const roomImageUrl = getRoomImageUrl(room);
 
@@ -1051,14 +1394,16 @@ function sendMessage(e) {
                           loading="lazy"
                           decoding="async"
                           referrerPolicy="no-referrer"
-                          onError={() => {
-                            setRoomImageCache((prev) => {
-                              if (!prev[room.roomId]) return prev;
-                              const next = { ...prev };
-                              delete next[room.roomId];
-                              return next;
-                            });
-                          }}
+                          onError={(event) => {
+  event.currentTarget.style.display = 'none';
+  removeStoredRoomImage(room.roomId);
+  setRoomImageCache((prev) => {
+    if (!prev[room.roomId]) return prev;
+    const next = { ...prev };
+    delete next[room.roomId];
+    return next;
+  });
+}}
                         />
                       ) : (
                         <span>{(room.name || 'R').trim().slice(0, 1).toUpperCase()}</span>
@@ -1114,19 +1459,21 @@ function sendMessage(e) {
                       onClick={(e) => e.stopPropagation()}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                      <label className="room-image-upload-option">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          disabled={uploadingRoomImageId === room.roomId}
-                          onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            event.target.value = '';
-                            if (file) uploadRoomImage(room, file);
-                          }}
-                        />
-                        {uploadingRoomImageId === room.roomId ? 'Uploading...' : 'Change Image'}
-                      </label>
+                   {canChangeImage && (
+  <label className="room-image-upload-option">
+    <input
+      type="file"
+      accept="image/jpeg,image/png,image/webp,image/gif"
+      disabled={uploadingRoomImageId === room.roomId}
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (file) uploadRoomImage(room, file);
+      }}
+    />
+    {uploadingRoomImageId === room.roomId ? 'Uploading...' : 'Change Image'}
+  </label>
+)}
                       {room.privacy === 'private' && (
                         <button
                           type="button"
@@ -1234,6 +1581,12 @@ function sendMessage(e) {
         loading="lazy"
         decoding="async"
         referrerPolicy="no-referrer"
+        onError={(event) => {
+  event.currentTarget.style.display = 'none';
+  if (activeRoom?.roomId) {
+    removeStoredRoomImage(activeRoom.roomId);
+  }
+}}
       />
     )}
     <span>{activeRoom.name}</span>
@@ -1430,23 +1783,36 @@ function sendMessage(e) {
       {inviteResults.length === 0 ? (
         <p className="member-empty">Search for users and send them an invite request. They must accept before joining.</p>
       ) : (
-        inviteResults.map((u) => (
-          <div key={u.userId} className="member-row">
-            <div>
-              <strong>{u.name || u.email || 'User'}</strong>
-              {u.email && <small>{u.email}</small>}
-            </div>
+        inviteResults.map((u) => {
+          const targetUserId = getInviteUserId(u);
+          const alreadyMember = isExistingRoomMember(u) || isRoomOwnerUser(u);
+          const alreadyInvited = u.invited || pendingInviteUserIds.has(targetUserId);
+          const canInvite = canInviteUserToCurrentRoom(u);
 
-            <button
-              type="button"
-              onClick={() => inviteUser(u.userId)}
-              className="approve-request-btn"
-              disabled={u.invited || !u.userId}
-            >
-              {u.invited ? 'Request Sent' : 'Send Request'}
-            </button>
-          </div>
-        ))
+          return (
+            <div key={targetUserId || u.email} className="member-row">
+              <div>
+                <strong>{u.name || u.email || 'User'}</strong>
+                {u.email && <small>{u.email}</small>}
+              </div>
+
+              {alreadyMember ? (
+                <span className="member-role-pill">Already in room</span>
+              ) : alreadyInvited ? (
+                <span className="member-role-pill">Invite sent</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => inviteUser(u)}
+                  className="approve-request-btn"
+                  disabled={!canInvite}
+                >
+                  Send Request
+                </button>
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   </div>
@@ -1489,7 +1855,13 @@ function sendMessage(e) {
             <button
               type="button"
               className="close-members"
-              onClick={() => setShowCreateModal(false)}
+              disabled={creatingRoom}
+              onClick={() => {
+                if (!creatingRoom) {
+                  removeNewRoomImage();
+                  setShowCreateModal(false);
+                }
+              }}
             >
               ✕
             </button>
@@ -1504,7 +1876,12 @@ function sendMessage(e) {
               <input
                 placeholder="Room name..."
                 value={newRoomName}
-                onChange={(e) => setNewRoomName(e.target.value)}
+                maxLength={60}
+                autoFocus
+                onChange={(e) => {
+                  setStatus('');
+                  setNewRoomName(e.target.value);
+                }}
                 disabled={creatingRoom}
               />
 
@@ -1517,8 +1894,38 @@ function sendMessage(e) {
                 <option value="private"> Private Room</option>
               </select>
 
+              <label className="create-room-image-picker">
+                <span>Room image</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  disabled={creatingRoom}
+                  onChange={handleNewRoomImageChange}
+                />
+              </label>
+
+              {newRoomImagePreview && (
+                <div className="create-room-image-preview-row">
+                  <img
+                    src={newRoomImagePreview}
+                    alt="Room preview"
+                    width="56"
+                    height="56"
+                  />
+
+                  <button
+                    type="button"
+                    className="delete-room-btn"
+                    disabled={creatingRoom}
+                    onClick={removeNewRoomImage}
+                  >
+                    Remove image
+                  </button>
+                </div>
+              )}
+
               <button type="submit" className="approve-request-btn" disabled={creatingRoom || !newRoomName.trim()}>
-                {creatingRoom ? 'Creating...' : 'Create Room'}
+                {creatingRoom ? (newRoomImageFile ? 'Creating and uploading...' : 'Creating...') : 'Create Room'}
               </button>
             </form>
           </div>
