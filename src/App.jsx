@@ -8,20 +8,24 @@ import {
   setupAndroidPushTokenListener,
 } from './firebase';
 import AuthRedirectHandler from './components/AuthRedirectHandler';
-import InstallPrompt from "./components/InstallPrompt";
+import InstallPrompt from './components/InstallPrompt';
 import {
   CircleUserRound,
   MessagesSquare,
   BrainCircuit,
 } from 'lucide-react';
 
+import {
+  connectChatSocket,
+  subscribeChatSocket,
+  disconnectChatSocket,
+} from './api/chatSocket';
 
 const Booksinfo = lazy(() => import('./pages/Booksinfo'));
 const QuizPage = lazy(() => import('./pages/QuizPage'));
 const ProgressPage = lazy(() => import('./pages/progress/ProgressPage'));
 const GameProfile = lazy(() => import('./pages/profile/GameProfile'));
 
-// Lazy imports
 const CommentsPage = lazy(() => import('./pages/CommentsPage'));
 const EditPostPage = lazy(() => import('./pages/EditPostPage'));
 const FeedPage = lazy(() => import('./pages/FeedPage'));
@@ -83,12 +87,40 @@ function ProtectedRoute({ children }) {
   return user ? children : <Navigate to="/login" replace state={{ from: location }} />;
 }
 
+function getUserSocketId(user) {
+  return (
+    user?.userId ||
+    user?.sub ||
+    user?.username ||
+    user?.email ||
+    ''
+  );
+}
+
+function getUnreadFromChatsPayload(payload) {
+  const chats = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.chats)
+      ? payload.chats
+      : [];
+
+  return chats.reduce((sum, chat) => sum + Number(chat?.unreadCount || 0), 0);
+}
+
 function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
+
   const [totalUnread, setTotalUnread] = useState(0);
+
   const touchStartXRef = useRef(null);
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/register' || location.pathname === '/confirm';
+  const unreadRefreshInFlightRef = useRef(false);
+  const unreadRefreshTimerRef = useRef(null);
+
+  const isAuthPage =
+    location.pathname === '/login' ||
+    location.pathname === '/register' ||
+    location.pathname === '/confirm';
 
   const goBack = useCallback(() => {
     window.history.back();
@@ -125,46 +157,151 @@ function Layout() {
     };
   }, [goBack]);
 
-  // Keep chat notification badge updated globally, even when user is not on Chat page
+  // Global chat badge: works even when user is not on Chat page
   useEffect(() => {
     if (!user) {
       setTotalUnread(0);
+
+      try {
+        localStorage.setItem('smartyChatUnreadCount', '0');
+      } catch {
+        // ignore storage errors
+      }
+
       return undefined;
     }
 
     let cancelled = false;
+    const userId = getUserSocketId(user);
 
-    const refreshChatUnread = async () => {
-      if (document.visibilityState === 'hidden' || !navigator.onLine) return;
+    const applyUnread = (value) => {
+      const nextUnread = Math.max(0, Number(value || 0));
+      setTotalUnread(nextUnread);
 
       try {
-        const chats = await chatApi.getChats();
-        if (cancelled) return;
-
-        const unread = Array.isArray(chats)
-          ? chats.reduce((sum, chat) => sum + Number(chat.unreadCount || 0), 0)
-          : 0;
-
-        setTotalUnread(unread);
-      } catch (error) {
-        console.error('Failed to refresh chat unread count:', error);
+        localStorage.setItem('smartyChatUnreadCount', String(nextUnread));
+      } catch {
+        // ignore storage errors
       }
     };
 
-    refreshChatUnread();
+    const refreshChatUnread = async ({ force = false } = {}) => {
+      if (cancelled || unreadRefreshInFlightRef.current) return;
 
-    const intervalId = window.setInterval(refreshChatUnread, 120000);
+      if (
+        !force &&
+        (document.visibilityState === 'hidden' || !navigator.onLine)
+      ) {
+        return;
+      }
 
-    window.addEventListener('focus', refreshChatUnread);
-    window.addEventListener('chat-unread-refresh', refreshChatUnread);
-    document.addEventListener('visibilitychange', refreshChatUnread);
+      unreadRefreshInFlightRef.current = true;
+
+      try {
+        const chatsPayload = await chatApi.getChats();
+        if (cancelled) return;
+
+        applyUnread(getUnreadFromChatsPayload(chatsPayload));
+      } catch (error) {
+        console.error('Failed to refresh chat unread count:', error);
+      } finally {
+        unreadRefreshInFlightRef.current = false;
+      }
+    };
+
+    const scheduleUnreadRefresh = () => {
+      if (unreadRefreshTimerRef.current) {
+        window.clearTimeout(unreadRefreshTimerRef.current);
+      }
+
+      unreadRefreshTimerRef.current = window.setTimeout(() => {
+        refreshChatUnread({ force: true });
+      }, 700);
+    };
+
+    try {
+      const storedUnread = Number(localStorage.getItem('smartyChatUnreadCount') || 0);
+      if (storedUnread > 0) setTotalUnread(storedUnread);
+    } catch {
+      // ignore storage errors
+    }
+
+    refreshChatUnread({ force: true });
+
+    if (userId) {
+      connectChatSocket(userId);
+    }
+
+    const unsubscribeSocket = subscribeChatSocket((data) => {
+      if (data?.type !== 'newMessage' || !data?.message) return;
+
+      const senderId = data.message.senderId || data.message.userId || '';
+      const activeChatId = localStorage.getItem('activeChatId') || '';
+      const messageChatId = data.message.chatId || '';
+
+      if (senderId && senderId === userId) return;
+
+      if (activeChatId && messageChatId && activeChatId === messageChatId) {
+        scheduleUnreadRefresh();
+        return;
+      }
+
+      setTotalUnread((current) => {
+        const nextUnread = Number(current || 0) + 1;
+
+        try {
+          localStorage.setItem('smartyChatUnreadCount', String(nextUnread));
+        } catch {
+          // ignore storage errors
+        }
+
+        return nextUnread;
+      });
+
+      scheduleUnreadRefresh();
+    });
+
+    const intervalId = window.setInterval(() => {
+      refreshChatUnread({ force: false });
+    }, 120000);
+
+    const handleRefresh = () => refreshChatUnread({ force: true });
+
+    const handleStorage = (event) => {
+      if (event.key === 'smartyChatUnreadCount') {
+        applyUnread(event.newValue);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshChatUnread({ force: true });
+      }
+    };
+
+    window.addEventListener('focus', handleRefresh);
+    window.addEventListener('storage', handleStorage);
+    window.addEventListener('chat-unread-refresh', handleRefresh);
+    window.addEventListener('chat-unread-refresh-request', handleRefresh);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       cancelled = true;
+
+      if (unreadRefreshTimerRef.current) {
+        window.clearTimeout(unreadRefreshTimerRef.current);
+        unreadRefreshTimerRef.current = null;
+      }
+
       window.clearInterval(intervalId);
-      window.removeEventListener('focus', refreshChatUnread);
-      window.removeEventListener('chat-unread-refresh', refreshChatUnread);
-      document.removeEventListener('visibilitychange', refreshChatUnread);
+      unsubscribeSocket?.();
+      disconnectChatSocket();
+
+      window.removeEventListener('focus', handleRefresh);
+      window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('chat-unread-refresh', handleRefresh);
+      window.removeEventListener('chat-unread-refresh-request', handleRefresh);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [user]);
 
@@ -174,31 +311,36 @@ function Layout() {
   }, []);
 
   useEffect(() => {
-  const handler = (event) => {
-    setTotalUnread(Number(event.detail?.totalUnread || 0));
-  };
+    const handler = (event) => {
+      const nextUnread = Math.max(0, Number(event.detail?.totalUnread || 0));
 
-  window.addEventListener('chat-unread-update', handler);
+      setTotalUnread(nextUnread);
 
-  return () => {
-    window.removeEventListener('chat-unread-update', handler);
-  };
-}, []);
+      try {
+        localStorage.setItem('smartyChatUnreadCount', String(nextUnread));
+      } catch {
+        // ignore storage errors
+      }
+    };
 
-useEffect(() => {
-  if (typeof navigator === 'undefined' || !('setAppBadge' in navigator)) return;
+    window.addEventListener('chat-unread-update', handler);
 
-  if (totalUnread > 0) {
-    navigator.setAppBadge(totalUnread).catch(() => {});
-  } else if ('clearAppBadge' in navigator) {
-    navigator.clearAppBadge().catch(() => {});
-  }
-}, [totalUnread]);
+    return () => {
+      window.removeEventListener('chat-unread-update', handler);
+    };
+  }, []);
 
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('setAppBadge' in navigator)) return;
 
-  // Fix Cognito redirect loop
+    if (totalUnread > 0) {
+      navigator.setAppBadge(totalUnread).catch(() => {});
+    } else if ('clearAppBadge' in navigator) {
+      navigator.clearAppBadge().catch(() => {});
+    }
+  }, [totalUnread]);
 
-  // ✅ Push notifications (ONLY after PWA install)
+  // Push notifications after PWA install
   useEffect(() => {
     async function setupPush() {
       if (!user || !navigator.onLine) return;
@@ -273,24 +415,24 @@ useEffect(() => {
                 }
               }}
             >
-            <div
-              className="brand-mark"
-              aria-hidden="true"
-              style={{
-                position: 'relative',
-                width: '46px',        // ↓ smaller
-                height: '46px',
-                borderRadius: '12px', // keep proportions
-                display: 'grid',
-                placeItems: 'center',
-                overflow: 'hidden',
-                background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(241,245,249,0.94))',
-                border: '1px solid rgba(255,255,255,0.95)',
-                boxShadow: '5px 5px 5px rgba(255, 255, 255, 0.54), 0 4px 10px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.9)', // ↓ lighter shadow
-                backdropFilter: 'blur(12px)',
-                WebkitBackdropFilter: 'blur(12px)',
-              }}
-            >
+              <div
+                className="brand-mark"
+                aria-hidden="true"
+                style={{
+                  position: 'relative',
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '12px',
+                  display: 'grid',
+                  placeItems: 'center',
+                  overflow: 'hidden',
+                  background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(241,245,249,0.94))',
+                  border: '1px solid rgba(255,255,255,0.95)',
+                  boxShadow: '5px 5px 5px rgba(255, 255, 255, 0.54), 0 4px 10px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.9)',
+                  backdropFilter: 'blur(12px)',
+                  WebkitBackdropFilter: 'blur(12px)',
+                }}
+              >
                 <div
                   style={{
                     position: 'absolute',
@@ -330,8 +472,8 @@ useEffect(() => {
                     }}
                   />
                 </div>
-
               </div>
+
               <div>
                 <h1>Smarty</h1>
                 <p>Learn while you scroll</p>
@@ -381,111 +523,112 @@ useEffect(() => {
                       : <Navigate to="/feed" replace />
                   }
                 />
-              <Route path="/feed" element={<FeedPage />} />
-              <Route path="/feed/:topic" element={<FeedPage />} />
 
-              <Route path="/booksinfo" element={<Booksinfo />} />
-              <Route path="/bookinfo" element={<Booksinfo />} />
-              <Route path="/topics" element={<TopicsPage />} />
-              <Route path="/news" element={<NewsPage />} />
-              <Route path="/read-books" element={<ReadBookPage />} />
-              <Route path="/preview-books" element={<ReadBookPage />} />
-              <Route path="/read-book/:bookId" element={<BookReaderPage />} />
+                <Route path="/feed" element={<FeedPage />} />
+                <Route path="/feed/:topic" element={<FeedPage />} />
 
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/confirm" element={<ConfirmPage />} />
+                <Route path="/booksinfo" element={<Booksinfo />} />
+                <Route path="/bookinfo" element={<Booksinfo />} />
+                <Route path="/topics" element={<TopicsPage />} />
+                <Route path="/news" element={<NewsPage />} />
+                <Route path="/read-books" element={<ReadBookPage />} />
+                <Route path="/preview-books" element={<ReadBookPage />} />
+                <Route path="/read-book/:bookId" element={<BookReaderPage />} />
 
-              <Route path="/creator/:userId" element={<CreatorProfilePage />} />
-              <Route path="/reel/:reelId" element={<ReelDetailPage />} />
-              <Route path="/quiz" element={<QuizPage />} />
-              <Route path="/game-profile" element={<GameProfile />} />
-              <Route path="/progress" element={<ProgressPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/confirm" element={<ConfirmPage />} />
 
-              <Route
-                path="/comments/:reelId"
-                element={
-                  <ProtectedRoute>
-                    <CommentsPage />
-                  </ProtectedRoute>
-                }
-              />
+                <Route path="/creator/:userId" element={<CreatorProfilePage />} />
+                <Route path="/reel/:reelId" element={<ReelDetailPage />} />
+                <Route path="/quiz" element={<QuizPage />} />
+                <Route path="/game-profile" element={<GameProfile />} />
+                <Route path="/progress" element={<ProgressPage />} />
 
-              <Route
-                path="/edit/:reelId"
-                element={
-                  <ProtectedRoute>
-                    <EditPostPage />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/comments/:reelId"
+                  element={
+                    <ProtectedRoute>
+                      <CommentsPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/chat"
-                element={
-                  <ProtectedRoute>
-                    <ChatPage />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/edit/:reelId"
+                  element={
+                    <ProtectedRoute>
+                      <EditPostPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/profile"
-                element={
-                  <ProtectedRoute>
-                    <ProfilePage />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/chat"
+                  element={
+                    <ProtectedRoute>
+                      <ChatPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/saved"
-                element={
-                  <ProtectedRoute>
-                    <SavedPage />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute>
+                      <ProfilePage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/create"
-                element={
-                  <ProtectedRoute>
-                    <CreatePostPage />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/saved"
+                  element={
+                    <ProtectedRoute>
+                      <SavedPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route path="/post-ai/:postId" element={<PostAiPage />} />
+                <Route
+                  path="/create"
+                  element={
+                    <ProtectedRoute>
+                      <CreatePostPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/creator-dashboard"
-                element={
-                  <ProtectedRoute>
-                    <CreatorDashboardPage />
-                  </ProtectedRoute>
-                }
-              />
+                <Route path="/post-ai/:postId" element={<PostAiPage />} />
 
-              <Route
-                path="/follow-requests"
-                element={
-                  <ProtectedRoute>
-                    <FollowRequestsPage />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/creator-dashboard"
+                  element={
+                    <ProtectedRoute>
+                      <CreatorDashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route
-                path="/rooms"
-                element={
-                  <ProtectedRoute>
-                    <TopicRoomsPage />
-                  </ProtectedRoute>
-                }
-              />
+                <Route
+                  path="/follow-requests"
+                  element={
+                    <ProtectedRoute>
+                      <FollowRequestsPage />
+                    </ProtectedRoute>
+                  }
+                />
 
-              <Route path="*" element={<Navigate to="/feed" replace />} />
+                <Route
+                  path="/rooms"
+                  element={
+                    <ProtectedRoute>
+                      <TopicRoomsPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route path="*" element={<Navigate to="/feed" replace />} />
               </Routes>
             </Suspense>
           </RouteErrorBoundary>

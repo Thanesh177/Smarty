@@ -9,6 +9,14 @@ const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
 const API_ORIGIN = 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com';
 const ROOM_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const ROOM_IMAGE_PICKER_MAX_BYTES = 8 * 1024 * 1024;
+const ROOM_LIST_CACHE_MS = 25_000;
+const ROOM_MEMBERS_CACHE_MS = 30_000;
+const USER_SEARCH_DEBOUNCE_MS = 350;
+const ROOM_INVITES_REFRESH_MS = 45_000;
+const MAX_RENDERED_MESSAGES = 40;
+const MAX_RENDERED_ROOMS = 60;
+const ROOM_IMAGE_EAGER_LIMIT = 8;
+const ROOM_IMAGE_RENDER_LIMIT = 24;
 
 function getStoredRoomImages() {
   try {
@@ -155,12 +163,21 @@ export default function TopicRoomsPage() {
   const { user } = useAuth();
   const userId = user?.id || user?.userId || user?.sub;
   const [roomImageCache, setRoomImageCache] = useState(() => getStoredRoomImages());
-  const [failedRoomImageIds, setFailedRoomImageIds] = useState(() => new Set());
+  const [failedRoomImages, setFailedRoomImages] = useState(() => ({}));
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const activeRoomRef = useRef(null);
   const messagesRef = useRef(null);
   const mountedRef = useRef(true);
   const loadingRoomRef = useRef(false);
+  const roomsLoadingRef = useRef(false);
+  const roomsCacheRef = useRef({ key: '', timestamp: 0, rooms: [] });
+  const pendingRoomsReloadRef = useRef(false);
+  const activeRoomImageUrlRef = useRef('');
+  const membersCacheRef = useRef({});
+  const joinRequestsCacheRef = useRef({});
+  const userSearchCacheRef = useRef({});
+  const userSearchTimerRef = useRef(null);
+  const roomInvitesLoadingRef = useRef(false);
   const sendingMessageRef = useRef(false);
   const [hiddenRooms, setHiddenRooms] = useState([]);
   const [showHidden, setShowHidden] = useState(false);
@@ -183,13 +200,21 @@ export default function TopicRoomsPage() {
   const [newRoomPrivacy, setNewRoomPrivacy] = useState('public');
   const [newRoomImageFile, setNewRoomImageFile] = useState(null);
   const [newRoomImagePreview, setNewRoomImagePreview] = useState('');
+  const [uploadingRoomImageId, setUploadingRoomImageId] = useState('');
+  const [renamingRoomId, setRenamingRoomId] = useState('');
+  const [showEditRoomModal, setShowEditRoomModal] = useState(false);
+  const [editRoomTarget, setEditRoomTarget] = useState(null);
+  const [editRoomName, setEditRoomName] = useState('');
+  const [editRoomImageFile, setEditRoomImageFile] = useState(null);
+  const [editRoomImagePreview, setEditRoomImagePreview] = useState('');
+  const [editRoomSaving, setEditRoomSaving] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRoomMenu, setShowRoomMenu] = useState(false);
+  const [showActiveRoomMenu, setShowActiveRoomMenu] = useState(false);
   const [openRoomActionMenuId, setOpenRoomActionMenuId] = useState('');
-  const [uploadingRoomImageId, setUploadingRoomImageId] = useState('');
-
   const roomMenuRef = useRef(null);
   const roomActionMenuRef = useRef(null);
+  const activeRoomMenuRef = useRef(null);
 
   const [roomSearch, setRoomSearch] = useState('');
   const [modalTitle, setModalTitle] = useState('Group Members');
@@ -218,10 +243,12 @@ const getRoomImageUrl = useCallback((room) => {
 
   if (!imageUrl) return '';
 
-  return imageUrl;
-}, [roomImageCache]);
+  if (failedRoomImages[room.roomId] === imageUrl) return '';
 
-  const sortedVisibleRooms = useMemo(() => rooms, [rooms]);
+  return imageUrl;
+}, [failedRoomImages, roomImageCache]);
+
+  const sortedVisibleRooms = useMemo(() => rooms.slice(0, MAX_RENDERED_ROOMS), [rooms]);
 
   const renderedMessages = useMemo(() => {
     if (!Array.isArray(messages) || messages.length === 0) return [];
@@ -241,8 +268,20 @@ const getRoomImageUrl = useCallback((room) => {
       unique.push(msg);
     }
 
-    return unique.length > 180 ? unique.slice(-180) : unique;
+    return unique.length > MAX_RENDERED_MESSAGES ? unique.slice(-MAX_RENDERED_MESSAGES) : unique;
   }, [messages]);
+
+  const activeRoomImageUrl = useMemo(() => getRoomImageUrl(activeRoom), [activeRoom, getRoomImageUrl]);
+  const activeRoomCanEdit = useMemo(
+    () =>
+      activeRoom?.type === 'custom' &&
+      (activeRoom?.ownerId === userId || activeRoom?.createdBy === userId),
+    [activeRoom, userId]
+  );
+
+  useEffect(() => {
+    activeRoomImageUrlRef.current = activeRoomImageUrl;
+  }, [activeRoomImageUrl]);
   useEffect(() => {
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
@@ -257,6 +296,9 @@ const getRoomImageUrl = useCallback((room) => {
 
       if (roomActionMenuRef.current && !roomActionMenuRef.current.contains(target)) {
         setOpenRoomActionMenuId('');
+      }
+      if (activeRoomMenuRef.current && !activeRoomMenuRef.current.contains(target)) {
+        setShowActiveRoomMenu(false);
       }
     };
 
@@ -313,32 +355,81 @@ useEffect(() => {
   };
 }, [newRoomImagePreview]);
 
-  async function loadRooms(searchValue = roomSearch) {
+useEffect(() => {
+  return () => {
+    if (editRoomImagePreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(editRoomImagePreview);
+    }
+  };
+}, [editRoomImagePreview]);
+
+useEffect(() => {
+  return () => {
+    if (userSearchTimerRef.current) {
+      window.clearTimeout(userSearchTimerRef.current);
+    }
+  };
+}, []);
+
+  async function loadRooms(searchValue = roomSearch, options = {}) {
+    const normalizedSearch = String(searchValue || '').trim().toLowerCase();
+    const cacheKey = normalizedSearch;
+    const force = Boolean(options.force);
+    const now = Date.now();
+    const cached = roomsCacheRef.current;
+
+    if (!force && cached.key === cacheKey && cached.rooms.length > 0 && now - cached.timestamp < ROOM_LIST_CACHE_MS) {
+      if (mountedRef.current) setRooms(cached.rooms);
+      return;
+    }
+
+    if (roomsLoadingRef.current) {
+      pendingRoomsReloadRef.current = true;
+      return;
+    }
+
+    roomsLoadingRef.current = true;
+
     try {
       setStatus('');
       setRoomsLoading(true);
 
       const data = await roomApi.getRooms({
-        search: searchValue.trim(),
+        search: normalizedSearch,
       });
 
       if (!mountedRef.current) return;
 
       const cachedRoomImages = getStoredRoomImages();
-      setRoomImageCache(cachedRoomImages);
+      setRoomImageCache((prev) => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(cachedRoomImages);
+        if (prevKeys.length === nextKeys.length && nextKeys.every((key) => prev[key] === cachedRoomImages[key])) {
+          return prev;
+        }
+        return cachedRoomImages;
+      });
+
       const allRoomsRaw = Array.isArray(data?.rooms) ? data.rooms : Array.isArray(data) ? data : [];
       const allRooms = allRoomsRaw.map((room) => {
         const cachedImageUrl = cachedRoomImages[room.roomId];
-        const imageUrl = normalizeRoomImageUrl(room.imageUrl || room.roomImageUrl || room.avatarUrl || room.coverImageUrl || room.coverUrl || cachedImageUrl || '');
+        const imageUrl = normalizeRoomImageUrl(
+          room.imageUrl ||
+            room.roomImageUrl ||
+            room.avatarUrl ||
+            room.coverImageUrl ||
+            room.coverUrl ||
+            cachedImageUrl ||
+            ''
+        );
 
         return {
-  ...room,
-  imageUrl,
-  roomImageUrl: room.roomImageUrl || imageUrl,
-  coverImageUrl: room.coverImageUrl || imageUrl,
-};
+          ...room,
+          imageUrl,
+          roomImageUrl: room.roomImageUrl || imageUrl,
+          coverImageUrl: room.coverImageUrl || imageUrl,
+        };
       });
-      const normalizedSearch = searchValue.trim().toLowerCase();
 
       const visibleRooms = allRooms.filter((room) => {
         const isOwner = room.ownerId === userId || room.createdBy === userId;
@@ -359,23 +450,85 @@ useEffect(() => {
         return Number(b.createdAt || 0) - Number(a.createdAt || 0);
       });
 
-      setRooms(visibleRooms);
+      roomsCacheRef.current = {
+        key: cacheKey,
+        timestamp: Date.now(),
+        rooms: visibleRooms,
+      };
+
+      setRooms((prev) => {
+        if (
+          prev.length === visibleRooms.length &&
+          prev.every((item, index) => {
+            const next = visibleRooms[index];
+            return (
+              item.roomId === next.roomId &&
+              item.imageUrl === next.imageUrl &&
+              item.roomImageUrl === next.roomImageUrl &&
+              item.coverImageUrl === next.coverImageUrl &&
+              item.memberCount === next.memberCount &&
+              item.name === next.name &&
+              item.privacy === next.privacy
+            );
+          })
+        ) {
+          return prev;
+        }
+
+        return visibleRooms;
+      });
     } catch (err) {
       console.error(err);
       if (mountedRef.current) setStatus('Failed to load rooms');
     } finally {
+      roomsLoadingRef.current = false;
       if (mountedRef.current) setRoomsLoading(false);
+
+      if (pendingRoomsReloadRef.current) {
+        pendingRoomsReloadRef.current = false;
+        window.setTimeout(() => {
+          if (mountedRef.current) loadRooms(searchValue, { force: true });
+        }, 100);
+      }
     }
   }
 
 useEffect(() => {
   if (!userId) return;
 
-  const timeout = setTimeout(() => {
-    loadRooms('');
-  }, 150);
+  loadRooms('', { force: true });
+}, [userId]);
 
-  return () => clearTimeout(timeout);
+
+useEffect(() => {
+  if (!userId) return undefined;
+
+  const loadInitialInvites = () => loadRoomInvites(false);
+
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(loadInitialInvites, { timeout: 2500 });
+  } else {
+    window.setTimeout(loadInitialInvites, 800);
+  }
+
+  const intervalId = window.setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      loadRoomInvites(false);
+    }
+  }, ROOM_INVITES_REFRESH_MS);
+
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      loadRoomInvites(false);
+    }
+  };
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  return () => {
+    window.clearInterval(intervalId);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
 }, [userId]);
 
 
@@ -401,7 +554,7 @@ useEffect(() => {
 
           if (index === -1) {
             const alreadyExists = prev.some((m) => m.messageId === msg.messageId);
-            return alreadyExists ? prev : [...prev.slice(-179), msg];
+            return alreadyExists ? prev : [...prev.slice(-(MAX_RENDERED_MESSAGES - 1)), msg];
           }
 
           const copy = [...prev];
@@ -437,7 +590,7 @@ if (!key) return prev;
 if (prev.some((m) => (m.messageId || m.clientId) === key)) {
   return prev;
 }
-        return [...prev.slice(-179), msg];
+        return [...prev.slice(-(MAX_RENDERED_MESSAGES - 1)), msg];
       });
     });
 
@@ -481,7 +634,7 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
       if (!createdRoom?.roomId) {
         console.error('Create room returned unexpected response:', data);
         setStatus('Room was created, but the response format was unexpected. Refreshing rooms...');
-        await loadRooms();
+        await loadRooms(roomSearch, { force: true });
         return false;
       }
 
@@ -500,10 +653,10 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
 
           if (imageUrl) {
             persistStoredRoomImage(createdRoom.roomId, imageUrl);
-            setFailedRoomImageIds((prev) => {
-              if (!prev.has(createdRoom.roomId)) return prev;
-              const next = new Set(prev);
-              next.delete(createdRoom.roomId);
+            setFailedRoomImages((prev) => {
+              if (!prev[createdRoom.roomId]) return prev;
+              const next = { ...prev };
+              delete next[createdRoom.roomId];
               return next;
             });
             setRoomImageCache((prev) => ({
@@ -545,7 +698,7 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
       setNewRoomPrivacy('public');
       setShowCreateModal(false);
 
-      await loadRooms();
+      await loadRooms(roomSearch, { force: true });
 
       // Creator is already added as owner/member by backend, so do not call joinRoom here.
       setActiveRoom(finalCreatedRoom);
@@ -577,7 +730,7 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
             : Array.isArray(messageData)
               ? messageData
               : [];
-          setMessages(loadedMessages.slice(-180));
+          setMessages(loadedMessages.slice(-MAX_RENDERED_MESSAGES));
         }
       } catch (messageErr) {
         console.error('Could not load new room messages:', messageErr);
@@ -619,7 +772,7 @@ async function unhideRoom(room) {
   try {
     await roomApi.unhideRoom(room.roomId);
     setHiddenRooms((prev) => prev.filter((r) => r.roomId !== room.roomId));
-    await loadRooms();
+    await loadRooms(roomSearch, { force: true });
   } catch (err) {
     console.error(err);
     setStatus('Could not unhide room');
@@ -628,9 +781,19 @@ async function unhideRoom(room) {
 
 // Room Invites popup logic
 async function loadRoomInvites(openPopup = false) {
+  if (roomInvitesLoadingRef.current) {
+    if (openPopup) setShowRoomInvites(true);
+    return;
+  }
+
+  roomInvitesLoadingRef.current = true;
+
   try {
-    if (openPopup) setStatus('');
-    setRoomInvitesLoading(true);
+    if (openPopup) {
+      setStatus('');
+      setRoomInvitesLoading(true);
+      setShowRoomInvites(true);
+    }
 
     const data = await roomApi.getRoomInvites();
     if (!mountedRef.current) return;
@@ -642,14 +805,25 @@ async function loadRoomInvites(openPopup = false) {
         : [];
 
     setRoomInvites(invites);
-    if (openPopup) setShowRoomInvites(true);
   } catch (err) {
-    console.error(err);
+    if (openPopup) console.error(err);
+
     if (mountedRef.current && openPopup) {
-      setStatus(err?.response?.data?.error || 'Could not load room invites');
+      const message =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.response?.data?.details ||
+        '';
+
+      if (err?.response?.status === 500) {
+        setStatus(message || 'Room invites service error. Check the TopicRoomInvites table index in Lambda.');
+      } else {
+        setStatus(message || 'Could not load room invites');
+      }
     }
   } finally {
-    if (mountedRef.current) setRoomInvitesLoading(false);
+    roomInvitesLoadingRef.current = false;
+    if (mountedRef.current && openPopup) setRoomInvitesLoading(false);
   }
 }
 
@@ -669,14 +843,12 @@ async function acceptRoomInvite(invite) {
     await roomApi.acceptRoomInvite(roomId);
     if (!mountedRef.current) return;
 
-    setRoomInvites((prev) => {
-  const updated = prev.filter((item) => (item.roomId || item.id) !== roomId);
-  if (updated.length === 0) setShowRoomInvites(false);
-  return updated;
-});
+    setRoomInvites((prev) => prev.filter((item) => (item.roomId || item.id) !== roomId));
 
-setStatus('Room invite accepted');
-await loadRooms();
+    setStatus('Room invite accepted');
+    membersCacheRef.current = {};
+    joinRequestsCacheRef.current = {};
+    await loadRooms(roomSearch, { force: true });
   } catch (err) {
     console.error(err);
     if (mountedRef.current) setStatus(err?.response?.data?.error || 'Could not accept invite');
@@ -696,11 +868,7 @@ async function rejectRoomInvite(invite) {
     await roomApi.declineRoomInvite(roomId);
     if (!mountedRef.current) return;
 
-    setRoomInvites((prev) => {
-      const updated = prev.filter((item) => (item.roomId || item.id) !== roomId);
-      if (updated.length === 0) setShowRoomInvites(false);
-      return updated;
-    });
+    setRoomInvites((prev) => prev.filter((item) => (item.roomId || item.id) !== roomId));
 
     setStatus('Room invite rejected');
   } catch (err) {
@@ -743,7 +911,7 @@ async function prepareRoomImageFile(file) {
   }
 
   const bitmap = await createImageBitmap(file);
-  const maxDimension = 1280;
+  const maxDimension = 800;
   const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
   const width = Math.max(1, Math.round(bitmap.width * scale));
   const height = Math.max(1, Math.round(bitmap.height * scale));
@@ -779,16 +947,16 @@ async function prepareRoomImageFile(file) {
 }
 
 async function uploadRoomImage(room, file) {
-  if (!room?.roomId || !file || uploadingRoomImageId) return;
+  if (!room?.roomId || !file || uploadingRoomImageId) return false;
 
   if (!file.type?.startsWith('image/')) {
     setStatus('Please choose an image file');
-    return;
+    return false;
   }
 
   if (file.size > ROOM_IMAGE_PICKER_MAX_BYTES) {
     setStatus('Image must be smaller than 8 MB before optimization');
-    return;
+    return false;
   }
 
   try {
@@ -805,14 +973,14 @@ async function uploadRoomImage(room, file) {
     if (!imageUrl) {
       setStatus('Image uploaded, but no image URL was returned');
       await loadRooms();
-      return;
+      return false;
     }
 
     persistStoredRoomImage(room.roomId, imageUrl);
-    setFailedRoomImageIds((prev) => {
-      if (!prev.has(room.roomId)) return prev;
-      const next = new Set(prev);
-      next.delete(room.roomId);
+    setFailedRoomImages((prev) => {
+      if (!prev[room.roomId]) return prev;
+      const next = { ...prev };
+      delete next[room.roomId];
       return next;
     });
     setRoomImageCache((prev) => ({
@@ -841,19 +1009,238 @@ async function uploadRoomImage(room, file) {
     }
 
     setOpenRoomActionMenuId('');
+    setShowActiveRoomMenu(false);
     setStatus('Room image updated');
+    return true;
   } catch (err) {
-  console.error(err);
+    console.error(err);
 
-  if (err?.response?.status === 403) {
-    setStatus('Only the room creator can change this room image');
-  } else {
-    setStatus(err?.response?.data?.error || 'Could not upload room image');
-  }
-} finally {
+    if (err?.response?.status === 403) {
+      setStatus('Only the room creator can change this room image');
+    } else {
+      setStatus(err?.response?.data?.error || 'Could not upload room image');
+    }
+    return false;
+  } finally {
     if (mountedRef.current) setUploadingRoomImageId('');
   }
 }
+
+async function renameRoom(room, providedName) {
+  if (!room?.roomId || renamingRoomId) return false;
+
+  const isOwner = room.ownerId === userId || room.createdBy === userId;
+
+  if (!isOwner) {
+    setStatus('Only the room creator can edit the topic name');
+    return false;
+  }
+
+  const currentName = String(room.name || '').trim();
+  const cleanName = String(providedName || '').trim().replace(/\s+/g, ' ');
+
+  if (!cleanName) {
+    setStatus('Topic name cannot be empty');
+    return false;
+  }
+
+  if (cleanName.length > 60) {
+    setStatus('Topic name must be 60 characters or fewer');
+    return false;
+  }
+
+  if (cleanName.toLowerCase() === currentName.toLowerCase()) {
+    return true;
+  }
+
+  try {
+    setStatus('');
+    setRenamingRoomId(room.roomId);
+    setShowActiveRoomMenu(false);
+
+    if (typeof roomApi.renameRoom !== 'function') {
+      throw new Error('renameRoom API method is missing in client.js');
+    }
+
+    const data = await roomApi.renameRoom(room.roomId, cleanName);
+    const { payload, body } = parseApiPayload(data);
+
+    const updatedRoom =
+      payload?.room ||
+      payload?.data?.room ||
+      body?.room ||
+      body?.data?.room ||
+      null;
+
+    const nextRoomPatch = {
+      name: updatedRoom?.name || cleanName,
+      nameLower: updatedRoom?.nameLower || cleanName.toLowerCase(),
+    };
+
+    setRooms((prev) =>
+      prev.map((item) =>
+        item.roomId === room.roomId ? { ...item, ...nextRoomPatch } : item
+      )
+    );
+
+    roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
+
+    if (activeRoomRef.current?.roomId === room.roomId) {
+      const nextActiveRoom = {
+        ...activeRoomRef.current,
+        ...nextRoomPatch,
+      };
+
+      activeRoomRef.current = nextActiveRoom;
+      setActiveRoom(nextActiveRoom);
+    }
+
+    if (modalRoom?.roomId === room.roomId) {
+      setModalRoom((prev) => (prev ? { ...prev, ...nextRoomPatch } : prev));
+    }
+
+    setStatus('Topic name updated');
+    return true;
+  } catch (err) {
+    console.error(err);
+
+    if (err?.response?.status === 409) {
+      setStatus('A room with this topic name already exists');
+    } else if (err?.response?.status === 403) {
+      setStatus('Only the room creator can edit the topic name');
+    } else {
+      setStatus(
+        err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Could not update topic name'
+      );
+    }
+
+    return false;
+  } finally {
+    if (mountedRef.current) setRenamingRoomId('');
+  }
+}
+function closeEditRoomModal() {
+  if (editRoomSaving) return;
+
+  if (editRoomImagePreview?.startsWith('blob:')) {
+    URL.revokeObjectURL(editRoomImagePreview);
+  }
+
+  setShowEditRoomModal(false);
+  setEditRoomTarget(null);
+  setEditRoomName('');
+  setEditRoomImageFile(null);
+  setEditRoomImagePreview('');
+}
+
+function openEditRoomModal(room) {
+  if (!room?.roomId) return;
+
+  const isOwner = room.ownerId === userId || room.createdBy === userId;
+
+  if (!isOwner) {
+    setStatus('Only the room creator can edit this topic');
+    return;
+  }
+
+  if (editRoomImagePreview?.startsWith('blob:')) {
+    URL.revokeObjectURL(editRoomImagePreview);
+  }
+
+  setShowActiveRoomMenu(false);
+  setEditRoomTarget(room);
+  setEditRoomName(room.name || '');
+  setEditRoomImageFile(null);
+  setEditRoomImagePreview('');
+  setShowEditRoomModal(true);
+}
+
+function handleEditRoomImageChange(event) {
+  const file = event.target.files?.[0] || null;
+  event.target.value = '';
+
+  if (editRoomImagePreview?.startsWith('blob:')) {
+    URL.revokeObjectURL(editRoomImagePreview);
+  }
+
+  if (!file) {
+    setEditRoomImageFile(null);
+    setEditRoomImagePreview('');
+    return;
+  }
+
+  if (!file.type?.startsWith('image/')) {
+    setEditRoomImageFile(null);
+    setEditRoomImagePreview('');
+    setStatus('Please choose an image file');
+    return;
+  }
+
+  if (file.size > ROOM_IMAGE_PICKER_MAX_BYTES) {
+    setEditRoomImageFile(null);
+    setEditRoomImagePreview('');
+    setStatus('Image must be smaller than 8 MB before optimization');
+    return;
+  }
+
+  setStatus('');
+  setEditRoomImageFile(file);
+  setEditRoomImagePreview(URL.createObjectURL(file));
+}
+
+function removeEditRoomImage() {
+  if (editRoomImagePreview?.startsWith('blob:')) {
+    URL.revokeObjectURL(editRoomImagePreview);
+  }
+
+  setEditRoomImageFile(null);
+  setEditRoomImagePreview('');
+}
+
+async function saveEditRoom(e) {
+  e.preventDefault();
+
+  if (!editRoomTarget?.roomId || editRoomSaving) return;
+
+  const cleanName = editRoomName.trim().replace(/\s+/g, ' ');
+  const currentName = String(editRoomTarget.name || '').trim();
+  const shouldRename = cleanName.toLowerCase() !== currentName.toLowerCase();
+
+  if (!cleanName) {
+    setStatus('Topic name cannot be empty');
+    return;
+  }
+
+  if (cleanName.length > 60) {
+    setStatus('Topic name must be 60 characters or fewer');
+    return;
+  }
+
+  try {
+    setStatus('');
+    setEditRoomSaving(true);
+
+    if (shouldRename) {
+      const renamed = await renameRoom(editRoomTarget, cleanName);
+      if (!renamed) return;
+    }
+
+    if (editRoomImageFile) {
+      const uploaded = await uploadRoomImage(editRoomTarget, editRoomImageFile);
+      if (!uploaded) return;
+    }
+
+    roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
+    setStatus('Topic updated');
+    closeEditRoomModal();
+  } finally {
+    if (mountedRef.current) setEditRoomSaving(false);
+  }
+}
+
 
 function handleNewRoomImageChange(event) {
   const file = event.target.files?.[0] || null;
@@ -899,15 +1286,22 @@ function removeNewRoomImage() {
 
   async function openRoom(room) {
     if (!room?.roomId || loadingRoomRef.current) return;
+
+    if (activeRoomRef.current?.roomId === room.roomId) {
+      setMobileChatOpen(true);
+      return;
+    }
+
     loadingRoomRef.current = true;
 
     try {
       setStatus('');
       setOpenRoomActionMenuId('');
+      setShowActiveRoomMenu(false);
 
       setActiveRoom(room);
       activeRoomRef.current = room;
-      setMessages([]);
+      setMessages((prev) => (prev.length ? [] : prev));
       setMobileChatOpen(true);
       setMessagesLoading(true);
       setRoomUnreadCounts((prev) => ({
@@ -924,7 +1318,7 @@ function removeNewRoomImage() {
           ? data
           : [];
 
-      setMessages(loadedMessages.slice(-180));
+      setMessages(loadedMessages.slice(-MAX_RENDERED_MESSAGES));
     } catch (err) {
       console.error(err);
       if (mountedRef.current) {
@@ -941,38 +1335,78 @@ function removeNewRoomImage() {
   }
 
   async function openMembers(room) {
+    if (!room?.roomId) return;
+
+    const cacheKey = room.roomId;
+    const cached = membersCacheRef.current[cacheKey];
+    const now = Date.now();
+
+    setStatus('');
+    setShowInvite(false);
+    setInviteSearch('');
+    setInviteResults([]);
+    setPendingInviteUserIds(new Set());
+    setModalTitle(`${room.name} members`);
+    setModalMode('members');
+    setModalRoom(room);
+    setShowMembers(true);
+
+    if (modalRoom?.roomId === room.roomId && modalMode === 'members' && members.length > 0) {
+      return;
+    }
+
+    if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
+      setMembers(cached.members);
+      return;
+    }
+
+    setMembers([]);
+
     try {
-      setStatus('');
-      setShowInvite(false);
-      setInviteSearch('');
-      setInviteResults([]);
-      setPendingInviteUserIds(new Set());
-
       const data = await roomApi.getRoomMembers(room.roomId);
+      if (!mountedRef.current) return;
 
-      setModalTitle(`${room.name} members`);
-      setModalMode('members');
-      setModalRoom(room);
-      setMembers(data.members || data || []);
-      setShowMembers(true);
+      const nextMembers = data.members || data || [];
+      membersCacheRef.current[cacheKey] = {
+        timestamp: Date.now(),
+        members: nextMembers,
+      };
+      setMembers(nextMembers);
     } catch (err) {
       console.error(err);
       setStatus(err?.response?.data?.error || 'Could not load members');
     }
   }
 
-async function searchUsers() {
-  const query = inviteSearch.trim();
+async function searchUsers(searchValue = inviteSearch) {
+  const query = String(searchValue || '').trim().toLowerCase();
 
   if (!query) {
     setInviteResults([]);
     return;
   }
 
+  const cached = userSearchCacheRef.current[query];
+  const now = Date.now();
+
+  if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
+    setInviteResults(dedupeInviteUsers(cached.users));
+    return;
+  }
+
   try {
     setStatus('');
     const data = await roomApi.searchUsers(query);
-    setInviteResults(data.users || data || []);
+    if (!mountedRef.current) return;
+
+const users = dedupeInviteUsers(data.users || data || []);
+
+userSearchCacheRef.current[query] = {
+  timestamp: Date.now(),
+  users,
+};
+
+setInviteResults(users);
   } catch (err) {
     console.error(err);
     setStatus(err?.response?.data?.error || 'Search failed');
@@ -987,6 +1421,48 @@ function getInviteUserId(user) {
 
 function getInviteUserEmail(user) {
   return String(user?.email || '').trim().toLowerCase();
+}
+
+function normalizeInviteKey(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^mailto:/, '')
+    .replace(/\s+/g, '');
+}
+
+function getEmailLocalPart(email) {
+  const cleanEmail = normalizeInviteKey(email);
+  return cleanEmail.includes('@') ? cleanEmail.split('@')[0] : '';
+}
+
+function dedupeInviteUsers(users = []) {
+  const seen = new Set();
+  const unique = [];
+
+  for (const user of users) {
+    const userIdValue = normalizeInviteKey(getInviteUserId(user));
+    const emailValue = normalizeInviteKey(getInviteUserEmail(user));
+    const usernameValue = normalizeInviteKey(user?.username);
+    const nameValue = normalizeInviteKey(user?.name || user?.displayName);
+    const emailLocalValue = getEmailLocalPart(emailValue);
+
+    const keys = [
+      userIdValue && `id:${userIdValue}`,
+      emailValue && `email:${emailValue}`,
+      usernameValue && `username:${usernameValue}`,
+      emailLocalValue && `username:${emailLocalValue}`,
+      nameValue && emailValue && `name-email:${nameValue}:${emailValue}`,
+      nameValue && userIdValue && `name-id:${nameValue}:${userIdValue}`,
+    ].filter(Boolean);
+
+    if (keys.some((key) => seen.has(key))) continue;
+
+    keys.forEach((key) => seen.add(key));
+    unique.push(user);
+  }
+
+  return unique;
 }
 
 function isExistingRoomMember(user) {
@@ -1069,14 +1545,13 @@ async function inviteUser(userToInvite) {
 
     setStatus(data?.message || 'Invite request sent. The user must accept before joining.');
   } catch (err) {
-    console.error(err);
-
+    const statusCode = err?.response?.status;
     const message =
       err?.response?.data?.error ||
       err?.response?.data?.message ||
       '';
 
-    if (err?.response?.status === 409) {
+    if (statusCode === 409) {
       setPendingInviteUserIds((prev) => {
         const next = new Set(prev);
         next.add(targetUserId);
@@ -1092,7 +1567,12 @@ async function inviteUser(userToInvite) {
       );
 
       setStatus(message || 'Invite already sent');
-    } else if (err?.response?.status === 403) {
+      return;
+    }
+
+    console.error(err);
+
+    if (statusCode === 403) {
       setStatus(message || 'Only the room creator can invite users.');
     } else {
       setStatus(message || 'Invite failed');
@@ -1101,20 +1581,43 @@ async function inviteUser(userToInvite) {
 }
 
   async function openJoinRequests(room) {
+    if (!room?.roomId) return;
+
+    const cacheKey = room.roomId;
+    const cached = joinRequestsCacheRef.current[cacheKey];
+    const now = Date.now();
+
+    setStatus('');
+    setShowInvite(false);
+    setInviteSearch('');
+    setInviteResults([]);
+    setPendingInviteUserIds(new Set());
+    setModalTitle(`${room.name} join requests`);
+    setModalMode('requests');
+    setModalRoom(room);
+    setShowMembers(true);
+
+    if (modalRoom?.roomId === room.roomId && modalMode === 'requests' && members.length > 0) {
+      return;
+    }
+
+    if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
+      setMembers(cached.requests);
+      return;
+    }
+
+    setMembers([]);
+
     try {
-      setStatus('');
-      setShowInvite(false);
-      setInviteSearch('');
-      setInviteResults([]);
-      setPendingInviteUserIds(new Set());
-
       const data = await roomApi.getRoomJoinRequests(room.roomId);
+      if (!mountedRef.current) return;
 
-      setModalTitle(`${room.name} join requests`);
-      setModalMode('requests');
-      setModalRoom(room);
-      setMembers(data.requests || data || []);
-      setShowMembers(true);
+      const nextRequests = data.requests || data || [];
+      joinRequestsCacheRef.current[cacheKey] = {
+        timestamp: Date.now(),
+        requests: nextRequests,
+      };
+      setMembers(nextRequests);
     } catch (err) {
       console.error(err);
       setStatus(err?.response?.data?.error || 'Could not load join requests');
@@ -1127,11 +1630,53 @@ async function inviteUser(userToInvite) {
     try {
       await roomApi.approveRoomJoinRequest(modalRoom.roomId, requestUserId);
       setMembers((prev) => prev.filter((member) => member.userId !== requestUserId));
+      if (modalRoom?.roomId) {
+        delete joinRequestsCacheRef.current[modalRoom.roomId];
+        delete membersCacheRef.current[modalRoom.roomId];
+      }
       setStatus('Join request approved');
-      await loadRooms();
+      await loadRooms(roomSearch, { force: true });
     } catch (err) {
       console.error(err);
       setStatus(err?.response?.data?.error || 'Could not approve request');
+    }
+  }
+
+  async function removeRoomMember(member) {
+    if (!modalRoom?.roomId || !member?.userId) return;
+
+    const isCreator = modalRoom.ownerId === userId || modalRoom.createdBy === userId;
+    const isTargetOwner = member.userId === modalRoom.ownerId || member.userId === modalRoom.createdBy;
+
+    if (!isCreator) {
+      setStatus('Only the group creator can remove members');
+      return;
+    }
+
+    if (isTargetOwner) {
+      setStatus('You cannot remove the group creator');
+      return;
+    }
+
+    const ok = window.confirm(`Remove ${member.name || member.email || 'this member'} from ${modalRoom.name}?`);
+    if (!ok) return;
+
+    try {
+      setStatus('');
+      await roomApi.removeRoomMember(modalRoom.roomId, member.userId);
+
+      setMembers((prev) => prev.filter((item) => item.userId !== member.userId));
+
+      if (modalRoom?.roomId) {
+        delete membersCacheRef.current[modalRoom.roomId];
+        delete joinRequestsCacheRef.current[modalRoom.roomId];
+      }
+
+      setStatus('Member removed from group');
+      await loadRooms(roomSearch, { force: true });
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.response?.data?.error || err?.response?.data?.message || 'Could not remove member');
     }
   }
 
@@ -1162,12 +1707,12 @@ async function inviteUser(userToInvite) {
       setStatus('Left private group');
 
       window.setTimeout(() => {
-        if (mountedRef.current) loadRooms();
+        if (mountedRef.current) loadRooms(roomSearch, { force: true });
       }, 150);
     } catch (err) {
       console.error(err);
       setStatus(err?.response?.data?.error || 'Could not leave room');
-      if (mountedRef.current) loadRooms();
+      if (mountedRef.current) loadRooms(roomSearch, { force: true });
     }
   }
 
@@ -1188,7 +1733,7 @@ async function inviteUser(userToInvite) {
         setMessages([]);
       }
 
-      await loadRooms();
+      await loadRooms(roomSearch, { force: true });
     } catch (err) {
       console.error(err);
       setStatus(err?.response?.data?.error || 'Could not hide room');
@@ -1215,7 +1760,7 @@ async function inviteUser(userToInvite) {
         setMessages([]);
       }
 
-      await loadRooms();
+      await loadRooms(roomSearch, { force: true });
     } catch (err) {
       console.error(err);
       setStatus(err?.response?.data?.error || 'Failed to delete room');
@@ -1248,10 +1793,8 @@ function sendMessage(e) {
   setText('');
   setMessages((prev) => {
     if (prev.some((msg) => (msg.messageId || msg.clientId) === clientId)) return prev;
-    return [...prev.slice(-179), tempMessage];
+    return [...prev.slice(-(MAX_RENDERED_MESSAGES - 1)), tempMessage];
   });
-
-  scrollMessagesToBottom();
 
   try {
     sendRoomMessage({
@@ -1365,21 +1908,19 @@ function sendMessage(e) {
             <p className="empty">Loading rooms...</p>
           ) : rooms.length === 0 ? (
             <p className="empty">No rooms found</p>
-          ) : sortedVisibleRooms.map((room) => {
+          ) : sortedVisibleRooms.map((room, roomIndex) => {
             const isOwner = room.ownerId === userId || room.createdBy === userId;
             const isPrivateCustom = room.type === 'custom' && room.privacy === 'private';
-const canLeave = isPrivateCustom && !isOwner;
-const canDelete = room.type === 'custom' && isOwner;
-const canChangeImage = room.type === 'custom' && isOwner;
-const canViewRequests = isPrivateCustom && isOwner;
+            const canLeave = isPrivateCustom && !isOwner;
+            const canDelete = room.type === 'custom' && isOwner;
             const unreadCount = roomUnreadCounts[room.roomId] || room.unreadCount || 0;
-            const roomImageUrl = getRoomImageUrl(room);
+            const roomImageUrl = roomIndex < ROOM_IMAGE_RENDER_LIMIT ? getRoomImageUrl(room) : '';
+            const shouldEagerLoadRoomImage = roomIndex < ROOM_IMAGE_EAGER_LIMIT;
 
             return (
               <div
                 key={room.roomId}
                 className={`room-item ${roomImageUrl ? 'room-has-image' : ''} ${activeRoom?.roomId === room.roomId ? 'active' : ''}`}
-                style={roomImageUrl ? { '--room-bg-image': `url(${roomImageUrl})` } : undefined}
                 onClick={() => openRoom(room)}
               >
                 <div className="room-info">
@@ -1391,12 +1932,18 @@ const canViewRequests = isPrivateCustom && isOwner;
                           alt=""
                           width="44"
                           height="44"
-                          loading="lazy"
+                          loading={shouldEagerLoadRoomImage ? 'eager' : 'lazy'}
+                          fetchpriority={shouldEagerLoadRoomImage ? 'high' : 'low'}
                           decoding="async"
                           referrerPolicy="no-referrer"
                           onError={(event) => {
+  const failedUrl = event.currentTarget.currentSrc || roomImageUrl;
   event.currentTarget.style.display = 'none';
   removeStoredRoomImage(room.roomId);
+  setFailedRoomImages((prev) => ({
+    ...prev,
+    [room.roomId]: failedUrl,
+  }));
   setRoomImageCache((prev) => {
     if (!prev[room.roomId]) return prev;
     const next = { ...prev };
@@ -1459,48 +2006,8 @@ const canViewRequests = isPrivateCustom && isOwner;
                       onClick={(e) => e.stopPropagation()}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
-                   {canChangeImage && (
-  <label className="room-image-upload-option">
-    <input
-      type="file"
-      accept="image/jpeg,image/png,image/webp,image/gif"
-      disabled={uploadingRoomImageId === room.roomId}
-      onChange={(event) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (file) uploadRoomImage(room, file);
-      }}
-    />
-    {uploadingRoomImageId === room.roomId ? 'Uploading...' : 'Change Image'}
-  </label>
-)}
-                      {room.privacy === 'private' && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setOpenRoomActionMenuId('');
-                            openMembers(room);
-                          }}
-                        >
-                          Members
-                        </button>
-                      )}
 
-                      {canViewRequests && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setOpenRoomActionMenuId('');
-                            openJoinRequests(room);
-                          }}
-                        >
-                          Requests
-                        </button>
-                      )}
+                     
 
                       {canLeave && (
                         <button
@@ -1556,6 +2063,8 @@ const canViewRequests = isPrivateCustom && isOwner;
           <div className="empty">Select a room</div>
         ) : (
           <>
+
+
 <div className="chat-header">
   <button
     type="button"
@@ -1565,33 +2074,117 @@ const canViewRequests = isPrivateCustom && isOwner;
       setActiveRoom(null);
       activeRoomRef.current = null;
       setMessages([]);
+      setShowActiveRoomMenu(false);
     }}
   >
     ←
   </button>
 
   <span className="active-room-title-wrap">
-    {getRoomImageUrl(activeRoom) && (
+    {activeRoomImageUrl && (
       <img
         className="active-room-image"
-        src={getRoomImageUrl(activeRoom)}
+        src={activeRoomImageUrl}
         alt=""
         width="36"
         height="36"
         loading="lazy"
+        fetchpriority="low"
         decoding="async"
         referrerPolicy="no-referrer"
         onError={(event) => {
-  event.currentTarget.style.display = 'none';
-  if (activeRoom?.roomId) {
-    removeStoredRoomImage(activeRoom.roomId);
-  }
-}}
+          const failedUrl = event.currentTarget.currentSrc || activeRoomImageUrlRef.current;
+          event.currentTarget.style.display = 'none';
+          if (activeRoom?.roomId) {
+            removeStoredRoomImage(activeRoom.roomId);
+            setFailedRoomImages((prev) => ({
+              ...prev,
+              [activeRoom.roomId]: failedUrl,
+            }));
+          }
+        }}
       />
     )}
     <span>{activeRoom.name}</span>
   </span>
+
+  <div
+    className="active-room-menu-wrap"
+    ref={activeRoomMenuRef}
+    onClick={(e) => e.stopPropagation()}
+  >
+    <button
+      type="button"
+      className="active-room-menu-btn"
+      aria-label="Active room actions"
+      aria-expanded={showActiveRoomMenu}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowRoomMenu(false);
+        setOpenRoomActionMenuId('');
+        setShowActiveRoomMenu((prev) => !prev);
+      }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      ⋯
+    </button>
+
+    {showActiveRoomMenu && (
+      <div className="active-room-menu-popover">
+        {activeRoomCanEdit && (
+            <button
+              type="button"
+              disabled={
+                uploadingRoomImageId === activeRoom.roomId ||
+                renamingRoomId === activeRoom.roomId ||
+                editRoomSaving
+              }
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openEditRoomModal(activeRoom);
+              }}
+            >
+              Edit
+            </button>
+        )}
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowActiveRoomMenu(false);
+            openMembers(activeRoom);
+          }}
+        >
+          Members
+        </button>
+
+        {activeRoom?.type === 'custom' &&
+          activeRoom?.privacy === 'private' &&
+          (activeRoom?.ownerId === userId || activeRoom?.createdBy === userId) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowActiveRoomMenu(false);
+                openJoinRequests(activeRoom);
+              }}
+            >
+              Requests
+            </button>
+          )}
+      </div>
+    )}
+  </div>
 </div>
+
 <div className="messages" ref={messagesRef}>
               {messagesLoading ? (
                 <p className="empty">Loading messages...</p>
@@ -1629,15 +2222,6 @@ const canViewRequests = isPrivateCustom && isOwner;
               <button type="submit" disabled={!text.trim() || !activeRoom}>Send</button>
             </form>
 
-            {messages.length > 180 && (
-              <button
-                type="button"
-                className="room-trim-messages-btn"
-                onClick={() => setMessages((prev) => prev.slice(-120))}
-              >
-                Reduce loaded messages
-              </button>
-            )}
           </>
         )}
       </section>
@@ -1659,12 +2243,12 @@ const canViewRequests = isPrivateCustom && isOwner;
         <p className="member-empty">No hidden groups.</p>
       ) : (
         hiddenRooms.map((room) => (
-          <div key={room.roomId} className="member-row">
+          <div key={room.roomId} className="member-row hidden-room-row">
             <strong>{room.name}</strong>
 
             <button
               type="button"
-              className="approve-request-btn"
+              className="approve-request-btn unhide-room-btn"
               onClick={() => unhideRoom(room)}
             >
               Unhide
@@ -1698,7 +2282,7 @@ const canViewRequests = isPrivateCustom && isOwner;
                 const inviteRoomId = invite.roomId || invite.id;
 
                 return (
-                  <div key={inviteRoomId || `invite-${index}`} className="member-row">
+                  <div key={inviteRoomId || `invite-${index}`} className="member-row room-invite-row">
                     <div>
                       <strong>{invite.roomName || invite.name || 'Room invite'}</strong>
                       {(invite.inviterName || invite.inviterEmail || invite.createdByName) && (
@@ -1708,23 +2292,27 @@ const canViewRequests = isPrivateCustom && isOwner;
                       )}
                     </div>
 
-                    <div className="room-actions">
+                    <div className="room-invite-actions">
                       <button
                         type="button"
-                        className="approve-request-btn"
+                        className="approve-request-btn room-invite-action-btn icon-action-btn"
+                        aria-label="Accept invite"
+                        title="Accept invite"
                         disabled={!inviteRoomId || processingInviteId === inviteRoomId}
                         onClick={() => acceptRoomInvite({ ...invite, roomId: inviteRoomId })}
                       >
-                        {processingInviteId === inviteRoomId ? 'Accepting...' : 'Accept'}
+                        {processingInviteId === inviteRoomId ? '...' : '✓'}
                       </button>
 
                       <button
                         type="button"
-                        className="delete-room-btn"
+                        className="delete-room-btn room-invite-action-btn icon-action-btn"
+                        aria-label="Reject invite"
+                        title="Reject invite"
                         disabled={!inviteRoomId || processingInviteId === inviteRoomId}
                         onClick={() => rejectRoomInvite({ ...invite, roomId: inviteRoomId })}
                       >
-                        Reject
+                        ✕
                       </button>
                     </div>
                   </div>
@@ -1748,12 +2336,15 @@ const canViewRequests = isPrivateCustom && isOwner;
 
             <h3>{modalTitle}</h3>
 
-<button
-  className="approve-request-btn"
-  onClick={() => setShowInvite((prev) => !prev)}
->
-  ➕ Send Invite Request
-</button>
+{modalMode !== 'requests' && (
+  <button
+    type="button"
+    className="approve-request-btn"
+    onClick={() => setShowInvite((prev) => !prev)}
+  >
+    ➕ Send Invite Request
+  </button>
+)}
 
 {showInvite && (
   <div className="invite-box">
@@ -1761,11 +2352,31 @@ const canViewRequests = isPrivateCustom && isOwner;
       <input
         placeholder="Search by email or ID..."
         value={inviteSearch}
-        onChange={(e) => setInviteSearch(e.target.value)}
+        onChange={(e) => {
+          const value = e.target.value;
+          setInviteSearch(value);
+
+          if (userSearchTimerRef.current) {
+            window.clearTimeout(userSearchTimerRef.current);
+          }
+
+          const query = value.trim();
+          if (!query) {
+            setInviteResults([]);
+            return;
+          }
+
+          userSearchTimerRef.current = window.setTimeout(() => {
+            searchUsers(query);
+          }, USER_SEARCH_DEBOUNCE_MS);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            searchUsers();
+            if (userSearchTimerRef.current) {
+              window.clearTimeout(userSearchTimerRef.current);
+            }
+            searchUsers(inviteSearch);
           }
         }}
       />
@@ -1773,7 +2384,7 @@ const canViewRequests = isPrivateCustom && isOwner;
       <button
         type="button"
         className="approve-request-btn"
-        onClick={searchUsers}
+        onClick={() => searchUsers(inviteSearch)}
       >
         Search
       </button>
@@ -1786,30 +2397,32 @@ const canViewRequests = isPrivateCustom && isOwner;
         inviteResults.map((u) => {
           const targetUserId = getInviteUserId(u);
           const alreadyMember = isExistingRoomMember(u) || isRoomOwnerUser(u);
-          const alreadyInvited = u.invited || pendingInviteUserIds.has(targetUserId);
+          const alreadyInvited = Boolean(u.invited || pendingInviteUserIds.has(targetUserId));
           const canInvite = canInviteUserToCurrentRoom(u);
 
           return (
-            <div key={targetUserId || u.email} className="member-row">
+            <div key={targetUserId || u.email} className="member-row invite-result-row">
               <div>
                 <strong>{u.name || u.email || 'User'}</strong>
                 {u.email && <small>{u.email}</small>}
               </div>
 
-              {alreadyMember ? (
-                <span className="member-role-pill">Already in room</span>
-              ) : alreadyInvited ? (
-                <span className="member-role-pill">Invite sent</span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => inviteUser(u)}
-                  className="approve-request-btn"
-                  disabled={!canInvite}
-                >
-                  Send Request
-                </button>
-              )}
+              <div className="invite-result-action">
+                {alreadyMember ? (
+                  <span className="member-role-pill">Already in room</span>
+                ) : alreadyInvited ? (
+                  <span className="member-role-pill">Invite sent</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => inviteUser(u)}
+                    className="approve-request-btn invite-send-btn"
+                    disabled={!canInvite}
+                  >
+                    Send Request
+                  </button>
+                )}
+              </div>
             </div>
           );
         })
@@ -1834,17 +2447,110 @@ const canViewRequests = isPrivateCustom && isOwner;
                   {modalMode === 'requests' ? (
                     <button
                       type="button"
-                      className="approve-request-btn"
+                      className="approve-request-btn icon-action-btn"
+                      aria-label="Accept join request"
+                      title="Accept join request"
+                      disabled={!member.userId}
                       onClick={() => approveJoinRequest(member.userId)}
                     >
-                      Approve
+                      ✓
                     </button>
                   ) : (
-                    <span>{member.role || 'member'}</span>
+                    <div className="member-actions">
+                      <span>{member.role || 'member'}</span>
+
+                      {(modalRoom?.ownerId === userId || modalRoom?.createdBy === userId) &&
+                        member.userId !== userId &&
+                        member.userId !== modalRoom?.ownerId &&
+                        member.userId !== modalRoom?.createdBy && (
+                          <button
+                            type="button"
+                            className="delete-room-btn member-remove-btn"
+                            onClick={() => removeRoomMember(member)}
+                          >
+                            Kick Out
+                          </button>
+                        )}
+                    </div>
                   )}
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {showEditRoomModal && editRoomTarget && (
+        <div className="members-modal">
+          <div className="members-card create-room-modal">
+            <button
+              type="button"
+              className="close-members"
+              disabled={editRoomSaving}
+              onClick={closeEditRoomModal}
+            >
+              ✕
+            </button>
+
+      <h3>Edit Topic</h3>
+      {status && <p className="room-status">{status}</p>}
+
+      <form onSubmit={saveEditRoom} className="create-form">
+        <label className="edit-room-field-label">
+          <span>Topic name</span>
+          <input
+            placeholder="Topic name..."
+            value={editRoomName}
+            maxLength={60}
+            autoFocus
+            disabled={editRoomSaving}
+            onChange={(event) => {
+              setStatus('');
+              setEditRoomName(event.target.value);
+            }}
+          />
+        </label>
+
+        <label className="create-room-image-picker">
+          <span>Topic image</span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            disabled={editRoomSaving}
+            onChange={handleEditRoomImageChange}
+          />
+        </label>
+
+        {(editRoomImagePreview || getRoomImageUrl(editRoomTarget)) && (
+          <div className="create-room-image-preview-row">
+            <img
+              src={editRoomImagePreview || getRoomImageUrl(editRoomTarget)}
+              alt="Topic preview"
+              width="56"
+              height="56"
+            />
+
+            {editRoomImagePreview && (
+              <button
+                type="button"
+                className="delete-room-btn"
+                disabled={editRoomSaving}
+                onClick={removeEditRoomImage}
+              >
+                Remove selected image
+              </button>
+            )}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          className="approve-request-btn"
+          disabled={editRoomSaving || !editRoomName.trim()}
+        >
+          {editRoomSaving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </form>
           </div>
         </div>
       )}

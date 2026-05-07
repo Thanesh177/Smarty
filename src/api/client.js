@@ -344,6 +344,33 @@ export const roomApi = {
     return data.members || data || [];
   },
 
+  async removeRoomMember(roomId, userId) {
+    const { data } = await api.post(
+      `/rooms/${encodePathSegment(roomId)}/members/remove`,
+      { userId }
+    );
+    return parseApiBody(data);
+  },
+
+  renameRoom: async (roomId, name) => {
+    const cleanRoomId = String(roomId || '').trim();
+    const cleanName = String(name || '').trim().replace(/\s+/g, ' ');
+
+    if (!cleanRoomId) {
+      throw new Error('Room ID is required to rename room.');
+    }
+
+    if (!cleanName) {
+      throw new Error('Topic name is required.');
+    }
+
+    const { data } = await api.post(`/rooms/${encodePathSegment(cleanRoomId)}/rename`, {
+      name: cleanName,
+    });
+
+    return parseApiBody(data);
+  },
+
   async leaveRoom(roomId) {
     const { data } = await api.post(
       `/rooms/${encodePathSegment(roomId)}/leave`
