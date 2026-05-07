@@ -24,6 +24,7 @@ const INITIAL_RENDER_LIMIT = 3;
 const RENDER_BATCH_SIZE = 3;
 const FAST_IMAGE_LIMIT = 6;
 const IMAGE_PRELOAD_MARGIN = '1400px';
+const PULL_REFRESH_VIEWPORT_RATIO = 0.4;
 
 const getPostCreatorId = (post) => {
   const authorId = post?.authorId || post?.authorID || post?.author_id || '';
@@ -755,13 +756,16 @@ export default function FeedPage() {
       event.preventDefault();
     }
 
-    const easedDistance = Math.min(86, distance * 0.45);
-    pullDistanceRef.current = easedDistance;
+    const triggerDistance = Math.max(120, window.innerHeight * PULL_REFRESH_VIEWPORT_RATIO);
+    const easedDistance = Math.min(triggerDistance, distance * 0.45);
+    pullDistanceRef.current = distance;
     setPullDistance(easedDistance);
   }, [isRefreshing]);
 
   const handleFeedTouchEnd = useCallback(() => {
-    const shouldRefresh = pullDistanceRef.current >= 58;
+    const triggerDistance = Math.max(120, window.innerHeight * PULL_REFRESH_VIEWPORT_RATIO);
+    const isAtTop = feedRef.current?.scrollTop <= 2;
+    const shouldRefresh = isAtTop && pullDistanceRef.current >= triggerDistance;
 
     pullStartYRef.current = 0;
     pullDistanceRef.current = 0;
