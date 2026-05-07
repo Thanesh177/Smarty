@@ -1,5 +1,5 @@
 /* =========================
-   BOOK READER PAGE
+   BOOK READER PAGE — SMARTY PREMIUM DARK
 ========================= */
 
 .reader-page {
@@ -11,10 +11,12 @@
   justify-content: center;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #f8fafc;
+  isolation: isolate;
   background:
-    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.14), transparent 30%),
-    radial-gradient(circle at 88% 8%, rgba(99, 102, 241, 0.14), transparent 32%),
-    linear-gradient(180deg, #07111f 0%, #020617 100%);
+    radial-gradient(circle at 12% 0%, rgba(56, 189, 248, 0.075), transparent 34%),
+    radial-gradient(circle at 88% 8%, rgba(34, 197, 94, 0.045), transparent 32%),
+    radial-gradient(circle at 54% 96%, rgba(139, 92, 246, 0.05), transparent 36%),
+    linear-gradient(180deg, #01050f 0%, #020617 48%, #00030a 100%);
   overflow-x: hidden;
   contain: layout style;
 }
@@ -25,26 +27,33 @@
   inset: 0;
   pointer-events: none;
   will-change: transform;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
-  background-size: 48px 48px;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(56, 189, 248, 0.04), transparent 30%),
+    radial-gradient(circle at 84% 18%, rgba(34, 197, 94, 0.03), transparent 26%),
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+  background-size: auto, auto, 48px 48px, 48px 48px;
   mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent 72%);
 }
 
 .reader-container {
   position: relative;
   z-index: 1;
-  width: min(980px, 100%);
+  width: min(1040px, 100%);
   margin: 0 auto;
   contain: layout;
 }
 
 .reader-surface-card {
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  background: rgba(15, 23, 42, 0.64);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
-  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  background:
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.045), transparent 44%),
+    linear-gradient(145deg, rgba(8, 13, 25, 0.84), rgba(2, 6, 23, 0.66));
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
   contain: content;
 }
 
@@ -59,19 +68,25 @@
   padding: 24px;
   color: #f8fafc;
   background:
-    radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.18), transparent 34%),
-    linear-gradient(180deg, #07111f, #020617);
+    radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.08), transparent 36%),
+    radial-gradient(circle at 82% 18%, rgba(34, 197, 94, 0.04), transparent 32%),
+    linear-gradient(180deg, #01050f, #00030a);
 }
 
 .reader-loading-card {
   width: min(360px, 100%);
   padding: 30px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 28px;
-  background: rgba(15, 23, 42, 0.72);
+  background:
+    radial-gradient(circle at top, rgba(56, 189, 248, 0.06), transparent 44%),
+    linear-gradient(145deg, rgba(8, 13, 25, 0.86), rgba(2, 6, 23, 0.68));
   text-align: center;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(8px);
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
   contain: content;
 }
 
@@ -82,7 +97,7 @@
 }
 
 .reader-loading-card span {
-  color: rgba(226, 232, 240, 0.62);
+  color: rgba(226, 232, 240, 0.64);
   font-size: 0.9rem;
 }
 
@@ -92,7 +107,8 @@
   margin: 0 auto;
   border-radius: 999px;
   border: 3px solid rgba(148, 163, 184, 0.22);
-  border-top-color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.06);
+  border-top-color: rgba(56, 189, 248, 0.82);
   animation: readerSpin 1.4s linear infinite;
   transform: translateZ(0);
 }
@@ -119,6 +135,9 @@
   padding: 10px;
   border-radius: 24px;
   contain: layout;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .menu-btn,
@@ -128,12 +147,15 @@
   height: 44px;
   border: 0;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.075);
+  background: rgba(8, 13, 25, 0.78);
   color: #f8fafc;
   font-weight: 950;
   cursor: pointer;
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.14);
-  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 8px 18px rgba(0, 0, 0, 0.18);
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  border: 1px solid rgba(148, 163, 184, 0.12);
   transform: translateZ(0);
   backface-visibility: hidden;
 }
@@ -142,8 +164,11 @@
 .reader-icon-btn:hover,
 .reader-topbar > button:hover {
   transform: translate3d(0, -1px, 0);
-  background: rgba(56, 189, 248, 0.14);
-  box-shadow: 0 7px 16px rgba(56, 189, 248, 0.12);
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(148, 163, 184, 0.2);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 .reader-progress-text {
@@ -163,7 +188,7 @@
 .reader-progress-text span {
   display: block;
   margin-top: 2px;
-  color: rgba(226, 232, 240, 0.58);
+  color: rgba(226, 232, 240, 0.6);
   font-size: 0.78rem;
   font-weight: 850;
 }
@@ -183,8 +208,10 @@
   overflow: hidden;
   contain: content;
   background:
-    radial-gradient(circle at 88% 10%, rgba(56, 189, 248, 0.2), transparent 30%),
-    linear-gradient(135deg, rgba(15, 23, 42, 0.86), rgba(30, 41, 59, 0.5));
+    radial-gradient(circle at 8% 0%, rgba(56, 189, 248, 0.09), transparent 36%),
+    radial-gradient(circle at 94% 8%, rgba(34, 197, 94, 0.055), transparent 32%),
+    radial-gradient(circle at 60% 100%, rgba(139, 92, 246, 0.055), transparent 38%),
+    linear-gradient(145deg, rgba(8, 13, 25, 0.9), rgba(2, 6, 23, 0.76));
 }
 
 .reader-kicker {
@@ -192,14 +219,15 @@
   width: fit-content;
   margin: 0 0 12px;
   padding: 7px 11px;
-  border: 1px solid rgba(125, 211, 252, 0.2);
+  border: 1px solid rgba(103, 232, 249, 0.09);
   border-radius: 999px;
-  background: rgba(56, 189, 248, 0.11);
-  color: #bae6fd;
+  background: rgba(56, 189, 248, 0.055);
+  color: rgba(191, 219, 254, 0.86);
   font-size: 0.72rem;
   font-weight: 950;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  text-shadow: none;
 }
 
 .reader-hero-copy h1 {
@@ -209,6 +237,7 @@
   line-height: 0.95;
   letter-spacing: -0.07em;
   text-wrap: balance;
+  text-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
 }
 
 .reader-hero-copy p {
@@ -229,10 +258,11 @@
 
 .reader-chip-row span {
   padding: 8px 11px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(248, 250, 252, 0.84);
+  background: rgba(8, 13, 25, 0.68);
+  color: rgba(248, 250, 252, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   font-size: 0.78rem;
   font-weight: 900;
 }
@@ -255,13 +285,16 @@
   padding: 10px 16px;
   border: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.085);
+  background: rgba(8, 13, 25, 0.76);
   color: #f8fafc;
   font-size: 0.86rem;
   font-weight: 950;
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.14);
-  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 20px rgba(0, 0, 0, 0.18);
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  border: 1px solid rgba(148, 163, 184, 0.12);
   transform: translateZ(0);
   backface-visibility: hidden;
 }
@@ -269,15 +302,18 @@
 .reader-bookmark-btn:hover,
 .reader-hero-bookmark-btn:hover {
   transform: translate3d(0, -1px, 0);
-  background: rgba(56, 189, 248, 0.14);
-  box-shadow: 0 7px 18px rgba(56, 189, 248, 0.12);
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(148, 163, 184, 0.2);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
 }
 
 .reader-bookmark-btn.active,
 .reader-hero-bookmark-btn.active {
-  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.9), rgba(34, 197, 94, 0.78));
   color: #ffffff;
-  box-shadow: 0 8px 20px rgba(56, 189, 248, 0.16);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.18),
+    0 0 16px rgba(56, 189, 248, 0.08);
 }
 
 .reader-orbit-progress {
@@ -287,9 +323,11 @@
   place-items: center;
   border-radius: 50%;
   background:
-    radial-gradient(circle, #0f172a 58%, transparent 60%),
-    conic-gradient(#38bdf8 var(--reader-progress), rgba(148, 163, 184, 0.18) 0);
-  box-shadow: 0 8px 20px rgba(56, 189, 248, 0.12);
+    radial-gradient(circle, #0b1120 58%, transparent 60%),
+    conic-gradient(rgba(34, 197, 94, 0.82) var(--reader-progress), rgba(56, 189, 248, 0.12) 0);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.22),
+    0 0 14px rgba(56, 189, 248, 0.055);
   contain: content;
 }
 
@@ -322,6 +360,9 @@
   padding: 14px;
   border-radius: 24px;
   contain: layout;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
 .menu-row,
@@ -345,11 +386,12 @@
   min-height: 40px;
   padding: 0 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(8, 13, 25, 0.7);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: rgba(226, 232, 240, 0.64);
+  color: rgba(226, 232, 240, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   font-weight: 950;
 }
 
@@ -361,12 +403,16 @@
   border: 0;
   border-radius: 999px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(8, 13, 25, 0.76);
   color: #f8fafc;
   font-size: 0.86rem;
   font-weight: 950;
   cursor: pointer;
-  transition: transform 0.16s ease, background 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
+  transition: transform 0.16s ease, background 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 7px 16px rgba(0, 0, 0, 0.16);
   transform: translateZ(0);
   backface-visibility: hidden;
 }
@@ -376,12 +422,13 @@
 .bookmark-list button:hover,
 .reader-retry-btn:hover {
   transform: translate3d(0, -1px, 0);
-  background: rgba(56, 189, 248, 0.14);
-  box-shadow: 0 7px 18px rgba(56, 189, 248, 0.1);
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(148, 163, 184, 0.2);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
 }
 
 .reader-menu-active {
-  background: linear-gradient(135deg, #38bdf8, #6366f1) !important;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.9), rgba(34, 197, 94, 0.78)) !important;
   color: #ffffff !important;
 }
 
@@ -393,7 +440,7 @@
 }
 
 .reader-controls span {
-  color: rgba(226, 232, 240, 0.68);
+  color: rgba(226, 232, 240, 0.64);
   font-size: 0.86rem;
   font-weight: 900;
   text-align: center;
@@ -411,14 +458,17 @@
   overflow: hidden;
   margin: 16px 0;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.35);
   contain: paint;
 }
 
 .reader-progress > div {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #38bdf8, #6366f1);
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.86), rgba(34, 197, 94, 0.78));
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.12);
   transition: width 0.16s ease;
 }
 
@@ -453,7 +503,7 @@
 
 .reader-focus-strip span,
 .reader-focus-strip em {
-  color: rgba(226, 232, 240, 0.58);
+  color: rgba(226, 232, 240, 0.6);
   font-size: 0.8rem;
   font-style: normal;
   font-weight: 850;
@@ -480,6 +530,9 @@
   transform-origin: center left;
   will-change: auto;
   contain: content;
+  box-shadow:
+    0 16px 38px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .reader-content p {
@@ -496,11 +549,11 @@
 }
 
 .page-flip-next {
-  animation: pageFlipNext 0.22s ease;
+  animation: pageFlipNext 0.16s ease;
 }
 
 .page-flip-prev {
-  animation: pageFlipPrev 0.22s ease;
+  animation: pageFlipPrev 0.16s ease;
 }
 
 @keyframes pageFlipNext {
@@ -558,6 +611,7 @@
   line-height: 0.95;
   letter-spacing: -0.07em;
   text-wrap: balance;
+  text-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
 }
 
 .reader-error {
@@ -568,7 +622,7 @@
 
 .reader-error-alt {
   margin-top: 18px;
-  color: rgba(248, 250, 252, 0.84);
+  color: rgba(248, 250, 252, 0.78);
 }
 
 .reader-error-alt ul {
@@ -585,11 +639,11 @@
 }
 
 .reader-retry-btn {
-  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.9), rgba(34, 197, 94, 0.78));
 }
 
 .reader-retry-btn.secondary {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(8, 13, 25, 0.76);
 }
 
 /* =========================
@@ -608,6 +662,7 @@
   color: #0f172a;
   border-color: rgba(15, 23, 42, 0.08);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(16px) saturate(135%);
 }
 
 .reader-theme-light .reader-content,
@@ -657,7 +712,7 @@
 
 @media (max-width: 720px) {
   .reader-page {
-    padding: 12px 12px 74px;
+    padding: 10px 10px 74px;
   }
 
   .reader-page::before {
@@ -671,7 +726,8 @@
   .reader-controls,
   .bookmark-list,
   .reader-focus-strip {
-    backdrop-filter: none;
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
   }
 
   .menu-btn,
@@ -689,6 +745,7 @@
   .reader-topbar {
     top: 8px;
     border-radius: 20px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26);
   }
 
   .reader-hero-card {
@@ -721,6 +778,7 @@
     max-width: 100%;
     padding: 22px 18px;
     border-radius: 24px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
   }
 
   .reader-content p {
