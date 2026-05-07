@@ -721,7 +721,17 @@ export default function FeedPage() {
   }, [isRefreshing, refetch, refresh, reload, showToast]);
 
   const handleFeedTouchStart = useCallback((event) => {
-    if (!feedRef.current || feedRef.current.scrollTop > 0 || isRefreshing) return;
+    if (!feedRef.current || isRefreshing) return;
+
+    const isAtTop = feedRef.current.scrollTop <= 2;
+
+    if (!isAtTop) {
+      pullStartYRef.current = 0;
+      pullDistanceRef.current = 0;
+      pullRefreshTriggeredRef.current = false;
+      setPullDistance(0);
+      return;
+    }
 
     pullStartYRef.current = event.touches[0]?.clientY || 0;
     pullDistanceRef.current = 0;
@@ -729,12 +739,21 @@ export default function FeedPage() {
   }, [isRefreshing]);
 
   const handleFeedTouchMove = useCallback((event) => {
-    if (!feedRef.current || isRefreshing) return;
+    if (!feedRef.current || isRefreshing || pullStartYRef.current <= 0) return;
 
     const currentY = event.touches[0]?.clientY || 0;
     const distance = Math.max(0, currentY - pullStartYRef.current);
+    const isAtTop = feedRef.current.scrollTop <= 2;
 
-    if (feedRef.current.scrollTop > 0 || distance <= 0) return;
+    if (!isAtTop || distance <= 0) {
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+      return;
+    }
+
+    if (distance > 6) {
+      event.preventDefault();
+    }
 
     const easedDistance = Math.min(86, distance * 0.45);
     pullDistanceRef.current = easedDistance;
@@ -987,6 +1006,7 @@ export default function FeedPage() {
       onTouchMove={handleFeedTouchMove}
       onTouchEnd={handleFeedTouchEnd}
       onTouchCancel={handleFeedTouchEnd}
+      style={{ overscrollBehaviorY: 'contain' }}
     >
       <button
         type="button"
