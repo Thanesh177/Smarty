@@ -37,6 +37,36 @@ function getUserDisplayName(person) {
   return 'User';
 }
 
+// Chat avatar cache helpers
+const CHAT_AVATAR_CACHE_KEY = 'smarty_chat_avatar_cache_v1';
+const CHAT_AVATAR_CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 7;
+
+function readChatAvatarCache() {
+  try {
+    const raw = localStorage.getItem(CHAT_AVATAR_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function writeChatAvatarCache(cache) {
+  try {
+    localStorage.setItem(CHAT_AVATAR_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Ignore storage quota/private mode failures.
+  }
+}
+
+function getCachedChatAvatar(cache, key) {
+  const item = cache?.[key];
+  if (!item?.url) return '';
+  if (Date.now() - Number(item.savedAt || 0) > CHAT_AVATAR_CACHE_MAX_AGE) return '';
+  return item.url;
+}
+
 
 
 // Optimize image files for upload (resize or compress if needed)
@@ -157,12 +187,66 @@ function getMediaKind(msg) {
   return 'file';
 }
 
+
 function formatAudioTime(seconds) {
   if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
 
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+function normalizeReactionMap(reactions) {
+  if (!reactions) return {};
+
+  if (!Array.isArray(reactions) && typeof reactions === 'object') {
+    return Object.entries(reactions).reduce((acc, [key, value]) => {
+      if (Array.isArray(value)) {
+        acc[key] = value.map((item) => String(item));
+      } else if (value && typeof value === 'object') {
+        const users = value.users || value.userIds || value.reactors || [];
+        acc[key] = Array.isArray(users) ? users.map((item) => String(item)) : [];
+      } else {
+        acc[key] = [];
+      }
+
+      return acc;
+    }, {});
+  }
+
+  if (Array.isArray(reactions)) {
+    return reactions.reduce((acc, item) => {
+      const emoji = item?.emoji || item?.reaction || item?.type;
+      const reactorId = item?.userId || item?.reactorId || item?.senderId;
+
+      if (!emoji || !reactorId) return acc;
+
+      const key = String(emoji);
+      const id = String(reactorId);
+      const users = Array.isArray(acc[key]) ? acc[key] : [];
+
+      if (!users.includes(id)) {
+        acc[key] = [...users, id];
+      }
+
+      return acc;
+    }, {});
+  }
+
+  return {};
+}
+
+function toggleReactionForUser(reactions, emoji, userId) {
+  const normalized = normalizeReactionMap(reactions);
+  const key = String(emoji);
+  const id = String(userId || '');
+  const users = Array.isArray(normalized[key]) ? normalized[key].map((item) => String(item)) : [];
+  const reacted = users.includes(id);
+
+  return {
+    ...normalized,
+    [key]: reacted ? users.filter((item) => item !== id) : [...users, id],
+  };
 }
 
 const AudioMiniPlayer = memo(function AudioMiniPlayer({ src, title = 'Voice note', onError }) {
@@ -205,7 +289,10 @@ const AudioMiniPlayer = memo(function AudioMiniPlayer({ src, title = 'Voice note
         preload="metadata"
         controls={false}
         style={{ display: 'none' }}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+        onLoadedMetadata={(e) => {
+          const nextDuration = e.currentTarget.duration || 0;
+          setDuration(Number.isFinite(nextDuration) ? nextDuration : 0);
+        }}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
         onEnded={() => {
           setPlaying(false);
@@ -349,8 +436,9 @@ export default function ChatPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Avatar fallback state
+  // Avatar fallback/cache state
   const [failedProfileAvatarIds, setFailedProfileAvatarIds] = useState({});
+  const [chatAvatarCache, setChatAvatarCache] = useState(() => readChatAvatarCache());
 
   const mountedRef = useRef(true);
   const activeChatIdRef = useRef(null);
@@ -404,6 +492,7 @@ export default function ChatPage() {
     return rawMessages.slice(-MAX_RENDERED_MESSAGES).map((msg) => ({
       ...msg,
       isMine: msg.senderId === userId,
+      reactions: normalizeReactionMap(msg.reactions),
     }));
   }, [userId]);
 
@@ -480,6 +569,10 @@ export default function ChatPage() {
   }, [selectedMediaPreview]);
 
   useEffect(() => {
+    writeChatAvatarCache(chatAvatarCache);
+  }, [chatAvatarCache]);
+
+  useEffect(() => {
     if (!userId) return;
 
     connectChatSocket(userId, (data) => {
@@ -495,32 +588,23 @@ export default function ChatPage() {
 
         if (reactorId === userId && !nextReactions) return;
 
-        setMessages((prev) =>
-          prev.map((msg) => {
+        setMessages((prev) => {
+          const nextMessages = prev.map((msg) => {
             if ((msg.messageId || msg.id) !== targetMessageId) return msg;
-
-            if (nextReactions) {
-              return {
-                ...msg,
-                reactions: nextReactions,
-              };
-            }
-
-            const reactions = msg.reactions || {};
-            const users = Array.isArray(reactions[emoji]) ? reactions[emoji] : [];
-            const reacted = users.includes(reactorId);
 
             return {
               ...msg,
-              reactions: {
-                ...reactions,
-                [emoji]: reacted
-                  ? users.filter((id) => id !== reactorId)
-                  : [...users, reactorId],
-              },
+              reactions: nextReactions
+                ? normalizeReactionMap(nextReactions)
+                : toggleReactionForUser(msg.reactions, emoji, reactorId),
             };
-          })
-        );
+          });
+
+          const activeChatId = activeChatIdRef.current;
+          if (activeChatId) setCachedMessages(activeChatId, nextMessages);
+
+          return nextMessages;
+        });
 
         return;
       }
@@ -1074,6 +1158,12 @@ const removeSelectedMedia = useCallback((shouldRevoke = true) => {
   }
 }, [selectedMediaPreview]);
 
+const cancelSelectedRecording = useCallback(() => {
+  removeSelectedMedia(true);
+  setShowComposerTools(false);
+  setStatus('');
+}, [removeSelectedMedia]);
+
 const refreshMessageMediaUrl = useCallback(async (msg) => {
   if (!msg?.mediaKey) return '';
 
@@ -1140,8 +1230,12 @@ const startVoiceRecording = async () => {
         { type: 'audio/webm' }
       );
 
+      if (selectedMediaPreview) URL.revokeObjectURL(selectedMediaPreview);
+
       setSelectedMedia(audioFile);
       setSelectedMediaPreview(URL.createObjectURL(audioBlob));
+      setShowComposerTools(true);
+      setRecordingSeconds(0);
 
       stream.getTracks().forEach((track) => track.stop());
     };
@@ -1240,7 +1334,10 @@ const renderedChatList = useMemo(
   () => chats.map((chat) => {
     const active = activeChat?.chatId === chat.chatId;
     const unreadCount = Number(chat.unreadCount || 0);
-    const realAvatarSrc = String(chat.receiverAvatarUrl || '').trim();
+    const avatarCacheKey = String(chat.receiverId || chat.userId || chat.id || chat.receiverEmail || chat.chatId || '').trim();
+    const directAvatarSrc = String(chat.receiverAvatarUrl || '').trim();
+    const cachedAvatarSrc = avatarCacheKey ? getCachedChatAvatar(chatAvatarCache, avatarCacheKey) : '';
+    const realAvatarSrc = directAvatarSrc || cachedAvatarSrc;
     const avatarFailKey = `${chat.chatId}:${realAvatarSrc}`;
     const profileAvatarFailed = realAvatarSrc ? Boolean(failedProfileAvatarIds[avatarFailKey]) : false;
 
@@ -1291,6 +1388,21 @@ const renderedChatList = useMemo(
                     delete next[avatarFailKey];
                     return next;
                   });
+
+                  if (avatarCacheKey && realAvatarSrc) {
+                    setChatAvatarCache((prev) => {
+                      const current = prev?.[avatarCacheKey];
+                      if (current?.url === realAvatarSrc) return prev;
+
+                      return {
+                        ...prev,
+                        [avatarCacheKey]: {
+                          url: realAvatarSrc,
+                          savedAt: Date.now(),
+                        },
+                      };
+                    });
+                  }
                 }}
                 data-avatar-url={realAvatarSrc}
               />
@@ -1328,6 +1440,7 @@ const renderedChatList = useMemo(
   [
     activeChat?.chatId,
     chats,
+    chatAvatarCache,
     failedProfileAvatarIds,
     openChat,
   ]
@@ -1460,22 +1573,15 @@ const reactToMessage = async (msg, emoji) => {
   const messageId = msg.messageId || msg.id;
   if (!messageId || String(messageId).startsWith('local-') || !activeChat) return;
 
+  const previousMessages = messages;
+
   setMessages((prev) => {
     const nextMessages = prev.map((item) => {
       if ((item.messageId || item.id) !== messageId) return item;
 
-      const reactions = item.reactions || {};
-      const users = Array.isArray(reactions[emoji]) ? reactions[emoji] : [];
-      const reacted = users.includes(userId);
-
       return {
         ...item,
-        reactions: {
-          ...reactions,
-          [emoji]: reacted
-            ? users.filter((id) => id !== userId)
-            : [...users, userId],
-        },
+        reactions: toggleReactionForUser(item.reactions, emoji, userId),
       };
     });
 
@@ -1484,7 +1590,7 @@ const reactToMessage = async (msg, emoji) => {
   });
 
   try {
-    await withTimeout(
+    const data = await withTimeout(
       chatApi.reactToMessage({
         chatId: activeChat.chatId,
         messageId,
@@ -1493,33 +1599,27 @@ const reactToMessage = async (msg, emoji) => {
       8000,
       'Reaction took too long.'
     );
+
+    const nextReactions = data?.reactions || data?.message?.reactions;
+
+    if (nextReactions && mountedRef.current) {
+      setMessages((prev) => {
+        const nextMessages = prev.map((item) =>
+          (item.messageId || item.id) === messageId
+            ? { ...item, reactions: normalizeReactionMap(nextReactions) }
+            : item
+        );
+
+        setCachedMessages(activeChat.chatId, nextMessages);
+        return nextMessages;
+      });
+    }
   } catch (err) {
     console.error('Reaction failed:', err);
 
-    setMessages((prev) => {
-      const nextMessages = prev.map((item) => {
-        if ((item.messageId || item.id) !== messageId) return item;
-
-        const currentReactions = item.reactions || {};
-        const currentUsers = Array.isArray(currentReactions[emoji]) ? currentReactions[emoji] : [];
-        const currentlyReacted = currentUsers.includes(userId);
-
-        return {
-          ...item,
-          reactions: {
-            ...currentReactions,
-            [emoji]: currentlyReacted
-              ? currentUsers.filter((id) => id !== userId)
-              : [...currentUsers, userId],
-          },
-        };
-      });
-
-      setCachedMessages(activeChat.chatId, nextMessages);
-      return nextMessages;
-    });
-
     if (mountedRef.current) {
+      setMessages(previousMessages);
+      setCachedMessages(activeChat.chatId, previousMessages);
       setStatus(err?.response?.status === 401 ? 'Reaction route is not authorized. Check API Gateway auth for /messages/react.' : 'Could not react to message.');
     }
   }
@@ -1981,11 +2081,12 @@ const runDeleteChat = useCallback(() => {
   {openReactionMenuId === (msg.messageId || msg.id) && (
     <div className="message-options-menu">
       <div className="message-reaction-row">
-        {['like', 'yes', 'seen', 'saved'].map((emoji) => {
-          const reactionUsers = Array.isArray(msg.reactions?.[emoji])
-            ? msg.reactions[emoji]
+        {['👍', '✅', '👀', '🔖'].map((emoji) => {
+          const normalizedReactions = normalizeReactionMap(msg.reactions);
+          const reactionUsers = Array.isArray(normalizedReactions[emoji])
+            ? normalizedReactions[emoji]
             : [];
-          const active = reactionUsers.includes(userId);
+          const active = reactionUsers.map((id) => String(id)).includes(String(userId));
 
           return (
             <button
@@ -2050,14 +2151,14 @@ const runDeleteChat = useCallback(() => {
   {showComposerTools && !isBlocked && (
     <div className="composer-tools-panel">
       <div className="emoji-row">
-        {['like', 'ok', 'yes', 'no'].map((emoji) => (
+        {['👍', '👌', '✅', '❌'].map((emoji) => (
           <button key={emoji} type="button" onClick={() => addEmoji(emoji)}>
             {emoji}
           </button>
         ))}
       </div>
-      {selectedMediaPreview && (
-        <div className="selected-media-card">
+   {selectedMediaPreview && (
+  <div className={selectedMedia?.type?.startsWith('audio/') || selectedMedia?.name?.startsWith('voice-') ? 'selected-media-card selected-voice-card' : 'selected-media-card'}>
           {selectedMedia?.type?.startsWith('image/') ? (
             <img
               src={selectedMediaPreview}
@@ -2079,12 +2180,33 @@ const runDeleteChat = useCallback(() => {
             <div className="selected-file-icon">file</div>
           )}
 
-          <div>
-            <strong>{selectedMedia?.name || 'Selected media'}</strong>
-            <span>{selectedMedia?.type || 'File ready to send'}</span>
-          </div>
+<div className="selected-media-details">
+  <strong>
+    {selectedMedia?.type?.startsWith('audio/') || selectedMedia?.name?.startsWith('voice-')
+      ? 'Voice note ready to send'
+      : selectedMedia?.name || 'Selected media'}
+  </strong>
+  <span>
+    {selectedMedia?.type?.startsWith('audio/') || selectedMedia?.name?.startsWith('voice-')
+      ? 'Preview it, send it, or cancel it.'
+      : selectedMedia?.type || 'File ready to send'}
+  </span>
+</div>
 
-          <button type="button" disabled={isUploading} onClick={removeSelectedMedia}>Remove</button>
+          {selectedMedia?.type?.startsWith('audio/') || selectedMedia?.name?.startsWith('voice-') ? (
+<button
+  type="button"
+  className="voice-ready-cancel-btn"
+  disabled={isUploading}
+  onClick={cancelSelectedRecording}
+>
+  Cancel recording
+</button>
+          ) : (
+            <button type="button" disabled={isUploading} onClick={removeSelectedMedia}>
+              Remove
+            </button>
+          )}
         </div>
       )}
     </div>

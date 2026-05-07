@@ -1345,3 +1345,104 @@ select:disabled {
 }
 
 
+.room-item.room-image-full-card {
+  position: relative !important;
+  isolation: isolate !important;
+  background: #020617 !important;
+}
+
+.room-full-bg-image {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center center !important;
+  border-radius: inherit !important;
+  z-index: -3 !important;
+  opacity: 0.72 !important;
+  filter: saturate(1.12) contrast(1.04) brightness(0.78) !important;
+  transform: scale(1.0) !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.room-item.room-image-full-card::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: -2 !important;
+  pointer-events: none !important;
+  background:
+    linear-gradient(90deg, rgba(2, 6, 23, 0.58) 0%, rgba(2, 6, 23, 0.34) 48%, rgba(2, 6, 23, 0.16) 100%),
+    linear-gradient(180deg, rgba(2, 6, 23, 0.04) 0%, rgba(2, 6, 23, 0.68) 100%) !important;
+}
+
+.room-item.room-image-full-card::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  background: radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.08), transparent 34%) !important;
+}
+
+.room-item.room-image-full-card .room-info,
+.room-item.room-image-full-card .room-card-menu-wrap {
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.room-item.room-image-full-card .room-image-wrap {
+  overflow: hidden !important;
+  background: rgba(2, 6, 23, 0.46) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.34),
+    0 1px 0 rgba(255, 255, 255, 0.12) inset !important;
+}
+
+.room-item.room-image-full-card .room-small-image {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  border-radius: inherit !important;
+  display: block !important;
+}
+/* FINAL FIX: keep room 3-dot actions clickable above image cards */
+.room-list,
+.room-item,
+.room-item.room-image-full-card {
+  overflow: visible !important;
+}
+
+.room-full-bg-image,
+.room-item.room-image-full-card::before,
+.room-item.room-image-full-card::after {
+  pointer-events: none !important;
+}
+
+.room-card-menu-wrap {
+  position: relative !important;
+  z-index: 5000 !important;
+  pointer-events: auto !important;
+  isolation: isolate !important;
+}
+
+.room-card-menu-btn {
+  position: relative !important;
+  z-index: 5001 !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+}
+
+.room-card-menu-popover {
+  z-index: 5002 !important;
+  pointer-events: auto !important;
+}
+
+.room-card-menu-popover,
+.room-card-menu-popover * {
+  pointer-events: auto !important;
+}

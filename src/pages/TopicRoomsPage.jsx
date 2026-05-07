@@ -170,6 +170,8 @@ export default function TopicRoomsPage() {
   const mountedRef = useRef(true);
   const loadingRoomRef = useRef(false);
   const roomsLoadingRef = useRef(false);
+  const roomsLoadInFlightKeyRef = useRef('');
+  const initialRoomsLoadedForUserRef = useRef('');
   const roomsCacheRef = useRef({ key: '', timestamp: 0, rooms: [] });
   const pendingRoomsReloadRef = useRef(false);
   const activeRoomImageUrlRef = useRef('');
@@ -384,11 +386,14 @@ useEffect(() => {
     }
 
     if (roomsLoadingRef.current) {
+      if (roomsLoadInFlightKeyRef.current === cacheKey) return;
+
       pendingRoomsReloadRef.current = true;
       return;
     }
 
     roomsLoadingRef.current = true;
+    roomsLoadInFlightKeyRef.current = cacheKey;
 
     try {
       setStatus('');
@@ -482,6 +487,7 @@ useEffect(() => {
       if (mountedRef.current) setStatus('Failed to load rooms');
     } finally {
       roomsLoadingRef.current = false;
+      roomsLoadInFlightKeyRef.current = '';
       if (mountedRef.current) setRoomsLoading(false);
 
       if (pendingRoomsReloadRef.current) {
@@ -495,7 +501,9 @@ useEffect(() => {
 
 useEffect(() => {
   if (!userId) return;
+  if (initialRoomsLoadedForUserRef.current === userId) return;
 
+  initialRoomsLoadedForUserRef.current = userId;
   loadRooms('', { force: true });
 }, [userId]);
 
@@ -1920,42 +1928,63 @@ function sendMessage(e) {
             return (
               <div
                 key={room.roomId}
-                className={`room-item ${roomImageUrl ? 'room-has-image' : ''} ${activeRoom?.roomId === room.roomId ? 'active' : ''}`}
-                onClick={() => openRoom(room)}
+                className={`room-item ${roomImageUrl ? 'room-has-image room-image-full-card' : ''} ${activeRoom?.roomId === room.roomId ? 'active' : ''}`}
+                onClick={(event) => {
+  if (event.target.closest('.room-card-menu-wrap')) return;
+  openRoom(room);
+}}
               >
+                {roomImageUrl && (
+                  <img
+                    className="room-full-bg-image"
+                    src={roomImageUrl}
+                    alt=""
+                    loading={shouldEagerLoadRoomImage ? 'eager' : 'lazy'}
+                    fetchPriority={shouldEagerLoadRoomImage ? 'high' : 'low'}
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    aria-hidden="true"
+                    draggable="false"
+                    style={{ pointerEvents: 'none', userSelect: 'none' }}
+                    onError={(event) => {
+                      const failedUrl = event.currentTarget.currentSrc || roomImageUrl;
+                      event.currentTarget.style.display = 'none';
+                      removeStoredRoomImage(room.roomId);
+                      setFailedRoomImages((prev) => ({
+                        ...prev,
+                        [room.roomId]: failedUrl,
+                      }));
+                      setRoomImageCache((prev) => {
+                        if (!prev[room.roomId]) return prev;
+                        const next = { ...prev };
+                        delete next[room.roomId];
+                        return next;
+                      });
+                    }}
+                  />
+                )}
                 <div className="room-info">
                   <div className="room-item-main">
-                    <div className="room-image-wrap">
-                      {roomImageUrl ? (
-                        <img
-                          src={roomImageUrl}
-                          alt=""
-                          width="44"
-                          height="44"
-                          loading={shouldEagerLoadRoomImage ? 'eager' : 'lazy'}
-                          fetchpriority={shouldEagerLoadRoomImage ? 'high' : 'low'}
-                          decoding="async"
-                          referrerPolicy="no-referrer"
-                          onError={(event) => {
-  const failedUrl = event.currentTarget.currentSrc || roomImageUrl;
-  event.currentTarget.style.display = 'none';
-  removeStoredRoomImage(room.roomId);
-  setFailedRoomImages((prev) => ({
-    ...prev,
-    [room.roomId]: failedUrl,
-  }));
-  setRoomImageCache((prev) => {
-    if (!prev[room.roomId]) return prev;
-    const next = { ...prev };
-    delete next[room.roomId];
-    return next;
-  });
-}}
-                        />
-                      ) : (
-                        <span>{(room.name || 'R').trim().slice(0, 1).toUpperCase()}</span>
-                      )}
-                    </div>
+                   <div className="room-image-wrap">
+  {roomImageUrl ? (
+    <img
+      className="room-small-image"
+      src={roomImageUrl}
+      alt=""
+      width="44"
+      height="44"
+      loading="lazy"
+      fetchPriority="low"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={(event) => {
+        event.currentTarget.style.display = 'none';
+      }}
+    />
+  ) : (
+    <span>{(room.name || 'R').trim().slice(0, 1).toUpperCase()}</span>
+  )}
+</div>
 
                     <div className="room-text-block">
                       <div className="room-title-row">
@@ -1979,14 +2008,25 @@ function sendMessage(e) {
                 <div
                   className="room-card-menu-wrap"
                   ref={openRoomActionMenuId === room.roomId ? roomActionMenuRef : null}
+                  style={{ position: 'relative', zIndex: 20 }}
                   onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
                   onPointerDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                 >
                   <button
                     type="button"
                     className="room-card-menu-btn"
                     aria-label="Room actions"
                     aria-expanded={openRoomActionMenuId === room.roomId}
+                    style={{ position: 'relative', zIndex: 21, pointerEvents: 'auto' }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                    }}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -2111,7 +2151,11 @@ function sendMessage(e) {
   <div
     className="active-room-menu-wrap"
     ref={activeRoomMenuRef}
+    style={{ position: 'relative', zIndex: 30 }}
     onClick={(e) => e.stopPropagation()}
+    onMouseDown={(e) => e.stopPropagation()}
+    onPointerDown={(e) => e.stopPropagation()}
+    onTouchStart={(e) => e.stopPropagation()}
   >
     <button
       type="button"
