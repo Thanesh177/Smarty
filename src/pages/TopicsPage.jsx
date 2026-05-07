@@ -1,25 +1,40 @@
-import { useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import useFeed from "../hooks/useFeed";
 import "./TopicsPage.css";
 
 const slugify = (value) =>
-  String(value || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, "-");
+  encodeURIComponent(
+    String(value || "")
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+  );
 
-const TopicCard = ({ topic, onNavigate }) => (
-  <button
-    type="button"
-    className="feed-topic-card"
-    onClick={() => onNavigate(topic)}
-  >
-    <span className="feed-topic-icon">#</span>
-    <strong>{topic}</strong>
-    <small>View posts →</small>
-  </button>
-);
+const topicSorter = new Intl.Collator(undefined, {
+  sensitivity: "base",
+  numeric: true,
+});
+
+const TopicCard = memo(function TopicCard({ topic, onNavigate }) {
+  const handleClick = useCallback(() => {
+    onNavigate(topic);
+  }, [onNavigate, topic]);
+
+  return (
+    <button
+      type="button"
+      className="feed-topic-card"
+      onClick={handleClick}
+      aria-label={`View posts about ${topic}`}
+    >
+      <span className="feed-topic-icon" aria-hidden="true">#</span>
+      <strong>{topic}</strong>
+      <small>View posts</small>
+    </button>
+  );
+});
 
 export default function TopicsPage() {
   const navigate = useNavigate();
@@ -31,16 +46,19 @@ export default function TopicsPage() {
     const uniqueTopics = new Set();
 
     for (const post of posts) {
-      if (!post?.topic) continue;
-      uniqueTopics.add(post.topic.trim());
+      const topic = String(post?.topic || "").trim();
+      if (!topic) continue;
+      uniqueTopics.add(topic);
     }
 
-    return Array.from(uniqueTopics).sort((a, b) => a.localeCompare(b));
+    return Array.from(uniqueTopics).sort(topicSorter.compare);
   }, [posts]);
 
   const handleNavigate = useCallback(
     (topic) => {
-      navigate(`/feed/${slugify(topic)}`);
+      const slug = slugify(topic);
+      if (!slug) return;
+      navigate(`/feed/${slug}`);
     },
     [navigate]
   );

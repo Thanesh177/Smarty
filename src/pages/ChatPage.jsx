@@ -8,20 +8,12 @@ import {
   sendChatMessage,
 } from '../api/chatSocket';
 
+
+
 import './ChatPage.css';
 
-const CHAT_FALLBACK_AVATARS = [
-  { id: 'sky', emoji: '🦋', label: 'Sky' },
-  { id: 'spark', emoji: '✨', label: 'Spark' },
-  { id: 'leaf', emoji: '🌿', label: 'Leaf' },
-  { id: 'moon', emoji: '🌙', label: 'Moon' },
-  { id: 'star', emoji: '⭐', label: 'Star' },
-  { id: 'fire', emoji: '🔥', label: 'Fire' },
-  { id: 'wave', emoji: '🌊', label: 'Wave' },
-  { id: 'fox', emoji: '🦊', label: 'Fox' },
-];
 
-const CHAT_AVATAR_STORAGE_KEY = 'smarty-chat-avatar-choices';
+
 
 function getUserDisplayName(person) {
   const candidates = [
@@ -43,58 +35,74 @@ function getUserDisplayName(person) {
   if (email.includes('@')) return email.split('@')[0];
 
   return 'User';
-
 }
 
-function getChatAvatarSeed(chat) {
-  return String(
-    chat?.receiverId ||
-    chat?.userId ||
-    chat?.id ||
-    chat?.receiverEmail ||
-    chat?.receiverUsername ||
-    chat?.chatId ||
-    'chat'
-  );
-}
 
-function getStoredAvatarChoices() {
+
+// Optimize image files for upload (resize or compress if needed)
+async function optimizeImageForUpload(file) {
+  const type = String(file?.type || '').toLowerCase();
+
+  if (!file || !type.startsWith('image/')) return file;
+  if (type === 'image/gif' || type === 'image/svg+xml') return file;
+  if (file.size <= 350 * 1024) return file;
+
+  const imageUrl = URL.createObjectURL(file);
+
   try {
-    const raw = localStorage.getItem(CHAT_AVATAR_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = imageUrl;
+    });
+
+    const maxDimension = 1600;
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext('2d', { alpha: type === 'image/png' || type === 'image/webp' });
+    if (!ctx) return file;
+
+    ctx.drawImage(image, 0, 0, width, height);
+
+    const outputType = type === 'image/png' ? 'image/png' : 'image/jpeg';
+    const outputName = outputType === 'image/jpeg'
+      ? file.name.replace(/\.(png|jpe?g|webp)$/i, '.jpg')
+      : file.name;
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, outputType, outputType === 'image/jpeg' ? 0.82 : 0.88);
+    });
+
+    if (!blob || blob.size >= file.size) return file;
+
+    return new File([blob], outputName, {
+      type: outputType,
+      lastModified: Date.now(),
+    });
+  } catch (err) {
+    console.error('Image optimization failed:', err);
+    return file;
+  } finally {
+    URL.revokeObjectURL(imageUrl);
   }
 }
 
-function saveStoredAvatarChoices(nextChoices) {
-  try {
-    localStorage.setItem(CHAT_AVATAR_STORAGE_KEY, JSON.stringify(nextChoices || {}));
-  } catch {
-    // Ignore private browsing/storage errors.
-  }
-}
 
-function getDefaultAvatarId(chat) {
-  const seed = getChatAvatarSeed(chat);
-  const total = seed.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return CHAT_FALLBACK_AVATARS[total % CHAT_FALLBACK_AVATARS.length]?.id || CHAT_FALLBACK_AVATARS[0].id;
-}
+function normalizeChatRecord(chat) {
+  if (!chat || typeof chat !== 'object') return chat;
 
-function getAvatarOptionById(avatarId) {
-  return CHAT_FALLBACK_AVATARS.find((avatar) => avatar.id === avatarId) || CHAT_FALLBACK_AVATARS[0];
-}
-
-function getChatRealAvatar(chat) {
-  return (
-    chat?.receiverAvatar ||
-    chat?.receiverPhoto ||
-    chat?.receiverImage ||
-    chat?.profilePicture ||
-    chat?.photoURL ||
-    ''
-  );
+  return {
+    ...chat,
+    receiverName: chat.receiverName || chat.receiverUsername || chat.receiverEmail || 'User',
+    receiverEmail: chat.receiverEmail || '',
+  };
 }
 
 
@@ -178,7 +186,7 @@ const AudioMiniPlayer = memo(function AudioMiniPlayer({ src, title = 'Voice note
   return (
     <div className="audio-mini-card" title={title}>
       <button type="button" className="audio-mini-play" onClick={togglePlay}>
-        {playing ? '❚❚' : '▶'}
+        {playing ? 'Pause' : 'Play'}
       </button>
 
       <div className={playing ? 'audio-mini-wave playing' : 'audio-mini-wave'}>
@@ -285,6 +293,8 @@ const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl
           alt={msg.mediaName || 'Shared media'}
           loading="lazy"
           decoding="async"
+          fetchPriority="low"
+          sizes="(max-width: 768px) 92vw, 520px"
           onError={refreshMedia}
         />
       ) : mediaKind === 'video' ? (
@@ -340,8 +350,7 @@ export default function ChatPage() {
   const [isUploading, setIsUploading] = useState(false);
 
   // Avatar fallback state
-  const [avatarChoices, setAvatarChoices] = useState(() => getStoredAvatarChoices());
-  const [avatarPickerChatId, setAvatarPickerChatId] = useState('');
+  const [failedProfileAvatarIds, setFailedProfileAvatarIds] = useState({});
 
   const mountedRef = useRef(true);
   const activeChatIdRef = useRef(null);
@@ -356,44 +365,17 @@ export default function ChatPage() {
   const messagePollTimerRef = useRef(null);
   const messageCacheRef = useRef(new Map());
   const lastChatsLoadRef = useRef(0);
+  const MAX_RENDERED_MESSAGES = 180;
+  const POLL_INTERVAL_VISIBLE = 12000;
+  const POLL_INTERVAL_HIDDEN = 45000;
+  const latestMessagesSignatureRef = useRef('');
 
   const userId = useMemo(
     () => user?.id || user?.userId || user?.sub,
     [user]
   );
 
-  // ====== Avatar fallback helpers ======
-  const getFallbackAvatarForChat = (chat) => {
-    const chatId = chat?.chatId || getChatAvatarSeed(chat);
-    const avatarId = avatarChoices[chatId] || getDefaultAvatarId(chat);
-    return getAvatarOptionById(avatarId);
-  };
-
-  const chooseFallbackAvatar = (chat, avatarId) => {
-    const chatId = chat?.chatId;
-    if (!chatId) return;
-
-    setAvatarChoices((prev) => {
-      const nextChoices = {
-        ...prev,
-        [chatId]: avatarId,
-      };
-
-      saveStoredAvatarChoices(nextChoices);
-      return nextChoices;
-    });
-
-    setAvatarPickerChatId('');
-  };
-
-  const toggleAvatarPicker = (event, chat) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (getChatRealAvatar(chat)) return;
-
-    setAvatarPickerChatId((current) => (current === chat.chatId ? '' : chat.chatId));
-  };
+  // =
 
   useEffect(() => {
     mountedRef.current = true;
@@ -405,20 +387,27 @@ export default function ChatPage() {
       if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
       if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
       if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
-      if (messagePollTimerRef.current) window.clearInterval(messagePollTimerRef.current);
+      if (messagePollTimerRef.current) window.clearTimeout(messagePollTimerRef.current);
       localStorage.removeItem('activeChatId');
       disconnectChatSocket();
     };
   }, []);
 
   // === Fast request helpers, message cache, polling refs ===
-  const normalizeMessages = (data) =>
-    (Array.isArray(data) ? data : Array.isArray(data?.messages) ? data.messages : []).map((msg) => ({
+  const normalizeMessages = useCallback((data) => {
+    const rawMessages = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.messages)
+        ? data.messages
+        : [];
+
+    return rawMessages.slice(-MAX_RENDERED_MESSAGES).map((msg) => ({
       ...msg,
       isMine: msg.senderId === userId,
     }));
+  }, [userId]);
 
-  const withTimeout = (promise, ms = 12000, message = 'Request timed out. Please try again.') => {
+  const withTimeout = useCallback((promise, ms = 12000, message = 'Request timed out. Please try again.') => {
     let timer;
 
     const timeout = new Promise((_, reject) => {
@@ -428,27 +417,32 @@ export default function ChatPage() {
     return Promise.race([promise, timeout]).finally(() => {
       window.clearTimeout(timer);
     });
-  };
+  }, []);
 
-  const getCachedMessages = (chatId) => messageCacheRef.current.get(chatId) || [];
+  const getCachedMessages = useCallback((chatId) => messageCacheRef.current.get(chatId) || [], []);
 
-  const setCachedMessages = (chatId, nextMessages) => {
+  const setCachedMessages = useCallback((chatId, nextMessages) => {
     if (!chatId) return;
-    messageCacheRef.current.set(chatId, nextMessages);
-  };
+    const safeMessages = Array.isArray(nextMessages)
+      ? nextMessages.slice(-MAX_RENDERED_MESSAGES)
+      : [];
+    messageCacheRef.current.set(chatId, safeMessages);
+  }, []);
 
-  const refreshChatsSoon = () => {
+  const refreshChatsSoon = useCallback(() => {
     const now = Date.now();
-    if (now - lastChatsLoadRef.current < 1500) return;
+    if (now - lastChatsLoadRef.current < 6000) return;
     lastChatsLoadRef.current = now;
     loadChats();
-  };
+  }, []);
 
   const loadChats = async () => {
     try {
       const data = await withTimeout(chatApi.getChats(), 10000, 'Chats took too long to load.');
       if (!mountedRef.current) return;
-      setChats(Array.isArray(data) ? data : Array.isArray(data?.chats) ? data.chats : []);
+      const nextChats = Array.isArray(data) ? data : Array.isArray(data?.chats) ? data.chats : [];
+      const normalizedChats = nextChats.map(normalizeChatRecord);
+      setChats(normalizedChats);
     } catch (err) {
       console.error('Failed to load chats:', err);
     }
@@ -471,7 +465,6 @@ export default function ChatPage() {
     );
 
     window.dispatchEvent(new Event('chat-unread-refresh'));
-    scrollMessagesToBottom();
   }, [chats]);
 
   useEffect(() => {
@@ -617,7 +610,6 @@ export default function ChatPage() {
       });
 
       scrollMessagesToBottom();
-      if (mountedRef.current) refreshChatsSoon();
     });
 
     return () => {
@@ -626,18 +618,23 @@ export default function ChatPage() {
     };
   }, [userId]);
 
-const scrollMessagesToBottom = () => {
+const scrollMessagesToBottom = useCallback(() => {
   if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
 
   scrollRafRef.current = window.requestAnimationFrame(() => {
     if (!mountedRef.current || !scrollRef.current) return;
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+
+    const target = scrollRef.current;
+    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+
+    if (distanceFromBottom > 260) return;
+    target.scrollTop = target.scrollHeight;
   });
-};
+}, []);
 
 useEffect(() => {
   scrollMessagesToBottom();
-}, [messages]);
+}, [messages.length, scrollMessagesToBottom]);
 
 useEffect(() => {
   if (!activeChat) return undefined;
@@ -679,17 +676,34 @@ useEffect(() => {
         email: startWithUser.email || '',
         username: startWithUser.username || startWithUser.email || '',
         name: startWithUser.name || startWithUser.email || 'User',
+        photoUrl: startWithUser.photoUrl || startWithUser.photoURL || '',
+        profilePic: startWithUser.profilePic || '',
+        profilePictureUrl: startWithUser.profilePictureUrl || '',
+        profilePicture: startWithUser.profilePicture || '',
+        avatarUrl: startWithUser.avatarUrl || '',
       };
 
       const chat = await withTimeout(chatApi.startChat(normalizedUser), 10000, 'Starting chat took too long.');
       if (!mountedRef.current) return;
 
-      const fixedChat = {
+      const fixedChat = normalizeChatRecord({
         ...chat,
         receiverId: chat.receiverId || targetUserId,
         receiverName: chat.receiverName || normalizedUser.name,
         receiverEmail: chat.receiverEmail || normalizedUser.email,
-      };
+        receiverAvatarUrl:
+          chat.receiverAvatarUrl ||
+          chat.receiverPhotoUrl ||
+          chat.receiverProfilePic ||
+          chat.receiverProfilePictureUrl ||
+          chat.receiverAvatar ||
+          normalizedUser.photoUrl ||
+          normalizedUser.profilePic ||
+          normalizedUser.profilePictureUrl ||
+          normalizedUser.profilePicture ||
+          normalizedUser.avatarUrl ||
+          '',
+      });
 
       setActiveChat(fixedChat);
       activeChatIdRef.current = fixedChat.chatId;
@@ -701,6 +715,8 @@ useEffect(() => {
       if (!mountedRef.current || activeChatIdRef.current !== fixedChat.chatId) return;
 
       const nextMessages = normalizeMessages(data);
+      const lastMessage = nextMessages[nextMessages.length - 1] || {};
+      latestMessagesSignatureRef.current = `${nextMessages.length}:${lastMessage.messageId || lastMessage.id || lastMessage.clientId || ''}:${lastMessage.createdAt || ''}:${lastMessage.editedAt || ''}:${lastMessage.deletedAt || ''}`;
       setCachedMessages(fixedChat.chatId, nextMessages);
       setMessages(nextMessages);
 
@@ -760,9 +776,7 @@ useEffect(() => {
         setActionsOpen(false);
       }
 
-      if (!target.closest?.('.chat-avatar-wrap')) {
-        setAvatarPickerChatId('');
-      }
+
     };
 
     document.addEventListener('mousedown', closeFloatingMenus);
@@ -801,9 +815,10 @@ const openChat = useCallback(async (chat) => {
 
   const cachedMessages = getCachedMessages(chat.chatId);
 
-  setActiveChat(chat);
-  activeChatIdRef.current = chat.chatId;
-  localStorage.setItem('activeChatId', chat.chatId);
+  const fixedChat = normalizeChatRecord(chat);
+  setActiveChat(fixedChat);
+  activeChatIdRef.current = fixedChat.chatId;
+  localStorage.setItem('activeChatId', fixedChat.chatId);
   setMobileChatOpen(true);
   setMessages(cachedMessages);
   setActionsOpen(false);
@@ -811,12 +826,12 @@ const openChat = useCallback(async (chat) => {
   setOpenReactionMenuId(null);
   setEditingMessageId(null);
   setEditingText('');
-  setIsBlocked(chat?.isBlocked || false);
+  setIsBlocked(fixedChat?.isBlocked || false);
   setUsers([]);
 
   setChats((prev) =>
     prev.map((item) =>
-      item.chatId === chat.chatId ? { ...item, unreadCount: 0 } : item
+      item.chatId === fixedChat.chatId ? { ...item, unreadCount: 0 } : item
     )
   );
 
@@ -830,7 +845,7 @@ const openChat = useCallback(async (chat) => {
     .then(async () => {
       try {
         if (chatApi.markAsRead) {
-          await withTimeout(chatApi.markAsRead(chat.chatId), 5000, 'Mark read timed out.');
+          await withTimeout(chatApi.markAsRead(fixedChat.chatId), 5000, 'Mark read timed out.');
         }
       } catch (e) {
         console.error('Mark as read failed', e);
@@ -840,7 +855,7 @@ const openChat = useCallback(async (chat) => {
   Promise.resolve()
     .then(async () => {
       try {
-        const receiverId = chat.receiverId || chat.userId || chat.id;
+        const receiverId = fixedChat.receiverId || fixedChat.userId || fixedChat.id;
         if (!receiverId || !chatApi.checkBlockStatus) return;
 
         const blockStatus = await withTimeout(
@@ -857,11 +872,13 @@ const openChat = useCallback(async (chat) => {
     });
 
   try {
-    const data = await withTimeout(chatApi.getMessages(chat.chatId), 10000, 'Messages took too long to load.');
-    if (!mountedRef.current || requestId !== chatRequestSeqRef.current || activeChatIdRef.current !== chat.chatId) return;
+    const data = await withTimeout(chatApi.getMessages(fixedChat.chatId), 10000, 'Messages took too long to load.');
+    if (!mountedRef.current || requestId !== chatRequestSeqRef.current || activeChatIdRef.current !== fixedChat.chatId) return;
 
     const nextMessages = normalizeMessages(data);
-    setCachedMessages(chat.chatId, nextMessages);
+    const lastMessage = nextMessages[nextMessages.length - 1] || {};
+    latestMessagesSignatureRef.current = `${nextMessages.length}:${lastMessage.messageId || lastMessage.id || lastMessage.clientId || ''}:${lastMessage.createdAt || ''}:${lastMessage.editedAt || ''}:${lastMessage.deletedAt || ''}`;
+    setCachedMessages(fixedChat.chatId, nextMessages);
     setMessages(nextMessages);
 
     if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
@@ -877,46 +894,63 @@ const openChat = useCallback(async (chat) => {
 }, [getCachedMessages, normalizeMessages, refreshChatsSoon, scrollMessagesToBottom, setCachedMessages, userId, withTimeout]);
 useEffect(() => {
   if (messagePollTimerRef.current) {
-    window.clearInterval(messagePollTimerRef.current);
+    window.clearTimeout(messagePollTimerRef.current);
     messagePollTimerRef.current = null;
   }
 
   if (!activeChat?.chatId || !userId) return undefined;
+
+  let stopped = false;
+
+  const getMessageSignature = (items) => {
+    if (!Array.isArray(items) || items.length === 0) return 'empty';
+    const last = items[items.length - 1] || {};
+    return `${items.length}:${last.messageId || last.id || last.clientId || ''}:${last.createdAt || ''}:${last.editedAt || ''}:${last.deletedAt || ''}`;
+  };
 
   const pollMessages = async () => {
     const chatId = activeChat.chatId;
 
     try {
       const data = await withTimeout(chatApi.getMessages(chatId), 9000, 'Message refresh timed out.');
-      if (!mountedRef.current || activeChatIdRef.current !== chatId) return;
+      if (!mountedRef.current || activeChatIdRef.current !== chatId || stopped) return;
 
       const nextMessages = normalizeMessages(data);
+      const nextSignature = getMessageSignature(nextMessages);
 
-      setMessages((prev) => {
-        const prevLast = prev[prev.length - 1]?.messageId || prev[prev.length - 1]?.id || prev[prev.length - 1]?.clientId;
-        const nextLast = nextMessages[nextMessages.length - 1]?.messageId || nextMessages[nextMessages.length - 1]?.id || nextMessages[nextMessages.length - 1]?.clientId;
-
-        if (prev.length === nextMessages.length && prevLast === nextLast) {
-          return prev;
-        }
-
+      if (latestMessagesSignatureRef.current !== nextSignature) {
+        latestMessagesSignatureRef.current = nextSignature;
         setCachedMessages(chatId, nextMessages);
-        return nextMessages;
-      });
+        setMessages(nextMessages);
+      }
     } catch (err) {
       console.error('Fallback message polling failed:', err);
+    } finally {
+      if (stopped || !mountedRef.current || activeChatIdRef.current !== chatId) return;
+      const delay = document.hidden ? POLL_INTERVAL_HIDDEN : POLL_INTERVAL_VISIBLE;
+      messagePollTimerRef.current = window.setTimeout(pollMessages, delay);
     }
   };
 
-  messagePollTimerRef.current = window.setInterval(pollMessages, 5000);
+  const handleVisibilityChange = () => {
+    if (!document.hidden) {
+      if (messagePollTimerRef.current) window.clearTimeout(messagePollTimerRef.current);
+      pollMessages();
+    }
+  };
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  messagePollTimerRef.current = window.setTimeout(pollMessages, POLL_INTERVAL_VISIBLE);
 
   return () => {
+    stopped = true;
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     if (messagePollTimerRef.current) {
-      window.clearInterval(messagePollTimerRef.current);
+      window.clearTimeout(messagePollTimerRef.current);
       messagePollTimerRef.current = null;
     }
   };
-}, [activeChat?.chatId, userId]);
+}, [activeChat?.chatId, userId, normalizeMessages, setCachedMessages, withTimeout]);
 
 useEffect(() => {
   const chatIdFromUrl = searchParams.get('chatId');
@@ -937,13 +971,29 @@ useEffect(() => {
       if (!mountedRef.current) return;
       activeChatIdRef.current = chat.chatId;
 
-      setActiveChat({
+      const fixedChat = normalizeChatRecord({
         ...chat,
         receiverUsername: chat.receiverUsername || selectedUser.username || selectedUser.userName,
         receiverName: chat.receiverName || selectedUser.name || selectedUser.username,
         receiverEmail: chat.receiverEmail || selectedUser.email,
+        receiverAvatarUrl:
+          chat.receiverAvatarUrl ||
+          chat.receiverPhotoUrl ||
+          chat.receiverProfilePic ||
+          chat.receiverProfilePictureUrl ||
+          chat.receiverAvatar ||
+          selectedUser.photoUrl ||
+          selectedUser.photoURL ||
+          selectedUser.profilePic ||
+          selectedUser.profilePictureUrl ||
+          selectedUser.profilePicture ||
+          selectedUser.avatarUrl ||
+          selectedUser.picture ||
+          '',
       });
-      localStorage.setItem('activeChatId', chat.chatId);
+
+      setActiveChat(fixedChat);
+      localStorage.setItem('activeChatId', fixedChat.chatId);
       setMobileChatOpen(true);
       setMessages([]);
       setActionsOpen(false);
@@ -953,10 +1003,12 @@ useEffect(() => {
       setUsers([]);
       setQuery('');
 
-      const data = await withTimeout(chatApi.getMessages(chat.chatId), 10000, 'Messages took too long to load.');
-      if (!mountedRef.current || activeChatIdRef.current !== chat.chatId) return;
+      const data = await withTimeout(chatApi.getMessages(fixedChat.chatId), 10000, 'Messages took too long to load.');
+      if (!mountedRef.current || activeChatIdRef.current !== fixedChat.chatId) return;
       const nextMessages = normalizeMessages(data);
-      setCachedMessages(chat.chatId, nextMessages);
+      const lastMessage = nextMessages[nextMessages.length - 1] || {};
+      latestMessagesSignatureRef.current = `${nextMessages.length}:${lastMessage.messageId || lastMessage.id || lastMessage.clientId || ''}:${lastMessage.createdAt || ''}:${lastMessage.editedAt || ''}:${lastMessage.deletedAt || ''}`;
+      setCachedMessages(fixedChat.chatId, nextMessages);
       setMessages(nextMessages);
 
       if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
@@ -964,8 +1016,8 @@ useEffect(() => {
 
       // check block status from backend
       try {
-        const blockStatus = await withTimeout(chatApi.checkBlockStatus(chat.receiverId), 7000, 'Block status check timed out.');
-        if (!mountedRef.current || activeChatIdRef.current !== chat.chatId) return;
+        const blockStatus = await withTimeout(chatApi.checkBlockStatus(fixedChat.receiverId), 7000, 'Block status check timed out.');
+        if (!mountedRef.current || activeChatIdRef.current !== fixedChat.chatId) return;
         setIsBlocked(blockStatus?.isBlocked || false);
       } catch (e) {
         console.error('Block status check failed', e);
@@ -1173,7 +1225,7 @@ const closeMobileChat = useCallback(() => {
   setActionsOpen(false);
 
   if (messagePollTimerRef.current) {
-    window.clearInterval(messagePollTimerRef.current);
+    window.clearTimeout(messagePollTimerRef.current);
     messagePollTimerRef.current = null;
   }
 }, []);
@@ -1188,9 +1240,16 @@ const renderedChatList = useMemo(
   () => chats.map((chat) => {
     const active = activeChat?.chatId === chat.chatId;
     const unreadCount = Number(chat.unreadCount || 0);
-    const realAvatar = getChatRealAvatar(chat);
-    const fallbackAvatar = getFallbackAvatarForChat(chat);
+    const realAvatarSrc = String(chat.receiverAvatarUrl || '').trim();
+    const avatarFailKey = `${chat.chatId}:${realAvatarSrc}`;
+    const profileAvatarFailed = realAvatarSrc ? Boolean(failedProfileAvatarIds[avatarFailKey]) : false;
 
+    const realAvatar = profileAvatarFailed ? '' : realAvatarSrc;
+    const avatarInitials = getUserDisplayName({
+      username: chat.receiverUsername,
+      name: chat.receiverName,
+      email: chat.receiverEmail,
+    }).slice(0, 2).toUpperCase();
     return (
       <div
         key={chat.chatId}
@@ -1210,45 +1269,38 @@ const renderedChatList = useMemo(
             {realAvatar ? (
               <img
                 className="chat-avatar"
-                src={realAvatar}
-                alt=""
+                src={realAvatarSrc}
+                alt={getUserDisplayName({
+                  username: chat.receiverUsername,
+                  name: chat.receiverName,
+                  email: chat.receiverEmail,
+                })}
                 loading="lazy"
                 decoding="async"
                 referrerPolicy="no-referrer"
+                onError={() => {
+                  setFailedProfileAvatarIds((prev) => ({
+                    ...prev,
+                    [avatarFailKey]: true,
+                  }));
+                }}
+                onLoad={() => {
+                  setFailedProfileAvatarIds((prev) => {
+                    if (!prev[avatarFailKey]) return prev;
+                    const next = { ...prev };
+                    delete next[avatarFailKey];
+                    return next;
+                  });
+                }}
+                data-avatar-url={realAvatarSrc}
               />
             ) : (
-              <button
-                type="button"
-                className="chat-avatar chat-avatar-fallback"
-                title="Choose avatar"
-                aria-label="Choose chat avatar"
-                onClick={(event) => toggleAvatarPicker(event, chat)}
+              <div
+                className="chat-avatar chat-avatar-fallback chat-avatar-default"
+                aria-label="Default avatar"
+                title="Default avatar"
               >
-                {fallbackAvatar.emoji}
-              </button>
-            )}
-
-            {!realAvatar && avatarPickerChatId === chat.chatId && (
-              <div className="chat-avatar-picker" onClick={(event) => event.stopPropagation()}>
-                <span>Choose avatar</span>
-                <div className="chat-avatar-options">
-                  {CHAT_FALLBACK_AVATARS.map((avatar) => (
-                    <button
-                      key={avatar.id}
-                      type="button"
-                      className={fallbackAvatar.id === avatar.id ? 'active' : ''}
-                      title={avatar.label}
-                      aria-label={`Use ${avatar.label} avatar`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        chooseFallbackAvatar(chat, avatar.id);
-                      }}
-                    >
-                      {avatar.emoji}
-                    </button>
-                  ))}
-                </div>
+                <span>{avatarInitials || 'US'}</span>
               </div>
             )}
           </div>
@@ -1275,12 +1327,9 @@ const renderedChatList = useMemo(
   }),
   [
     activeChat?.chatId,
-    avatarPickerChatId,
     chats,
-    chooseFallbackAvatar,
-    getFallbackAvatarForChat,
+    failedProfileAvatarIds,
     openChat,
-    toggleAvatarPicker,
   ]
 );
 
@@ -1294,11 +1343,15 @@ const renderedChatList = useMemo(
     let progressTimer;
     let mediaKey = '';
     let mediaUrl = '';
+    let uploadFile = selectedMedia;
 
     try {
       if (selectedMedia) {
         setIsUploading(true);
         setUploadProgress(8);
+
+        uploadFile = await optimizeImageForUpload(selectedMedia);
+        if (!mountedRef.current) return;
 
         progressTimer = window.setInterval(() => {
           setUploadProgress((prev) => Math.min(prev + 18, 92));
@@ -1306,8 +1359,8 @@ const renderedChatList = useMemo(
 
         const uploadData = await withTimeout(
           chatApi.getMediaUploadUrl({
-            fileName: selectedMedia.name,
-            fileType: selectedMedia.type,
+            fileName: uploadFile.name,
+            fileType: uploadFile.type || selectedMedia.type,
           }),
           10000,
           'Preparing upload took too long.'
@@ -1327,10 +1380,10 @@ const renderedChatList = useMemo(
         const uploadRes = await withTimeout(
           fetch(uploadUrl, {
             method: 'PUT',
-            body: selectedMedia,
+            body: uploadFile,
             signal: uploadAbortController.signal,
             headers: {
-              'Content-Type': selectedMedia.type || 'application/octet-stream',
+              'Content-Type': uploadFile.type || selectedMedia.type || 'application/octet-stream',
             },
           }),
           25000,
@@ -1353,8 +1406,8 @@ const renderedChatList = useMemo(
         text: cleanText,
         mediaKey,
         mediaUrl,
-        mediaName: selectedMedia?.name || '',
-        mediaType: selectedMedia?.type || '',
+        mediaName: uploadFile?.name || selectedMedia?.name || '',
+        mediaType: uploadFile?.type || selectedMedia?.type || '',
         mediaPreview: selectedMediaPreview || '',
         createdAt: Date.now(),
         isMine: true,
@@ -1374,8 +1427,8 @@ const renderedChatList = useMemo(
         text: cleanText,
         mediaKey,
         mediaUrl,
-        mediaName: selectedMedia?.name || '',
-        mediaType: selectedMedia?.type || '',
+        mediaName: uploadFile?.name || selectedMedia?.name || '',
+        mediaType: uploadFile?.type || selectedMedia?.type || '',
         clientId,
       });
 
@@ -1691,7 +1744,7 @@ const handleBlockUser = async () => {
       setStatus('Chat deleted.');
 
       if (messagePollTimerRef.current) {
-        window.clearInterval(messagePollTimerRef.current);
+        window.clearTimeout(messagePollTimerRef.current);
         messagePollTimerRef.current = null;
       }
 
@@ -1757,7 +1810,7 @@ const runDeleteChat = useCallback(() => {
       setMessages([]);
       setActionsOpen(false);
       if (messagePollTimerRef.current) {
-        window.clearInterval(messagePollTimerRef.current);
+        window.clearTimeout(messagePollTimerRef.current);
         messagePollTimerRef.current = null;
       }
     }
@@ -1862,7 +1915,7 @@ const runDeleteChat = useCallback(() => {
 </div>
             </div>
 
-            <div className="messages" ref={scrollRef}>
+            <div className="messages" ref={scrollRef} aria-live="polite">
               {groupedMessages.length === 0 ? (
                 <p className="empty-chat">No messages yet. Say hello.</p>
               ) : (
@@ -1928,7 +1981,7 @@ const runDeleteChat = useCallback(() => {
   {openReactionMenuId === (msg.messageId || msg.id) && (
     <div className="message-options-menu">
       <div className="message-reaction-row">
-        {['👍', '❤️', '😂', '🔥'].map((emoji) => {
+        {['like', 'yes', 'seen', 'saved'].map((emoji) => {
           const reactionUsers = Array.isArray(msg.reactions?.[emoji])
             ? msg.reactions[emoji]
             : [];
@@ -1997,7 +2050,7 @@ const runDeleteChat = useCallback(() => {
   {showComposerTools && !isBlocked && (
     <div className="composer-tools-panel">
       <div className="emoji-row">
-        {['😀', '😂', '😍', '🔥', '❤️', '👍', '🙏', '🎉'].map((emoji) => (
+        {['like', 'ok', 'yes', 'no'].map((emoji) => (
           <button key={emoji} type="button" onClick={() => addEmoji(emoji)}>
             {emoji}
           </button>
@@ -2011,6 +2064,7 @@ const runDeleteChat = useCallback(() => {
               alt={selectedMedia?.name || 'Selected media'}
               loading="lazy"
               decoding="async"
+              fetchPriority="low"
             />
           ) : selectedMedia?.type?.startsWith('video/') ? (
             <video src={selectedMediaPreview} controls playsInline preload="metadata" />
@@ -2022,7 +2076,7 @@ const runDeleteChat = useCallback(() => {
               />
             </div>
           ) : (
-            <div className="selected-file-icon">📎</div>
+            <div className="selected-file-icon">file</div>
           )}
 
           <div>
@@ -2030,7 +2084,7 @@ const runDeleteChat = useCallback(() => {
             <span>{selectedMedia?.type || 'File ready to send'}</span>
           </div>
 
-          <button type="button" disabled={isUploading} onClick={removeSelectedMedia}>✕</button>
+          <button type="button" disabled={isUploading} onClick={removeSelectedMedia}>Remove</button>
         </div>
       )}
     </div>
@@ -2053,7 +2107,7 @@ const runDeleteChat = useCallback(() => {
     />
 
     <button type="button" className="composer-icon-btn" disabled={isBlocked || isUploading} onClick={openMediaPicker}>
-      ＋
+      +
     </button>
 
     {/* <button type="button" className="composer-icon-btn" onClick={() => setShowComposerTools((prev) => !prev)}>
@@ -2074,7 +2128,7 @@ const runDeleteChat = useCallback(() => {
   onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
   disabled={isBlocked || isUploading}
 >
-  {isRecording ? `⏹ ${recordingSeconds}s` : '🎤'}
+  {isRecording ? `Stop ${recordingSeconds}s` : 'Voice'}
 </button>
 {isRecording && (
   <button
@@ -2083,7 +2137,7 @@ const runDeleteChat = useCallback(() => {
     disabled={isUploading}
     onClick={cancelVoiceRecording}
   >
-    ✕
+    Cancel
   </button>
 )}
     

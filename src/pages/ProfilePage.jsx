@@ -14,6 +14,38 @@ function getPostImage(post) {
     ''
   );
 }
+
+const AnimatedStatNumber = memo(function AnimatedStatNumber({ value }) {
+  const target = Number(value || 0);
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    let frameId;
+    const duration = 2000;
+    const startTime = performance.now();
+    const startValue = displayValue;
+    const change = target - startValue;
+
+    const tick = (now) => {
+      const progress = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(Math.round(startValue + change * eased));
+
+      if (progress < 1) {
+        frameId = requestAnimationFrame(tick);
+      }
+    };
+
+    frameId = requestAnimationFrame(tick);
+
+    return () => {
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [target]);
+
+  return <>{displayValue}</>;
+});
+
 const ProfilePostCard = memo(function ProfilePostCard({ post, label, onOpen, onEdit, editable = true }) {
   const postId = post.id || post.reelId;
   const image = getPostImage(post);
@@ -31,6 +63,8 @@ const ProfilePostCard = memo(function ProfilePostCard({ post, label, onOpen, onE
             alt={post.title || 'Post'}
             loading="lazy"
             decoding="async"
+            fetchPriority="low"
+            sizes="(max-width: 768px) 92vw, 320px"
           />
         ) : (
           <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
@@ -356,6 +390,11 @@ export default function ProfilePage() {
   const createCroppedProfileImage = useCallback(async (file) => {
     if (!file) return null;
 
+    const type = String(file.type || '').toLowerCase();
+    if (!type.startsWith('image/') || type === 'image/gif' || type === 'image/svg+xml') {
+      return file;
+    }
+
     const imageUrl = URL.createObjectURL(file);
 
     try {
@@ -366,15 +405,16 @@ export default function ProfilePage() {
         img.src = imageUrl;
       });
 
-      const canvasSize = 512;
+      const canvasSize = 384;
       const canvas = document.createElement('canvas');
       canvas.width = canvasSize;
       canvas.height = canvasSize;
 
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { alpha: false });
       if (!ctx) return file;
 
-      ctx.clearRect(0, 0, canvasSize, canvasSize);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvasSize, canvasSize);
       ctx.save();
       ctx.beginPath();
       ctx.arc(canvasSize / 2, canvasSize / 2, canvasSize / 2, 0, Math.PI * 2);
@@ -393,16 +433,24 @@ export default function ProfilePage() {
       const offsetX = (cropX / 100) * maxOffsetX;
       const offsetY = (cropY / 100) * maxOffsetY;
 
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(image, -offsetX, -offsetY, drawWidth, drawHeight);
       ctx.restore();
 
       const blob = await new Promise((resolve) => {
-        canvas.toBlob(resolve, 'image/jpeg', 0.92);
+        canvas.toBlob(resolve, 'image/jpeg', 0.78);
       });
 
       if (!blob) return file;
 
-      return new File([blob], `profile-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      return new File([blob], `profile-${Date.now()}.jpg`, {
+        type: 'image/jpeg',
+        lastModified: Date.now(),
+      });
+    } catch (err) {
+      console.error('Profile image compression failed:', err);
+      return file;
     } finally {
       URL.revokeObjectURL(imageUrl);
     }
@@ -431,6 +479,7 @@ export default function ProfilePage() {
 
       if (newPhoto) {
         const croppedPhoto = await createCroppedProfileImage(newPhoto);
+        if (!croppedPhoto) throw new Error('Could not process profile image.');
 
         const upload = await withTimeout(
           postApi.getUploadUrl({
@@ -462,7 +511,6 @@ export default function ProfilePage() {
 
       const updated = await withTimeout(userApi.updateProfile(payload), 12000);
 
-      console.log('UPDATED PROFILE:', updated);
 
       setProfile((prev) => ({
         ...prev,
@@ -531,6 +579,8 @@ export default function ProfilePage() {
               alt={post.title || 'Post'}
               loading="lazy"
               decoding="async"
+              fetchPriority="low"
+              sizes="(max-width: 768px) 92vw, 320px"
             />
           ) : (
             <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
@@ -578,7 +628,7 @@ export default function ProfilePage() {
                 className="avatar-photo"
                 loading="eager"
                 decoding="async"
-                fetchpriority="high"
+                fetchPriority="high"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                   e.currentTarget.nextElementSibling.style.display = 'grid';
@@ -640,17 +690,17 @@ export default function ProfilePage() {
 
         <div className="profile-stats">
           <div className="stat-card">
-            <strong>{myPosts.length}</strong>
+            <strong><AnimatedStatNumber value={myPosts.length} /></strong>
             <span>Posts</span>
           </div>
 
           <div className="stat-card">
-            <strong>{myPublicPosts.length}</strong>
+            <strong><AnimatedStatNumber value={myPublicPosts.length} /></strong>
             <span>Public</span>
           </div>
 
           <div className="stat-card">
-            <strong>{following.length}</strong>
+            <strong><AnimatedStatNumber value={following.length} /></strong>
             <span>Following</span>
           </div>
         </div>
@@ -861,6 +911,8 @@ const name =
                         alt={post.title || 'Post'}
                         loading="lazy"
                         decoding="async"
+                        fetchPriority="low"
+                        sizes="(max-width: 768px) 92vw, 320px"
                       />
                     ) : (
                       <div className="private-placeholder">{post.topic?.[0] || 'S'}</div>
@@ -939,6 +991,7 @@ const name =
                       src={photoPreview || profile?.photoUrl || profile?.profilePic}
                       alt="Profile crop preview"
                       draggable="false"
+                      decoding="async"
                       style={{
                         transform: `scale(${cropZoom})`,
                         objectPosition: `${cropX}% ${cropY}%`,

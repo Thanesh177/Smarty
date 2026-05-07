@@ -20,8 +20,8 @@
 .edit-preview-card {
   overflow: hidden;
   border-radius: 18px;
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.58), rgba(2, 6, 23, 0.92));
+  border: 1px solid rgba(148, 163, 184, 0.09);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
   contain: content;
 }
@@ -29,7 +29,7 @@
 .edit-preview-card span {
   display: block;
   padding: 10px 12px;
-  color: rgba(226, 232, 240, 0.72);
+  color: rgba(203, 213, 225, 0.66);
   font-size: 0.78rem;
   font-weight: 800;
 }
@@ -40,7 +40,7 @@
   height: 220px;
   display: block;
   object-fit: contain;
-  background: #020617;
+  background: #00030a;
   transform: translateZ(0);
   backface-visibility: hidden;
 }
@@ -62,8 +62,8 @@
   display: grid;
   place-items: center;
   text-align: center;
-  background: rgba(255, 255, 255, 0.055);
-  border: 1px solid rgba(255, 255, 255, 0.075);
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.56), rgba(2, 6, 23, 0.88));
+  border: 1px solid rgba(148, 163, 184, 0.09);
   transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
   transform: translateZ(0);
   backface-visibility: hidden;
@@ -72,8 +72,8 @@
 
 .mini-upload-card:hover {
   transform: translate3d(0, -1px, 0);
-  background: rgba(148, 163, 184, 0.12);
-  border-color: rgba(203, 213, 225, 0.18);
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.62), rgba(2, 6, 23, 0.94));
+  border-color: rgba(148, 163, 184, 0.18);
 }
 
 .mini-upload-card input {
@@ -82,7 +82,7 @@
 
 .mini-upload-card small {
   max-width: 100%;
-  color: rgba(226, 232, 240, 0.68);
+  color: rgba(203, 213, 225, 0.64);
   font-size: 0.76rem;
   font-weight: 800;
   word-break: break-word;
@@ -127,28 +127,30 @@
 }
 
 .edit-action-row > .publish-btn {
-  border: 1px solid rgba(125, 211, 252, 0.28);
-  color: #f8fbff;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  color: #ffffff;
   background:
-    linear-gradient(135deg, rgba(14, 165, 233, 0.95), rgba(37, 99, 235, 0.94));
+    linear-gradient(135deg, rgba(30, 41, 59, 0.88), rgba(15, 23, 42, 0.98));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 10px 24px rgba(37, 99, 235, 0.22);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
 .edit-action-row > .publish-btn:hover {
   transform: translate3d(0, -1px, 0);
-  border-color: rgba(186, 230, 253, 0.44);
+  border-color: rgba(148, 163, 184, 0.26);
+  background:
+    linear-gradient(135deg, rgba(51, 65, 85, 0.9), rgba(15, 23, 42, 1));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 12px 28px rgba(37, 99, 235, 0.28);
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 28px rgba(0, 0, 0, 0.36);
 }
 
 .edit-action-row > .delete-post-btn {
-  border: 1px solid rgba(248, 113, 113, 0.28);
-  color: #fecaca;
+  border: 1px solid rgba(248, 113, 113, 0.18);
+  color: rgba(254, 202, 202, 0.88);
   background:
-    linear-gradient(135deg, rgba(127, 29, 29, 0.54), rgba(69, 10, 10, 0.42));
+    linear-gradient(135deg, rgba(69, 10, 10, 0.34), rgba(2, 6, 23, 0.86));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 8px 20px rgba(127, 29, 29, 0.14);
@@ -157,9 +159,9 @@
 .edit-action-row > .delete-post-btn:hover {
   transform: translate3d(0, -1px, 0);
   background:
-    linear-gradient(135deg, rgba(185, 28, 28, 0.94), rgba(127, 29, 29, 0.9));
-  color: #fff;
-  border-color: rgba(252, 165, 165, 0.6);
+    linear-gradient(135deg, rgba(127, 29, 29, 0.72), rgba(69, 10, 10, 0.82));
+  color: #ffffff;
+  border-color: rgba(248, 113, 113, 0.42);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 10px 24px rgba(239, 68, 68, 0.22);
@@ -177,14 +179,14 @@
 
 .status {
   margin: 10px 0 0;
-  color: #cbd5e1;
+  color: rgba(203, 213, 225, 0.68);
   font-size: 0.86rem;
   font-weight: 800;
   contain: content;
 }
 
 .status.error {
-  color: #fca5a5;
+  color: rgba(252, 165, 165, 0.92);
 }
 
 /* ===== RESPONSIVE ===== */
@@ -262,4 +264,23 @@
   width: 100%;
   min-width: 0;
   min-height: 52px;
+}
+
+.edit-preview-card,
+.mini-upload-card,
+.edit-action-row > .publish-btn,
+.edit-action-row > .delete-post-btn {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (min-width: 1180px) {
+  .top-row-grid {
+    grid-template-columns: minmax(0, 1fr) 390px;
+    gap: 18px;
+  }
+
+  .edit-preview-card img,
+  .edit-preview-card video {
+    height: 250px;
+  }
 }

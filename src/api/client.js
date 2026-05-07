@@ -145,6 +145,101 @@ const parseApiBody = (data) => {
   }
 };
 
+
+const encodePathSegment = (value) => encodeURIComponent(String(value || '').trim());
+
+const getProfileImageUrl = (item = {}) =>
+  String(
+    item.photoUrl ||
+      item.photoURL ||
+      item.profilePic ||
+      item.profilePictureUrl ||
+      item.profilePicture ||
+      item.avatarUrl ||
+      item.avatar ||
+      item.picture ||
+      item.imageUrl ||
+      item.receiverPhotoUrl ||
+      item.receiverPhotoURL ||
+      item.receiverProfilePic ||
+      item.receiverProfilePictureUrl ||
+      item.receiverProfilePicture ||
+      item.receiverAvatarUrl ||
+      item.receiverAvatar ||
+      item.receiverPhoto ||
+      item.receiverImageUrl ||
+      item.receiverImage ||
+      ''
+  ).trim();
+
+const getReceiverProfileImageUrl = (item = {}) =>
+  String(
+    item.receiverPhotoUrl ||
+      item.receiverPhotoURL ||
+      item.receiverAvatarUrl ||
+      item.receiverProfilePictureUrl ||
+      item.receiverProfilePicture ||
+      item.receiverProfilePic ||
+      item.receiverAvatar ||
+      item.receiverPhoto ||
+      item.receiverImageUrl ||
+      item.receiverImage ||
+      item.receiver?.photoUrl ||
+      item.receiver?.photoURL ||
+      item.receiver?.profilePic ||
+      item.receiver?.profilePictureUrl ||
+      item.receiver?.profilePicture ||
+      item.receiver?.avatarUrl ||
+      ''
+  ).trim();
+
+const getProfileUpdatedAt = (item = {}) =>
+  item.avatarUpdatedAt ||
+  item.profileUpdatedAt ||
+  item.updatedAt ||
+  item.imageUpdatedAt ||
+  item.lastSeenAt ||
+  '';
+
+const normalizeUserProfile = (user = {}) => {
+  const avatarUrl = getProfileImageUrl(user);
+  const updatedAt = getProfileUpdatedAt(user);
+
+  return {
+    ...user,
+    avatarUrl,
+    photoUrl: avatarUrl,
+    profilePic: avatarUrl,
+    profilePicture: avatarUrl,
+    profilePictureUrl: avatarUrl,
+    avatarUpdatedAt: updatedAt,
+    profileUpdatedAt: updatedAt,
+  };
+};
+
+const normalizeChatProfile = (chat = {}) => {
+  const receiverAvatarUrl = getReceiverProfileImageUrl(chat);
+  const updatedAt = getProfileUpdatedAt(chat);
+
+  return {
+    ...chat,
+    receiverName: chat.receiverName || chat.receiverUsername || chat.receiverEmail || 'User',
+    receiverEmail: chat.receiverEmail || '',
+    receiverAvatarUrl,
+    receiverAvatar: receiverAvatarUrl,
+    receiverPhoto: receiverAvatarUrl,
+    receiverPhotoUrl: receiverAvatarUrl,
+    receiverPhotoURL: receiverAvatarUrl,
+    receiverImage: receiverAvatarUrl,
+    receiverImageUrl: receiverAvatarUrl,
+    receiverProfilePic: receiverAvatarUrl,
+    receiverProfilePicture: receiverAvatarUrl,
+    receiverProfilePictureUrl: receiverAvatarUrl,
+    avatarUpdatedAt: updatedAt,
+    profileUpdatedAt: updatedAt,
+  };
+};
+
 export const authApi = {
   async login() {
     throw new Error('Login is handled by Cognito, not API Gateway.');
@@ -164,53 +259,62 @@ export const roomApi = {
   },
 
   searchUsers: async (q) => {
-  const { data } = await api.post('/users/find', {
-    action: 'search',
-    q,
-  });
-  return data;
-},
-
-inviteUserToRoom: async (roomId, userId) => {
-  const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/invites`, {
-    userId,
-    invitedUserId: userId,
-  });
-  return data;
-},
-
-getRoomInvites: async () => {
-  const { data } = await api.get('/rooms/invites');
-  return data;
-},
-
-
-
-acceptRoomInvite: async (roomId) => {
-  const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/invites/accept`);
-  return data;
-},
-
-declineRoomInvite: async (roomId) => {
-  const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/invites/reject`);
-  return data;
-},
-
-createRoom: async (payload) => {
-  const { data } = await api.post('/rooms', payload);
-  return data;
-},
-
-  async joinRoom(roomId, joinCode = '') {
-    const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/join`, {
-      joinCode,
+    const { data } = await api.post('/users/find', {
+      action: 'search',
+      q,
     });
     return data;
   },
 
+  inviteUserToRoom: async (roomId, userId) => {
+    const { data } = await api.post(`/rooms/${encodePathSegment(roomId)}/invites`, {
+      userId,
+      invitedUserId: userId,
+    });
+    return parseApiBody(data);
+  },
+
+  uploadRoomImage: async (roomId, payload) => {
+    const encodedRoomId = encodePathSegment(roomId);
+
+    if (!encodedRoomId) {
+      throw new Error('Room ID is required to upload room image.');
+    }
+
+    const { data } = await api.post(`/rooms/${encodedRoomId}/image`, payload);
+    return parseApiBody(data);
+  },
+
+  getRoomInvites: async () => {
+    const { data } = await api.get('/rooms/invites');
+    return data;
+  },
+
+  acceptRoomInvite: async (roomId) => {
+    const { data } = await api.post(`/rooms/${encodePathSegment(roomId)}/invites/accept`);
+    return parseApiBody(data);
+  },
+
+  declineRoomInvite: async (roomId) => {
+    const { data } = await api.post(`/rooms/${encodePathSegment(roomId)}/invites/reject`);
+    return parseApiBody(data);
+  },
+
+  createRoom: async (payload) => {
+    const { data } = await api.post('/rooms', payload);
+    return parseApiBody(data);
+  },
+
+  async joinRoom(roomId, joinCode = '') {
+    const { data } = await api.post(`/rooms/${encodePathSegment(roomId)}/join`, {
+      joinCode,
+    });
+    return parseApiBody(data);
+  },
+
   async getRoomMessages(roomId, params = {}) {
     const { data } = await api.get(
-      `/rooms/${encodeURIComponent(roomId)}/messages`,
+      `/rooms/${encodePathSegment(roomId)}/messages`,
       { params }
     );
     return data;
@@ -218,60 +322,60 @@ createRoom: async (payload) => {
 
   async getRoomMembers(roomId) {
     const { data } = await api.get(
-      `/rooms/${encodeURIComponent(roomId)}/members`
+      `/rooms/${encodePathSegment(roomId)}/members`
     );
     return data.members || data || [];
   },
 
   async leaveRoom(roomId) {
     const { data } = await api.post(
-      `/rooms/${encodeURIComponent(roomId)}/leave`
+      `/rooms/${encodePathSegment(roomId)}/leave`
     );
-    return data;
+    return parseApiBody(data);
   },
 
   async requestJoinRoom(roomId) {
-  const { data } = await api.post(`/rooms/${encodeURIComponent(roomId)}/request`);
-  return data;
-},
+    const { data } = await api.post(`/rooms/${encodePathSegment(roomId)}/request`);
+    return parseApiBody(data);
+  },
 
-async getRoomJoinRequests(roomId) {
-  const { data } = await api.get(`/rooms/${encodeURIComponent(roomId)}/requests`);
-  return data.requests || [];
-},
+  async getRoomJoinRequests(roomId) {
+    const { data } = await api.get(`/rooms/${encodePathSegment(roomId)}/requests`);
+    return data.requests || [];
+  },
 
-async getHiddenRooms() {
-  const { data } = await api.get('/rooms/hidden');
-  return data.rooms || [];
-},
+  async getHiddenRooms() {
+    const { data } = await api.get('/rooms/hidden');
+    return data.rooms || [];
+  },
 
-async unhideRoom(roomId) {
-  const { data } = await api.post(
-    `/rooms/${encodeURIComponent(roomId)}/unhide`
-  );
-  return data;
-},
+  async unhideRoom(roomId) {
+    const { data } = await api.post(
+      `/rooms/${encodePathSegment(roomId)}/unhide`
+    );
+    return parseApiBody(data);
+  },
 
-async approveRoomJoinRequest(roomId, userId) {
-  const { data } = await api.post(
-    `/rooms/${encodeURIComponent(roomId)}/requests/approve`,
-    { userId }
-  );
-  return data;
-},
+  async approveRoomJoinRequest(roomId, userId) {
+    const { data } = await api.post(
+      `/rooms/${encodePathSegment(roomId)}/requests/approve`,
+      { userId }
+    );
+    return parseApiBody(data);
+  },
 
   async hideRoom(roomId) {
     const { data } = await api.post(
-      `/rooms/${encodeURIComponent(roomId)}/hide`
+      `/rooms/${encodePathSegment(roomId)}/hide`
     );
-    return data;
+    return parseApiBody(data);
   },
 
   async deleteRoom(roomId) {
     const { data } = await api.delete(
-      `/rooms/${encodeURIComponent(roomId)}`
+      `/rooms/${encodePathSegment(roomId)}`
     );
-    return data;
+    return parseApiBody(data);
   },
 };
 
@@ -281,7 +385,7 @@ export const creatorApi = {
       params: { userId },
     });
 
-    return data.profile || data;
+    return normalizeUserProfile(parseApiBody(data)?.profile || parseApiBody(data));
   },
 
 async getFollowRequests() {
@@ -908,7 +1012,8 @@ async getSingleReel(reelId) {
 export const userApi = {
   getMe: async () => {
     const res = await api.get('/users/profile');
-    return res.data.profile || res.data;
+    const parsed = parseApiBody(res.data);
+    return normalizeUserProfile(parsed.profile || parsed);
   },
 
   async followUser(followingId) {
@@ -939,7 +1044,7 @@ export const chatApi = {
       params: { query },
     });
 
-    return normalizeList(data);
+    return normalizeList(data).map(normalizeUserProfile);
   },
 
   async deleteChat(chatId) {
@@ -992,18 +1097,74 @@ async reportUser(payload) {
 },
 
   async startChat(user) {
+    const normalizedUser = normalizeUserProfile(user);
     const { data } = await api.post(endpoints.chat.start, {
-      receiverId: user.userId || user.id || user.sub,
-      receiverEmail: user.email,
-      receiverUsername: user.username,
+      receiverId: normalizedUser.userId || normalizedUser.id || normalizedUser.sub,
+      receiverEmail: normalizedUser.email,
+      receiverUsername: normalizedUser.username,
+      receiverName: normalizedUser.name,
+      receiverAvatarUrl: normalizedUser.avatarUrl,
+      receiverPhotoUrl: normalizedUser.photoUrl,
+      receiverProfilePic: normalizedUser.profilePic,
+      receiverProfilePictureUrl: normalizedUser.profilePictureUrl,
+      avatarUpdatedAt: normalizedUser.avatarUpdatedAt,
+      profileUpdatedAt: normalizedUser.profileUpdatedAt,
     });
 
-    return data;
+    const parsed = parseApiBody(data);
+    return normalizeChatProfile({
+      ...parsed,
+      receiverAvatarUrl:
+        parsed.receiverAvatarUrl ||
+        parsed.receiverPhotoUrl ||
+        parsed.receiverProfilePic ||
+        parsed.receiverProfilePictureUrl ||
+        normalizedUser.avatarUrl ||
+        '',
+      receiverPhotoUrl:
+        parsed.receiverPhotoUrl ||
+        parsed.receiverAvatarUrl ||
+        parsed.receiverProfilePic ||
+        parsed.receiverProfilePictureUrl ||
+        normalizedUser.avatarUrl ||
+        '',
+      receiverProfilePic:
+        parsed.receiverProfilePic ||
+        parsed.receiverAvatarUrl ||
+        parsed.receiverPhotoUrl ||
+        parsed.receiverProfilePictureUrl ||
+        normalizedUser.avatarUrl ||
+        '',
+      receiverProfilePictureUrl:
+        parsed.receiverProfilePictureUrl ||
+        parsed.receiverAvatarUrl ||
+        parsed.receiverPhotoUrl ||
+        parsed.receiverProfilePic ||
+        normalizedUser.avatarUrl ||
+        '',
+    });
   },
 
   async getChats() {
     const { data } = await api.get(endpoints.chat.list);
-    return normalizeList(data);
+    const chats = normalizeList(data).map(normalizeChatProfile);
+
+    if (import.meta.env.DEV) {
+      console.table(
+        chats.map((chat) => ({
+          chatId: chat.chatId,
+          receiverId: chat.receiverId,
+          receiverName: chat.receiverName,
+          receiverAvatarUrl: chat.receiverAvatarUrl,
+          receiverPhotoUrl: chat.receiverPhotoUrl,
+          receiverProfilePic: chat.receiverProfilePic,
+          genericPhotoUrl: chat.photoUrl || '',
+          genericAvatarUrl: chat.avatarUrl || '',
+        }))
+      );
+    }
+
+    return chats;
   },
 
   async getMessages(chatId) {

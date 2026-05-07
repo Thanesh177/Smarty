@@ -1,12 +1,36 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
+
 import './TopicRoomsPage.css';
+
+const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
+
+function getStoredRoomImages() {
+  try {
+    return JSON.parse(localStorage.getItem(ROOM_IMAGE_CACHE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function persistStoredRoomImage(roomId, imageUrl) {
+  if (!roomId || !imageUrl) return;
+
+  try {
+    const current = getStoredRoomImages();
+    current[roomId] = imageUrl;
+    localStorage.setItem(ROOM_IMAGE_CACHE_KEY, JSON.stringify(current));
+  } catch {
+    // Ignore storage errors in private mode or low-storage environments.
+  }
+}
 
 export default function TopicRoomsPage() {
   const { user } = useAuth();
   const userId = user?.id || user?.userId || user?.sub;
+  const [roomImageCache, setRoomImageCache] = useState(() => getStoredRoomImages());
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const activeRoomRef = useRef(null);
   const messagesRef = useRef(null);
@@ -34,6 +58,7 @@ export default function TopicRoomsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRoomMenu, setShowRoomMenu] = useState(false);
   const [openRoomActionMenuId, setOpenRoomActionMenuId] = useState('');
+  const [uploadingRoomImageId, setUploadingRoomImageId] = useState('');
 
   const roomMenuRef = useRef(null);
   const roomActionMenuRef = useRef(null);
@@ -50,6 +75,42 @@ export default function TopicRoomsPage() {
   // Prevent duplicate room creation submissions
   const [creatingRoom, setCreatingRoom] = useState(false);
 
+  const getRoomImageUrl = useCallback((room) => {
+    if (!room) return '';
+
+    return (
+      room.imageUrl ||
+      room.roomImageUrl ||
+      room.avatarUrl ||
+      room.coverImageUrl ||
+      room.coverUrl ||
+      roomImageCache[room.roomId] ||
+      ''
+    );
+  }, [roomImageCache]);
+
+  const sortedVisibleRooms = useMemo(() => rooms, [rooms]);
+
+  const renderedMessages = useMemo(() => {
+    if (!Array.isArray(messages) || messages.length === 0) return [];
+
+    const seen = new Set();
+    const unique = [];
+
+    for (const msg of messages) {
+      const key =
+        msg.messageId ||
+        msg.clientId ||
+        `${msg.createdAt || 'msg'}-${msg.senderId || 'user'}-${msg.text || msg.message || ''}`;
+
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      unique.push(msg);
+    }
+
+    return unique.length > 180 ? unique.slice(-180) : unique;
+  }, [messages]);
   useEffect(() => {
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
@@ -82,15 +143,19 @@ export default function TopicRoomsPage() {
   };
 }, []);
 
-const scrollMessagesToBottom = () => {
+const scrollMessagesToBottom = useCallback(() => {
   const el = messagesRef.current;
   if (!el) return;
-  el.scrollTop = el.scrollHeight;
-};
+
+  requestAnimationFrame(() => {
+    el.scrollTop = el.scrollHeight;
+  });
+}, []);
 
 useEffect(() => {
+  if (!activeRoom) return;
   scrollMessagesToBottom();
-}, [messages]);
+}, [activeRoom, renderedMessages.length, scrollMessagesToBottom]);
 
 useEffect(() => {
   if (!activeRoom) return undefined;
@@ -106,7 +171,7 @@ useEffect(() => {
     window.visualViewport?.removeEventListener('resize', handleViewportResize);
     window.removeEventListener('resize', handleViewportResize);
   };
-}, [activeRoom]);
+}, [activeRoom, scrollMessagesToBottom]);
 
   async function loadRooms(searchValue = roomSearch) {
     try {
@@ -119,7 +184,19 @@ useEffect(() => {
 
       if (!mountedRef.current) return;
 
-      const allRooms = Array.isArray(data?.rooms) ? data.rooms : Array.isArray(data) ? data : [];
+      const cachedRoomImages = getStoredRoomImages();
+      setRoomImageCache(cachedRoomImages);
+      const allRoomsRaw = Array.isArray(data?.rooms) ? data.rooms : Array.isArray(data) ? data : [];
+      const allRooms = allRoomsRaw.map((room) => {
+        const cachedImageUrl = cachedRoomImages[room.roomId];
+        const imageUrl = room.imageUrl || room.roomImageUrl || room.avatarUrl || room.coverImageUrl || room.coverUrl || cachedImageUrl || '';
+
+        return {
+          ...room,
+          imageUrl,
+          roomImageUrl: room.roomImageUrl || imageUrl,
+        };
+      });
       const normalizedSearch = searchValue.trim().toLowerCase();
 
       const visibleRooms = allRooms.filter((room) => {
@@ -183,7 +260,7 @@ useEffect(() => {
 
           if (index === -1) {
             const alreadyExists = prev.some((m) => m.messageId === msg.messageId);
-            return alreadyExists ? prev : [...prev, msg];
+            return alreadyExists ? prev : [...prev.slice(-179), msg];
           }
 
           const copy = [...prev];
@@ -219,7 +296,7 @@ if (!key) return prev;
 if (prev.some((m) => (m.messageId || m.clientId) === key)) {
   return prev;
 }
-        return [...prev, msg];
+        return [...prev.slice(-179), msg];
       });
     });
 
@@ -314,7 +391,7 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
             : Array.isArray(messageData)
               ? messageData
               : [];
-          setMessages(loadedMessages);
+          setMessages(loadedMessages.slice(-180));
         }
       } catch (messageErr) {
         console.error('Could not load new room messages:', messageErr);
@@ -431,18 +508,148 @@ async function rejectRoomInvite(invite) {
     await roomApi.declineRoomInvite(roomId);
     if (!mountedRef.current) return;
 
-setRoomInvites((prev) => {
-  const updated = prev.filter((item) => (item.roomId || item.id) !== roomId);
-  if (updated.length === 0) setShowRoomInvites(false);
-  return updated;
-});
+    setRoomInvites((prev) => {
+      const updated = prev.filter((item) => (item.roomId || item.id) !== roomId);
+      if (updated.length === 0) setShowRoomInvites(false);
+      return updated;
+    });
 
-setStatus('Room invite rejected');
+    setStatus('Room invite rejected');
   } catch (err) {
     console.error(err);
     if (mountedRef.current) setStatus(err?.response?.data?.error || 'Could not reject invite');
   } finally {
     if (mountedRef.current) setProcessingInviteId('');
+  }
+}
+
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result || '');
+      resolve(result.includes(',') ? result.split(',')[1] : result);
+    };
+
+    reader.onerror = () => reject(reader.error || new Error('Could not read image'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// Optimize and prepare room image for upload
+async function prepareRoomImageFile(file) {
+  if (!file) throw new Error('No image selected');
+
+  if (!file.type?.startsWith('image/')) {
+    throw new Error('Please choose an image file');
+  }
+
+  if (file.size <= 1024 * 1024 || typeof createImageBitmap !== 'function') {
+    return {
+      fileName: file.name || 'room-image.jpg',
+      contentType: file.type || 'image/jpeg',
+      imageBase64: await readFileAsBase64(file),
+    };
+  }
+
+  const bitmap = await createImageBitmap(file);
+  const maxDimension = 1280;
+  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) {
+    bitmap.close?.();
+    return {
+      fileName: file.name || 'room-image.jpg',
+      contentType: file.type || 'image/jpeg',
+      imageBase64: await readFileAsBase64(file),
+    };
+  }
+
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+
+  const blob = await new Promise((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', 0.78);
+  });
+
+  if (!blob) throw new Error('Could not optimize image');
+
+  return {
+    fileName: `${String(file.name || 'room-image').replace(/\.[^.]+$/, '')}.jpg`,
+    contentType: 'image/jpeg',
+    imageBase64: await readFileAsBase64(blob),
+  };
+}
+
+async function uploadRoomImage(room, file) {
+  if (!room?.roomId || !file || uploadingRoomImageId) return;
+
+  if (!file.type?.startsWith('image/')) {
+    setStatus('Please choose an image file');
+    return;
+  }
+
+  if (file.size > 8 * 1024 * 1024) {
+    setStatus('Image must be smaller than 8 MB');
+    return;
+  }
+
+  try {
+    setStatus('');
+    setUploadingRoomImageId(room.roomId);
+
+    const optimizedImage = await prepareRoomImageFile(file);
+    const data = await roomApi.uploadRoomImage(room.roomId, optimizedImage);
+
+    const imageUrl = data?.imageUrl || data?.room?.imageUrl;
+
+    if (!imageUrl) {
+      setStatus('Image uploaded, but no image URL was returned');
+      await loadRooms();
+      return;
+    }
+
+    persistStoredRoomImage(room.roomId, imageUrl);
+    setRoomImageCache((prev) => ({
+      ...prev,
+      [room.roomId]: imageUrl,
+    }));
+
+    setRooms((prev) =>
+      prev.map((item) =>
+        item.roomId === room.roomId
+          ? { ...item, imageUrl, roomImageUrl: imageUrl }
+          : item
+      )
+    );
+
+    if (activeRoomRef.current?.roomId === room.roomId) {
+      const updatedRoom = {
+        ...activeRoomRef.current,
+        imageUrl,
+        roomImageUrl: imageUrl,
+      };
+
+      activeRoomRef.current = updatedRoom;
+      setActiveRoom(updatedRoom);
+    }
+
+    setOpenRoomActionMenuId('');
+    setStatus('Room image updated');
+  } catch (err) {
+    console.error(err);
+    setStatus(err?.response?.data?.error || 'Could not upload room image');
+  } finally {
+    if (mountedRef.current) setUploadingRoomImageId('');
   }
 }
 
@@ -473,7 +680,7 @@ setStatus('Room invite rejected');
           ? data
           : [];
 
-      setMessages(loadedMessages);
+      setMessages(loadedMessages.slice(-180));
     } catch (err) {
       console.error(err);
       if (mountedRef.current) {
@@ -700,10 +907,10 @@ function sendMessage(e) {
   setText('');
   setMessages((prev) => {
     if (prev.some((msg) => (msg.messageId || msg.clientId) === clientId)) return prev;
-    return [...prev, tempMessage];
+    return [...prev.slice(-179), tempMessage];
   });
 
-  window.setTimeout(scrollMessagesToBottom, 0);
+  scrollMessagesToBottom();
 
   try {
     sendRoomMessage({
@@ -816,35 +1023,65 @@ function sendMessage(e) {
             <p className="empty">Loading rooms...</p>
           ) : rooms.length === 0 ? (
             <p className="empty">No rooms found</p>
-          ) : rooms.map((room) => {
+          ) : sortedVisibleRooms.map((room) => {
             const isOwner = room.ownerId === userId || room.createdBy === userId;
             const isPrivateCustom = room.type === 'custom' && room.privacy === 'private';
             const canLeave = isPrivateCustom && !isOwner;
             const canDelete = room.type === 'custom' && isOwner;
             const canViewRequests = isPrivateCustom && isOwner;
             const unreadCount = roomUnreadCounts[room.roomId] || room.unreadCount || 0;
+            const roomImageUrl = getRoomImageUrl(room);
 
             return (
               <div
                 key={room.roomId}
-                className={`room-item ${activeRoom?.roomId === room.roomId ? 'active' : ''}`}
+                className={`room-item ${roomImageUrl ? 'room-has-image' : ''} ${activeRoom?.roomId === room.roomId ? 'active' : ''}`}
+                style={roomImageUrl ? { '--room-bg-image': `url(${roomImageUrl})` } : undefined}
                 onClick={() => openRoom(room)}
               >
                 <div className="room-info">
-                  <div className="room-title-row">
-                    <div className="room-name-badge-row">
-                      <strong>{room.name}</strong>
-                      {(room.ownerId === userId || room.createdBy === userId) && (
-                        <span className="room-owner-badge">You</span>
+                  <div className="room-item-main">
+                    <div className="room-image-wrap">
+                      {roomImageUrl ? (
+                        <img
+                          src={roomImageUrl}
+                          alt=""
+                          width="44"
+                          height="44"
+                          loading="lazy"
+                          decoding="async"
+                          referrerPolicy="no-referrer"
+                          onError={() => {
+                            setRoomImageCache((prev) => {
+                              if (!prev[room.roomId]) return prev;
+                              const next = { ...prev };
+                              delete next[room.roomId];
+                              return next;
+                            });
+                          }}
+                        />
+                      ) : (
+                        <span>{(room.name || 'R').trim().slice(0, 1).toUpperCase()}</span>
                       )}
                     </div>
-                    {unreadCount > 0 && (
-                      <span className="room-unread-badge">
-                        {unreadCount > 99 ? '99+' : unreadCount}
-                      </span>
-                    )}
+
+                    <div className="room-text-block">
+                      <div className="room-title-row">
+                        <div className="room-name-badge-row">
+                          <strong>{room.name}</strong>
+                          {(room.ownerId === userId || room.createdBy === userId) && (
+                            <span className="room-owner-badge">You</span>
+                          )}
+                        </div>
+                        {unreadCount > 0 && (
+                          <span className="room-unread-badge">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </span>
+                        )}
+                      </div>
+                      <span>{room.privacy === 'private' ? ' Private' : ' Public'}</span>
+                    </div>
                   </div>
-                  <span>{room.privacy === 'private' ? ' Private' : ' Public'}</span>
                 </div>
 
                 <div
@@ -877,6 +1114,19 @@ function sendMessage(e) {
                       onClick={(e) => e.stopPropagation()}
                       onPointerDown={(e) => e.stopPropagation()}
                     >
+                      <label className="room-image-upload-option">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          disabled={uploadingRoomImageId === room.roomId}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            event.target.value = '';
+                            if (file) uploadRoomImage(room, file);
+                          }}
+                        />
+                        {uploadingRoomImageId === room.roomId ? 'Uploading...' : 'Change Image'}
+                      </label>
                       {room.privacy === 'private' && (
                         <button
                           type="button"
@@ -973,35 +1223,46 @@ function sendMessage(e) {
     ←
   </button>
 
-  <span>{activeRoom.name}</span>
+  <span className="active-room-title-wrap">
+    {getRoomImageUrl(activeRoom) && (
+      <img
+        className="active-room-image"
+        src={getRoomImageUrl(activeRoom)}
+        alt=""
+        width="36"
+        height="36"
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+      />
+    )}
+    <span>{activeRoom.name}</span>
+  </span>
 </div>
 <div className="messages" ref={messagesRef}>
-                {messagesLoading ? (
-  <p className="empty">Loading messages...</p>
-) : messages.length === 0 ? (
-  <p className="empty">No messages yet</p>
-) : (
-  Array.from(
-    new Map(
-      messages.map((msg, index) => [msg.messageId || msg.clientId || `${msg.createdAt || 'msg'}-${index}`, msg])
-    ).values()
-  ).map((msg, index) => (
-    <div
-      key={msg.messageId || msg.clientId || `${msg.createdAt || 'msg'}-${msg.senderId || 'user'}-${index}`}
-      className={msg.senderId === userId ? 'msg mine' : 'msg'}
-    >
-      <b>{msg.senderName || msg.name || 'User'}</b>
-      <p>
-        {msg.text || msg.message || ''}
-        {msg.pending && <span className="msg-state"> Sending...</span>}
-        {msg.failed && <span className="msg-state failed"> Failed</span>}
-      </p>
-    </div>
-  ))
-)}
+              {messagesLoading ? (
+                <p className="empty">Loading messages...</p>
+              ) : renderedMessages.length === 0 ? (
+                <p className="empty">No messages yet</p>
+              ) : (
+                renderedMessages.map((msg, index) => (
+                  <div
+                    key={msg.messageId || msg.clientId || `${msg.createdAt || 'msg'}-${index}`}
+                    className={msg.senderId === userId ? 'msg mine' : 'msg'}
+                  >
+                    <b>{msg.senderName || msg.name || 'User'}</b>
+                    <p>
+                      {msg.text || msg.message || ''}
+                      {msg.pending && <span className="msg-state"> Sending...</span>}
+                      {msg.failed && <span className="msg-state failed"> Failed</span>}
+                    </p>
+                  </div>
+                ))
+              )}
             </div>
 
             <form className="input" onSubmit={sendMessage}>
+
 
 <input
   placeholder="Type message..."
@@ -1010,13 +1271,20 @@ function sendMessage(e) {
   onChange={(e) => {
     setText(e.target.value);
   }}
-  onFocus={() => {
-    window.setTimeout(scrollMessagesToBottom, 120);
-  }}
+  onFocus={scrollMessagesToBottom}
 />
-
               <button type="submit" disabled={!text.trim() || !activeRoom}>Send</button>
             </form>
+
+            {messages.length > 180 && (
+              <button
+                type="button"
+                className="room-trim-messages-btn"
+                onClick={() => setMessages((prev) => prev.slice(-120))}
+              >
+                Reduce loaded messages
+              </button>
+            )}
           </>
         )}
       </section>

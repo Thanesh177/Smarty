@@ -214,40 +214,19 @@
   border-radius: 38px;
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 10% 0%, rgba(56, 189, 248, 0.24), transparent 32%),
-    radial-gradient(circle at 88% 16%, rgba(139, 92, 246, 0.18), transparent 34%),
-    radial-gradient(circle at 48% 100%, rgba(34, 197, 94, 0.12), transparent 34%),
-    linear-gradient(145deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.8));
+  background: rgba(2, 6, 23, 0.42);
   border: 1px solid rgba(255, 255, 255, 0.11);
-  box-shadow:
-    0 30px 90px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .profile-left::before {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  background: linear-gradient(120deg, transparent, rgba(56, 189, 248, 0.2), transparent);
-  transform: translateX(-100%);
-  animation: profileHeroShimmer 5.5s ease-in-out infinite;
-  pointer-events: none;
+  content: none;
 }
 
 .profile-left::after {
-  content: "";
-  position: absolute;
-  width: 250px;
-  height: 250px;
-  right: -90px;
-  bottom: -105px;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(34, 197, 94, 0.16), transparent 68%);
-  animation: profileSoftFloat 5s ease-in-out infinite;
-  pointer-events: none;
+  content: none;
 }
 
 .profile-left > * {
@@ -384,6 +363,7 @@
   justify-content: center;
   gap: 8px;
 }
+
 
 .profile-edit-btn::after,
 .profile-dashboard-btn::after,
@@ -682,27 +662,16 @@
   padding: 22px;
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.13), transparent 34%),
-    linear-gradient(145deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.62));
+  background: rgba(2, 6, 23, 0.42);
   border: 1px solid rgba(255, 255, 255, 0.095);
-  box-shadow:
-    0 28px 70px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   transition: transform 0.24s ease, border-color 0.24s ease, background 0.24s ease, box-shadow 0.24s ease;
 }
 
 .stat-card::before {
-  content: '';
-  position: absolute;
-  width: 108px;
-  height: 108px;
-  right: -34px;
-  top: -34px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.055);
+  content: none;
 }
 
 .stat-card::after {
@@ -810,13 +779,11 @@
   padding: 28px;
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.1), transparent 36%),
-    rgba(15, 23, 42, 0.72);
+  background: rgba(2, 6, 23, 0.42);
   border: 1px solid rgba(255, 255, 255, 0.085);
-  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
 }
 
@@ -884,12 +851,8 @@
   text-align: left;
   cursor: pointer;
   color: white;
-  background:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.12), transparent 34%),
-    linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(7, 17, 31, 0.98));
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 30px 85px rgba(0, 0, 0, 0.28);
+  background: rgba(2, 6, 23, 0.42);
+  box-shadow: none;
   transition: transform 0.24s ease, box-shadow 0.24s ease, filter 0.24s ease;
 }
 
@@ -1085,34 +1048,6 @@
    ANIMATIONS
 ========================= */
 
-@keyframes profileHeroShimmer {
-  0% {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  35% {
-    opacity: 1;
-  }
-  70% {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  100% {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-}
-
-@keyframes profileSoftFloat {
-  0%, 100% {
-    transform: translateY(0) scale(1);
-    opacity: 0.72;
-  }
-  50% {
-    transform: translateY(-18px) scale(1.08);
-    opacity: 1;
-  }
-}
 
 /* =========================
    MOBILE

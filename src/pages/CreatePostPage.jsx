@@ -13,22 +13,32 @@ const STAGES = [
 ];
 
 const compressImage = async (file) => {
-  if (!file || !file.type.startsWith('image/')) return file;
+  const type = String(file?.type || '').toLowerCase();
+
+  if (!file || !type.startsWith('image/')) return file;
+  if (type === 'image/gif' || type === 'image/svg+xml') return file;
+  if (file.size <= 350 * 1024) return file;
 
   const options = {
     maxSizeMB: 0.35,
-    maxWidthOrHeight: 800,
+    maxWidthOrHeight: 1200,
     useWebWorker: true,
     fileType: 'image/webp',
     initialQuality: 0.75,
+    alwaysKeepResolution: false,
   };
 
   const compressedBlob = await imageCompression(file, options);
 
+  if (!compressedBlob || compressedBlob.size >= file.size) return file;
+
   return new File(
     [compressedBlob],
     file.name.replace(/\.[^/.]+$/, '.webp'),
-    { type: 'image/webp' }
+    {
+      type: 'image/webp',
+      lastModified: Date.now(),
+    }
   );
 };
 
@@ -454,6 +464,8 @@ export default function CreatePostPage() {
                       className="image-preview"
                       loading="lazy"
                       decoding="async"
+                      fetchPriority="low"
+                      sizes="(max-width: 768px) 92vw, 640px"
                     />
                   </>
                 ) : (

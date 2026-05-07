@@ -385,11 +385,18 @@ export default function FeedPage() {
     error,
     nextCursor,
     loadMore,
+    refetch,
+    refresh,
+    reload,
     likePost,
     savePost,
   } = useFeed();
 
   const loadMoreRef = useRef(null);
+  const feedRef = useRef(null);
+  const pullStartYRef = useRef(0);
+  const pullDistanceRef = useRef(0);
+  const pullRefreshTriggeredRef = useRef(false);
   const [translations, setTranslations] = useState({});
   const [translating, setTranslating] = useState({});
   const [showTranslated, setShowTranslated] = useState({});
@@ -400,6 +407,8 @@ export default function FeedPage() {
   const [savedPostIds, setSavedPostIds] = useState({});
   const [creatorProfiles, setCreatorProfiles] = useState({});
   const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER_LIMIT);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   useEffect(() => {
     mountedRef.current = true;
 
@@ -687,6 +696,64 @@ export default function FeedPage() {
     }, duration);
   }, []);
 
+  const handleRefreshFeed = useCallback(async () => {
+    if (isRefreshing) return;
+
+    setIsRefreshing(true);
+    setRenderLimit(INITIAL_RENDER_LIMIT);
+
+    try {
+      const refreshFeed = refetch || refresh || reload;
+
+      if (typeof refreshFeed === 'function') {
+        await refreshFeed();
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error('Feed refresh failed:', err);
+      showToast('Could not refresh feed');
+    } finally {
+      if (mountedRef.current) {
+        setIsRefreshing(false);
+      }
+    }
+  }, [isRefreshing, refetch, refresh, reload, showToast]);
+
+  const handleFeedTouchStart = useCallback((event) => {
+    if (!feedRef.current || feedRef.current.scrollTop > 0 || isRefreshing) return;
+
+    pullStartYRef.current = event.touches[0]?.clientY || 0;
+    pullDistanceRef.current = 0;
+    pullRefreshTriggeredRef.current = false;
+  }, [isRefreshing]);
+
+  const handleFeedTouchMove = useCallback((event) => {
+    if (!feedRef.current || isRefreshing) return;
+
+    const currentY = event.touches[0]?.clientY || 0;
+    const distance = Math.max(0, currentY - pullStartYRef.current);
+
+    if (feedRef.current.scrollTop > 0 || distance <= 0) return;
+
+    const easedDistance = Math.min(86, distance * 0.45);
+    pullDistanceRef.current = easedDistance;
+    setPullDistance(easedDistance);
+  }, [isRefreshing]);
+
+  const handleFeedTouchEnd = useCallback(() => {
+    const shouldRefresh = pullDistanceRef.current >= 58;
+
+    pullStartYRef.current = 0;
+    pullDistanceRef.current = 0;
+    setPullDistance(0);
+
+    if (shouldRefresh && !pullRefreshTriggeredRef.current && !isRefreshing) {
+      pullRefreshTriggeredRef.current = true;
+      handleRefreshFeed();
+    }
+  }, [handleRefreshFeed, isRefreshing]);
+
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) {
@@ -723,7 +790,14 @@ export default function FeedPage() {
     const postId = getPostId(post);
     if (!postId || explaining[postId]) return;
 
-    if (simpleExplanations[postId]) return;
+    if (simpleExplanations[postId]) {
+      setSimpleExplanations((prev) => {
+        const next = { ...prev };
+        delete next[postId];
+        return next;
+      });
+      return;
+    }
 
     try {
       setExplaining((prev) => ({ ...prev, [postId]: true }));
@@ -906,7 +980,14 @@ export default function FeedPage() {
   );
 
   return (
-    <main className="snap-feed-page">
+    <main
+      ref={feedRef}
+      className="snap-feed-page"
+      onTouchStart={handleFeedTouchStart}
+      onTouchMove={handleFeedTouchMove}
+      onTouchEnd={handleFeedTouchEnd}
+      onTouchCancel={handleFeedTouchEnd}
+    >
       <button
         type="button"
         className="floating-create-btn"
@@ -916,6 +997,14 @@ export default function FeedPage() {
       </button>
 
       {toast && <div className="success-toast">{toast}</div>}
+
+      <div
+        className={isRefreshing ? 'pull-refresh-indicator refreshing' : 'pull-refresh-indicator'}
+        style={{ transform: `translate(-50%, ${pullDistance || (isRefreshing ? 48 : 0)}px)` }}
+        aria-live="polite"
+      >
+        <span className="pull-refresh-spinner" />
+      </div>
 
       <aside className="topic-rail">
         {renderedTopics}

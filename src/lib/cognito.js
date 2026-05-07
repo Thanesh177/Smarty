@@ -98,12 +98,6 @@ if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID || !COGNITO_USER_POOL_ID) {
   console.warn('Missing Cognito environment values. Check VITE_COGNITO_DOMAIN, VITE_COGNITO_CLIENT_ID, and VITE_COGNITO_USER_POOL_ID.');
 }
 
-if (import.meta.env.DEV) {
-  console.log('COGNITO REDIRECT IN:', redirectSignIn);
-  console.log('COGNITO REDIRECT OUT:', redirectSignOut);
-  console.log('ANDROID COGNITO MODE:', isAndroidApp());
-}
-
 Amplify.configure({
   Auth: {
     Cognito: {
