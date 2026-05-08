@@ -18,13 +18,21 @@ const normalizeTopic = (value) =>
     .trim()
     .replace(/\s+/g, '-');
 
+
 const getPostId = (post) => post?.reelId || post?.id || '';
+
+const getPostTime = (post) => Number(post?.createdAtMs || post?.updatedAtMs || post?.createdAt || post?.updatedAt || post?.timestamp || 0);
+
+const normalizeCreatorProfile = (value) => value?.profile || value?.user || value || null;
 
 const INITIAL_RENDER_LIMIT = 3;
 const RENDER_BATCH_SIZE = 3;
 const FAST_IMAGE_LIMIT = 4;
 const IMAGE_PRELOAD_MARGIN = '900px';
 const PULL_REFRESH_VIEWPORT_RATIO = 0.4;
+const FEED_SCROLL_STORAGE_KEY = 'smarty.feed.scrollY';
+const FEED_RENDER_LIMIT_STORAGE_KEY = 'smarty.feed.renderLimit';
+const FEED_POST_ID_STORAGE_KEY = 'smarty.feed.postId';
 
 const getPostCreatorId = (post) => {
   const authorId = post?.authorId || post?.authorID || post?.author_id || '';
@@ -106,6 +114,21 @@ const getDisplayUsername = (post, creatorProfile = null) => {
   return pickName(databasePostNames) || pickName(profileNames) || pickName(nestedPostNames) || 'user';
 };
 
+const getCachedExplanation = (post) => {
+  const value =
+    post?.aiExplanation ||
+    post?.simpleExplanation ||
+    post?.explanation ||
+    post?.explainText ||
+    post?.simplifiedText ||
+    '';
+
+  const text = String(value || '').trim();
+  return text && text.toLowerCase() !== 'null' && text.toLowerCase() !== 'undefined'
+    ? text
+    : '';
+};
+
 const TopicPill = memo(function TopicPill({ item, active, onSelect }) {
   return (
     <button
@@ -175,7 +198,6 @@ const FeedPostCard = memo(function FeedPostCard({
   explanation,
   onTopicClick,
   onSave,
-  onAiDetails,
   onOpenPost,
   onComments,
   onExplain,
@@ -422,6 +444,7 @@ export default function FeedPage() {
   }, []);
 
 
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const targetPostId = params.get('postId');
@@ -473,12 +496,7 @@ export default function FeedPage() {
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => {
-      const timeA = Number(a.createdAt || a.updatedAt || a.timestamp || 0);
-      const timeB = Number(b.createdAt || b.updatedAt || b.timestamp || 0);
-
-      return timeB - timeA;
-    });
+    return Array.from(map.values()).sort((a, b) => getPostTime(b) - getPostTime(a));
   }, [posts]);
 
 
@@ -575,12 +593,74 @@ export default function FeedPage() {
     [filteredPosts, renderLimit]
   );
 
+  useEffect(() => {
+    const savedPostId = sessionStorage.getItem(FEED_POST_ID_STORAGE_KEY) || '';
+    const savedRenderLimit = Number(sessionStorage.getItem(FEED_RENDER_LIMIT_STORAGE_KEY) || 0);
+
+    if (!savedPostId || !filteredPosts.length) return;
+
+    const savedPostIndex = filteredPosts.findIndex((post) => getPostId(post) === savedPostId);
+    const neededRenderLimit = savedPostIndex >= 0
+      ? savedPostIndex + 1
+      : savedRenderLimit;
+
+    if (neededRenderLimit > renderLimit) {
+      setRenderLimit(Math.min(neededRenderLimit + 1, filteredPosts.length));
+    }
+  }, [filteredPosts, renderLimit]);
+
+  useEffect(() => {
+    const savedScrollY = Number(sessionStorage.getItem(FEED_SCROLL_STORAGE_KEY) || 0);
+    const savedPostId = sessionStorage.getItem(FEED_POST_ID_STORAGE_KEY) || '';
+
+    if (
+      !Number.isFinite(savedScrollY) ||
+      savedScrollY <= 0 ||
+      !feedRef.current ||
+      renderedFeedPosts.length === 0
+    ) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      const savedPostElement = savedPostId
+        ? document.getElementById(`post-${savedPostId}`)
+        : null;
+
+      if (savedPostElement) {
+        savedPostElement.scrollIntoView({
+          block: 'start',
+          behavior: 'auto',
+        });
+      }
+
+      if (feedRef.current) {
+        feedRef.current.scrollTop = savedScrollY;
+        feedRef.current.scrollTo({
+          top: savedScrollY,
+          behavior: 'auto',
+        });
+      }
+
+      window.scrollTo({
+        top: savedScrollY,
+        behavior: 'auto',
+      });
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [renderedFeedPosts.length]);
+
   const renderedPostIdSet = useMemo(
     () => new Set(renderedFeedPosts.map((post) => getPostId(post)).filter(Boolean)),
     [renderedFeedPosts]
   );
 
   useEffect(() => {
+    const savedPostId = sessionStorage.getItem(FEED_POST_ID_STORAGE_KEY) || '';
+
+    if (savedPostId) return;
+
     setRenderLimit(INITIAL_RENDER_LIMIT);
   }, [topic, selectedTopic]);
 
@@ -662,8 +742,8 @@ export default function FeedPage() {
       await Promise.allSettled(
         missingCreatorIds.map(async (creatorId) => {
           try {
-            const profile = await creatorApi.getProfile(creatorId);
-            loadedProfiles[creatorId] = profile;
+            const profileResponse = await creatorApi.getProfile(creatorId);
+            loadedProfiles[creatorId] = normalizeCreatorProfile(profileResponse);
           } catch (err) {
             requestedCreatorIdsRef.current.delete(creatorId);
             console.error('Could not load creator profile:', creatorId, err);
@@ -820,7 +900,9 @@ export default function FeedPage() {
 
       const nextSavedState = typeof data?.isSaved === 'boolean'
         ? data.isSaved
-        : !isCurrentlySaved;
+        : typeof data?.saved === 'boolean'
+          ? data.saved
+          : !isCurrentlySaved;
 
       setSavedPostIds((prev) => ({
         ...prev,
@@ -847,6 +929,16 @@ export default function FeedPage() {
       return;
     }
 
+    const cachedExplanation = getCachedExplanation(post);
+
+    if (cachedExplanation) {
+      setSimpleExplanations((prev) => ({
+        ...prev,
+        [postId]: cachedExplanation,
+      }));
+      return;
+    }
+
     try {
       setExplaining((prev) => ({ ...prev, [postId]: true }));
 
@@ -857,9 +949,17 @@ export default function FeedPage() {
       });
       if (!mountedRef.current) return;
 
+      const explanationText =
+        data?.explanation ||
+        data?.aiExplanation ||
+        data?.simpleExplanation ||
+        data?.item?.aiExplanation ||
+        data?.post?.aiExplanation ||
+        'Could not simplify this post.';
+
       setSimpleExplanations((prev) => ({
         ...prev,
-        [postId]: data?.explanation || 'Could not simplify this post.',
+        [postId]: explanationText,
       }));
     } catch (err) {
       console.error('Simplify failed:', err);
@@ -893,24 +993,7 @@ export default function FeedPage() {
     [navigate]
   );
 
-  const handleAiDetails = useCallback(
-    (post, creatorName) => {
-      const postId = getPostId(post);
-      if (!postId) return;
-
-      navigate(`/post-ai/${postId}`, {
-        state: {
-          post: {
-            ...post,
-            id: postId,
-            reelId: postId,
-          },
-          creatorName,
-        },
-      });
-    },
-    [navigate]
-  );
+  // REMOVED handleAiDetails callback block
 
   const handleComments = useCallback(
     (postId) => {
@@ -924,18 +1007,34 @@ export default function FeedPage() {
       const postId = getPostId(post);
       if (!postId) return;
 
+      const currentScrollY = feedRef.current?.scrollTop || window.scrollY || 0;
+      sessionStorage.setItem(FEED_SCROLL_STORAGE_KEY, String(currentScrollY));
+      sessionStorage.setItem(FEED_RENDER_LIMIT_STORAGE_KEY, String(renderLimit));
+      sessionStorage.setItem(FEED_POST_ID_STORAGE_KEY, postId);
+
+      const {
+        aiExplanation,
+        simpleExplanation,
+        explanation,
+        explainText,
+        simplifiedText,
+        ...postForDetails
+      } = post;
+
       navigate(`/post-ai/${postId}`, {
         state: {
           post: {
-            ...post,
+            ...postForDetails,
             id: postId,
             reelId: postId,
+            aiDetailedExplanation: post.aiDetailedExplanation || '',
           },
           creatorName,
+          feedScrollY: currentScrollY,
         },
       });
     },
-    [navigate]
+    [navigate, renderLimit]
   );
 
   const handleTranslateChange = useCallback(
@@ -984,9 +1083,12 @@ export default function FeedPage() {
               post.savedByCurrentUser
           );
 
+      // const cachedExplanation = getCachedExplanation(post); // Removed unused line
+      const visibleExplanation = simpleExplanations[postId] || '';
+
       return (
         <FeedPostCard
-          key={`${postId}-${post.createdAt || post.updatedAt || ''}`}
+          key={`${postId}-${post.createdAtMs || post.updatedAtMs || post.createdAt || post.updatedAt || ''}`}
           post={post}
           index={index}
           postId={postId}
@@ -997,10 +1099,9 @@ export default function FeedPage() {
           isTranslated={Boolean(showTranslated[postId])}
           isTranslating={Boolean(translating[postId])}
           isExplaining={Boolean(explaining[postId])}
-          explanation={simpleExplanations[postId]}
+          explanation={visibleExplanation}
           onTopicClick={handleTopicClick}
           onSave={handleSave}
-          onAiDetails={handleAiDetails}
           onOpenPost={handleOpenPost}
           onComments={handleComments}
           onExplain={handleExplain}
@@ -1013,7 +1114,6 @@ export default function FeedPage() {
       creatorProfiles,
       explaining,
       renderedFeedPosts,
-      handleAiDetails,
       handleOpenPost,
       handleComments,
       handleExplain,

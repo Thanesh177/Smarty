@@ -4,8 +4,9 @@ import { chatApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import {
   connectChatSocket,
-  disconnectChatSocket,
   sendChatMessage,
+  setActiveChatOnSocket,
+  subscribeChatSocket,
 } from '../api/chatSocket';
 
 
@@ -407,6 +408,7 @@ export default function ChatPage() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const audioChunksRef = useRef([]);
   const recordingTimerRef = useRef(null);
+  const recordingStreamRef = useRef(null);
   const { user } = useAuth();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -463,6 +465,20 @@ export default function ChatPage() {
     [user]
   );
 
+function scrollMessagesToBottom(force = false) {
+  if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
+
+  scrollRafRef.current = window.requestAnimationFrame(() => {
+    if (!mountedRef.current || !scrollRef.current) return;
+
+    const target = scrollRef.current;
+    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+
+    if (!force && distanceFromBottom > 260) return;
+    target.scrollTop = target.scrollHeight;
+  });
+}
+
   // =
 
   useEffect(() => {
@@ -475,9 +491,16 @@ export default function ChatPage() {
       if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
       if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
       if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
+      recordingStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
       if (messagePollTimerRef.current) window.clearTimeout(messagePollTimerRef.current);
-      localStorage.removeItem('activeChatId');
-      disconnectChatSocket();
+localStorage.removeItem('activeChatId');
+
+try {
+  setActiveChatOnSocket?.('');
+} catch (err) {
+  console.error('Could not clear active chat on socket:', err);
+}
     };
   }, []);
 
@@ -516,6 +539,14 @@ export default function ChatPage() {
       ? nextMessages.slice(-MAX_RENDERED_MESSAGES)
       : [];
     messageCacheRef.current.set(chatId, safeMessages);
+  }, []);
+
+  const buildMessagesSignature = useCallback((items) => {
+    if (!Array.isArray(items) || items.length === 0) return 'empty';
+
+    const lastMessage = items[items.length - 1] || {};
+
+    return `${items.length}:${lastMessage.messageId || lastMessage.id || lastMessage.clientId || ''}:${lastMessage.createdAt || ''}:${lastMessage.editedAt || ''}:${lastMessage.deletedAt || ''}`;
   }, []);
 
   const refreshChatsSoon = useCallback(() => {
@@ -557,7 +588,14 @@ export default function ChatPage() {
   }, [chats]);
 
   useEffect(() => {
-    activeChatIdRef.current = activeChat?.chatId || null;
+    const chatId = activeChat?.chatId || '';
+    activeChatIdRef.current = chatId || null;
+
+    try {
+      setActiveChatOnSocket?.(chatId);
+    } catch (err) {
+      console.error('Could not update active chat on socket:', err);
+    }
   }, [activeChat?.chatId]);
 
   useEffect(() => {
@@ -575,8 +613,9 @@ export default function ChatPage() {
   useEffect(() => {
     if (!userId) return;
 
-    connectChatSocket(userId, (data) => {
-      if (!mountedRef.current) return;
+connectChatSocket(userId);
+
+const unsubscribeSocket = subscribeChatSocket((data) => {      if (!mountedRef.current) return;
       if (data.type === 'messageReaction') {
         const reactionMessage = data.message || data;
         const targetMessageId = reactionMessage.messageId;
@@ -698,27 +737,13 @@ export default function ChatPage() {
 
     return () => {
       localStorage.removeItem('activeChatId');
-      disconnectChatSocket();
+      unsubscribeSocket?.();
     };
-  }, [userId]);
-
-const scrollMessagesToBottom = useCallback(() => {
-  if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
-
-  scrollRafRef.current = window.requestAnimationFrame(() => {
-    if (!mountedRef.current || !scrollRef.current) return;
-
-    const target = scrollRef.current;
-    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
-
-    if (distanceFromBottom > 260) return;
-    target.scrollTop = target.scrollHeight;
-  });
-}, []);
+  }, [userId, setCachedMessages]);
 
 useEffect(() => {
   scrollMessagesToBottom();
-}, [messages.length, scrollMessagesToBottom]);
+}, [messages.length]);
 
 useEffect(() => {
   if (!activeChat) return undefined;
@@ -734,7 +759,7 @@ useEffect(() => {
     window.visualViewport?.removeEventListener('resize', handleViewportResize);
     window.removeEventListener('resize', handleViewportResize);
   };
-}, [activeChat]);
+}, [activeChat?.chatId]);
 
 useEffect(() => {
   const startWithUser = location.state?.startWithUser;
@@ -799,8 +824,7 @@ useEffect(() => {
       if (!mountedRef.current || activeChatIdRef.current !== fixedChat.chatId) return;
 
       const nextMessages = normalizeMessages(data);
-      const lastMessage = nextMessages[nextMessages.length - 1] || {};
-      latestMessagesSignatureRef.current = `${nextMessages.length}:${lastMessage.messageId || lastMessage.id || lastMessage.clientId || ''}:${lastMessage.createdAt || ''}:${lastMessage.editedAt || ''}:${lastMessage.deletedAt || ''}`;
+      latestMessagesSignatureRef.current = buildMessagesSignature(nextMessages);
       setCachedMessages(fixedChat.chatId, nextMessages);
       setMessages(nextMessages);
 
@@ -960,8 +984,7 @@ const openChat = useCallback(async (chat) => {
     if (!mountedRef.current || requestId !== chatRequestSeqRef.current || activeChatIdRef.current !== fixedChat.chatId) return;
 
     const nextMessages = normalizeMessages(data);
-    const lastMessage = nextMessages[nextMessages.length - 1] || {};
-    latestMessagesSignatureRef.current = `${nextMessages.length}:${lastMessage.messageId || lastMessage.id || lastMessage.clientId || ''}:${lastMessage.createdAt || ''}:${lastMessage.editedAt || ''}:${lastMessage.deletedAt || ''}`;
+    latestMessagesSignatureRef.current = buildMessagesSignature(nextMessages);
     setCachedMessages(fixedChat.chatId, nextMessages);
     setMessages(nextMessages);
 
@@ -975,7 +998,7 @@ const openChat = useCallback(async (chat) => {
       setStatus(cachedMessages.length ? '' : 'Could not load messages.');
     }
   }
-}, [getCachedMessages, normalizeMessages, refreshChatsSoon, scrollMessagesToBottom, setCachedMessages, userId, withTimeout]);
+}, [getCachedMessages, normalizeMessages, refreshChatsSoon, setCachedMessages, userId, withTimeout, buildMessagesSignature]);
 useEffect(() => {
   if (messagePollTimerRef.current) {
     window.clearTimeout(messagePollTimerRef.current);
@@ -986,12 +1009,6 @@ useEffect(() => {
 
   let stopped = false;
 
-  const getMessageSignature = (items) => {
-    if (!Array.isArray(items) || items.length === 0) return 'empty';
-    const last = items[items.length - 1] || {};
-    return `${items.length}:${last.messageId || last.id || last.clientId || ''}:${last.createdAt || ''}:${last.editedAt || ''}:${last.deletedAt || ''}`;
-  };
-
   const pollMessages = async () => {
     const chatId = activeChat.chatId;
 
@@ -1000,7 +1017,7 @@ useEffect(() => {
       if (!mountedRef.current || activeChatIdRef.current !== chatId || stopped) return;
 
       const nextMessages = normalizeMessages(data);
-      const nextSignature = getMessageSignature(nextMessages);
+      const nextSignature = buildMessagesSignature(nextMessages);
 
       if (latestMessagesSignatureRef.current !== nextSignature) {
         latestMessagesSignatureRef.current = nextSignature;
@@ -1034,7 +1051,7 @@ useEffect(() => {
       messagePollTimerRef.current = null;
     }
   };
-}, [activeChat?.chatId, userId, normalizeMessages, setCachedMessages, withTimeout]);
+}, [activeChat?.chatId, userId, normalizeMessages, setCachedMessages, withTimeout, buildMessagesSignature]);
 
 useEffect(() => {
   const chatIdFromUrl = searchParams.get('chatId');
@@ -1090,8 +1107,7 @@ useEffect(() => {
       const data = await withTimeout(chatApi.getMessages(fixedChat.chatId), 10000, 'Messages took too long to load.');
       if (!mountedRef.current || activeChatIdRef.current !== fixedChat.chatId) return;
       const nextMessages = normalizeMessages(data);
-      const lastMessage = nextMessages[nextMessages.length - 1] || {};
-      latestMessagesSignatureRef.current = `${nextMessages.length}:${lastMessage.messageId || lastMessage.id || lastMessage.clientId || ''}:${lastMessage.createdAt || ''}:${lastMessage.editedAt || ''}:${lastMessage.deletedAt || ''}`;
+      latestMessagesSignatureRef.current = buildMessagesSignature(nextMessages);
       setCachedMessages(fixedChat.chatId, nextMessages);
       setMessages(nextMessages);
 
@@ -1112,7 +1128,7 @@ useEffect(() => {
       console.error('Could not start chat:', err);
       if (mountedRef.current) setStatus('Could not start chat.');
     }
-  }, [normalizeMessages, refreshChatsSoon, scrollMessagesToBottom, setCachedMessages, withTimeout]);
+  }, [normalizeMessages, refreshChatsSoon, setCachedMessages, withTimeout, buildMessagesSignature]);
 
   const addEmoji = useCallback((emoji) => {
     setText((prev) => `${prev}${emoji}`);
@@ -1194,40 +1210,90 @@ const refreshMessageMediaUrl = useCallback(async (msg) => {
 
 const startVoiceRecording = async () => {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    cancelRecordingRef.current = false;
-    if (!mountedRef.current) {
-      stream.getTracks().forEach((track) => track.stop());
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus('Voice recording is not supported in this browser.');
       return;
     }
 
-    const recorder = new MediaRecorder(stream);
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordingStreamRef.current = stream;
+    cancelRecordingRef.current = false;
+
+    if (!mountedRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+      return;
+    }
+
+    const supportedMimeType = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/mpeg',
+    ].find((mimeType) => {
+      try {
+        return MediaRecorder.isTypeSupported(mimeType);
+      } catch {
+        return false;
+      }
+    });
+
+    const recorder = supportedMimeType
+      ? new MediaRecorder(stream, { mimeType: supportedMimeType })
+      : new MediaRecorder(stream);
+
     audioChunksRef.current = [];
 
     recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
+      if (event.data && event.data.size > 0) {
         audioChunksRef.current.push(event.data);
       }
     };
 
+    recorder.onerror = (event) => {
+      console.error('Voice recording recorder error:', event?.error || event);
+      if (mountedRef.current) setStatus('Voice recording failed. Please try again.');
+    };
+
     recorder.onstop = () => {
+      const streamToStop = recordingStreamRef.current || stream;
+      streamToStop?.getTracks?.().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+
+      setIsRecording(false);
+      setMediaRecorder(null);
+      setRecordingSeconds(0);
+
       if (!mountedRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
+        audioChunksRef.current = [];
         return;
       }
+
       if (cancelRecordingRef.current) {
         audioChunksRef.current = [];
-        stream.getTracks().forEach((track) => track.stop());
+        cancelRecordingRef.current = false;
         return;
       }
-      const audioBlob = new Blob(audioChunksRef.current, {
-        type: 'audio/webm',
-      });
+
+      const mimeType = recorder.mimeType || supportedMimeType || 'audio/webm';
+      const extension = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('mpeg') ? 'mp3' : 'webm';
+      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+      audioChunksRef.current = [];
+
+      if (!audioBlob.size) {
+        setStatus('No voice audio was recorded. Please try again.');
+        return;
+      }
 
       const audioFile = new File(
         [audioBlob],
-        `voice-${Date.now()}.webm`,
-        { type: 'audio/webm' }
+        `voice-${Date.now()}.${extension}`,
+        { type: mimeType }
       );
 
       if (selectedMediaPreview) URL.revokeObjectURL(selectedMediaPreview);
@@ -1235,56 +1301,71 @@ const startVoiceRecording = async () => {
       setSelectedMedia(audioFile);
       setSelectedMediaPreview(URL.createObjectURL(audioBlob));
       setShowComposerTools(true);
-      setRecordingSeconds(0);
-
-      stream.getTracks().forEach((track) => track.stop());
+      setStatus('');
     };
 
-    recorder.start();
+    recorder.start(250);
     setMediaRecorder(recorder);
     setIsRecording(true);
     setRecordingSeconds(0);
+    setStatus('');
+
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+    }
 
     recordingTimerRef.current = window.setInterval(() => {
       if (mountedRef.current) setRecordingSeconds((prev) => prev + 1);
     }, 1000);
   } catch (err) {
     console.error('Voice recording failed:', err);
-    if (mountedRef.current) setStatus('Microphone permission denied.');
+    recordingStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+    setIsRecording(false);
+    setMediaRecorder(null);
+    setRecordingSeconds(0);
+
+    if (recordingTimerRef.current) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    if (mountedRef.current) setStatus('Microphone permission denied or unavailable.');
   }
 };
 
 const stopVoiceRecording = useCallback(() => {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-    mediaRecorder.stream?.getTracks?.().forEach((track) => track.stop());
-  }
-
-  setIsRecording(false);
-  setMediaRecorder(null);
-
-  if (recordingTimerRef.current) {
-    clearInterval(recordingTimerRef.current);
-    recordingTimerRef.current = null;
+    try {
+      mediaRecorder.stop();
+    } catch (err) {
+      console.error('Could not stop recording:', err);
+    }
   }
 }, [mediaRecorder]);
 
 
 const cancelVoiceRecording = useCallback(() => {
   cancelRecordingRef.current = true;
+
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-    mediaRecorder.stream?.getTracks?.().forEach((track) => track.stop());
-  }
+    try {
+      mediaRecorder.stop();
+    } catch (err) {
+      console.error('Could not cancel recording:', err);
+    }
+  } else {
+    audioChunksRef.current = [];
+    recordingStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+    setIsRecording(false);
+    setMediaRecorder(null);
+    setRecordingSeconds(0);
 
-  audioChunksRef.current = [];
-  setIsRecording(false);
-  setMediaRecorder(null);
-  setRecordingSeconds(0);
-
-  if (recordingTimerRef.current) {
-    clearInterval(recordingTimerRef.current);
-    recordingTimerRef.current = null;
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
   }
 }, [mediaRecorder]);
 
@@ -1299,12 +1380,12 @@ const openMediaPicker = useCallback(() => {
 const handleTextChange = useCallback((event) => {
   setText(event.target.value);
   scrollMessagesToBottom();
-}, [scrollMessagesToBottom]);
+}, []);
 
 const handleTextFocus = useCallback(() => {
   if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
   scrollTimerRef.current = window.setTimeout(scrollMessagesToBottom, 120);
-}, [scrollMessagesToBottom]);
+}, []);
 
 
 const closeMobileChat = useCallback(() => {
@@ -1315,6 +1396,11 @@ const closeMobileChat = useCallback(() => {
   setEditingMessageId(null);
   setEditingText('');
   localStorage.removeItem('activeChatId');
+  try {
+    setActiveChatOnSocket?.('');
+  } catch (err) {
+    console.error('Could not clear active chat on socket:', err);
+  }
   setMessages([]);
   setActionsOpen(false);
 
@@ -1527,12 +1613,12 @@ const renderedChatList = useMemo(
         reactions: {},
       };
 
-      setMessages((prev) => {
-        const nextMessages = [...prev, tempMessage];
-        setCachedMessages(activeChat.chatId, nextMessages);
-        return nextMessages;
-      });
-      scrollMessagesToBottom();
+setMessages((prev) => {
+  const nextMessages = [...prev, tempMessage];
+  setCachedMessages(activeChat.chatId, nextMessages);
+  return nextMessages;
+});
+scrollMessagesToBottom(true);
 
       sendChatMessage({
         chatId: activeChat.chatId,
@@ -1555,10 +1641,10 @@ const renderedChatList = useMemo(
         setUploadProgress(0);
       }, selectedMedia ? 350 : 0);
 
-      setText('');
-      removeSelectedMedia(false);
-      setShowComposerTools(false);
-      scrollMessagesToBottom();
+setText('');
+removeSelectedMedia(false);
+setShowComposerTools(false);
+scrollMessagesToBottom(true);
     } catch (err) {
       if (progressTimer) window.clearInterval(progressTimer);
       activeUploadAbortRef.current = null;
@@ -1907,6 +1993,11 @@ const runDeleteChat = useCallback(() => {
       setEditingMessageId(null);
       setEditingText('');
       localStorage.removeItem('activeChatId');
+      try {
+        setActiveChatOnSocket?.('');
+      } catch (err) {
+        console.error('Could not clear active chat on socket:', err);
+      }
       setMessages([]);
       setActionsOpen(false);
       if (messagePollTimerRef.current) {

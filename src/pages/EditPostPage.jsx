@@ -1,7 +1,24 @@
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { postApi } from '../api/client';
 import './CreatePostPage.css';
+
+// --- Helper functions ---
+function normalizeItemsResponse(value, key) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.[key])) return value[key];
+  if (Array.isArray(value?.items)) return value.items;
+  return [];
+}
+
+function normalizeSinglePostResponse(value) {
+  return value?.post || value?.item || value?.reel || value || null;
+}
+
+function getUploadResultKey(value) {
+  return value?.fileKey || value?.mediaKey || value?.key || value?.imageKey || value?.videoKey || value?.fileUrl || value?.mediaUrl || value?.url || '';
+}
 
 export default function EditPostPage() {
   const { reelId } = useParams();
@@ -59,24 +76,25 @@ export default function EditPostPage() {
     try {
       setLoading(true);
 
-      const [topicData, post] = await Promise.all([
+      const [topicData, postResponse] = await Promise.all([
         postApi.getTopics(),
         postApi.getSingleReel(reelId),
       ]);
       if (!mountedRef.current) return;
 
-      const topicList = Array.isArray(topicData)
-        ? Array.from(
-            new Set(
-              topicData
-                .map((item) =>
-                  typeof item === 'string' ? item : item.topic || item.name || item.title
-                )
-                .filter(Boolean)
-                .map((item) => String(item).trim())
+      const topicItems = normalizeItemsResponse(topicData, 'topics');
+      const post = normalizeSinglePostResponse(postResponse);
+
+      const topicList = Array.from(
+        new Set(
+          topicItems
+            .map((item) =>
+              typeof item === 'string' ? item : item.topic || item.name || item.title
             )
-          )
-        : [];
+            .filter(Boolean)
+            .map((item) => String(item).trim())
+        )
+      );
 
       setTopics(topicList);
       setLoadedPost(post || null);
@@ -87,8 +105,8 @@ export default function EditPostPage() {
         title: post?.title || '',
         body: post?.body || '',
         visibility: post?.visibility || 'public',
-        imageUrl: post?.imageUrl || '',
-        videoUrl: post?.videoUrl || '',
+        imageUrl: post?.imageUrl || post?.photoUrl || post?.thumbnail || post?.coverImage || '',
+        videoUrl: post?.videoUrl || post?.mediaUrl || '',
       });
     } catch (err) {
       console.error(err);
@@ -208,7 +226,7 @@ export default function EditPostPage() {
       xhr.send(file);
     });
 
-    return uploadData.fileUrl;
+    return getUploadResultKey(uploadData);
   }, []);
 
   const submit = useCallback(async (event) => {
@@ -300,14 +318,58 @@ export default function EditPostPage() {
 
   const handleImageFileChange = useCallback((event) => {
     const file = event.target.files?.[0] || null;
+
+    if (!file) {
+      setImageFile(null);
+      return;
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const maxSize = 8 * 1024 * 1024;
+
+    if (!allowedTypes.includes(file.type)) {
+      setStatus('Please choose a JPG, PNG, or WEBP image.');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > maxSize) {
+      setStatus('Image must be under 8 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    setStatus('');
     setImageFile(file);
-    if (file) setVideoFile(null);
+    setVideoFile(null);
   }, []);
 
   const handleVideoFileChange = useCallback((event) => {
     const file = event.target.files?.[0] || null;
+
+    if (!file) {
+      setVideoFile(null);
+      return;
+    }
+
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
+    const maxSize = 80 * 1024 * 1024;
+
+    if (!allowedTypes.includes(file.type)) {
+      setStatus('Please choose an MP4, WEBM, or MOV video.');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > maxSize) {
+      setStatus('Video must be under 80 MB.');
+      event.target.value = '';
+      return;
+    }
+
+    setStatus('');
     setVideoFile(file);
-    if (file) setImageFile(null);
+    setImageFile(null);
   }, []);
 
   const handleTitleChange = useCallback((event) => {
@@ -436,7 +498,7 @@ export default function EditPostPage() {
                   alt="Current post"
                   loading="lazy"
                   decoding="async"
-                  fetchpriority="auto"
+                  fetchPriority="auto"
                 />
               </div>
             )}

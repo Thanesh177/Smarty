@@ -4,6 +4,13 @@ import { postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import './PostAiPage.css';
 
+const getDetailedExplanation = (value) => {
+  const text = String(value?.aiDetailedExplanation || '').trim();
+  return text && text.toLowerCase() !== 'null' && text.toLowerCase() !== 'undefined'
+    ? text
+    : '';
+};
+
 const PostAiMessage = memo(function PostAiMessage({ message }) {
   return (
     <div className={message.role === 'user' ? 'post-ai-msg mine' : 'post-ai-msg'}>
@@ -23,7 +30,7 @@ export default function PostAiPage() {
   const creatorName = location.state?.creatorName || 'Smarty creator';
 
   const [post, setPost] = useState(postFromState);
-  const [explanation, setExplanation] = useState('');
+  const [explanation, setExplanation] = useState(() => getDetailedExplanation(postFromState));
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [question, setQuestion] = useState('');
@@ -66,13 +73,7 @@ export default function PostAiPage() {
   }, []);
 
   const displayExplanation = useMemo(() => {
-    return (
-      explanation ||
-      post?.aiDetailedExplanation ||
-      post?.detailedExplanation ||
-      post?.aiExplanation ||
-      ''
-    );
+    return explanation || getDetailedExplanation(post) || '';
   }, [explanation, post]);
 
   const renderedMessages = useMemo(
@@ -99,34 +100,42 @@ export default function PostAiPage() {
         setLoading(true);
         setStatus('');
 
-        if (displayExplanation) {
+        const existingDetailedExplanation = getDetailedExplanation(post);
+
+        if (existingDetailedExplanation) {
+          setExplanation(existingDetailedExplanation);
           setLoading(false);
           return;
         }
 
-        const data = await postApi.explainPost({
+        const detailsPayload = {
           postId,
           id: postId,
           reelId: postId,
           title,
           body,
           mode: 'detailed',
-        });
+        };
+
+        const data = postApi.getPostDetails
+          ? await postApi.getPostDetails(detailsPayload)
+          : postApi.getAiDetails
+            ? await postApi.getAiDetails(detailsPayload)
+            : await postApi.explainPost(detailsPayload);
 
         if (!mountedRef.current) return;
 
-        if (data?.post) {
-          setPost((prev) => ({ ...(prev || {}), ...data.post }));
-        }
-
         const nextExplanation =
-          data?.explanation ||
-          data?.answer ||
-          data?.text ||
-          data?.post?.aiDetailedExplanation ||
-          data?.post?.detailedExplanation ||
-          data?.post?.aiExplanation ||
-          '';
+          getDetailedExplanation(data?.post) ||
+          String(data?.aiDetailedExplanation || data?.explanation || '').trim();
+
+        if (data?.post) {
+          setPost((prev) => ({
+            ...(prev || {}),
+            ...data.post,
+            aiDetailedExplanation: nextExplanation || data.post.aiDetailedExplanation || '',
+          }));
+        }
 
         setExplanation(nextExplanation);
 
@@ -171,7 +180,7 @@ export default function PostAiPage() {
         userId,
         title,
         body,
-        explanation: displayExplanation,
+        explanation: getDetailedExplanation(post) || displayExplanation,
         question: cleanQuestion,
       });
 
@@ -206,8 +215,14 @@ export default function PostAiPage() {
   }, [asking, body, displayExplanation, postId, question, readableError, title, userId]);
 
   const goBack = useCallback(() => {
+    const savedScrollY = location.state?.scrollY;
+
+    if (typeof savedScrollY === 'number') {
+      sessionStorage.setItem('feedScrollY', String(savedScrollY));
+    }
+
     navigate(-1);
-  }, [navigate]);
+  }, [location.state, navigate]);
 
   const handleQuestionChange = useCallback((event) => {
     setQuestion(event.target.value);
@@ -216,7 +231,11 @@ export default function PostAiPage() {
   return (
     <main className="post-ai-page">
       <section className="post-ai-shell">
-        <button type="button" className="post-ai-back" onClick={goBack}>
+        <button
+          type="button"
+          className="post-ai-back"
+          onClick={goBack}
+        >
           ← Back
         </button>
 

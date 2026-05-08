@@ -42,6 +42,100 @@ const compressImage = async (file) => {
   );
 };
 
+const parseApiErrorMessage = (err) => {
+  const data = err?.response?.data;
+
+  if (typeof data === 'string') {
+    try {
+      const parsed = JSON.parse(data);
+      return parsed?.message || parsed?.error || data;
+    } catch {
+      return data;
+    }
+  }
+
+  return (
+    data?.message ||
+    data?.error ||
+    err?.message ||
+    'Something went wrong.'
+  );
+};
+
+
+const normalizeUploadResponse = (uploadData = {}) => {
+  const parsed = typeof uploadData?.body === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(uploadData.body);
+        } catch {
+          return uploadData;
+        }
+      })()
+    : uploadData;
+
+  return {
+    uploadUrl: parsed.uploadUrl || parsed.url || parsed.presignedUrl || '',
+    fileUrl: parsed.fileUrl || parsed.publicUrl || parsed.url || '',
+    key: parsed.key || parsed.fileKey || parsed.imageKey || parsed.videoKey || '',
+  };
+};
+
+const DEFAULT_TOPICS = [
+  'Science',
+  'Psychology',
+  'Health',
+  'Technology',
+  'Finance',
+  'History',
+  'Study Tips',
+  'General Knowledge',
+];
+
+const normalizeTopicsResponse = (data) => {
+  const parsed = typeof data?.body === 'string'
+    ? (() => {
+        try {
+          return JSON.parse(data.body);
+        } catch {
+          return data;
+        }
+      })()
+    : data;
+
+  const rawTopics = Array.isArray(parsed?.topics)
+    ? parsed.topics
+    : Array.isArray(parsed?.items)
+      ? parsed.items
+      : Array.isArray(parsed?.data)
+        ? parsed.data
+        : Array.isArray(parsed)
+          ? parsed
+          : [];
+
+  const topicList = Array.from(
+    new Set(
+      rawTopics
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          return (
+            item?.topic ||
+            item?.topicName ||
+            item?.name ||
+            item?.title ||
+            item?.category ||
+            item?.id ||
+            ''
+          );
+        })
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
+
+  return topicList.length ? topicList : DEFAULT_TOPICS;
+};
+
 export default function CreatePostPage() {
   const mountedRef = useRef(true);
   const activeUploadRef = useRef(null);
@@ -78,24 +172,7 @@ export default function CreatePostPage() {
         const data = await postApi.getTopics();
         if (!mountedRef.current) return;
 
-        const rawTopics = Array.isArray(data?.topics)
-          ? data.topics
-          : Array.isArray(data)
-            ? data
-            : [];
-
-        const topicList = Array.from(
-          new Set(
-            rawTopics
-              .map((item) =>
-                typeof item === 'string'
-                  ? item
-                  : item?.topic || item?.name || item?.title
-              )
-              .filter(Boolean)
-              .map((item) => String(item).trim())
-          )
-        ).sort((a, b) => a.localeCompare(b));
+        const topicList = normalizeTopicsResponse(data);
 
         setTopics(topicList);
 
@@ -104,7 +181,11 @@ export default function CreatePostPage() {
         }
       } catch (err) {
         console.error('Failed to load topics:', err);
-        if (mountedRef.current) setStatus('Could not load topics. You can use a custom topic.');
+        if (mountedRef.current) {
+          setTopics(DEFAULT_TOPICS);
+          setForm((prev) => ({ ...prev, topic: prev.topic || DEFAULT_TOPICS[0] }));
+          setStatus('Could not load topics from server. Showing default topics.');
+        }
       }
     }
 
@@ -130,10 +211,16 @@ export default function CreatePostPage() {
   const uploadFile = useCallback(async (file, onProgress) => {
     if (!file) return { url: '', key: '' };
 
-    const uploadData = await postApi.getUploadUrl({
-      fileName: file.name,
-      fileType: file.type,
-    });
+    const uploadData = normalizeUploadResponse(
+      await postApi.getUploadUrl({
+        fileName: file.name,
+        fileType: file.type || 'application/octet-stream',
+      })
+    );
+
+    if (!uploadData.uploadUrl) {
+      throw new Error('Upload URL was not returned by the server.');
+    }
 
     await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
@@ -163,13 +250,13 @@ export default function CreatePostPage() {
       };
 
       xhr.open('PUT', uploadData.uploadUrl);
-      xhr.setRequestHeader('Content-Type', file.type);
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
       xhr.send(file);
     });
 
     return {
-      url: uploadData.fileUrl || uploadData.url || '',
-      key: uploadData.key || uploadData.fileKey || uploadData.imageKey || '',
+      url: uploadData.fileUrl,
+      key: uploadData.key,
     };
   }, []);
 
@@ -279,7 +366,11 @@ export default function CreatePostPage() {
     } catch (err) {
       console.error('Create post failed:', err);
       if (mountedRef.current) {
-        setStatus(err?.message === 'Upload cancelled' ? 'Upload cancelled.' : 'Failed to publish.');
+        const message = err?.message === 'Upload cancelled'
+          ? 'Upload cancelled.'
+          : parseApiErrorMessage(err);
+
+        setStatus(`Failed to publish: ${message}`);
         setSubmitting(false);
         setUploadStage('');
         setUploadProgress(0);

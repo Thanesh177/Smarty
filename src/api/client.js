@@ -121,6 +121,7 @@ const normalizeList = (data) => {
   const parsed = parseApiBody(data);
 
   if (Array.isArray(parsed)) return parsed;
+  if (Array.isArray(parsed?.topics)) return parsed.topics;
   if (Array.isArray(parsed?.items)) return parsed.items;
   if (Array.isArray(parsed?.reels)) return parsed.reels;
   if (Array.isArray(parsed?.posts)) return parsed.posts;
@@ -131,6 +132,10 @@ const normalizeList = (data) => {
   if (Array.isArray(parsed?.chats)) return parsed.chats;
   if (Array.isArray(parsed?.messages)) return parsed.messages;
   if (Array.isArray(parsed?.rooms)) return parsed.rooms;
+  if (Array.isArray(parsed?.invites)) return parsed.invites;
+  if (Array.isArray(parsed?.following)) return parsed.following;
+  if (Array.isArray(parsed?.followers)) return parsed.followers;
+  if (Array.isArray(parsed?.requests)) return parsed.requests;
 
   return [];
 };
@@ -143,6 +148,27 @@ const parseApiBody = (data) => {
   } catch {
     return data;
   }
+};
+
+
+const normalizeObjectResponse = (data, keys = []) => {
+  const parsed = parseApiBody(data);
+
+  for (const key of keys) {
+    if (parsed?.[key]) return parsed[key];
+  }
+
+  return parsed || {};
+};
+
+const normalizeBooleanSaveResponse = (data, fallback = false) => {
+  const parsed = parseApiBody(data);
+
+  if (typeof parsed?.isSaved === 'boolean') return parsed.isSaved;
+  if (typeof parsed?.saved === 'boolean') return parsed.saved;
+  if (typeof parsed?.bookmarked === 'boolean') return parsed.bookmarked;
+
+  return fallback;
 };
 
 
@@ -255,7 +281,7 @@ export const authApi = {
 export const roomApi = {
   async getRooms(params = {}) {
     const { data } = await api.get('/rooms', { params });
-    return data.rooms || data || [];
+    return normalizeList(data);
   },
 
   searchUsers: async (q) => {
@@ -263,7 +289,11 @@ export const roomApi = {
       action: 'search',
       q,
     });
-    return data;
+
+    return {
+      ...parseApiBody(data),
+      users: normalizeList(data),
+    };
   },
 
   inviteUserToRoom: async (roomId, userId) => {
@@ -304,7 +334,10 @@ export const roomApi = {
 
   getRoomInvites: async () => {
     const { data } = await api.get('/rooms/invites');
-    return data;
+    return {
+      ...parseApiBody(data),
+      invites: normalizeList(data),
+    };
   },
 
   acceptRoomInvite: async (roomId) => {
@@ -318,8 +351,19 @@ export const roomApi = {
   },
 
   createRoom: async (payload) => {
-    const { data } = await api.post('/rooms', payload);
-    return parseApiBody(data);
+    try {
+      const { data } = await api.post('/rooms', payload);
+      const parsed = parseApiBody(data);
+
+      return {
+        ...parsed,
+        room: normalizeObjectResponse(parsed, ['room']),
+      };
+    } catch (error) {
+      const backendError = parseApiBody(error?.response?.data);
+      console.error('CREATE ROOM API ERROR:', backendError || error);
+      throw error;
+    }
   },
 
   async joinRoom(roomId, joinCode = '') {
@@ -341,7 +385,7 @@ export const roomApi = {
     const { data } = await api.get(
       `/rooms/${encodePathSegment(roomId)}/members`
     );
-    return data.members || data || [];
+    return normalizeList(data);
   },
 
   async removeRoomMember(roomId, userId) {
@@ -385,12 +429,12 @@ export const roomApi = {
 
   async getRoomJoinRequests(roomId) {
     const { data } = await api.get(`/rooms/${encodePathSegment(roomId)}/requests`);
-    return data.requests || [];
+    return normalizeList(data);
   },
 
   async getHiddenRooms() {
     const { data } = await api.get('/rooms/hidden');
-    return data.rooms || [];
+    return normalizeList(data);
   },
 
   async unhideRoom(roomId) {

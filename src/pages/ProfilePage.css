@@ -1497,3 +1497,46 @@
     font-size: 0.68rem;
   }
 }
+
+.profile-modal {
+  width: min(100%, 620px);
+  max-height: min(92dvh, 640px);
+  border-radius: 26px;
+}
+
+.profile-modal-header,
+.profile-modal-footer {
+  padding: 14px 16px;
+}
+
+.profile-modal-body {
+  padding: 14px 16px;
+  gap: 12px;
+}
+
+.profile-crop-preview {
+  width: 118px;
+  height: 118px;
+}
+
+.profile-crop-box {
+  gap: 10px;
+  padding: 10px;
+}
+
+.profile-photo-upload {
+  min-height: 42px;
+}
+
+.profile-edit-box {
+  padding: 14px;
+  gap: 10px;
+}
+
+.profile-edit-box input {
+  padding: 11px 13px;
+}
+
+.profile-edit-box button {
+  padding: 11px 13px;
+}

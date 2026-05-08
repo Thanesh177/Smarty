@@ -15,6 +15,24 @@ function getPostImage(post) {
   );
 }
 
+function normalizeProfileResponse(value) {
+  return value?.profile || value || null;
+}
+
+function normalizeItemsResponse(value, key) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.[key])) return value[key];
+  if (Array.isArray(value?.items)) return value.items;
+  return [];
+}
+
+function withCacheBuster(url, value) {
+  if (!url) return '';
+
+  const separator = String(url).includes('?') ? '&' : '?';
+  return `${url}${separator}v=${encodeURIComponent(value || Date.now())}`;
+}
+
 const AnimatedStatNumber = memo(function AnimatedStatNumber({ value }) {
   const target = Number(value || 0);
   const [displayValue, setDisplayValue] = useState(0);
@@ -162,6 +180,7 @@ export default function ProfilePage() {
   const cropDragRef = useRef(null);
   const mountedRef = useRef(false);
   const profileLoadIdRef = useRef(0);
+  const [avatarImageFailed, setAvatarImageFailed] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -206,6 +225,16 @@ export default function ProfilePage() {
   const initials = useMemo(() => {
     return displayName.substring(0, 2).toUpperCase();
   }, [displayName]);
+
+  const profileImageSrc = useMemo(() => {
+    const rawImage = profile?.photoUrl || profile?.profilePic || '';
+    const version = profile?.updatedAt || profile?.lastSeenAt || profile?.photoKey || '';
+    return withCacheBuster(rawImage, version);
+  }, [profile]);
+
+  useEffect(() => {
+    setAvatarImageFailed(false);
+  }, [profileImageSrc]);
 
   const withTimeout = useCallback((promise, ms = 12000) => {
     let timer;
@@ -294,9 +323,14 @@ export default function ProfilePage() {
         setStatus('');
       }
 
-      const me = await withTimeout(userApi.getMe(), 12000);
+      const meResponse = await withTimeout(userApi.getMe(), 12000);
+      const me = normalizeProfileResponse(meResponse);
 
       if (!mountedRef.current || profileLoadIdRef.current !== loadId) return;
+
+      if (!me) {
+        throw new Error('Profile response was empty.');
+      }
 
       setProfile(me);
 
@@ -318,15 +352,15 @@ export default function ProfilePage() {
       if (!mountedRef.current || profileLoadIdRef.current !== loadId) return;
 
       if (postsResult.status === 'fulfilled') {
-        const posts = postsResult.value;
-        setMyPosts(Array.isArray(posts) ? posts : []);
+        const posts = normalizeItemsResponse(postsResult.value, 'posts');
+        setMyPosts(posts);
       } else if (!silent) {
         console.error(postsResult.reason);
       }
 
       if (followingResult.status === 'fulfilled') {
-        const followingData = followingResult.value;
-        setFollowing(Array.isArray(followingData) ? followingData : []);
+        const followingData = normalizeItemsResponse(followingResult.value, 'following');
+        setFollowing(followingData);
       } else if (!silent) {
         console.error(followingResult.reason);
       }
@@ -347,6 +381,19 @@ export default function ProfilePage() {
 
   const handlePhotoSelect = useCallback((file) => {
     if (!file) return;
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const maxSize = 6 * 1024 * 1024;
+
+    if (!allowedTypes.includes(file.type)) {
+      setStatus('Please choose a JPG, PNG, or WEBP image.');
+      return;
+    }
+
+    if (file.size > maxSize) {
+      setStatus('Profile image must be under 6 MB.');
+      return;
+    }
 
     if (photoPreview) URL.revokeObjectURL(photoPreview);
 
@@ -481,11 +528,16 @@ export default function ProfilePage() {
         const croppedPhoto = await createCroppedProfileImage(newPhoto);
         if (!croppedPhoto) throw new Error('Could not process profile image.');
 
+        const uploadPayload = {
+          fileName: croppedPhoto.name,
+          fileType: croppedPhoto.type,
+          contentType: croppedPhoto.type,
+          folder: 'profiles',
+          type: 'profile',
+        };
+
         const upload = await withTimeout(
-          postApi.getUploadUrl({
-            fileName: croppedPhoto.name,
-            fileType: croppedPhoto.type,
-          }),
+          postApi.getUploadUrl(uploadPayload),
           12000
         );
 
@@ -498,7 +550,20 @@ export default function ProfilePage() {
           20000
         );
 
-        photoValue = upload.fileKey || upload.fileUrl;
+        photoValue =
+          upload.fileKey ||
+          upload.mediaKey ||
+          upload.key ||
+          upload.photoKey ||
+          upload.imageKey ||
+          upload.fileUrl ||
+          upload.mediaUrl ||
+          upload.photoUrl ||
+          '';
+
+        if (!photoValue) {
+          throw new Error('Upload succeeded but no image key was returned.');
+        }
       }
 
       const payload = {
@@ -509,13 +574,20 @@ export default function ProfilePage() {
         photoKey: photoValue,
       };
 
-      const updated = await withTimeout(userApi.updateProfile(payload), 12000);
-
+      const updatedResponse = await withTimeout(userApi.updateProfile(payload), 12000);
+      const updated = normalizeProfileResponse(updatedResponse);
+      const updatedAt = Date.now();
 
       setProfile((prev) => ({
         ...prev,
-        ...updated,
+        ...(updated || {}),
+        photoUrl: updated?.photoUrl || updated?.profilePic || prev?.photoUrl || photoValue,
+        profilePic: updated?.profilePic || updated?.photoUrl || prev?.profilePic || photoValue,
+        photoKey: updated?.photoKey || photoValue || prev?.photoKey || '',
+        updatedAt: updated?.updatedAt || updatedAt,
       }));
+
+      setAvatarImageFailed(false);
 
       setEditingProfile(false);
       setNewPhoto(null);
@@ -525,8 +597,8 @@ export default function ProfilePage() {
       setCropY(50);
       setStatus('Profile updated.');
     } catch (err) {
-      console.error(err);
-      setStatus('Failed to update profile.');
+      console.error('PROFILE UPDATE ERROR:', err?.response?.data || err);
+      setStatus(err?.response?.data?.error || err?.message || 'Failed to update profile.');
     } finally {
       setSavingProfile(false);
     }
@@ -545,8 +617,9 @@ export default function ProfilePage() {
       setStatus('');
       setTab('approved-private');
 
-      const posts = await withTimeout(postApi.getCreatorPrivatePosts(creatorId), 12000);
-      setCreatorPrivatePosts(Array.isArray(posts) ? posts : []);
+      const postsResponse = await withTimeout(postApi.getCreatorPrivatePosts(creatorId), 12000);
+      const posts = normalizeItemsResponse(postsResponse, 'posts');
+      setCreatorPrivatePosts(posts);
     } catch (err) {
       console.error(err);
 
@@ -621,25 +694,23 @@ export default function ProfilePage() {
             onClick={openProfileEditor}
             aria-label="Edit profile photo"
           >
-            {profile?.photoUrl || profile?.profilePic ? (
+            {profileImageSrc && !avatarImageFailed ? (
               <img
-                src={profile.photoUrl || profile.profilePic}
+                key={profileImageSrc}
+                src={profileImageSrc}
                 alt="Profile"
                 className="avatar-photo"
                 loading="eager"
                 decoding="async"
                 fetchPriority="high"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.nextElementSibling.style.display = 'grid';
-                }}
+                onError={() => setAvatarImageFailed(true)}
               />
             ) : null}
 
             <div
               className="avatar-xl"
               style={{
-                display: profile?.photoUrl || profile?.profilePic ? 'none' : 'grid',
+                display: profileImageSrc && !avatarImageFailed ? 'none' : 'grid',
               }}
             >
               {initials}
@@ -820,26 +891,14 @@ export default function ProfilePage() {
               <div className="friend-results-list">
                 {friendResults.map((item) => {
                   const itemId = item.userId || item.id || item.sub || item.email;
-                  const itemName = item.username || item.name || item.email || 'User';
-                  const itemInitial = String(itemName).charAt(0).toUpperCase();
 
                   return (
-                    <div className="friend-result-card" key={itemId || itemName}>
-                      <div className="friend-result-avatar">{itemInitial}</div>
-
-                      <div>
-                        <strong>{itemName}</strong>
-                        <span>{item.email || 'Smarty user'}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => inviteFriend(item)}
-                        disabled={item.invited || friendActionLoading === itemId}
-                      >
-                        {item.invited ? 'Requested' : friendActionLoading === itemId ? 'Sending...' : 'Follow'}
-                      </button>
-                    </div>
+                    <FriendResultCard
+                      key={itemId || item.email || item.username || item.name}
+                      item={item}
+                      loadingId={friendActionLoading}
+                      onInvite={inviteFriend}
+                    />
                   );
                 })}
               </div>
@@ -850,34 +909,14 @@ export default function ProfilePage() {
           ) : (
             <div className="approved-creators-list">
               {following.map((creator) => {
-const creatorId =
-  creator.userId ||
-  creator.followingId ||
-  creator.id ||
-  creator.sub;
-
-const name =
-  creator.username ||
-  creator.name ||
-  creator.email?.split('@')[0] ||
-  'Creator';
+                const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
 
                 return (
-                  <button
-                    key={creatorId || name}
-                    type="button"
-                    className="approved-creator-card"
-                    onClick={() => openApprovedCreator(creator)}
-                  >
-                    <div className="approved-avatar">{name[0].toUpperCase()}</div>
-
-                    <div>
-                      <h4>{name}</h4>
-                      <p>Following</p>
-                    </div>
-
-                    <span>Open private posts</span>
-                  </button>
+                  <ApprovedCreatorCard
+                    key={creatorId || creator.email || creator.username || creator.name}
+                    creator={creator}
+                    onOpen={openApprovedCreator}
+                  />
                 );
               })}
             </div>
@@ -988,7 +1027,7 @@ const name =
                     onPointerLeave={endCropDrag}
                   >
                     <img
-                      src={photoPreview || profile?.photoUrl || profile?.profilePic}
+                      src={photoPreview || profileImageSrc}
                       alt="Profile crop preview"
                       draggable="false"
                       decoding="async"

@@ -18,7 +18,6 @@ import {
 import {
   connectChatSocket,
   subscribeChatSocket,
-  disconnectChatSocket,
 } from './api/chatSocket';
 
 const Booksinfo = lazy(() => import('./pages/Booksinfo'));
@@ -323,7 +322,6 @@ function Layout() {
 
       window.clearInterval(intervalId);
       unsubscribeSocket?.();
-      disconnectChatSocket();
 
       window.removeEventListener('focus', handleRefresh);
       window.removeEventListener('storage', handleStorage);

@@ -7,6 +7,7 @@ let reconnectTimer = null;
 let heartbeatTimer = null;
 let reconnectAttempts = 0;
 let currentUserId = '';
+let currentActiveChatId = '';
 let manuallyClosed = false;
 let lastUrl = '';
 let outboundQueue = [];
@@ -31,6 +32,32 @@ const clearHeartbeatTimer = () => {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
   }
+};
+
+const hasSocketDemand = () => {
+  return Boolean(messageHandler) || socketListeners.size > 0 || outboundQueue.length > 0;
+};
+
+const closeSocketIfIdle = () => {
+  if (!socket) return;
+  if (hasSocketDemand()) return;
+
+  manuallyClosed = true;
+  clearReconnectTimer();
+  clearHeartbeatTimer();
+
+  try {
+    socket.close(1000, 'Idle socket');
+  } catch {
+    // ignore close errors
+  }
+
+  socket = null;
+  connected = false;
+  reconnectAttempts = 0;
+  currentUserId = '';
+  currentActiveChatId = '';
+  lastUrl = '';
 };
 
 const safeParseMessage = (value) => {
@@ -79,7 +106,7 @@ const startHeartbeat = () => {
 };
 
 const scheduleReconnect = () => {
-  if (manuallyClosed || !currentUserId) return;
+  if (manuallyClosed || !currentUserId || !hasSocketDemand()) return;
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
 
   reconnectAttempts += 1;
@@ -144,6 +171,18 @@ export function connectChatSocket(userId, onMessage) {
     }
 
     startHeartbeat();
+
+    if (currentActiveChatId) {
+      sendSocketPayload(
+        {
+          action: 'setActiveChat',
+          type: 'setActiveChat',
+          chatId: currentActiveChatId,
+        },
+        { queueIfClosed: false }
+      );
+    }
+
     flushQueue();
   };
 
@@ -189,6 +228,14 @@ export function connectChatSocket(userId, onMessage) {
       console.log('Chat WebSocket disconnected');
     }
 
+    if (!hasSocketDemand()) {
+      currentUserId = '';
+      currentActiveChatId = '';
+      lastUrl = '';
+      reconnectAttempts = 0;
+      return;
+    }
+
     scheduleReconnect();
   };
 
@@ -199,7 +246,9 @@ export function disconnectChatSocket() {
   // Soft disconnect.
   // Do not close the socket here because App.jsx uses it globally for badges.
   clearReconnectTimer();
+  currentActiveChatId = '';
   messageHandler = null;
+  closeSocketIfIdle();
 }
 
 export function forceDisconnectChatSocket() {
@@ -221,6 +270,7 @@ export function forceDisconnectChatSocket() {
   connected = false;
   reconnectAttempts = 0;
   currentUserId = '';
+  currentActiveChatId = '';
   lastUrl = '';
   messageHandler = null;
   socketListeners.clear();
@@ -280,11 +330,17 @@ export function sendChatMessage({
 }
 
 export function setActiveChat(chatId) {
+  currentActiveChatId = String(chatId || '');
+
   return sendSocketPayload({
     action: 'setActiveChat',
     type: 'setActiveChat',
-    chatId: chatId || null,
+    chatId: currentActiveChatId,
   });
+}
+
+export function setActiveChatOnSocket(chatId = '') {
+  return setActiveChat(chatId);
 }
 
 export function sendRoomMessage(payload = {}) {
@@ -311,6 +367,7 @@ export function subscribeChatSocket(listener) {
 
   return () => {
     socketListeners.delete(listener);
+    closeSocketIfIdle();
   };
 }
 
@@ -324,6 +381,7 @@ export function getChatSocketState() {
     readyState: socket?.readyState ?? null,
     reconnectAttempts,
     currentUserId,
+    currentActiveChatId,
     queuedMessages: outboundQueue.length,
   };
 }

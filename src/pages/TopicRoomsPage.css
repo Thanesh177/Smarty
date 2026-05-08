@@ -1162,7 +1162,10 @@ select:disabled {
   .invite-row,
   .room-invite-item,
   .hidden-room-row,
-  .hidden-room-item,
+  .hidden-room-item {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
   .invite-result-row {
     grid-template-columns: minmax(0, 1fr) !important;
   }
@@ -1181,9 +1184,8 @@ select:disabled {
     justify-content: flex-end !important;
   }
 
-  .invite-result-action,
   .invite-send-btn {
-    width: 100% !important;
+    width: auto !important;
   }
 }
 
@@ -1445,4 +1447,48 @@ select:disabled {
 .room-card-menu-popover,
 .room-card-menu-popover * {
   pointer-events: auto !important;
+}
+
+
+.invite-result-row.member-row,
+.invite-result-row {
+  display: block !important;
+}
+
+.invite-inline-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 12px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.invite-user-info {
+  display: flex !important;
+  flex-direction: column !important;
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.invite-user-info strong,
+.invite-user-info small {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.invite-result-action {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+}
+
+.invite-result-action .invite-send-btn {
+  width: auto !important;
+  min-width: 104px !important;
+  white-space: nowrap !important;
 }

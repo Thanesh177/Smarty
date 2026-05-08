@@ -550,6 +550,23 @@ useEffect(() => {
       const msg = data?.message;
       const current = activeRoomRef.current;
 
+      if (data.type === 'roomInvite' && data.invite) {
+        const invite = data.invite;
+        const inviteRoomId = invite.roomId || invite.id;
+
+        if (inviteRoomId) {
+          setRoomInvites((prev) => {
+            if (prev.some((item) => (item.roomId || item.id) === inviteRoomId)) {
+              return prev;
+            }
+
+            return [invite, ...prev];
+          });
+        }
+
+        return;
+      }
+
       if (!msg) return;
 
       if (data.type === 'messageAck') {
@@ -1794,7 +1811,8 @@ function sendMessage(e) {
     senderId: userId,
     senderName: user?.name || user?.email || 'You',
     text: cleanText,
-    createdAt: Date.now(),
+    createdAt: String(Date.now()),
+    createdAtMs: Date.now(),
     pending: true,
   };
 
@@ -2129,7 +2147,7 @@ function sendMessage(e) {
         width="36"
         height="36"
         loading="lazy"
-        fetchpriority="low"
+        fetchPriority="low"
         decoding="async"
         referrerPolicy="no-referrer"
         onError={(event) => {
@@ -2445,29 +2463,31 @@ function sendMessage(e) {
           const canInvite = canInviteUserToCurrentRoom(u);
 
           return (
-            <div key={targetUserId || u.email} className="member-row invite-result-row">
-              <div>
-                <strong>{u.name || u.email || 'User'}</strong>
-                {u.email && <small>{u.email}</small>}
-              </div>
+<div key={targetUserId || u.email} className="member-row invite-result-row">
+  <div className="invite-inline-row">
+    <div className="invite-user-info">
+      <strong>{u.name || u.email || 'User'}</strong>
+      {u.email && <small>{u.email}</small>}
+    </div>
 
-              <div className="invite-result-action">
-                {alreadyMember ? (
-                  <span className="member-role-pill">Already in room</span>
-                ) : alreadyInvited ? (
-                  <span className="member-role-pill">Invite sent</span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => inviteUser(u)}
-                    className="approve-request-btn invite-send-btn"
-                    disabled={!canInvite}
-                  >
-                    Send Request
-                  </button>
-                )}
-              </div>
-            </div>
+    <div className="invite-result-action">
+      {alreadyMember ? (
+        <span className="member-role-pill">Already in room</span>
+      ) : alreadyInvited ? (
+        <span className="member-role-pill">Invite sent</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inviteUser(u)}
+          className="approve-request-btn invite-send-btn"
+          disabled={!canInvite}
+        >
+          Send Request
+        </button>
+      )}
+    </div>
+  </div>
+</div>
           );
         })
       )}
