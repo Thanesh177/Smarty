@@ -171,6 +171,7 @@
   overflow: hidden;
   animation: premiumBookFloat 1.8s ease-in-out infinite;
   transform: translateZ(0);
+  display: block;
 }
 
 .premium-book-loader::after {
@@ -830,7 +831,18 @@
   }
 }
 
-@media (max-width: 720px), (prefers-reduced-motion: reduce) {
+@media (max-width: 720px) {
+  .read-books-page::before,
+  .book-cover-placeholder::after {
+    animation: none !important;
+  }
+
+  .book-cover-placeholder::after {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
   .read-books-page::before,
   .book-cover-placeholder::after,
   .premium-book-loader,

@@ -488,6 +488,7 @@ export default function ChatPage() {
 
   // Avatar fallback/cache state
   const [failedProfileAvatarIds, setFailedProfileAvatarIds] = useState({});
+  const [loadedProfileAvatarIds, setLoadedProfileAvatarIds] = useState({});
   const [chatAvatarCache, setChatAvatarCache] = useState(() => readChatAvatarCache());
 
   const mountedRef = useRef(true);
@@ -1500,6 +1501,7 @@ const renderedChatList = useMemo(
     const realAvatarSrc = directAvatarSrc || cachedAvatarSrc;
     const avatarFailKey = `${chat.chatId}:${realAvatarSrc}`;
     const profileAvatarFailed = realAvatarSrc ? Boolean(failedProfileAvatarIds[avatarFailKey]) : false;
+    const profileAvatarLoaded = realAvatarSrc ? Boolean(loadedProfileAvatarIds[avatarFailKey]) : false;
 
     const realAvatar = profileAvatarFailed ? '' : realAvatarSrc;
     const avatarInitials = getUserDisplayName({
@@ -1523,58 +1525,67 @@ const renderedChatList = useMemo(
       >
         <div className="chat-item">
           <div className="chat-avatar-wrap">
-            {realAvatar ? (
-              <img
-                className="chat-avatar"
-                src={realAvatarSrc}
-                alt={getUserDisplayName({
-                  username: chat.receiverUsername,
-                  name: chat.receiverName,
-                  email: chat.receiverEmail,
-                })}
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
-                onError={() => {
-                  setFailedProfileAvatarIds((prev) => ({
-                    ...prev,
-                    [avatarFailKey]: true,
-                  }));
-                }}
-                onLoad={() => {
-                  setFailedProfileAvatarIds((prev) => {
-                    if (!prev[avatarFailKey]) return prev;
-                    const next = { ...prev };
-                    delete next[avatarFailKey];
-                    return next;
-                  });
+            <div className="chat-avatar-stack">
+              {(!realAvatar || !profileAvatarLoaded || profileAvatarFailed) && (
+                <div
+                  className="chat-avatar chat-avatar-fallback chat-avatar-default"
+                  aria-label="Default avatar"
+                  title="Default avatar"
+                >
+                  <span>{avatarInitials || 'US'}</span>
+                </div>
+              )}
+              {realAvatar && !profileAvatarFailed && (
+                <img
+                  className="chat-avatar"
+                  src={realAvatarSrc}
+                  alt={getUserDisplayName({
+                    username: chat.receiverUsername,
+                    name: chat.receiverName,
+                    email: chat.receiverEmail,
+                  })}
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  style={{ opacity: profileAvatarLoaded ? 1 : 0 }}
+                  onError={() => {
+                    setFailedProfileAvatarIds((prev) => ({
+                      ...prev,
+                      [avatarFailKey]: true,
+                    }));
+                  }}
+                  onLoad={() => {
+                    setLoadedProfileAvatarIds((prev) => ({
+                      ...prev,
+                      [avatarFailKey]: true,
+                    }));
 
-                  if (avatarCacheKey && realAvatarSrc) {
-                    setChatAvatarCache((prev) => {
-                      const current = prev?.[avatarCacheKey];
-                      if (current?.url === realAvatarSrc) return prev;
-
-                      return {
-                        ...prev,
-                        [avatarCacheKey]: {
-                          url: realAvatarSrc,
-                          savedAt: Date.now(),
-                        },
-                      };
+                    setFailedProfileAvatarIds((prev) => {
+                      if (!prev[avatarFailKey]) return prev;
+                      const next = { ...prev };
+                      delete next[avatarFailKey];
+                      return next;
                     });
-                  }
-                }}
-                data-avatar-url={realAvatarSrc}
-              />
-            ) : (
-              <div
-                className="chat-avatar chat-avatar-fallback chat-avatar-default"
-                aria-label="Default avatar"
-                title="Default avatar"
-              >
-                <span>{avatarInitials || 'US'}</span>
-              </div>
-            )}
+
+                    if (avatarCacheKey && realAvatarSrc) {
+                      setChatAvatarCache((prev) => {
+                        const current = prev?.[avatarCacheKey];
+                        if (current?.url === realAvatarSrc) return prev;
+
+                        return {
+                          ...prev,
+                          [avatarCacheKey]: {
+                            url: realAvatarSrc,
+                            savedAt: Date.now(),
+                          },
+                        };
+                      });
+                    }
+                  }}
+                  data-avatar-url={realAvatarSrc}
+                />
+              )}
+            </div>
           </div>
 
           <div className="chat-content">
@@ -1602,6 +1613,7 @@ const renderedChatList = useMemo(
     chats,
     chatAvatarCache,
     failedProfileAvatarIds,
+    loadedProfileAvatarIds,
     openChat,
   ]
 );
