@@ -14,6 +14,14 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const messaging = getMessaging(app);
 
+function dispatchSmartyForegroundNotification(detail) {
+  window.dispatchEvent(
+    new CustomEvent('smarty-notification', {
+      detail,
+    })
+  );
+}
+
 export async function requestNotificationToken() {
   const permission = await Notification.requestPermission();
 
@@ -55,42 +63,50 @@ export function setupAndroidPushTokenListener() {
 export function listenForForegroundMessages() {
   return onMessage(messaging, async (payload) => {
     console.log('Foreground push received:', payload);
-    console.log('Notification permission:', Notification.permission);
 
-    const title =
-      payload.data?.title ||
-      payload.notification?.title ||
-      'Smarty';
-
+    const title = payload.data?.title || payload.notification?.title || 'Smarty';
     const body =
       payload.data?.body ||
       payload.notification?.body ||
       'You have a new notification.';
 
-    if (Notification.permission !== 'granted') {
-      console.warn('Notifications are not granted');
-      return;
-    }
+    const url = payload.data?.url || '/';
+    const type = payload.data?.type || 'general';
 
-    try {
-      const registration = await navigator.serviceWorker.ready;
+    dispatchSmartyForegroundNotification({
+      title,
+      body,
+      url,
+      type,
+      rawPayload: payload,
+    });
 
-      await registration.showNotification(title, {
-        body,
-        icon: '/logo192.png',
-        badge: '/logo192.png',
-        data: payload.data || {},
-      });
+    if (document.visibilityState !== 'visible') {
+      if (Notification.permission !== 'granted') {
+        console.warn('Notifications are not granted');
+        return;
+      }
 
-      console.log('Foreground notification shown');
-    } catch (err) {
-      console.error('Foreground notification failed:', err);
+      try {
+        const registration = await navigator.serviceWorker.ready;
 
-      new Notification(title, {
-        body,
-        icon: '/logo192.png',
-        data: payload.data || {},
-      });
+        await registration.showNotification(title, {
+          body,
+          icon: '/logo192.png',
+          badge: '/logo192.png',
+          data: payload.data || {},
+        });
+
+        console.log('Background-style notification shown from foreground handler');
+      } catch (err) {
+        console.error('Foreground notification fallback failed:', err);
+
+        new Notification(title, {
+          body,
+          icon: '/logo192.png',
+          data: payload.data || {},
+        });
+      }
     }
   });
 }

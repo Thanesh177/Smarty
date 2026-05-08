@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef, lazy, Suspense, Component } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
@@ -107,11 +107,39 @@ function getUnreadFromChatsPayload(payload) {
   return chats.reduce((sum, chat) => sum + Number(chat?.unreadCount || 0), 0);
 }
 
+function ReminderPopup({ title, body, visible, onClose, onClick }) {
+  useEffect(() => {
+    if (!visible) return undefined;
+
+    const timer = window.setTimeout(() => {
+      onClose?.();
+    }, 4200);
+
+    return () => window.clearTimeout(timer);
+  }, [visible, onClose]);
+
+  return (
+    <button
+      type="button"
+      className={`reminder-popup ${visible ? 'show' : ''}`}
+      onClick={onClick}
+      aria-live="polite"
+    >
+      <div className="reminder-popup-card">
+        <strong>{title}</strong>
+        <p>{body}</p>
+      </div>
+    </button>
+  );
+}
+
 function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [totalUnread, setTotalUnread] = useState(0);
+  const [popupNotification, setPopupNotification] = useState(null);
 
   const touchStartXRef = useRef(null);
   const unreadRefreshInFlightRef = useRef(false);
@@ -368,6 +396,24 @@ function Layout() {
   }, []);
 
   useEffect(() => {
+    const handleSmartyNotification = (event) => {
+      const detail = event.detail || {};
+
+      setPopupNotification({
+        title: detail.title || 'Smarty',
+        body: detail.body || 'You have a new notification.',
+        url: detail.url || '/',
+      });
+    };
+
+    window.addEventListener('smarty-notification', handleSmartyNotification);
+
+    return () => {
+      window.removeEventListener('smarty-notification', handleSmartyNotification);
+    };
+  }, []);
+
+  useEffect(() => {
     const preloadCommonPages = () => {
       if (document.visibilityState === 'hidden' || !navigator.onLine) return;
 
@@ -399,6 +445,19 @@ function Layout() {
   return (
     <>
       <AuthRedirectHandler />
+
+      <ReminderPopup
+        title={popupNotification?.title || 'Smarty'}
+        body={popupNotification?.body || ''}
+        visible={Boolean(popupNotification)}
+        onClose={() => setPopupNotification(null)}
+        onClick={() => {
+          if (popupNotification?.url) {
+            navigate(popupNotification.url);
+          }
+          setPopupNotification(null);
+        }}
+      />
 
       {!isAuthPage && <InstallPrompt />}
 
@@ -638,9 +697,79 @@ function Layout() {
   );
 }
 
+function ReminderPopupStyles() {
+  return (
+    <style>{`
+      .reminder-popup {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 10000;
+        border: 0;
+        background: transparent;
+        padding: 0;
+        cursor: pointer;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-18px) scale(0.96);
+        transition: opacity 0.28s ease, transform 0.28s ease;
+      }
+
+      .reminder-popup.show {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0) scale(1);
+      }
+
+      .reminder-popup-card {
+        min-width: 280px;
+        max-width: 340px;
+        padding: 14px 16px;
+        border-radius: 20px;
+        background: linear-gradient(180deg, rgba(10, 15, 28, 0.94), rgba(6, 10, 20, 0.96));
+        color: #fff;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.07) inset;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        text-align: left;
+      }
+
+      .reminder-popup-card strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+      }
+
+      .reminder-popup-card p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.45;
+        color: rgba(255, 255, 255, 0.84);
+      }
+
+      @media (max-width: 640px) {
+        .reminder-popup {
+          top: 12px;
+          right: 12px;
+          left: 12px;
+        }
+
+        .reminder-popup-card {
+          min-width: 0;
+          max-width: none;
+          width: 100%;
+        }
+      }
+    `}</style>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
+      <ReminderPopupStyles />
       <Layout />
     </AuthProvider>
   );

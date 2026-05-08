@@ -1,0 +1,41 @@
+.reminder-popup {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  opacity: 0;
+  transform: translateY(-18px) scale(0.96);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  cursor: pointer;
+}
+
+.reminder-popup.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.reminder-popup-card {
+  min-width: 280px;
+  max-width: 340px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(8, 12, 24, 0.92);
+  color: white;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.reminder-popup-card strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.reminder-popup-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.82);
+}

@@ -22,8 +22,8 @@ const getPostId = (post) => post?.reelId || post?.id || '';
 
 const INITIAL_RENDER_LIMIT = 3;
 const RENDER_BATCH_SIZE = 3;
-const FAST_IMAGE_LIMIT = 6;
-const IMAGE_PRELOAD_MARGIN = '1400px';
+const FAST_IMAGE_LIMIT = 4;
+const IMAGE_PRELOAD_MARGIN = '900px';
 const PULL_REFRESH_VIEWPORT_RATIO = 0.4;
 
 const getPostCreatorId = (post) => {
@@ -155,7 +155,7 @@ const FeedImage = memo(function FeedImage({ src, alt, index }) {
       alt={alt}
       loading={index < FAST_IMAGE_LIMIT ? 'eager' : 'lazy'}
       decoding="async"
-     fetchpriority={index < FAST_IMAGE_LIMIT ? 'high' : shouldLoad ? 'auto' : 'low'}
+      fetchPriority={index < FAST_IMAGE_LIMIT ? 'high' : shouldLoad ? 'auto' : 'low'}
       className="feed-image"
     />
   );
@@ -410,6 +410,7 @@ export default function FeedPage() {
   const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER_LIMIT);
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFeedAtTop, setIsFeedAtTop] = useState(true);
   useEffect(() => {
     mountedRef.current = true;
 
@@ -626,7 +627,7 @@ export default function FeedPage() {
       },
       {
         root: null,
-        rootMargin: '900px',
+        rootMargin: '600px',
         threshold: 0,
       }
     );
@@ -725,6 +726,7 @@ export default function FeedPage() {
     if (!feedRef.current || isRefreshing) return;
 
     const isAtTop = feedRef.current.scrollTop <= 2;
+    setIsFeedAtTop(isAtTop);
 
     if (!isAtTop) {
       pullStartYRef.current = 0;
@@ -737,6 +739,7 @@ export default function FeedPage() {
     pullStartYRef.current = event.touches[0]?.clientY || 0;
     pullDistanceRef.current = 0;
     pullRefreshTriggeredRef.current = false;
+    setPullDistance(0);
   }, [isRefreshing]);
 
   const handleFeedTouchMove = useCallback((event) => {
@@ -746,9 +749,15 @@ export default function FeedPage() {
     const distance = Math.max(0, currentY - pullStartYRef.current);
     const isAtTop = feedRef.current.scrollTop <= 2;
 
+    setIsFeedAtTop(isAtTop);
+
     if (!isAtTop || distance <= 0) {
       pullDistanceRef.current = 0;
-      setPullDistance(0);
+
+      if (mountedRef.current) {
+        setPullDistance(0);
+      }
+
       return;
     }
 
@@ -769,13 +778,29 @@ export default function FeedPage() {
 
     pullStartYRef.current = 0;
     pullDistanceRef.current = 0;
-    setPullDistance(0);
+    setIsFeedAtTop(Boolean(isAtTop));
+
+    if (mountedRef.current) {
+      setPullDistance(0);
+    }
 
     if (shouldRefresh && !pullRefreshTriggeredRef.current && !isRefreshing) {
       pullRefreshTriggeredRef.current = true;
       handleRefreshFeed();
     }
   }, [handleRefreshFeed, isRefreshing]);
+
+  const handleFeedScroll = useCallback(() => {
+    if (!feedRef.current) return;
+
+    const atTop = feedRef.current.scrollTop <= 2;
+    setIsFeedAtTop(atTop);
+
+    if (!atTop && pullDistanceRef.current > 0) {
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1010,6 +1035,7 @@ export default function FeedPage() {
       onTouchMove={handleFeedTouchMove}
       onTouchEnd={handleFeedTouchEnd}
       onTouchCancel={handleFeedTouchEnd}
+      onScroll={handleFeedScroll}
       style={{ overscrollBehaviorY: 'contain' }}
     >
       <button
@@ -1022,13 +1048,17 @@ export default function FeedPage() {
 
       {toast && <div className="success-toast">{toast}</div>}
 
-      <div
-        className={isRefreshing ? 'pull-refresh-indicator refreshing' : 'pull-refresh-indicator'}
-        style={{ transform: `translate(-50%, ${pullDistance || (isRefreshing ? 48 : 0)}px)` }}
-        aria-live="polite"
-      >
-        <span className="pull-refresh-spinner" />
-      </div>
+      {(pullDistance > 0 || isRefreshing) && isFeedAtTop && (
+        <div
+          className={isRefreshing ? 'pull-refresh-indicator refreshing' : 'pull-refresh-indicator'}
+          style={{
+            transform: `translate(-50%, ${pullDistance || (isRefreshing ? 48 : 0)}px)`,
+          }}
+          aria-live="polite"
+        >
+          <span className="pull-refresh-spinner" />
+        </div>
+      )}
 
       <aside className="topic-rail">
         {renderedTopics}
