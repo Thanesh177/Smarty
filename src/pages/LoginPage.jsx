@@ -25,6 +25,9 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
+      sessionStorage.setItem('smarty-post-login-redirect', from);
+      localStorage.setItem('smarty-post-login-redirect', from);
+
       if (isAndroidCognitoLogin()) {
         startAndroidGoogleLogin();
         return;
@@ -65,7 +68,16 @@ export default function LoginPage() {
         }
 
         setError(`Next sign-in step: ${step || 'unknown'}`);
+        return;
       }
+
+      setMessage('Login successful. Loading your profile...');
+      sessionStorage.setItem('smarty-post-login-redirect', from);
+      localStorage.setItem('smarty-post-login-redirect', from);
+
+      window.setTimeout(() => {
+        window.location.replace(from);
+      }, 250);
     } catch (err) {
       setError(err?.message || 'Login failed. Check your Cognito configuration.');
     } finally {
@@ -134,7 +146,11 @@ export default function LoginPage() {
           {error && <p className="status error">{error}</p>}
           {message && <p className="status success">{message}</p>}
 
-          <button className="primary-btn login-submit" disabled={submitting || !form.email.trim() || !form.password} type="submit">
+          <button
+            className="primary-btn login-submit"
+            disabled={submitting || !form.email.trim() || !form.password}
+            type="submit"
+          >
             {submitting ? 'Please wait...' : 'Login'}
           </button>
 
@@ -150,7 +166,7 @@ export default function LoginPage() {
 
           <div className="login-links">
             <Link className="text-btn" to="/register" state={{ from }}>
-              Need an account? Register
+              New here? Create an account
             </Link>
           </div>
         </form>

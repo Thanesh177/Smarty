@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { userApi } from '../api/client';
 import './RegisterPage.css';
 
 export default function RegisterPage() {
@@ -31,7 +32,20 @@ export default function RegisterPage() {
 
     try {
       if (step === 'register') {
-        const result = await register(form.name, form.email, form.password);
+        const cleanEmail = form.email.trim().toLowerCase();
+
+        if (!cleanEmail) {
+          setError('Please enter your email.');
+          return;
+        }
+
+        const existing = await userApi.checkEmailExists(cleanEmail);
+
+        if (existing.exists) {
+          console.warn('Email found in SmartyUsers, continuing signup so Cognito can confirm duplicate status.');
+        }
+
+        const result = await register(form.name, cleanEmail, form.password);
 
         if (result?.isSignUpComplete) {
           setMessage('Account created. You can log in now.');
@@ -43,12 +57,25 @@ export default function RegisterPage() {
       }
 
       if (step === 'confirm') {
-        await confirmRegistration(form.email, form.code);
+        await confirmRegistration(form.email.trim().toLowerCase(), form.code);
         setMessage('Account verified. You can log in now.');
         setStep('done');
       }
     } catch (err) {
-      setError(err?.message || 'Registration failed.');
+      const errorName = err?.name || '';
+      const errorMessage = err?.message || '';
+      const combinedError = `${errorName} ${errorMessage}`;
+
+      if (
+        combinedError.includes('UsernameExistsException') ||
+        combinedError.toLowerCase().includes('already exists') ||
+        combinedError.toLowerCase().includes('already signed up') ||
+        combinedError.toLowerCase().includes('account with the given email')
+      ) {
+        setError('This email is already signed up. Please log in instead.');
+      } else {
+        setError(errorMessage || 'Registration failed.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -82,6 +109,7 @@ export default function RegisterPage() {
             <input
               placeholder="Email"
               type="email"
+              autoComplete="email"
               value={form.email}
               onChange={(e) => updateField('email', e.target.value)}
             />
@@ -89,6 +117,7 @@ export default function RegisterPage() {
             <input
               placeholder="Password"
               type="password"
+              autoComplete="new-password"
               value={form.password}
               onChange={(e) => updateField('password', e.target.value)}
             />
@@ -116,7 +145,11 @@ export default function RegisterPage() {
         {message && <p className="status success">{message}</p>}
 
         {step !== 'done' ? (
-          <button className="primary-btn" disabled={submitting} type="submit">
+          <button
+            className="primary-btn"
+            disabled={submitting || (step === 'register' && (!form.email.trim() || !form.password)) || (step === 'confirm' && !form.code.trim())}
+            type="submit"
+          >
             {submitting
               ? 'Please wait...'
               : step === 'register'

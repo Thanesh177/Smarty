@@ -243,6 +243,53 @@ const normalizeUserProfile = (user = {}) => {
   };
 };
 
+const getAuthClaimsProfile = async () => {
+  try {
+    const session = await fetchAuthSession();
+    const payload = session?.tokens?.idToken?.payload || session?.tokens?.accessToken?.payload || {};
+
+    const sub = payload.sub || payload.username || '';
+    const email = String(payload.email || '').trim().toLowerCase();
+    const trimmedEmailName = email ? email.split('@')[0] : '';
+    const rawUsername =
+      payload.preferred_username ||
+      payload['cognito:username'] ||
+      trimmedEmailName ||
+      'user';
+    const username = String(rawUsername || 'user')
+      .trim()
+      .replace(/^google[_-]/i, '')
+      .replace(/[^a-zA-Z0-9._]/g, '')
+      .slice(0, 24) || trimmedEmailName || 'user';
+    const name =
+      payload.name ||
+      payload.given_name ||
+      trimmedEmailName ||
+      username ||
+      'User';
+    const picture = payload.picture || '';
+
+    if (!sub && !email) return null;
+
+    return normalizeUserProfile({
+      id: sub,
+      userId: sub,
+      sub,
+      email,
+      username,
+      name,
+      displayName: name,
+      photoUrl: picture,
+      avatarUrl: picture,
+      profilePic: picture,
+      profilePictureUrl: picture,
+      isFallbackProfile: true,
+    });
+  } catch {
+    return null;
+  }
+};
+
 const normalizeChatProfile = (chat = {}) => {
   const receiverAvatarUrl = getReceiverProfileImageUrl(chat);
   const updatedAt = getProfileUpdatedAt(chat);
@@ -1133,10 +1180,47 @@ async getSingleReel(reelId) {
 };
 
 export const userApi = {
+  checkEmailExists: async (email) => {
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    if (!cleanEmail) {
+      return { exists: false, provider: '', message: '' };
+    }
+
+    try {
+      const { data } = await api.post('/users/check-email', { email: cleanEmail });
+      const parsed = parseApiBody(data);
+
+      return {
+        exists: Boolean(parsed?.exists),
+        provider: parsed?.provider || '',
+        message: parsed?.message || '',
+      };
+    } catch (error) {
+      if (error?.response?.status === 404) {
+        return { exists: false, provider: '', message: '' };
+      }
+
+      console.error('CHECK EMAIL API ERROR:', error?.response?.data || error);
+      throw error;
+    }
+  },
+
   getMe: async () => {
-    const res = await api.get('/users/profile');
-    const parsed = parseApiBody(res.data);
-    return normalizeUserProfile(parsed.profile || parsed);
+    try {
+      const res = await api.get('/users/profile');
+      const parsed = parseApiBody(res.data);
+      return normalizeUserProfile(parsed.profile || parsed);
+    } catch (error) {
+      const fallbackProfile = await getAuthClaimsProfile();
+
+      if (fallbackProfile) {
+        console.warn('USERS PROFILE API FAILED, USING COGNITO FALLBACK:', error?.response?.data || error?.message || error);
+        return fallbackProfile;
+      }
+
+      throw error;
+    }
   },
 
   async followUser(followingId) {

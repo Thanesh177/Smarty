@@ -10,8 +10,6 @@ import {
 import { Hub } from 'aws-amplify/utils';
 import { exchangeAndroidCodeForTokens } from '../lib/cognito';
 
-console.log('AuthContext loaded');
-
 const AuthContext = createContext(null);
 
 function decodeJwtPayload(token) {
@@ -24,6 +22,46 @@ function decodeJwtPayload(token) {
   }
 }
 
+function getSafeName(payload = {}, email = '') {
+  const trimmedEmail = email ? String(email).split('@')[0] : '';
+  return payload.name || payload.given_name || payload.preferred_username || trimmedEmail || 'User';
+}
+
+function getSafeUsername(currentUser, payload = {}, email = '') {
+  const trimmedEmail = email ? String(email).split('@')[0] : '';
+  const rawUsername =
+    payload.preferred_username ||
+    payload['cognito:username'] ||
+    currentUser?.username ||
+    trimmedEmail ||
+    'user';
+
+  return String(rawUsername)
+    .replace(/^google[_-]/i, '')
+    .replace(/[^a-zA-Z0-9._]/g, '')
+    .slice(0, 24) || trimmedEmail || 'user';
+}
+
+function saveAuthUser(authUser) {
+  if (!authUser) return;
+
+  if (authUser.token) {
+    localStorage.setItem('eduscroll_token', authUser.token);
+  }
+
+  if (authUser.accessToken) {
+    localStorage.setItem('eduscroll_access_token', authUser.accessToken);
+  }
+
+  localStorage.setItem('eduscroll_user', JSON.stringify(authUser));
+}
+
+function clearAuthStorage() {
+  localStorage.removeItem('eduscroll_token');
+  localStorage.removeItem('eduscroll_user');
+  localStorage.removeItem('eduscroll_access_token');
+}
+
 function mapCognitoUser(currentUser, session) {
   const idTokenObject = session?.tokens?.idToken;
   const accessTokenObject = session?.tokens?.accessToken;
@@ -31,21 +69,23 @@ function mapCognitoUser(currentUser, session) {
   const idToken = idTokenObject?.toString() ?? null;
   const accessToken = accessTokenObject?.toString() ?? null;
 
-  const payload = idTokenObject?.payload || {};
+  const payload = idTokenObject?.payload || accessTokenObject?.payload || {};
   const sub = payload.sub || currentUser?.userId || null;
   const email =
     payload.email ||
     currentUser?.signInDetails?.loginId ||
-    currentUser?.username ||
-    null;
+    '';
+
+  const username = getSafeUsername(currentUser, payload, email);
+  const name = getSafeName(payload, email);
 
   return {
     id: sub,
     userId: sub,
     sub,
-    username: currentUser?.username || email,
+    username,
     email,
-    name: payload.name || email,
+    name,
     token: idToken,
     accessToken,
   };
@@ -68,20 +108,19 @@ console.log('ANDROID CODE:', androidCode)
           const tokens = await exchangeAndroidCodeForTokens(androidCode);
           const payload = decodeJwtPayload(tokens.id_token);
 
+          const email = payload.email || '';
           const authUser = {
             id: payload.sub || null,
             userId: payload.sub || null,
             sub: payload.sub || null,
-            username: payload.email || payload['cognito:username'] || null,
-            email: payload.email || null,
-            name: payload.name || payload.email || 'User',
+            username: getSafeUsername(null, payload, email),
+            email,
+            name: getSafeName(payload, email),
             token: tokens.id_token,
             accessToken: tokens.access_token,
           };
 
-          localStorage.setItem('eduscroll_token', tokens.id_token);
-          localStorage.setItem('eduscroll_access_token', tokens.access_token);
-          localStorage.setItem('eduscroll_user', JSON.stringify(authUser));
+          saveAuthUser(authUser);
           setUser(authUser);
           setLoading(false);
           window.location.replace('/feed');
@@ -89,13 +128,15 @@ console.log('ANDROID CODE:', androidCode)
         }
 
         const cachedToken = localStorage.getItem('eduscroll_token');
-const cachedUser = localStorage.getItem('eduscroll_user');
+        const cachedUser = localStorage.getItem('eduscroll_user');
 
-if (cachedToken && cachedUser) {
-  setUser(JSON.parse(cachedUser));
-  setLoading(false);
-  return;
-}
+        if (cachedToken && cachedUser) {
+          try {
+            setUser(JSON.parse(cachedUser));
+          } catch {
+            clearAuthStorage();
+          }
+        }
 
         const currentUser = await getCurrentUser();
         const session = await fetchAuthSession();
@@ -103,21 +144,26 @@ if (cachedToken && cachedUser) {
 
         const authUser = mapCognitoUser(currentUser, session);
 
-        if (authUser.token) {
-          localStorage.setItem('eduscroll_token', authUser.token);
-        }
-        if (authUser.accessToken) {
-          localStorage.setItem('eduscroll_access_token', authUser.accessToken);
-        }
-        localStorage.setItem('eduscroll_user', JSON.stringify(authUser));
+        saveAuthUser(authUser);
         setUser(authUser);
-      } catch (err) {
-        console.error('Auth init failed:', err);
-        localStorage.removeItem('eduscroll_token');
-        localStorage.removeItem('eduscroll_user');
-        localStorage.removeItem('eduscroll_access_token');
-        setUser(null);
-      } finally {
+} catch (err) {
+  const message =
+    err?.name ||
+    err?.message ||
+    '';
+
+  const isUnauthenticated =
+    String(message).includes('UserUnAuthenticatedException') ||
+    String(message).includes('needs to be authenticated') ||
+    String(message).includes('No current user');
+
+  if (!isUnauthenticated) {
+    console.error('Auth init failed:', err);
+  }
+
+  clearAuthStorage();
+  setUser(null);
+} finally {
         setLoading(false);
       }
     };
@@ -138,14 +184,7 @@ if (cachedToken && cachedUser) {
           const session = await fetchAuthSession();
           const authUser = mapCognitoUser(currentUser, session);
 
-          if (authUser.token) {
-            localStorage.setItem('eduscroll_token', authUser.token);
-          }
-          if (authUser.accessToken) {
-            localStorage.setItem('eduscroll_access_token', authUser.accessToken);
-          }
-
-          localStorage.setItem('eduscroll_user', JSON.stringify(authUser));
+          saveAuthUser(authUser);
           setUser(authUser);
           window.location.replace('/feed');
         } catch (err) {
@@ -168,13 +207,7 @@ const login = async (email, password) => {
     const session = await fetchAuthSession();
     const authUser = mapCognitoUser(currentUser, session);
 
-    if (authUser.token) {
-      localStorage.setItem('eduscroll_token', authUser.token);
-    }
-    if (authUser.accessToken) {
-      localStorage.setItem('eduscroll_access_token', authUser.accessToken);
-    }
-    localStorage.setItem('eduscroll_user', JSON.stringify(authUser));
+    saveAuthUser(authUser);
     setUser(authUser);
 
     return { success: true };
@@ -216,9 +249,7 @@ const login = async (email, password) => {
 
   const logout = async () => {
     await signOut();
-    localStorage.removeItem('eduscroll_token');
-    localStorage.removeItem('eduscroll_user');
-    localStorage.removeItem('eduscroll_access_token');
+    clearAuthStorage();
     setUser(null);
   };
 
@@ -228,11 +259,11 @@ const login = async (email, password) => {
     const accessToken = session?.tokens?.accessToken?.toString() ?? null;
 
     if (idToken) {
-      localStorage.setItem('eduscroll_token', idToken);
-      if (accessToken) {
-        localStorage.setItem('eduscroll_access_token', accessToken);
-      }
-      setUser((prev) => (prev ? { ...prev, token: idToken, accessToken } : prev));
+      setUser((prev) => {
+        const nextUser = prev ? { ...prev, token: idToken, accessToken } : prev;
+        if (nextUser) saveAuthUser(nextUser);
+        return nextUser;
+      });
     }
 
     return idToken;

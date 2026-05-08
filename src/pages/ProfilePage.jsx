@@ -33,6 +33,31 @@ function withCacheBuster(url, value) {
   return `${url}${separator}v=${encodeURIComponent(value || Date.now())}`;
 }
 
+function isLikelyCognitoSub(value) {
+  const text = String(value || '').trim();
+  return /^[a-f0-9-]{24,}$/i.test(text) || /^[a-z0-9]{20,}$/i.test(text);
+}
+
+function getCleanProfileName(profile) {
+  const emailName = profile?.email ? String(profile.email).split('@')[0] : '';
+  const candidates = [
+    profile?.username,
+    profile?.name,
+    profile?.displayName,
+    emailName,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim();
+    if (!value) continue;
+    if (value.includes('@')) return value.split('@')[0];
+    if (isLikelyCognitoSub(value)) continue;
+    return value;
+  }
+
+  return 'User';
+}
+
 const AnimatedStatNumber = memo(function AnimatedStatNumber({ value }) {
   const target = Number(value || 0);
   const [displayValue, setDisplayValue] = useState(0);
@@ -181,6 +206,7 @@ export default function ProfilePage() {
   const mountedRef = useRef(false);
   const profileLoadIdRef = useRef(0);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
+  const [avatarImageLoaded, setAvatarImageLoaded] = useState(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -209,18 +235,7 @@ export default function ProfilePage() {
     };
   }, [photoPreview]);
 
-  const displayName = useMemo(() => {
-    const raw = profile?.username || profile?.name || profile?.email || 'User';
-    const value = String(raw).trim();
-
-    if (value.includes('@')) return value.split('@')[0];
-
-    if (value.includes('-') && value.length > 20) {
-      return profile?.email ? profile.email.split('@')[0] : 'User';
-    }
-
-    return value || 'User';
-  }, [profile]);
+  const displayName = useMemo(() => getCleanProfileName(profile), [profile]);
 
   const initials = useMemo(() => {
     return displayName.substring(0, 2).toUpperCase();
@@ -234,6 +249,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     setAvatarImageFailed(false);
+    setAvatarImageLoaded(false);
   }, [profileImageSrc]);
 
   const withTimeout = useCallback((promise, ms = 12000) => {
@@ -334,11 +350,7 @@ export default function ProfilePage() {
 
       setProfile(me);
 
-      const safeUsername =
-        me.username && !String(me.username).includes('-')
-          ? me.username
-          : me.email?.split('@')[0] || me.name || '';
-
+      const safeUsername = getCleanProfileName(me);
       setNewUsername(safeUsername);
       setLoading(false);
 
@@ -588,6 +600,7 @@ export default function ProfilePage() {
       }));
 
       setAvatarImageFailed(false);
+      setAvatarImageLoaded(false);
 
       setEditingProfile(false);
       setNewPhoto(null);
@@ -703,14 +716,19 @@ export default function ProfilePage() {
                 loading="eager"
                 decoding="async"
                 fetchPriority="high"
-                onError={() => setAvatarImageFailed(true)}
+                style={{ opacity: avatarImageLoaded ? 1 : 0 }}
+                onLoad={() => setAvatarImageLoaded(true)}
+                onError={() => {
+                  setAvatarImageFailed(true);
+                  setAvatarImageLoaded(false);
+                }}
               />
             ) : null}
 
             <div
               className="avatar-xl"
               style={{
-                display: profileImageSrc && !avatarImageFailed ? 'none' : 'grid',
+                display: !profileImageSrc || avatarImageFailed || !avatarImageLoaded ? 'grid' : 'none',
               }}
             >
               {initials}
