@@ -879,14 +879,49 @@ async deleteComment(payload) {
   }
 },
 
+async getPostDetails(payload) {
+  if (USE_MOCK) {
+    await delay(200);
+    return {
+      explanation: payload?.aiDetailedExplanation || '',
+      aiDetailedExplanation: payload?.aiDetailedExplanation || '',
+      post: payload || {},
+    };
+  }
+
+  try {
+    const { data } = await api.post('/posts/details', {
+      postId: payload?.postId || payload?.id || payload?.reelId,
+      id: payload?.id || payload?.postId || payload?.reelId,
+      reelId: payload?.reelId || payload?.postId || payload?.id,
+      title: payload?.title || '',
+      body: payload?.body || '',
+      topic: payload?.topic || '',
+      mode: 'detailed',
+    });
+
+    const parsed = parseApiBody(data);
+
+    return {
+      ...parsed,
+      explanation: parsed?.post?.aiDetailedExplanation || parsed?.aiDetailedExplanation || parsed?.explanation || '',
+      aiDetailedExplanation: parsed?.post?.aiDetailedExplanation || parsed?.aiDetailedExplanation || parsed?.explanation || '',
+      post: parsed?.post || {},
+    };
+  } catch (err) {
+    console.error('GET POST DETAILS API ERROR:', err?.response?.data || err);
+    throw err;
+  }
+},
+
 async explainPost(payload) {
   const { data } = await api.post('/posts/explain', payload);
-  return data;
+  return parseApiBody(data);
 },
 
 async askPostDoubt(payload) {
   const { data } = await api.post('/posts/ask-doubt', payload);
-  return data;
+  return parseApiBody(data);
 },
 
 async editComment(payload) {

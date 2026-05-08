@@ -17,6 +17,20 @@ const topicSorter = new Intl.Collator(undefined, {
   numeric: true,
 });
 
+const DEFAULT_TOPICS = [
+  "Finance", "Investing", "Personal Finance", "Stock Market", "Trading",
+  "Psychology", "Human Behavior", "Decision Making", "Habits", "Motivation",
+  "Neuroscience", "Memory", "Learning", "Brain Function",
+  "Technology", "Artificial Intelligence", "Cybersecurity", "Software Systems",
+  "Business", "Startups", "Entrepreneurship", "Marketing",
+  "Economics", "Global Economy", "Consumer Behavior",
+  "Health", "Mental Health", "Nutrition", "Sleep", "Fitness",
+  "Space", "Astronomy", "Physics", "Gravity", "Black Holes",
+  "Climate Change", "Environment", "Sustainability",
+  "History", "Ancient Civilizations", "Society", "Culture",
+  "Productivity", "Focus", "Self Improvement", "Discipline",
+];
+
 const TopicCard = memo(function TopicCard({ topic, onNavigate }) {
   const handleClick = useCallback(() => {
     onNavigate(topic);
@@ -41,14 +55,14 @@ export default function TopicsPage() {
   const { posts, loading, error } = useFeed();
 
   const topics = useMemo(() => {
-    if (!Array.isArray(posts) || posts.length === 0) return [];
+    const uniqueTopics = new Set(DEFAULT_TOPICS);
 
-    const uniqueTopics = new Set();
-
-    for (const post of posts) {
-      const topic = String(post?.topic || "").trim();
-      if (!topic) continue;
-      uniqueTopics.add(topic);
+    if (Array.isArray(posts)) {
+      for (const post of posts) {
+        const topic = String(post?.topic || "").trim();
+        if (!topic) continue;
+        uniqueTopics.add(topic);
+      }
     }
 
     return Array.from(uniqueTopics).sort(topicSorter.compare);
@@ -74,9 +88,6 @@ export default function TopicsPage() {
       {loading && <p className="feed-topics-status">Loading topics...</p>}
       {error && <p className="feed-topics-status error">{error}</p>}
 
-      {!loading && !error && topics.length === 0 && (
-        <p className="feed-topics-status">No topics found yet.</p>
-      )}
 
       <section className="feed-topics-grid">
         {topics.map((topic) => (

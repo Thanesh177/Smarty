@@ -1,13 +1,15 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import confetti from "canvas-confetti";
-import BrainGameEngine from "../components/games/BrainGameEngine";
 import { saveWrongQuestion, getWrongQuestions } from "../lib/progressStore";
 import "./QuizPage.css";
-import BossChallenge from "../components/boss/BossChallenge";
 import { checkAchievements } from "../components/achievements/achievementEngine";
 import AchievementToast from "../components/achievements/AchievementToast";
 import useSoundFeedback from "../components/audio/useSoundFeedback";
 import XPOrb from "../components/ui/XPOrb";
+
+
+const BrainGameEngine = lazy(() => import("../components/games/BrainGameEngine"));
+const BossChallenge = lazy(() => import("../components/boss/BossChallenge"));
 
 
 
@@ -178,8 +180,10 @@ const QUESTIONS = {};
 const TopicCard = memo(function TopicCard({ item, progress, onStart }) {
   return (
     <button
+      type="button"
       className={`topic-card ${item.color}`}
       onClick={() => onStart(item)}
+      aria-label={`Start ${item.title} quiz`}
     >
       <div className="topic-card-top">
         <span className="topic-emoji">{item.emoji}</span>
@@ -233,6 +237,16 @@ const ReviewItem = memo(function ReviewItem({ answer, answerIndex }) {
       </div>
       <span>{answer.isCorrect ? "✅" : "❌"}</span>
     </article>
+  );
+});
+
+const QuizLoadingCard = memo(function QuizLoadingCard({ label = "Loading challenge..." }) {
+  return (
+    <div className="ai-loading-card compact-loading-card">
+      <div className="result-animation" />
+      <h2>{label}</h2>
+      <p>Preparing your next Smarty challenge.</p>
+    </div>
   );
 });
 
@@ -307,17 +321,19 @@ function getAdaptiveQuestions(topicId, progressMap) {
 }
 
 function getStoredGuestId() {
-
   const existing = localStorage.getItem("smarty-user-id");
 
   if (existing) return existing;
 
-  const created = `guest-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`;
+  const randomId = globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const created = `guest-${randomId}`;
 
   localStorage.setItem("smarty-user-id", created);
 
   return created;
-
 }
 
 function getActiveQuizKey(topicId) {
@@ -523,8 +539,20 @@ const renderedReviewItems = useMemo(
   const current = mixedSteps[index];
   const currentTopicHasAIQuestions = topic ? Array.isArray(aiQuestions[topic.id]) && aiQuestions[topic.id].length > 0 : false;
 
+  const currentOptions = useMemo(() => (
+    Array.isArray(current?.options) ? current.options : []
+  ), [current]);
+
+  const quizShellExtras = useMemo(() => (
+    <>
+      <AchievementToast achievements={newAchievements} />
+      <XPOrb xp={xpGained} combo={comboCount} />
+    </>
+  ), [comboCount, newAchievements, xpGained]);
+
   const loadAIQuestions = useCallback(async (topicId) => {
   if (!API_BASE_URL) {
+    setLoadingAI(false);
     setSaveError("AI API is not configured. Add VITE_API_BASE_URL to your .env file.");
     return;
   }
@@ -629,111 +657,104 @@ const renderedTopics = useMemo(
 
 const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
   setSaving(true);
-
   setSaveError("");
 
   const userId = getStoredGuestId();
 
-  const percentage = Math.round((finalScore / mixedSteps.length) * 100);
+  const percentage = mixedSteps.length ? Math.round((finalScore / mixedSteps.length) * 100) : 0;
+
+  if (!API_BASE_URL) {
+    const xpEarnedLocal = finalAnswers.reduce(
+      (total, answer) => total + (answer.xp || 0),
+      0
+    );
+
+    const updatedProgress = saveStoredTopicProgress(topic.id, {
+      bestScore: Math.max(topicProgressMap[topic.id]?.bestScore || 0, finalScore),
+      bestPercent: Math.max(topicProgressMap[topic.id]?.bestPercent || 0, percentage),
+      attempts: (topicProgressMap[topic.id]?.attempts || 0) + 1,
+      totalXP: (topicProgressMap[topic.id]?.totalXP || 0) + xpEarnedLocal,
+      lastScore: finalScore,
+      updatedAt: new Date().toISOString(),
+    });
+
+    setTopicProgressMap(updatedProgress);
+    clearActiveQuiz(topic.id);
+    setSaveError("Progress saved locally. API is not configured.");
+    setSaving(false);
+    return;
+  }
 
   const xpEarned = finalAnswers.reduce(
-
-  (total, answer) => total + (answer.xp || 0),
-
-  0
-
-);
+    (total, answer) => total + (answer.xp || 0),
+    0
+  );
 
   try {
-
       const res = await fetch(`${API_BASE_URL}/quiz/save`, {
-
         method: "POST",
-
         headers: {
-
           "Content-Type": "application/json",
-
         },
-
         body: JSON.stringify({
-
           userId,
-
           topicId: topic.id,
-
           topicTitle: topic.title,
-
           score: finalScore,
-
           totalQuestions: mixedSteps.length,
-
           percentage,
-
           xpEarned,
-
-answers: finalAnswers.map((answer) => ({
-  id: answer.id,
-  question: answer.q,
-  selected: answer.selected,
-  correctAnswer: answer.correctAnswer,
-  explanation: answer.explanation,
-  isCorrect: answer.isCorrect,
-  difficulty: answer.difficulty,
-  xp: answer.xp || 0,
-})),
-
+          answers: finalAnswers.map((answer) => ({
+            id: answer.id,
+            question: answer.q,
+            selected: answer.selected,
+            correctAnswer: answer.correctAnswer,
+            explanation: answer.explanation,
+            isCorrect: answer.isCorrect,
+            difficulty: answer.difficulty,
+            xp: answer.xp || 0,
+          })),
         }),
-
       });
 
       if (!res.ok) {
-
         throw new Error("Could not save quiz progress.");
-
       }
 
       const data = await res.json();
 
       setProgress(data);
       const updatedProgress = saveStoredTopicProgress(topic.id, {
-  bestScore: data.bestScore ?? finalScore,
-  bestPercent: Math.max(data.percentage || percentage, topicProgressMap[topic.id]?.bestPercent || 0),
-  attempts: data.attempts ?? ((topicProgressMap[topic.id]?.attempts || 0) + 1),
-  totalXP: data.totalXP ?? ((topicProgressMap[topic.id]?.totalXP || 0) + xpEarned),
-  level: data.level,
-  lastScore: finalScore,
-  updatedAt: new Date().toISOString(),
-});
+        bestScore: data.bestScore ?? finalScore,
+        bestPercent: Math.max(data.percentage || percentage, topicProgressMap[topic.id]?.bestPercent || 0),
+        attempts: data.attempts ?? ((topicProgressMap[topic.id]?.attempts || 0) + 1),
+        totalXP: data.totalXP ?? ((topicProgressMap[topic.id]?.totalXP || 0) + xpEarned),
+        level: data.level,
+        lastScore: finalScore,
+        updatedAt: new Date().toISOString(),
+      });
 
-setTopicProgressMap(updatedProgress);
-const unlocked = checkAchievements({
-  topicId: topic.id,
-  percentage,
-  streak: visitProgress.streak,
-  overallLevel,
-});
+      setTopicProgressMap(updatedProgress);
+      const unlocked = checkAchievements({
+        topicId: topic.id,
+        percentage,
+        streak: visitProgress.streak,
+        overallLevel,
+      });
 
-if (unlocked.length) {
-  setNewAchievements(unlocked);
-  sounds.levelUp();
-}
-clearActiveQuiz(topic.id);
+      if (unlocked.length) {
+        setNewAchievements(unlocked);
+        sounds.levelUp();
+      }
+      clearActiveQuiz(topic.id);
 
       if (percentage >= 60) {
-
         confetti({
-
           particleCount: 140,
-
           spread: 85,
-
           origin: { y: 0.65 },
-
         });
-
       }
-
     } catch (error) {
       const updatedProgress = saveStoredTopicProgress(topic.id, {
         bestScore: Math.max(topicProgressMap[topic.id]?.bestScore || 0, finalScore),
@@ -747,11 +768,9 @@ clearActiveQuiz(topic.id);
       setTopicProgressMap(updatedProgress);
       clearActiveQuiz(topic.id);
       setSaveError(error.message || "Could not save quiz progress.");
-
     } finally {
       setSaving(false);
     }
-
   }, [mixedSteps.length, overallLevel, sounds, topic, topicProgressMap, visitProgress.streak]);
 
 useEffect(() => {
@@ -953,18 +972,19 @@ if (topic && bossMode && !finished) {
     <main className="quiz-page">
       <section className="question-card">
         <div className="quiz-top-row">
-          <button className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
+          <button type="button" className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
           <span>Boss Level</span>
         </div>
 
-        <BossChallenge
-          topicId={topic.id}
-          onComplete={handleBossComplete}
-        />
+        <Suspense fallback={<QuizLoadingCard label="Loading boss level..." />}>
+          <BossChallenge
+            topicId={topic.id}
+            onComplete={handleBossComplete}
+          />
+        </Suspense>
       </section>
 
-      <AchievementToast achievements={newAchievements} />
-<XPOrb xp={xpGained} combo={comboCount} />
+      {quizShellExtras}
     </main>
   );
 }
@@ -974,7 +994,7 @@ if (topic && bossMode && !finished) {
       <main className="quiz-page">
         <section className="question-card">
           <div className="quiz-top-row">
-            <button className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
+            <button type="button" className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
             <span>Smarty Quiz</span>
           </div>
 
@@ -987,14 +1007,13 @@ if (topic && bossMode && !finished) {
                 : saveError || "Please check your AI API setup and try again."}
             </p>
             {!loadingAI && (
-              <button className="submit-answer-btn" onClick={() => loadAIQuestions(topic.id)}>
+              <button type="button" className="submit-answer-btn" onClick={() => loadAIQuestions(topic.id)}>
                 Try Again
               </button>
             )}
           </div>
         </section>
-        <AchievementToast achievements={newAchievements} />
-<XPOrb xp={xpGained} combo={comboCount} />
+        {quizShellExtras}
       </main>
     );
   }
@@ -1025,6 +1044,7 @@ if (topic && bossMode && !finished) {
 
             <div className="hero-actions">
               <button
+                type="button"
                 className="profile-btn"
                 onClick={() => window.location.href = "/game-profile"}
               >
@@ -1079,8 +1099,7 @@ if (topic && bossMode && !finished) {
         <section className="topic-grid">
 {renderedTopics}
         </section>
-<AchievementToast achievements={newAchievements} />
-<XPOrb xp={xpGained} combo={comboCount} />
+{quizShellExtras}
       </main>
 
     );
@@ -1189,19 +1208,16 @@ if (topic && bossMode && !finished) {
 
           <div className="result-actions">
 
-            <button onClick={() => startQuiz(topic)}>Retry Topic</button>
+            <button type="button" onClick={() => startQuiz(topic)}>Retry Topic</button>
 
-            <button onClick={restart} className="secondary-btn">
-
+            <button type="button" onClick={restart} className="secondary-btn">
               Choose Another Topic
-
             </button>
 
           </div>
 
         </section>
-<AchievementToast achievements={newAchievements} />
-<XPOrb xp={xpGained} combo={comboCount} />
+{quizShellExtras}
       </main>
 
     );
@@ -1213,7 +1229,7 @@ if (topic && bossMode && !finished) {
     <main className="quiz-page">
       <section className="question-card">
         <div className="quiz-top-row">
-          <button className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
+          <button type="button" className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
           <span>
             Challenge {index + 1}/{mixedSteps.length}
           </span>
@@ -1235,14 +1251,15 @@ if (topic && bossMode && !finished) {
 
 
 
-        <BrainGameEngine
-          game={current}
-          topicId={topic.id}
-          onComplete={handleGameComplete}
-        />
+        <Suspense fallback={<QuizLoadingCard />}>
+          <BrainGameEngine
+            game={current}
+            topicId={topic.id}
+            onComplete={handleGameComplete}
+          />
+        </Suspense>
       </section>
-      <AchievementToast achievements={newAchievements} />
-<XPOrb xp={xpGained} combo={comboCount} />
+      {quizShellExtras}
     </main>
   );
 }
@@ -1266,6 +1283,7 @@ if (topic && bossMode && !finished) {
           </span>
 
           <button
+            type="button"
             className="profile-mini-btn"
             onClick={() => window.location.href = "/game-profile"}
           >
@@ -1292,39 +1310,44 @@ if (topic && bossMode && !finished) {
 )}
 
 
-        <h2>{current.q}</h2>
+        <h2>{current?.q || "Challenge question"}</h2>
 
         <div className="option-list">
-
-          {current.options.map((option) => (
-
-            <button
-
-              key={option}
-
-              className={selected === option ? "option-btn selected" : "option-btn"}
-
-              onClick={() => setSelected(option)}
-
-            >
-
-              {option}
-
-            </button>
-
-          ))}
-
+          {(() => {
+            const currentOptions = current?.options || [];
+            return currentOptions.map((option) => (
+              <button
+                key={option}
+                className={selected === option ? "option-btn selected" : "option-btn"}
+                type="button"
+                onClick={() => !locked && setSelected(option)}
+                disabled={locked}
+                aria-pressed={selected === option}
+              >
+                {option}
+              </button>
+            ));
+          })()}
         </div>
 
-        <button className="submit-answer-btn" onClick={submitAnswer} disabled={!selected || locked}>
+        {(() => {
+          const currentOptions = current?.options || [];
+          return currentOptions.length === 0 && (
+            <p className="save-error">This question could not load properly. Please go back and try again.</p>
+          );
+        })()}
 
+        <button
+          type="button"
+          className="submit-answer-btn"
+          onClick={submitAnswer}
+          disabled={!selected || locked || (current?.options || []).length === 0}
+        >
           {index + 1 === mixedSteps.length ? "Finish Quiz" : "Lock Answer"}
-
         </button>
 
       </section>
-<AchievementToast achievements={newAchievements} />
-<XPOrb xp={xpGained} combo={comboCount} />
+{quizShellExtras}
     </main>
 
   );

@@ -5,6 +5,9 @@ import './ReadBookPage.css';
 
 const PAGE_SIZE = 12;
 const SEARCH_PAGE_SIZE = 24;
+const READ_BOOK_ROWS_CACHE_KEY = 'smarty_read_book_rows_cache_v1';
+const READ_BOOK_BROWSE_CACHE_KEY = 'smarty_read_book_browse_cache_v1';
+const READ_BOOK_CACHE_MAX_AGE = 1000 * 60 * 5;
 
 const CATEGORIES = [
   { title: 'Popular Classics', search: '' },
@@ -108,6 +111,47 @@ function getSavedBooks() {
 
 function saveSavedBooks(books) {
   localStorage.setItem('saved_read_books', JSON.stringify(books));
+}
+
+function readSessionCache(key, fallback) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : null;
+
+    if (!parsed || Date.now() - Number(parsed.savedAt || 0) > READ_BOOK_CACHE_MAX_AGE) {
+      return fallback;
+    }
+
+    return parsed.value ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeSessionCache(key, value) {
+  try {
+    sessionStorage.setItem(
+      key,
+      JSON.stringify({
+        savedAt: Date.now(),
+        value,
+      })
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function deferReadBookStartup(callback) {
+  if (typeof window === 'undefined') return undefined;
+
+  if ('requestIdleCallback' in window) {
+    const idleId = window.requestIdleCallback(callback, { timeout: 900 });
+    return () => window.cancelIdleCallback?.(idleId);
+  }
+
+  const timer = window.setTimeout(callback, 120);
+  return () => window.clearTimeout(timer);
 }
 
 function getBookCover(book) {
@@ -239,7 +283,6 @@ const BookGrid = memo(function BookGrid({ title, books, savedBookIds, onToggleSa
 export default function ReadBookPage() {
   const location = useLocation();
   const isPreviewPage = location.pathname === '/preview-books';
-  const [rows, setRows] = useState({});
   const [query, setQuery] = useState('');
   const [authorFilter, setAuthorFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
@@ -248,14 +291,17 @@ export default function ReadBookPage() {
   const [searchResults, setSearchResults] = useState([]);
   const [searchPage, setSearchPage] = useState(1);
   const [hasMoreSearch, setHasMoreSearch] = useState(false);
-  const [browseBooks, setBrowseBooks] = useState([]);
   const [browsePage, setBrowsePage] = useState(1);
   const [hasMoreBrowse, setHasMoreBrowse] = useState(true);
   const [savedBooks, setSavedBooks] = useState(getSavedBooks);
-  const [loadingRows, setLoadingRows] = useState(true);
   const [searching, setSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [rows, setRows] = useState(() => readSessionCache(READ_BOOK_ROWS_CACHE_KEY, {}));
+  const [browseBooks, setBrowseBooks] = useState(() => readSessionCache(READ_BOOK_BROWSE_CACHE_KEY, []));
+  const [loadingRows, setLoadingRows] = useState(
+    () => Object.keys(readSessionCache(READ_BOOK_ROWS_CACHE_KEY, {})).length === 0
+  );
 
   const loadMoreRef = useRef(null);
   const mountedRef = useRef(true);
@@ -420,9 +466,15 @@ export default function ReadBookPage() {
 
       const safeBooks = Array.isArray(books) ? books : [];
 
-      setBrowseBooks((currentBooks) => (
-        pageToLoad === 1 ? safeBooks : mergeUniqueBooks(currentBooks, safeBooks)
-      ));
+      setBrowseBooks((currentBooks) => {
+        const nextBooks = pageToLoad === 1 ? safeBooks : mergeUniqueBooks(currentBooks, safeBooks);
+
+        if (pageToLoad === 1 && !categoryFilter && !cleanAuthorFilter && !cleanYearFilter) {
+          writeSessionCache(READ_BOOK_BROWSE_CACHE_KEY, nextBooks);
+        }
+
+        return nextBooks;
+      });
       setBrowsePage(pageToLoad);
       setHasMoreBrowse(safeBooks.length >= SEARCH_PAGE_SIZE);
     } catch (err) {
@@ -487,7 +539,15 @@ useEffect(() => {
   hasLoadedInitialDataRef.current = true;
 
   async function loadRows() {
-    setLoadingRows(true);
+    const cachedRows = readSessionCache(READ_BOOK_ROWS_CACHE_KEY, {});
+
+    if (Object.keys(cachedRows).length > 0) {
+      setRows(cachedRows);
+      setLoadingRows(false);
+    } else {
+      setLoadingRows(true);
+    }
+
     setError('');
 
     try {
@@ -504,7 +564,13 @@ useEffect(() => {
       );
 
       if (!mountedRef.current) return;
-      setRows(Object.fromEntries(results.map(([title, books]) => [title, Array.isArray(books) ? books : []])));
+
+      const nextRows = Object.fromEntries(
+        results.map(([title, books]) => [title, Array.isArray(books) ? books : []])
+      );
+
+      writeSessionCache(READ_BOOK_ROWS_CACHE_KEY, nextRows);
+      setRows(nextRows);
     } catch (err) {
       if (mountedRef.current) setError(err.message || 'Failed to load books.');
     } finally {
@@ -512,8 +578,8 @@ useEffect(() => {
     }
   }
 
-  loadRows();
-}, [loadBrowsePage]);
+  return deferReadBookStartup(loadRows);
+}, []);
 
 useEffect(() => {
   if (!hasActiveFilters) {
@@ -522,8 +588,9 @@ useEffect(() => {
     setSearchPage(1);
     setHasMoreSearch(false);
     if (browseBooks.length === 0) {
-      loadBrowsePage(1);
+      return deferReadBookStartup(() => loadBrowsePage(1));
     }
+
     return undefined;
   }
 

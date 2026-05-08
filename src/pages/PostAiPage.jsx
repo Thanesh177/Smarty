@@ -11,6 +11,22 @@ const getDetailedExplanation = (value) => {
     : '';
 };
 
+const isLongDetailedExplanation = (text) => {
+  const clean = String(text || '').trim();
+  const wordCount = clean.split(/\s+/).filter(Boolean).length;
+
+  return (
+    wordCount >= 60 &&
+    !clean.toLowerCase().startsWith('simple version:') &&
+    !clean.toLowerCase().includes('explain this post like the reader is 15')
+  );
+};
+
+const getUsableDetailedExplanation = (value) => {
+  const text = getDetailedExplanation(value);
+  return isLongDetailedExplanation(text) ? text : '';
+};
+
 const PostAiMessage = memo(function PostAiMessage({ message }) {
   return (
     <div className={message.role === 'user' ? 'post-ai-msg mine' : 'post-ai-msg'}>
@@ -30,7 +46,7 @@ export default function PostAiPage() {
   const creatorName = location.state?.creatorName || 'Smarty creator';
 
   const [post, setPost] = useState(postFromState);
-  const [explanation, setExplanation] = useState(() => getDetailedExplanation(postFromState));
+  const [explanation, setExplanation] = useState(() => getUsableDetailedExplanation(postFromState));
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
   const [question, setQuestion] = useState('');
@@ -73,13 +89,13 @@ export default function PostAiPage() {
   }, []);
 
   const displayExplanation = useMemo(() => {
-    return explanation || getDetailedExplanation(post) || '';
+    return explanation || getUsableDetailedExplanation(post) || '';
   }, [explanation, post]);
 
   const renderedMessages = useMemo(
     () => messages.map((message, index) => (
       <PostAiMessage
-        key={`${message.role}-${index}-${message.text.slice(0, 16)}`}
+        key={`${message.role || 'msg'}-${index}-${String(message.text || '').slice(0, 16)}`}
         message={message}
       />
     )),
@@ -100,7 +116,7 @@ export default function PostAiPage() {
         setLoading(true);
         setStatus('');
 
-        const existingDetailedExplanation = getDetailedExplanation(post);
+        const existingDetailedExplanation = getUsableDetailedExplanation(post);
 
         if (existingDetailedExplanation) {
           setExplanation(existingDetailedExplanation);
@@ -117,30 +133,36 @@ export default function PostAiPage() {
           mode: 'detailed',
         };
 
+        if (!postApi.getPostDetails && !postApi.getAiDetails) {
+          throw new Error('Missing detailed AI endpoint. Add postApi.getPostDetails in client.js and point it to /posts/details.');
+        }
+
         const data = postApi.getPostDetails
           ? await postApi.getPostDetails(detailsPayload)
-          : postApi.getAiDetails
-            ? await postApi.getAiDetails(detailsPayload)
-            : await postApi.explainPost(detailsPayload);
+          : await postApi.getAiDetails(detailsPayload);
 
         if (!mountedRef.current) return;
 
-        const nextExplanation =
-          getDetailedExplanation(data?.post) ||
-          String(data?.aiDetailedExplanation || data?.explanation || '').trim();
+        const nextExplanationCandidate =
+          getUsableDetailedExplanation(data?.post) ||
+          String(data?.aiDetailedExplanation || data?.post?.aiDetailedExplanation || data?.explanation || '').trim();
+
+        const nextExplanation = isLongDetailedExplanation(nextExplanationCandidate)
+          ? nextExplanationCandidate
+          : '';
 
         if (data?.post) {
           setPost((prev) => ({
             ...(prev || {}),
             ...data.post,
-            aiDetailedExplanation: nextExplanation || data.post.aiDetailedExplanation || '',
+            aiDetailedExplanation: nextExplanation,
           }));
         }
 
         setExplanation(nextExplanation);
 
         if (!nextExplanation) {
-          setStatus('No saved AI explanation was found for this post. Regenerate it from the backend Lambda.');
+          setStatus('Detailed explanation was not returned. Check that client.js getPostDetails points to the AI content Lambda route /posts/details, not the simplify Lambda.');
         }
       } catch (err) {
         console.error('Load AI explanation failed:', err);
@@ -153,7 +175,7 @@ export default function PostAiPage() {
     }
 
     loadExplanation();
-  }, [body, displayExplanation, postId, readableError, title]);
+  }, [body, postId, readableError, title]);
 
   const askDoubt = useCallback(async (event) => {
     event.preventDefault();
@@ -180,7 +202,7 @@ export default function PostAiPage() {
         userId,
         title,
         body,
-        explanation: getDetailedExplanation(post) || displayExplanation,
+        explanation: getUsableDetailedExplanation(post) || displayExplanation,
         question: cleanQuestion,
       });
 
@@ -212,7 +234,7 @@ export default function PostAiPage() {
     } finally {
       if (mountedRef.current) setAsking(false);
     }
-  }, [asking, body, displayExplanation, postId, question, readableError, title, userId]);
+  }, [asking, body, displayExplanation, post, postId, question, readableError, title, userId]);
 
   const goBack = useCallback(() => {
     const savedScrollY = location.state?.scrollY;
@@ -241,14 +263,14 @@ export default function PostAiPage() {
 
         <div className="post-ai-header">
           <p>AI Post Guide</p>
-          <h1>{title}</h1>
+          <h1>{title || 'Post explanation'}</h1>
           <span>By {creatorName}</span>
         </div>
 
         {body && (
           <article className="post-ai-original">
             <strong>Original Post</strong>
-            <p>{body}</p>
+            <p>{String(body || '')}</p>
           </article>
         )}
 
@@ -264,7 +286,7 @@ export default function PostAiPage() {
               <p>AI is explaining this post in detail...</p>
             </div>
           ) : (
-            <p>{displayExplanation || 'No explanation available yet.'}</p>
+            <p>{String(displayExplanation || 'No explanation available yet.')}</p>
           )}
 
           {status && <div className="post-ai-status">{status}</div>}

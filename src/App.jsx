@@ -46,6 +46,8 @@ const ReadBookPage = lazy(() => import('./pages/ReadBookPage'));
 const BookReaderPage = lazy(() => import('./pages/BookReaderPage'));
 const PostAiPage = lazy(() => import('./pages/PostAiPage'));
 
+const GLOBAL_PULL_REFRESH_RATIO = 0.4;
+
 function PageLoader() {
   return <p className="status">Loading page...</p>;
 }
@@ -139,10 +141,16 @@ function Layout() {
 
   const [totalUnread, setTotalUnread] = useState(0);
   const [popupNotification, setPopupNotification] = useState(null);
+  const [globalPullDistance, setGlobalPullDistance] = useState(0);
+  const [globalRefreshing, setGlobalRefreshing] = useState(false);
 
   const touchStartXRef = useRef(null);
   const unreadRefreshInFlightRef = useRef(false);
   const unreadRefreshTimerRef = useRef(null);
+  const globalPullStartYRef = useRef(0);
+  const globalPullDistanceRef = useRef(0);
+  const globalPullAtTopRef = useRef(false);
+  const globalPullTriggeredRef = useRef(false);
 
   const isAuthPage =
     location.pathname === '/login' ||
@@ -152,6 +160,100 @@ function Layout() {
   const goBack = useCallback(() => {
     window.history.back();
   }, []);
+
+  const isPageAtTop = useCallback(() => {
+    const scrollingElement = document.scrollingElement || document.documentElement;
+    const windowTop = window.scrollY || scrollingElement?.scrollTop || 0;
+    const contentElement = document.querySelector('.content');
+    const contentTop = contentElement?.scrollTop || 0;
+    const feedElement = document.querySelector('.snap-feed-page');
+    const feedTop = feedElement?.scrollTop || 0;
+
+    return windowTop <= 2 && contentTop <= 2 && feedTop <= 2;
+  }, []);
+
+  const resetGlobalPullRefresh = useCallback(() => {
+    globalPullStartYRef.current = 0;
+    globalPullDistanceRef.current = 0;
+    globalPullAtTopRef.current = false;
+    globalPullTriggeredRef.current = false;
+    setGlobalPullDistance(0);
+  }, []);
+
+  const runGlobalPullRefresh = useCallback(() => {
+    if (globalRefreshing) return;
+
+    setGlobalRefreshing(true);
+    window.dispatchEvent(new CustomEvent('smarty-global-refresh'));
+
+    window.setTimeout(() => {
+      window.location.reload();
+    }, 180);
+  }, [globalRefreshing]);
+
+  const handleGlobalPullStart = useCallback((event) => {
+    if (globalRefreshing || event.touches.length !== 1) return;
+
+    const atTop = isPageAtTop();
+    globalPullAtTopRef.current = atTop;
+    globalPullTriggeredRef.current = false;
+
+    if (!atTop) {
+      resetGlobalPullRefresh();
+      return;
+    }
+
+    globalPullStartYRef.current = event.touches[0]?.clientY || 0;
+    globalPullDistanceRef.current = 0;
+    setGlobalPullDistance(0);
+  }, [globalRefreshing, isPageAtTop, resetGlobalPullRefresh]);
+
+  const handleGlobalPullMove = useCallback((event) => {
+    if (
+      globalRefreshing ||
+      event.touches.length !== 1 ||
+      !globalPullAtTopRef.current ||
+      globalPullStartYRef.current <= 0 ||
+      !isPageAtTop()
+    ) {
+      return;
+    }
+
+    const currentY = event.touches[0]?.clientY || 0;
+    const distance = Math.max(0, currentY - globalPullStartYRef.current);
+
+    if (distance <= 0) {
+      globalPullDistanceRef.current = 0;
+      setGlobalPullDistance(0);
+      return;
+    }
+
+    globalPullDistanceRef.current = distance;
+    const triggerDistance = Math.max(120, window.innerHeight * GLOBAL_PULL_REFRESH_RATIO);
+    const easedDistance = Math.min(triggerDistance, distance * 0.42);
+
+    setGlobalPullDistance((current) => (
+      Math.abs(current - easedDistance) > 1 ? easedDistance : current
+    ));
+  }, [globalRefreshing, isPageAtTop]);
+
+  const handleGlobalPullEnd = useCallback(() => {
+    const triggerDistance = Math.max(120, window.innerHeight * GLOBAL_PULL_REFRESH_RATIO);
+    const shouldRefresh =
+      !globalRefreshing &&
+      globalPullAtTopRef.current &&
+      isPageAtTop() &&
+      globalPullDistanceRef.current >= triggerDistance;
+
+    if (shouldRefresh && !globalPullTriggeredRef.current) {
+      globalPullTriggeredRef.current = true;
+      setGlobalPullDistance(triggerDistance);
+      runGlobalPullRefresh();
+      return;
+    }
+
+    resetGlobalPullRefresh();
+  }, [globalRefreshing, isPageAtTop, resetGlobalPullRefresh, runGlobalPullRefresh]);
 
   useEffect(() => {
     const isMobileView = () => window.matchMedia('(max-width: 768px)').matches;
@@ -568,7 +670,26 @@ function Layout() {
           </div>
         </header>
 
-        <main className="content">
+        <main
+          className="content"
+          onTouchStart={handleGlobalPullStart}
+          onTouchMove={handleGlobalPullMove}
+          onTouchEnd={handleGlobalPullEnd}
+          onTouchCancel={resetGlobalPullRefresh}
+        >
+          {(globalPullDistance > 0 || globalRefreshing) && (
+            <div
+              className={`global-pull-refresh ${globalRefreshing ? 'refreshing' : ''}`}
+              style={{
+                transform: `translate(-50%, ${globalPullDistance || 48}px)`,
+              }}
+              aria-live="polite"
+            >
+              <span className="global-pull-refresh-spinner" />
+              <small>{globalRefreshing ? 'Refreshing' : 'Pull to refresh'}</small>
+            </div>
+          )}
+
           <RouteErrorBoundary key={location.pathname}>
             <Suspense fallback={<PageLoader />}>
               <Routes>
@@ -698,6 +819,60 @@ function Layout() {
 function ReminderPopupStyles() {
   return (
     <style>{`
+      .global-pull-refresh {
+        position: fixed;
+        top: 72px;
+        left: 50%;
+        z-index: 9999;
+        width: 92px;
+        height: 54px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        color: rgba(255, 255, 255, 0.9);
+        background: linear-gradient(180deg, rgba(10, 15, 28, 0.86), rgba(6, 10, 20, 0.92));
+        box-shadow: 0 16px 42px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        pointer-events: none;
+        will-change: transform, opacity;
+        transition: transform 0.18s ease, opacity 0.18s ease;
+      }
+
+      .global-pull-refresh small {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+      }
+
+      .global-pull-refresh-spinner {
+        width: 17px;
+        height: 17px;
+        border-radius: 999px;
+        border: 2px solid rgba(255, 255, 255, 0.22);
+        border-top-color: rgba(56, 189, 248, 0.95);
+        animation: globalPullSpin 0.85s linear infinite;
+      }
+
+      .global-pull-refresh.refreshing .global-pull-refresh-spinner {
+        border-top-color: rgba(34, 197, 94, 0.95);
+      }
+
+      @keyframes globalPullSpin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (max-width: 640px) {
+        .global-pull-refresh {
+          top: 64px;
+        }
+      }
       .reminder-popup {
         position: fixed;
         top: 18px;

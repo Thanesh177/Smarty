@@ -42,6 +42,9 @@ function getUserDisplayName(person) {
 const CHAT_AVATAR_CACHE_KEY = 'smarty_chat_avatar_cache_v1';
 const CHAT_AVATAR_CACHE_MAX_AGE = 1000 * 60 * 60 * 24 * 7;
 
+const CHAT_LIST_CACHE_KEY = 'smarty_chat_list_cache_v1';
+const CHAT_LIST_CACHE_MAX_AGE = 1000 * 60 * 3;
+
 function readChatAvatarCache() {
   try {
     const raw = localStorage.getItem(CHAT_AVATAR_CACHE_KEY);
@@ -66,6 +69,48 @@ function getCachedChatAvatar(cache, key) {
   if (!item?.url) return '';
   if (Date.now() - Number(item.savedAt || 0) > CHAT_AVATAR_CACHE_MAX_AGE) return '';
   return item.url;
+}
+
+function readChatListCache(userId) {
+  try {
+    const raw = sessionStorage.getItem(`${CHAT_LIST_CACHE_KEY}:${userId || 'guest'}`);
+    const parsed = raw ? JSON.parse(raw) : null;
+
+    if (!parsed || !Array.isArray(parsed.chats)) return [];
+    if (Date.now() - Number(parsed.savedAt || 0) > CHAT_LIST_CACHE_MAX_AGE) return [];
+
+    return parsed.chats.map(normalizeChatRecord);
+  } catch {
+    return [];
+  }
+}
+
+function writeChatListCache(userId, chats) {
+  if (!userId || !Array.isArray(chats)) return;
+
+  try {
+    sessionStorage.setItem(
+      `${CHAT_LIST_CACHE_KEY}:${userId}`,
+      JSON.stringify({
+        savedAt: Date.now(),
+        chats: chats.slice(0, 80),
+      })
+    );
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function deferChatStartup(callback) {
+  if (typeof window === 'undefined') return undefined;
+
+  if ('requestIdleCallback' in window) {
+    const idleId = window.requestIdleCallback(callback, { timeout: 900 });
+    return () => window.cancelIdleCallback?.(idleId);
+  }
+
+  const timer = window.setTimeout(callback, 120);
+  return () => window.clearTimeout(timer);
 }
 
 
@@ -308,7 +353,7 @@ const AudioMiniPlayer = memo(function AudioMiniPlayer({ src, title = 'Voice note
 });
 
 // ===== ChatMediaPreview component =====
-const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl }) {
+const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl, onOpenImage }) {
   const [mediaSource, setMediaSource] = useState(msg.mediaUrl || msg.mediaPreview || '');
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -384,6 +429,8 @@ const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl
           fetchPriority="low"
           sizes="(max-width: 768px) 92vw, 520px"
           onError={refreshMedia}
+          onClick={() => onOpenImage?.(mediaSource)}
+          style={{ cursor: 'zoom-in' }}
         />
       ) : mediaKind === 'video' ? (
         <video src={mediaSource} controls playsInline preload="metadata" onError={refreshMedia} />
@@ -415,7 +462,7 @@ export default function ChatPage() {
   const [isBlocked, setIsBlocked] = useState(false);
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState([]);
-  const [chats, setChats] = useState([]);
+  const [chats, setChats] = useState(() => readChatListCache(user?.id || user?.userId || user?.sub));
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -437,6 +484,7 @@ export default function ChatPage() {
   const mediaInputRef = useRef(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [fullscreenImage, setFullscreenImage] = useState('');
 
   // Avatar fallback/cache state
   const [failedProfileAvatarIds, setFailedProfileAvatarIds] = useState({});
@@ -553,7 +601,10 @@ try {
     const now = Date.now();
     if (now - lastChatsLoadRef.current < 6000) return;
     lastChatsLoadRef.current = now;
-    loadChats();
+
+    deferChatStartup(() => {
+      if (mountedRef.current) loadChats();
+    });
   }, []);
 
   const loadChats = async () => {
@@ -562,14 +613,28 @@ try {
       if (!mountedRef.current) return;
       const nextChats = Array.isArray(data) ? data : Array.isArray(data?.chats) ? data.chats : [];
       const normalizedChats = nextChats.map(normalizeChatRecord);
-      setChats(normalizedChats);
+      writeChatListCache(userId, normalizedChats);
+      setChats((prev) => {
+        const prevSignature = prev.map((chat) => `${chat.chatId}:${chat.unreadCount || 0}:${chat.lastMessage || ''}`).join('|');
+        const nextSignature = normalizedChats.map((chat) => `${chat.chatId}:${chat.unreadCount || 0}:${chat.lastMessage || ''}`).join('|');
+        return prevSignature === nextSignature ? prev : normalizedChats;
+      });
     } catch (err) {
       console.error('Failed to load chats:', err);
     }
   };
 
   useEffect(() => {
-    if (userId) loadChats();
+    if (!userId) return undefined;
+
+    const cachedChats = readChatListCache(userId);
+    if (cachedChats.length > 0) {
+      setChats(cachedChats);
+    }
+
+    return deferChatStartup(() => {
+      if (mountedRef.current) loadChats();
+    });
   }, [userId]);
 
   useEffect(() => {
@@ -611,11 +676,17 @@ try {
   }, [chatAvatarCache]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) return undefined;
 
-connectChatSocket(userId);
+    let unsubscribeSocket = null;
+    let cancelled = false;
 
-const unsubscribeSocket = subscribeChatSocket((data) => {      if (!mountedRef.current) return;
+    const cancelStartup = deferChatStartup(() => {
+      if (cancelled || !mountedRef.current) return;
+
+      connectChatSocket(userId);
+
+      unsubscribeSocket = subscribeChatSocket((data) => {      if (!mountedRef.current) return;
       if (data.type === 'messageReaction') {
         const reactionMessage = data.message || data;
         const targetMessageId = reactionMessage.messageId;
@@ -735,7 +806,10 @@ const unsubscribeSocket = subscribeChatSocket((data) => {      if (!mountedRef.c
       scrollMessagesToBottom();
     });
 
+    });
     return () => {
+      cancelled = true;
+      cancelStartup?.();
       localStorage.removeItem('activeChatId');
       unsubscribeSocket?.();
     };
@@ -2122,7 +2196,11 @@ const runDeleteChat = useCallback(() => {
                         className={msg.isMine ? 'message mine' : 'message'}
                       >
                         {(msg.mediaUrl || msg.mediaPreview || msg.mediaKey) && (
-                          <ChatMediaPreview msg={msg} onRefreshMediaUrl={refreshMessageMediaUrl} />
+                          <ChatMediaPreview
+                            msg={msg}
+                            onRefreshMediaUrl={refreshMessageMediaUrl}
+                            onOpenImage={setFullscreenImage}
+                          />
                         )}
 
 {editingMessageId === (msg.messageId || msg.id) ? (
@@ -2362,6 +2440,18 @@ const runDeleteChat = useCallback(() => {
           </>
         )}
       </section>
+      {fullscreenImage && (
+        <div
+          className="image-lightbox"
+          onClick={() => setFullscreenImage('')}
+        >
+          <img
+            src={fullscreenImage}
+            alt="Expanded preview"
+            className="image-lightbox-img"
+          />
+        </div>
+      )}
     </main>
   );
 }

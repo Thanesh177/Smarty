@@ -29,7 +29,6 @@ const INITIAL_RENDER_LIMIT = 3;
 const RENDER_BATCH_SIZE = 3;
 const FAST_IMAGE_LIMIT = 4;
 const IMAGE_PRELOAD_MARGIN = '900px';
-const PULL_REFRESH_VIEWPORT_RATIO = 0.4;
 const FEED_SCROLL_STORAGE_KEY = 'smarty.feed.scrollY';
 const FEED_RENDER_LIMIT_STORAGE_KEY = 'smarty.feed.renderLimit';
 const FEED_POST_ID_STORAGE_KEY = 'smarty.feed.postId';
@@ -400,6 +399,8 @@ export default function FeedPage() {
   const highlightRemoveTimerRef = useRef(null);
   const requestedCreatorIdsRef = useRef(new Set());
   const toastTimerRef = useRef(null);
+  const scrollRafRef = useRef(0);
+  const restoredFeedPositionRef = useRef(false);
 
   const {
     posts,
@@ -417,9 +418,6 @@ export default function FeedPage() {
 
   const loadMoreRef = useRef(null);
   const feedRef = useRef(null);
-  const pullStartYRef = useRef(0);
-  const pullDistanceRef = useRef(0);
-  const pullRefreshTriggeredRef = useRef(false);
   const [translations, setTranslations] = useState({});
   const [translating, setTranslating] = useState({});
   const [showTranslated, setShowTranslated] = useState({});
@@ -430,9 +428,6 @@ export default function FeedPage() {
   const [savedPostIds, setSavedPostIds] = useState({});
   const [creatorProfiles, setCreatorProfiles] = useState({});
   const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER_LIMIT);
-  const [pullDistance, setPullDistance] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isFeedAtTop, setIsFeedAtTop] = useState(true);
   useEffect(() => {
     mountedRef.current = true;
 
@@ -440,6 +435,7 @@ export default function FeedPage() {
       mountedRef.current = false;
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
       if (highlightRemoveTimerRef.current) clearTimeout(highlightRemoveTimerRef.current);
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
     };
   }, []);
 
@@ -597,7 +593,7 @@ export default function FeedPage() {
     const savedPostId = sessionStorage.getItem(FEED_POST_ID_STORAGE_KEY) || '';
     const savedRenderLimit = Number(sessionStorage.getItem(FEED_RENDER_LIMIT_STORAGE_KEY) || 0);
 
-    if (!savedPostId || !filteredPosts.length) return;
+    if (!savedPostId || !filteredPosts.length || restoredFeedPositionRef.current) return;
 
     const savedPostIndex = filteredPosts.findIndex((post) => getPostId(post) === savedPostId);
     const neededRenderLimit = savedPostIndex >= 0
@@ -605,51 +601,57 @@ export default function FeedPage() {
       : savedRenderLimit;
 
     if (neededRenderLimit > renderLimit) {
-      setRenderLimit(Math.min(neededRenderLimit + 1, filteredPosts.length));
+      setRenderLimit(Math.min(neededRenderLimit + RENDER_BATCH_SIZE, filteredPosts.length));
     }
   }, [filteredPosts, renderLimit]);
 
   useEffect(() => {
+    if (restoredFeedPositionRef.current) return undefined;
+
     const savedScrollY = Number(sessionStorage.getItem(FEED_SCROLL_STORAGE_KEY) || 0);
     const savedPostId = sessionStorage.getItem(FEED_POST_ID_STORAGE_KEY) || '';
 
-    if (
-      !Number.isFinite(savedScrollY) ||
-      savedScrollY <= 0 ||
-      !feedRef.current ||
-      renderedFeedPosts.length === 0
-    ) {
+    if (!savedPostId || !filteredPosts.length || renderedFeedPosts.length === 0) {
+      return undefined;
+    }
+
+    const savedPostIndex = filteredPosts.findIndex((post) => getPostId(post) === savedPostId);
+
+    if (savedPostIndex >= renderedFeedPosts.length) {
       return undefined;
     }
 
     const timer = window.setTimeout(() => {
-      const savedPostElement = savedPostId
-        ? document.getElementById(`post-${savedPostId}`)
-        : null;
+      if (!mountedRef.current) return;
 
-      if (savedPostElement) {
-        savedPostElement.scrollIntoView({
-          block: 'start',
-          behavior: 'auto',
-        });
-      }
+      const savedPostElement = document.getElementById(`post-${savedPostId}`);
 
-      if (feedRef.current) {
-        feedRef.current.scrollTop = savedScrollY;
-        feedRef.current.scrollTo({
-          top: savedScrollY,
-          behavior: 'auto',
-        });
-      }
+      if (!savedPostElement) return;
 
-      window.scrollTo({
-        top: savedScrollY,
+      restoredFeedPositionRef.current = true;
+
+      savedPostElement.scrollIntoView({
+        block: 'start',
         behavior: 'auto',
       });
-    }, 250);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!mountedRef.current) return;
+
+          if (Number.isFinite(savedScrollY) && savedScrollY > 0 && feedRef.current) {
+            feedRef.current.scrollTop = savedScrollY;
+            feedRef.current.scrollTo({
+              top: savedScrollY,
+              behavior: 'auto',
+            });
+          }
+        });
+      });
+    }, 120);
 
     return () => clearTimeout(timer);
-  }, [renderedFeedPosts.length]);
+  }, [filteredPosts, renderedFeedPosts.length]);
 
   const renderedPostIdSet = useMemo(
     () => new Set(renderedFeedPosts.map((post) => getPostId(post)).filter(Boolean)),
@@ -659,10 +661,14 @@ export default function FeedPage() {
   useEffect(() => {
     const savedPostId = sessionStorage.getItem(FEED_POST_ID_STORAGE_KEY) || '';
 
-    if (savedPostId) return;
+    if (savedPostId && !restoredFeedPositionRef.current) return;
 
+    restoredFeedPositionRef.current = false;
     setRenderLimit(INITIAL_RENDER_LIMIT);
   }, [topic, selectedTopic]);
+  const indexOfPostInFeed = useCallback((feedPosts, targetPostId) => (
+    feedPosts.findIndex((item) => getPostId(item) === targetPostId)
+  ), []);
 
   useEffect(() => {
     const pruneByRenderedPosts = (current) => {
@@ -717,16 +723,19 @@ export default function FeedPage() {
     return () => observer.disconnect();
   }, [nextCursor, loadingMore, loading, loadMore, renderLimit, filteredPosts.length]);
 
-  useEffect(() => {
-    const creatorIds = [
+  const visibleCreatorIds = useMemo(
+    () => [
       ...new Set(
         renderedFeedPosts
           .map((post) => getPostCreatorId(post))
           .filter(Boolean)
       ),
-    ];
+    ],
+    [renderedFeedPosts]
+  );
 
-    const missingCreatorIds = creatorIds.filter(
+  useEffect(() => {
+    const missingCreatorIds = visibleCreatorIds.filter(
       (id) => !creatorProfiles[id] && !requestedCreatorIdsRef.current.has(id)
     );
 
@@ -761,7 +770,7 @@ export default function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, [renderedFeedPosts, creatorProfiles]);
+  }, [visibleCreatorIds, creatorProfiles]);
 
   const showToast = useCallback((message, duration = 1200) => {
     if (toastTimerRef.current) {
@@ -778,108 +787,12 @@ export default function FeedPage() {
     }, duration);
   }, []);
 
-  const handleRefreshFeed = useCallback(async () => {
-    if (isRefreshing) return;
-
-    setIsRefreshing(true);
-    setRenderLimit(INITIAL_RENDER_LIMIT);
-
-    try {
-      const refreshFeed = refetch || refresh || reload;
-
-      if (typeof refreshFeed === 'function') {
-        await refreshFeed();
-      } else {
-        window.location.reload();
-      }
-    } catch (err) {
-      console.error('Feed refresh failed:', err);
-      showToast('Could not refresh feed');
-    } finally {
-      if (mountedRef.current) {
-        setIsRefreshing(false);
-      }
-    }
-  }, [isRefreshing, refetch, refresh, reload, showToast]);
-
-  const handleFeedTouchStart = useCallback((event) => {
-    if (!feedRef.current || isRefreshing) return;
-
-    const isAtTop = feedRef.current.scrollTop <= 2;
-    setIsFeedAtTop(isAtTop);
-
-    if (!isAtTop) {
-      pullStartYRef.current = 0;
-      pullDistanceRef.current = 0;
-      pullRefreshTriggeredRef.current = false;
-      setPullDistance(0);
-      return;
-    }
-
-    pullStartYRef.current = event.touches[0]?.clientY || 0;
-    pullDistanceRef.current = 0;
-    pullRefreshTriggeredRef.current = false;
-    setPullDistance(0);
-  }, [isRefreshing]);
-
-  const handleFeedTouchMove = useCallback((event) => {
-    if (!feedRef.current || isRefreshing || pullStartYRef.current <= 0) return;
-
-    const currentY = event.touches[0]?.clientY || 0;
-    const distance = Math.max(0, currentY - pullStartYRef.current);
-    const isAtTop = feedRef.current.scrollTop <= 2;
-
-    setIsFeedAtTop(isAtTop);
-
-    if (!isAtTop || distance <= 0) {
-      pullDistanceRef.current = 0;
-
-      if (mountedRef.current) {
-        setPullDistance(0);
-      }
-
-      return;
-    }
-
-    if (distance > 6) {
-      event.preventDefault();
-    }
-
-    const triggerDistance = Math.max(120, window.innerHeight * PULL_REFRESH_VIEWPORT_RATIO);
-    const easedDistance = Math.min(triggerDistance, distance * 0.45);
-    pullDistanceRef.current = distance;
-    setPullDistance(easedDistance);
-  }, [isRefreshing]);
-
-  const handleFeedTouchEnd = useCallback(() => {
-    const triggerDistance = Math.max(120, window.innerHeight * PULL_REFRESH_VIEWPORT_RATIO);
-    const isAtTop = feedRef.current?.scrollTop <= 2;
-    const shouldRefresh = isAtTop && pullDistanceRef.current >= triggerDistance;
-
-    pullStartYRef.current = 0;
-    pullDistanceRef.current = 0;
-    setIsFeedAtTop(Boolean(isAtTop));
-
-    if (mountedRef.current) {
-      setPullDistance(0);
-    }
-
-    if (shouldRefresh && !pullRefreshTriggeredRef.current && !isRefreshing) {
-      pullRefreshTriggeredRef.current = true;
-      handleRefreshFeed();
-    }
-  }, [handleRefreshFeed, isRefreshing]);
-
   const handleFeedScroll = useCallback(() => {
-    if (!feedRef.current) return;
+    if (scrollRafRef.current) return;
 
-    const atTop = feedRef.current.scrollTop <= 2;
-    setIsFeedAtTop(atTop);
-
-    if (!atTop && pullDistanceRef.current > 0) {
-      pullDistanceRef.current = 0;
-      setPullDistance(0);
-    }
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = 0;
+    });
   }, []);
 
   useEffect(() => {
@@ -887,6 +800,11 @@ export default function FeedPage() {
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
         toastTimerRef.current = null;
+      }
+
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = 0;
       }
     };
   }, []);
@@ -1008,8 +926,12 @@ export default function FeedPage() {
       if (!postId) return;
 
       const currentScrollY = feedRef.current?.scrollTop || window.scrollY || 0;
+      restoredFeedPositionRef.current = false;
       sessionStorage.setItem(FEED_SCROLL_STORAGE_KEY, String(currentScrollY));
-      sessionStorage.setItem(FEED_RENDER_LIMIT_STORAGE_KEY, String(renderLimit));
+      sessionStorage.setItem(
+        FEED_RENDER_LIMIT_STORAGE_KEY,
+        String(Math.max(renderLimit, indexOfPostInFeed(filteredPosts, postId) + 1))
+      );
       sessionStorage.setItem(FEED_POST_ID_STORAGE_KEY, postId);
 
       const {
@@ -1034,7 +956,7 @@ export default function FeedPage() {
         },
       });
     },
-    [navigate, renderLimit]
+    [filteredPosts, indexOfPostInFeed, navigate, renderLimit]
   );
 
   const handleTranslateChange = useCallback(
@@ -1131,12 +1053,8 @@ export default function FeedPage() {
     <main
       ref={feedRef}
       className="snap-feed-page"
-      onTouchStart={handleFeedTouchStart}
-      onTouchMove={handleFeedTouchMove}
-      onTouchEnd={handleFeedTouchEnd}
-      onTouchCancel={handleFeedTouchEnd}
       onScroll={handleFeedScroll}
-      style={{ overscrollBehaviorY: 'contain' }}
+      style={{ overscrollBehaviorY: 'auto' }}
     >
       <button
         type="button"
@@ -1147,18 +1065,6 @@ export default function FeedPage() {
       </button>
 
       {toast && <div className="success-toast">{toast}</div>}
-
-      {(pullDistance > 0 || isRefreshing) && isFeedAtTop && (
-        <div
-          className={isRefreshing ? 'pull-refresh-indicator refreshing' : 'pull-refresh-indicator'}
-          style={{
-            transform: `translate(-50%, ${pullDistance || (isRefreshing ? 48 : 0)}px)`,
-          }}
-          aria-live="polite"
-        >
-          <span className="pull-refresh-spinner" />
-        </div>
-      )}
 
       <aside className="topic-rail">
         {renderedTopics}

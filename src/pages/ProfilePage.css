@@ -251,8 +251,9 @@
 .avatar-xl {
   width: clamp(142px, 14vw, 210px);
   height: clamp(142px, 14vw, 210px);
-  border-radius: clamp(36px, 4vw, 58px);
+  border-radius: 50%;
   flex-shrink: 0;
+  overflow: hidden;
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
@@ -1193,7 +1194,8 @@
   .avatar-xl {
     width: 124px;
     height: 124px;
-    border-radius: 34px;
+    border-radius: 50%;
+    overflow: hidden;
   }
 
   .profile-left h1 {
@@ -1274,12 +1276,13 @@
   padding: 0;
   background: transparent;
   position: relative;
-  border-radius: clamp(36px, 4vw, 58px);
+  border-radius: 50%;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   flex-shrink: 0;
   display: block;
+  overflow: hidden;
 }
 
 .profile-avatar-button:hover .avatar-edit-overlay,
@@ -1419,7 +1422,8 @@
 
 @media (max-width: 560px) {
   .profile-avatar-button {
-    border-radius: 34px;
+    border-radius: 50%;
+    overflow: hidden;
   }
 
   .avatar-edit-overlay {
