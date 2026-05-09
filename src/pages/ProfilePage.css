@@ -4,10 +4,10 @@
 ========================= */
 
 .profile-page {
-  width: min(1560px, calc(100% - 32px));
+  width: min(1480px, calc(100% - 28px));
   min-height: calc(100vh - 72px);
   margin: 0 auto;
-  padding: 0rem  20px;
+  padding: 10px 18px 44px;
   color: #f8fafc;
   position: relative;
 }
@@ -198,27 +198,32 @@
 
 .profile-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
-  gap: 28px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 20px;
   align-items: stretch;
-  min-height: clamp(430px, 58vh, 620px);
-  margin-bottom: 34px;
+  min-height: clamp(360px, 50vh, 540px);
+  margin-bottom: 26px;
 }
 
 .profile-left {
   display: flex;
-  gap: clamp(18px, 3vw, 34px);
+  gap: clamp(16px, 2.4vw, 28px);
   align-items: center;
   min-height: 100%;
-  padding: clamp(26px, 4.5vw, 58px);
-  border-radius: 38px;
+  padding: clamp(22px, 3.4vw, 44px);
+  border-radius: 32px;
   position: relative;
   overflow: hidden;
-  background: rgba(2, 6, 23, 0.42);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.13), transparent 34%),
+    radial-gradient(circle at 100% 12%, rgba(139, 92, 246, 0.11), transparent 34%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.72), rgba(2, 6, 23, 0.5));
+  border: 1px solid rgba(255, 255, 255, 0.105);
+  box-shadow:
+    0 28px 80px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(18px) saturate(1.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
 }
 
 .profile-left::before {
@@ -249,8 +254,9 @@
 
 .avatar-photo,
 .avatar-xl {
-  width: clamp(142px, 14vw, 210px);
-  height: clamp(142px, 14vw, 210px);
+  width: clamp(116px, 11vw, 172px);
+
+  height: clamp(116px, 11vw, 172px);
   border-radius: 50%;
   flex-shrink: 0;
   overflow: hidden;
@@ -308,24 +314,27 @@
 .profile-left h1 {
   margin: 0;
   color: white;
-  font-size: clamp(2.45rem, 5.3vw, 5rem);
-  line-height: 0.9;
+  font-size: clamp(2.05rem, 4.5vw, 4.3rem);
+    line-height: 0.9;
   letter-spacing: -0.078em;
   text-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
 }
 
 .profile-email {
-  margin: 14px 0 0;
+
   color: #cbd5e1;
-  font-weight: 850;
-  overflow-wrap: anywhere;
+  margin: 10px 0 0;
+
+  font-size: 0.9rem;  overflow-wrap: anywhere;
 }
 
 .profile-bio {
-  margin: 14px 0 0;
   color: rgba(226, 232, 240, 0.74);
-  line-height: 1.75;
-  max-width: 650px;
+  margin: 10px 0 0;
+
+  line-height: 1.6;
+
+  font-size: 0.92rem;  max-width: 650px;
   font-weight: 600;
 }
 
@@ -771,19 +780,30 @@
 .profile-content {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 22px;
+  gap: 16px;
 }
 
 .profile-card {
-  min-height: 180px;
-  border-radius: 30px;
-  padding: 28px;
+  min-height: 154px;
+  border-radius: 25px;
+  padding: 22px;
   position: relative;
   overflow: hidden;
-  background: rgba(2, 6, 23, 0.42);
+  background:
+
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.07), transparent 34%),
+
+    rgba(2, 6, 23, 0.44);
+
   border: 1px solid rgba(255, 255, 255, 0.085);
-  box-shadow: none;
-  backdrop-filter: none;
+
+  box-shadow:
+
+    0 18px 58px rgba(0, 0, 0, 0.18),
+
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+
+  backdrop-filter: blur(14px) saturate(1.08);
   -webkit-backdrop-filter: none;
   transition: transform 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
 }
