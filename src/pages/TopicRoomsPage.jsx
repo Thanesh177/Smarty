@@ -102,6 +102,28 @@ function parseApiPayload(payload) {
   };
 }
 
+function extractRoomArray(data, keys = []) {
+  const { payload, body } = parseApiPayload(data);
+  const responseData = body?.data || payload?.data || body || payload || data || {};
+
+  for (const key of keys) {
+    if (Array.isArray(data?.[key])) return data[key];
+    if (Array.isArray(payload?.[key])) return payload[key];
+    if (Array.isArray(body?.[key])) return body[key];
+    if (Array.isArray(responseData?.[key])) return responseData[key];
+    if (Array.isArray(responseData?.data?.[key])) return responseData.data[key];
+  }
+
+  if (Array.isArray(responseData?.Items)) return responseData.Items;
+  if (Array.isArray(responseData?.users)) return responseData.users;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(responseData)) return responseData;
+
+  return [];
+}
+
 function getUploadedRoomImageUrl(uploadResponse) {
   const { payload, body } = parseApiPayload(uploadResponse);
 
@@ -349,6 +371,9 @@ export default function TopicRoomsPage() {
   const [modalMode, setModalMode] = useState('members');
   const [modalRoom, setModalRoom] = useState(null);
   const [members, setMembers] = useState([]);
+  const [activeInfoLoading, setActiveInfoLoading] = useState(false);
+  const [activeInfoMembers, setActiveInfoMembers] = useState([]);
+  const [activeInfoRequests, setActiveInfoRequests] = useState([]);
   const [showMembers, setShowMembers] = useState(false);
   const [status, setStatus] = useState('');
   const [creatingRoom, setCreatingRoom] = useState(false);
@@ -700,40 +725,67 @@ export default function TopicRoomsPage() {
     setOpenRoomActionMenuId('');
     setShowRoomMenu(false);
     setActiveInfoSection('media');
+    setActiveInfoLoading(false);
     setShowActiveRoomInfo(true);
   }
 
-  async function toggleActiveInfoSection(section) {
-    if (!activeRoom?.roomId) return;
+async function toggleActiveInfoSection(section) {
+  if (!activeRoom?.roomId) return;
 
-    const nextSection = activeInfoSection === section ? '' : section;
-    setActiveInfoSection(nextSection);
+  const nextSection = activeInfoSection === section ? '' : section;
+  setActiveInfoSection(nextSection);
 
-    if (!nextSection) return;
+  if (!nextSection) return;
 
-    if (section === 'members') {
-      await openMembers(activeRoom);
-      setShowMembers(false);
-      setShowActiveRoomInfo(true);
-      setModalRoom(activeRoom);
-      setModalMode('members');
-      return;
+  if (section === 'members') {
+    setActiveInfoLoading(true);
+    setActiveInfoMembers([]);
+    setModalRoom(activeRoom);
+    setModalMode('members');
+
+    try {
+      const data = await roomApi.getRoomMembers(activeRoom.roomId);
+
+      const nextMembers = extractRoomArray(data, ['members']);
+
+      setActiveInfoMembers(nextMembers);
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.response?.data?.error || 'Could not load members');
+    } finally {
+      setActiveInfoLoading(false);
     }
 
-    if (section === 'requests') {
-      await openJoinRequests(activeRoom);
-      setShowMembers(false);
-      setShowActiveRoomInfo(true);
-      setModalRoom(activeRoom);
-      setModalMode('requests');
-      return;
-    }
-
-    if (section === 'invite') {
-      setInviteLinkModalOpen(false);
-      setShowActiveRoomInfo(true);
-    }
+    return;
   }
+
+  if (section === 'requests') {
+    setActiveInfoLoading(true);
+    setActiveInfoRequests([]);
+    setModalRoom(activeRoom);
+    setModalMode('requests');
+
+    try {
+      const data = await roomApi.getRoomJoinRequests(activeRoom.roomId);
+
+      const nextRequests = extractRoomArray(data, ['requests']);
+
+      setActiveInfoRequests(nextRequests);
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.response?.data?.error || 'Could not load join requests');
+    } finally {
+      setActiveInfoLoading(false);
+    }
+
+    return;
+  }
+
+  if (section === 'invite') {
+    setInviteLinkModalOpen(false);
+    setShowActiveRoomInfo(true);
+  }
+}
 
   function openMediaFromGrid(message) {
     const normalizedMessage = normalizeRoomMessageMedia(message);
@@ -1430,7 +1482,18 @@ export default function TopicRoomsPage() {
       roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
 
       await loadRooms(roomSearch, { force: true });
-      setShowRoomInvites(false);
+
+const joinedRoom =
+  roomsCacheRef.current.rooms.find((room) => room.roomId === roomId) ||
+  rooms.find((room) => room.roomId === roomId) ||
+  invite?.room ||
+  null;
+
+setShowRoomInvites(false);
+
+if (joinedRoom?.roomId) {
+  await openRoom(joinedRoom);
+}
     } catch (err) {
       console.error(err);
 
@@ -2074,9 +2137,14 @@ async function openMembers(room) {
   setModalRoom(room);
   setShowMembers(true);
 
-  if (modalRoom?.roomId === room.roomId && modalMode === 'members' && members.length > 0) {
-    return;
-  }
+  if (
+  modalRoom?.roomId === room.roomId &&
+  modalMode === 'members' &&
+  members.length > 0 &&
+  showActiveRoomInfo
+) {
+  return;
+}
 
   if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
     setMembers(cached.members);
@@ -2090,11 +2158,7 @@ async function openMembers(room) {
 
     if (!mountedRef.current) return;
 
-    const nextMembers = Array.isArray(data?.members)
-      ? data.members
-      : Array.isArray(data)
-        ? data
-        : [];
+    const nextMembers = extractRoomArray(data, ['members']);
 
     membersCacheRef.current[cacheKey] = {
       timestamp: Date.now(),
@@ -2315,9 +2379,14 @@ async function openJoinRequests(room) {
   setModalRoom(room);
   setShowMembers(true);
 
-  if (modalRoom?.roomId === room.roomId && modalMode === 'requests' && members.length > 0) {
-    return;
-  }
+if (
+  modalRoom?.roomId === room.roomId &&
+  modalMode === 'requests' &&
+  members.length > 0 &&
+  showActiveRoomInfo
+) {
+  return;
+}
 
   if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
     setMembers(cached.requests);
@@ -2331,11 +2400,7 @@ async function openJoinRequests(room) {
 
     if (!mountedRef.current) return;
 
-    const nextRequests = Array.isArray(data?.requests)
-      ? data.requests
-      : Array.isArray(data)
-        ? data
-        : [];
+    const nextRequests = extractRoomArray(data, ['requests']);
 
     joinRequestsCacheRef.current[cacheKey] = {
       timestamp: Date.now(),
@@ -2359,7 +2424,8 @@ async function approveJoinRequest(requestUserId) {
 
     await roomApi.approveRoomJoinRequest(approvedRoom.roomId, requestUserId);
 
-    setMembers((prev) => prev.filter((member) => member.userId !== requestUserId));
+    setMembers((prev) => prev.filter((member) => getInviteUserId(member) !== requestUserId));
+    setActiveInfoRequests((prev) => prev.filter((request) => getInviteUserId(request) !== requestUserId));
 
     delete joinRequestsCacheRef.current[approvedRoom.roomId];
     delete membersCacheRef.current[approvedRoom.roomId];
@@ -2367,6 +2433,8 @@ async function approveJoinRequest(requestUserId) {
 
     setShowMembers(false);
     setShowInvite(false);
+    setShowActiveRoomInfo(false);
+    setActiveInfoSection('');
     setModalMode('members');
     setModalRoom(null);
     setMembers([]);
@@ -3422,27 +3490,42 @@ return (
           <div className="active-room-info-expanded-area">
             {activeInfoSection === 'members' && (
               <div className="active-room-info-inline-section">
-                {modalMode !== 'members' ? (
+                {activeInfoLoading ? (
                   <p className="active-room-info-empty">Loading members...</p>
-                ) : members.length === 0 ? (
-                  <p className="active-room-info-empty">No members loaded.</p>
+                ) : activeInfoMembers.length === 0 ? (
+                  <p className="active-room-info-empty">No members found.</p>
                 ) : (
-                  members.map((member) => (
-                    <div className="active-room-info-person" key={member.userId || member.email}>
-                      <div className="active-room-info-avatar">
-                        {member.avatarUrl || member.photoUrl || member.profilePic ? (
-                          <img src={member.avatarUrl || member.photoUrl || member.profilePic} alt="" />
-                        ) : (
-                          <span>{(member.name || member.email || 'U').slice(0, 1).toUpperCase()}</span>
-                        )}
-                      </div>
+                  activeInfoMembers.map((member) => {
+                    const memberId = getInviteUserId(member);
+                    const memberIsCreator =
+                      memberId &&
+                      (memberId === activeRoom.ownerId || memberId === activeRoom.createdBy);
 
-                      <div>
-                        <strong>{member.name || member.userName || member.email || 'User'}</strong>
-                        <p>{member.email || member.userEmail || member.role || 'Member'}</p>
+                    return (
+                      <div className="active-room-info-person" key={memberId || member.email}>
+                        <div className="active-room-info-avatar">
+                          {member.avatarUrl || member.photoUrl || member.profilePic ? (
+                            <img src={member.avatarUrl || member.photoUrl || member.profilePic} alt="" />
+                          ) : (
+                            <span>
+                              {(member.name || member.userName || member.email || 'U')
+                                .slice(0, 1)
+                                .toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+
+                        <div>
+                          <strong>{member.name || member.userName || member.email || 'User'}</strong>
+                          <p>{member.email || member.userEmail || member.role || 'Member'}</p>
+                        </div>
+
+                        <span className="member-role-pill">
+                          {memberIsCreator ? 'Creator' : member.role || 'Member'}
+                        </span>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}
@@ -3484,18 +3567,25 @@ return (
 
             {activeInfoSection === 'requests' && activeRoomCanEdit && activeRoom.privacy === 'private' && (
               <div className="active-room-info-inline-section">
-                {modalMode !== 'requests' ? (
+                {activeInfoLoading ? (
                   <p className="active-room-info-empty">Loading requests...</p>
-                ) : members.length === 0 ? (
+                ) : activeInfoRequests.length === 0 ? (
                   <p className="active-room-info-empty">No pending requests.</p>
                 ) : (
-                  members.map((request) => (
-                    <div className="active-room-info-person request" key={request.userId || request.email}>
+                  activeInfoRequests.map((request) => (
+                    <div
+                      className="active-room-info-person request"
+                      key={getInviteUserId(request) || request.email}
+                    >
                       <div className="active-room-info-avatar">
                         {request.avatarUrl || request.photoUrl || request.profilePic ? (
                           <img src={request.avatarUrl || request.photoUrl || request.profilePic} alt="" />
                         ) : (
-                          <span>{(request.name || request.userName || request.email || 'U').slice(0, 1).toUpperCase()}</span>
+                          <span>
+                            {(request.name || request.userName || request.email || 'U')
+                              .slice(0, 1)
+                              .toUpperCase()}
+                          </span>
                         )}
                       </div>
 
@@ -3511,7 +3601,7 @@ return (
                       <button
                         type="button"
                         className="active-room-info-approve"
-                        onClick={() => approveJoinRequest(request.userId)}
+                        onClick={() => approveJoinRequest(getInviteUserId(request))}
                       >
                         Accept
                       </button>
@@ -3833,8 +3923,8 @@ return (
                     className="approve-request-btn icon-action-btn"
                     aria-label="Accept join request"
                     title="Accept join request"
-                    disabled={!member.userId}
-                    onClick={() => approveJoinRequest(member.userId)}
+                    disabled={!getInviteUserId(member)}
+                    onClick={() => approveJoinRequest(getInviteUserId(member))}
                   >
                     ✓
                   </button>
