@@ -1,124 +1,68 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { roomApi } from '../api/client';
+import { roomApi, storePendingRoomInvite } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
-import './JoinRoomPage.css';
+import './RoomInvitePage.css';
 
-function parseApiPayload(payload) {
-  let parsedPayload = payload;
-
-  try {
-    parsedPayload = typeof payload === 'string' ? JSON.parse(payload) : payload;
-  } catch {
-    parsedPayload = payload;
-  }
-
-  let parsedBody = parsedPayload?.body;
-
-  try {
-    parsedBody = typeof parsedBody === 'string' ? JSON.parse(parsedBody) : parsedBody;
-  } catch {
-    parsedBody = parsedPayload?.body;
-  }
-
-  return {
-    payload: parsedPayload,
-    body: parsedBody,
-  };
-}
-
-function normalizeInvitePayload(data) {
-  const { payload, body } = parseApiPayload(data);
-
-  const rawInvite =
-    payload?.invite ||
-    payload?.data?.invite ||
-    body?.invite ||
-    body?.data?.invite ||
-    payload ||
-    body ||
-    null;
-
-  if (!rawInvite || typeof rawInvite !== 'object') return null;
-
-  const requiresApproval =
-    rawInvite.requiresApproval === false || rawInvite.requiresApproval === 'false'
-      ? false
-      : true;
-
-  return {
-    ...rawInvite,
-    inviteCode: rawInvite.inviteCode || rawInvite.code || '',
-    roomId: rawInvite.roomId || rawInvite.topicRoomId || rawInvite.groupId || rawInvite.room?.roomId || '',
-    roomName: rawInvite.roomName || rawInvite.name || rawInvite.room?.name || 'Private Room',
-    description: rawInvite.description || rawInvite.roomDescription || rawInvite.about || rawInvite.room?.description || '',
-    roomImageUrl: rawInvite.roomImageUrl || rawInvite.imageUrl || rawInvite.coverImageUrl || rawInvite.room?.imageUrl || '',
-    privacy: rawInvite.privacy || rawInvite.room?.privacy || 'private',
-    memberCount: Number(rawInvite.memberCount || rawInvite.room?.memberCount || 0),
-    requiresApproval,
-  };
-}
-
-export default function JoinRoomPage() {
+export default function RoomInvitePage() {
   const { inviteCode } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const autoJoinAttemptedRef = useRef('');
-  const safeInviteCode = String(inviteCode || '').trim();
-  const pendingInviteKey = `smarty-pending-room-invite-${safeInviteCode}`;
-  const joinPath = `/rooms/invite/${safeInviteCode}`;
+
+  const cleanInviteCode = useMemo(
+    () => String(inviteCode || '').trim(),
+    [inviteCode]
+  );
 
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [status, setStatus] = useState('');
-  const [loadError, setLoadError] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     async function loadInvite() {
+      if (!cleanInviteCode) {
+        setError('Invite code is missing.');
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
+        setError('');
         setStatus('');
-        setLoadError('');
 
-        const data = await roomApi.getRoomInvite(safeInviteCode);
-        const normalizedInvite = normalizeInvitePayload(data);
+        storePendingRoomInvite(cleanInviteCode);
 
-        if (!normalizedInvite?.inviteCode && !normalizedInvite?.roomId) {
-          throw new Error('Invite response was empty or invalid.');
-        }
-
-        setInvite(normalizedInvite);
+        const data = await roomApi.getRoomInvite(cleanInviteCode);
+        setInvite(data?.invite || data || null);
       } catch (err) {
-        setInvite(null);
-        setLoadError(
+        console.error('ROOM INVITE PREVIEW ERROR:', err);
+        setError(
           err?.response?.data?.error ||
             err?.response?.data?.message ||
             err?.message ||
-            'Invite link could not be loaded.'
+            'Could not load invite.'
         );
       } finally {
         setLoading(false);
       }
     }
 
-    if (safeInviteCode) {
-      loadInvite();
-    } else {
-      setLoading(false);
-      setLoadError('Invite code is missing from the link.');
-    }
-  }, [safeInviteCode]);
+    loadInvite();
+  }, [cleanInviteCode]);
 
-  const joinRoom = useCallback(async () => {
+  async function handleJoinRoom() {
+    if (!cleanInviteCode || joining) return;
+
     if (!user) {
-      sessionStorage.setItem('smarty-post-login-redirect', joinPath);
-      localStorage.setItem('smarty-post-login-redirect', joinPath);
-      sessionStorage.setItem(pendingInviteKey, '1');
-      localStorage.setItem(pendingInviteKey, '1');
-      navigate(`/login?redirect=${encodeURIComponent(joinPath)}`, {
-        replace: true,
-        state: { from: joinPath },
+      storePendingRoomInvite(cleanInviteCode);
+      navigate('/login', {
+        replace: false,
+        state: {
+          redirectTo: `/rooms/invite/${encodeURIComponent(cleanInviteCode)}`,
+        },
       });
       return;
     }
@@ -126,43 +70,29 @@ export default function JoinRoomPage() {
     try {
       setJoining(true);
       setStatus('');
+      setError('');
 
-      const data = await roomApi.joinRoomFromInvite(safeInviteCode);
-      const { payload, body } = parseApiPayload(data);
-      const joinResult = body || payload || data || {};
-      const joinedRoomId =
-        joinResult?.roomId ||
-        joinResult?.room?.roomId ||
-        invite?.roomId ||
-        '';
+      console.log('JOIN BUTTON CLICKED', cleanInviteCode);
 
-      sessionStorage.removeItem(pendingInviteKey);
-      localStorage.removeItem(pendingInviteKey);
-      sessionStorage.removeItem('smarty-post-login-redirect');
-      localStorage.removeItem('smarty-post-login-redirect');
+      const result = await roomApi.joinRoomFromInvite(cleanInviteCode);
 
-      if (joinResult?.joined) {
-        setStatus('Joined room successfully. Opening room...');
-        window.setTimeout(() => {
-          if (joinedRoomId) {
-            sessionStorage.setItem('smarty-open-room-id', joinedRoomId);
-            localStorage.setItem('smarty-open-room-id', joinedRoomId);
-            navigate(`/rooms?roomId=${encodeURIComponent(joinedRoomId)}`, { replace: true });
-          } else {
-            navigate('/rooms', { replace: true });
-          }
-        }, 700);
+      console.log('JOIN RESULT', result);
+
+      if (result?.joined) {
+        setStatus(result?.message || 'Joined room successfully.');
+        navigate('/rooms', { replace: true });
         return;
       }
 
-      if (joinResult?.requested) {
-        setStatus('Join request sent. The room creator must approve you.');
+      if (result?.requested) {
+        setStatus(result?.message || 'Join request sent.');
         return;
       }
 
-      setStatus(joinResult?.message || 'Request completed.');
+      setStatus(result?.message || 'Invite processed.');
     } catch (err) {
-      setStatus(
+      console.error('JOIN ROOM FROM INVITE ERROR:', err);
+      setError(
         err?.response?.data?.error ||
           err?.response?.data?.message ||
           err?.message ||
@@ -171,107 +101,89 @@ export default function JoinRoomPage() {
     } finally {
       setJoining(false);
     }
-  }, [invite, joinPath, navigate, pendingInviteKey, safeInviteCode, user]);
+  }
 
-  useEffect(() => {
-    if (!safeInviteCode || !user || !invite || loadError || loading) return;
-    if (autoJoinAttemptedRef.current === safeInviteCode) return;
+  if (loading) {
+    return (
+      <main className="room-invite-page">
+        <section className="room-invite-card">
+          <p>Loading invite...</p>
+        </section>
+      </main>
+    );
+  }
 
-    const pendingInvite =
-      sessionStorage.getItem(pendingInviteKey) === '1' ||
-      localStorage.getItem(pendingInviteKey) === '1' ||
-      sessionStorage.getItem('smarty-post-login-redirect') === joinPath ||
-      localStorage.getItem('smarty-post-login-redirect') === joinPath;
-
-    if (invite.requiresApproval !== false && !pendingInvite) return;
-    if (joining) return;
-
-    autoJoinAttemptedRef.current = safeInviteCode;
-    setStatus(invite.requiresApproval ? 'Sending join request...' : 'Instant join enabled. Joining room...');
-    joinRoom();
-  }, [invite, joinPath, joinRoom, joining, loadError, loading, pendingInviteKey, safeInviteCode, user]);
-
-  const roomName = invite?.roomName || 'Private Room';
-  const description =
-    invite?.description ||
-    invite?.roomDescription ||
-    'This is a private Smarty room. Join to learn, chat, and share ideas with invited members.';
-
-  const isInviteUnavailable = Boolean(loadError) && !invite;
+  if (error && !invite) {
+    return (
+      <main className="room-invite-page">
+        <section className="room-invite-card">
+          <h1>Invite unavailable</h1>
+          <p>{error}</p>
+          <button type="button" onClick={() => navigate('/rooms')}>
+            Back to rooms
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <main className="join-room-page">
-      <section className="join-room-card">
-        {loading ? (
-          <div className="join-loader">
-            <span />
-            <p>Loading invite...</p>
-          </div>
-        ) : isInviteUnavailable ? (
-          <div className="join-error-state">
-            <div className="join-room-fallback">!</div>
-            <p className="join-eyebrow">Invite Unavailable</p>
-            <h1>Link can’t be opened</h1>
-            <p className="join-status error">{loadError}</p>
-            <button
-              type="button"
-              className="join-secondary-btn"
-              onClick={() => navigate('/rooms')}
-            >
-              Back to Rooms
-            </button>
-          </div>
+    <main className="room-invite-page">
+      <section className="room-invite-card">
+        <div className="room-invite-cover">
+          {invite?.roomImageUrl ? (
+            <img src={invite.roomImageUrl} alt={invite.roomName || 'Room'} />
+          ) : (
+            <span>{(invite?.roomName || 'R').slice(0, 1).toUpperCase()}</span>
+          )}
+        </div>
+
+        <p className="room-invite-kicker">Private room invite</p>
+
+        <h1>{invite?.roomName || 'Room invite'}</h1>
+
+        {invite?.description && <p>{invite.description}</p>}
+
+        <p className="room-invite-meta">
+          {invite?.privacy === 'private' ? 'Private room' : 'Public room'}
+          {invite?.memberCount ? ` · ${invite.memberCount} members` : ''}
+        </p>
+
+        {invite?.requiresApproval ? (
+          <p className="room-invite-note">
+            This room requires creator approval before you can join.
+          </p>
         ) : (
-          <>
-            <div className="join-room-hero">
-              {invite?.roomImageUrl ? (
-                <img src={invite.roomImageUrl} alt="" />
-              ) : (
-                <div className="join-room-fallback">
-                  {roomName.slice(0, 1).toUpperCase()}
-                </div>
-              )}
-            </div>
-
-            <p className="join-eyebrow">Private Room Invite</p>
-            <h1>{roomName}</h1>
-
-            <div className="join-room-meta">
-              <span>{invite?.privacy === 'private' ? 'Private' : 'Public'}</span>
-              <span>{Number(invite?.memberCount || 0)} members</span>
-              <span>{invite?.requiresApproval !== false ? 'Approval required' : 'Instant join'}</span>
-            </div>
-
-            <div className="join-description">
-              <h2>Description</h2>
-              <p>{description}</p>
-            </div>
-
-            {status && <p className="join-status">{status}</p>}
-            {loadError && <p className="join-status error">{loadError}</p>}
-
-            <button
-              type="button"
-              className="join-room-btn"
-              disabled={joining || !invite || Boolean(loadError) || !safeInviteCode}
-              onClick={joinRoom}
-            >
-              {joining
-                ? 'Please wait...'
-                : invite?.requiresApproval !== false
-                  ? 'Request to Join'
-                  : 'Join Room'}
-            </button>
-
-            <button
-              type="button"
-              className="join-secondary-btn"
-              onClick={() => navigate('/rooms')}
-            >
-              Back to Rooms
-            </button>
-          </>
+          <p className="room-invite-note">
+            This invite allows you to join instantly.
+          </p>
         )}
+
+        {error && <p className="room-invite-error">{error}</p>}
+        {status && <p className="room-invite-status">{status}</p>}
+
+        <button
+          type="button"
+          className="room-invite-join-btn"
+          disabled={joining}
+          onClick={handleJoinRoom}
+        >
+          {joining
+            ? 'Joining...'
+            : user
+              ? invite?.requiresApproval
+                ? 'Request to Join'
+                : 'Join Room'
+              : 'Log in to Join'}
+        </button>
+
+        <button
+          type="button"
+          className="room-invite-secondary-btn"
+          onClick={() => navigate('/rooms')}
+        >
+          Back to rooms
+        </button>
       </section>
     </main>
   );
