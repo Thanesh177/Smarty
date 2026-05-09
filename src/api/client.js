@@ -616,9 +616,6 @@ export const roomApi = {
     };
   },
 
-joinRoomFromInvite: async (inviteCode) => {
-  return roomApi.joinRoomInvite(inviteCode);
-},
 
   disableInviteLink: async (inviteCode) => {
     const cleanCode = String(inviteCode || '').trim();
@@ -662,7 +659,7 @@ joinRoomFromInvite: async (inviteCode) => {
     }
   },
 
-joinRoomInvite: async (inviteCode) => {
+joinRoomFromInvite: async (inviteCode) => {
   const cleanCode = String(inviteCode || '').trim();
 
   if (!cleanCode) {
