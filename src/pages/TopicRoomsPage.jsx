@@ -1494,25 +1494,36 @@ export default function TopicRoomsPage() {
       setShowActiveRoomMenu(false);
 
       const data = await roomApi.createRoomInviteLink(room.roomId, {
-        // Backend Lambda uses requiresApproval. UI toggle uses the opposite meaning.
         requiresApproval: !inviteLinkAutoAccept,
         autoAccept: inviteLinkAutoAccept,
         maxUses: 100,
       });
 
-      const inviteCode = data?.inviteCode || data?.code || '';
+      const { payload, body } = parseApiPayload(data);
+      const responseData = body?.data || payload?.data || body || payload || {};
+
+      const inviteCode =
+        responseData?.inviteCode ||
+        responseData?.code ||
+        responseData?.invite?.inviteCode ||
+        responseData?.invite?.code ||
+        '';
+
       const inviteUrl =
-        data?.inviteUrl ||
-        data?.url ||
+        responseData?.inviteUrl ||
+        responseData?.url ||
+        responseData?.invite?.inviteUrl ||
+        responseData?.invite?.url ||
         (inviteCode ? `${APP_ORIGIN}/rooms/invite/${inviteCode}` : '');
 
       if (!inviteUrl) {
+        console.error('Invite link response missing URL:', data);
         throw new Error('Invite link was created, but no invite URL was returned');
       }
 
-      setGeneratedInviteCode(
-        inviteCode || String(inviteUrl).split('/').filter(Boolean).pop() || ''
-      );
+      const finalInviteCode = inviteCode || String(inviteUrl).split('/').filter(Boolean).pop() || '';
+
+      setGeneratedInviteCode(finalInviteCode);
       setGeneratedInviteLink(inviteUrl);
       setInviteLinkCopied(false);
       setInviteLinkModalOpen(true);
