@@ -14,15 +14,19 @@ const APP_ORIGIN = import.meta.env.PROD
 const ROOM_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const ROOM_IMAGE_PICKER_MAX_BYTES = 8 * 1024 * 1024;
 const ROOM_MEDIA_MAX_BYTES = 80 * 1024 * 1024;
+const ROOM_MEDIA_MAX_FILES_PER_BATCH = 20;
+const ROOM_MEDIA_MAX_BATCH_BYTES = 500 * 1024 * 1024;
 const ROOM_LIST_CACHE_MS = 25_000;
 const ROOM_MEMBERS_CACHE_MS = 30_000;
 const USER_SEARCH_DEBOUNCE_MS = 350;
 const ROOM_INVITES_REFRESH_MS = 45_000;
-const MAX_RENDERED_MESSAGES = 35;
-const MAX_RENDERED_MEDIA_MESSAGES = 80;
-const MAX_RENDERED_ROOMS = 50;
+const MAX_RENDERED_ROOMS = 250;
 const ROOM_IMAGE_EAGER_LIMIT = 4;
 const ROOM_IMAGE_RENDER_LIMIT = 16;
+const MAX_RENDERED_MESSAGES = 90;
+const MAX_RENDERED_MEDIA_MESSAGES = 260;
+const ROOM_MESSAGES_FETCH_LIMIT = 50;
+const MAX_ROOM_MEDIA_GRID_ITEMS = 160;
 
 const ROOM_MEDIA_IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
 const ROOM_MEDIA_VIDEO_EXTENSIONS = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
@@ -244,7 +248,7 @@ function dedupeMessages(messages = []) {
     const key =
       msg.messageId ||
       msg.clientId ||
-      `${msg.createdAt || 'msg'}-${msg.senderId || 'user'}-${msg.text || msg.message || ''}`;
+      `${msg.createdAt || 'msg'}-${msg.senderId || 'user'}-${String(msg.text || msg.message || '')}`;
 
     if (!key || seen.has(key)) continue;
 
@@ -256,13 +260,7 @@ function dedupeMessages(messages = []) {
 }
 
 function getLoadedRoomMessages(data) {
-  const loadedMessages = Array.isArray(data?.messages)
-    ? data.messages
-    : Array.isArray(data)
-      ? data
-      : [];
-
-  return loadedMessages.map(normalizeRoomMessageMedia).slice(-MAX_RENDERED_MEDIA_MESSAGES);
+  return extractRoomArray(data, ['messages', 'Items']).map(normalizeRoomMessageMedia);
 }
 
 function areRoomsEqualForList(currentRoom, nextRoom) {
@@ -312,6 +310,38 @@ function getRoomInviteRoomId(invite) {
   );
 }
 
+function renderMessageWithLinks(value = '') {
+  const text = String(value || '');
+  if (!text) return null;
+
+  const urlRegex = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (!part) return null;
+    urlRegex.lastIndex = 0;
+
+    if (urlRegex.test(part)) {
+      const href = part.toLowerCase().startsWith('http') ? part : `https://${part}`;
+
+      return (
+        <a
+          key={`${part}-${index}`}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="room-message-link"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
 export default function TopicRoomsPage() {
   const { user } = useAuth();
   const userId = user?.id || user?.userId || user?.sub;
@@ -323,6 +353,8 @@ export default function TopicRoomsPage() {
   const [showHidden, setShowHidden] = useState(false);
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
+  const [hasOlderMessages, setHasOlderMessages] = useState(true);
   const [roomInvites, setRoomInvites] = useState([]);
   const [showRoomInvites, setShowRoomInvites] = useState(false);
   const [roomInvitesLoading, setRoomInvitesLoading] = useState(false);
@@ -346,6 +378,7 @@ export default function TopicRoomsPage() {
   const [selectedMediaType, setSelectedMediaType] = useState('');
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
+  const [mediaUploadLabel, setMediaUploadLabel] = useState('');
   const [mediaViewer, setMediaViewer] = useState(null);
   const [mediaViewerReturnToGrid, setMediaViewerReturnToGrid] = useState(false);
   const [showRoomMediaGrid, setShowRoomMediaGrid] = useState(false);
@@ -389,11 +422,12 @@ export default function TopicRoomsPage() {
   const [showMembers, setShowMembers] = useState(false);
   const [status, setStatus] = useState('');
   const [creatingRoom, setCreatingRoom] = useState(false);
-const [deletingMessageId, setDeletingMessageId] = useState('');
+  const [deletingMessageId, setDeletingMessageId] = useState('');
   const activeRoomRef = useRef(null);
   const messagesRef = useRef(null);
   const mountedRef = useRef(true);
   const loadingRoomRef = useRef(false);
+  const olderMessagesLoadingRef = useRef(false);
   const roomsLoadingRef = useRef(false);
   const roomsLoadInFlightKeyRef = useRef('');
   const initialRoomsLoadedForUserRef = useRef('');
@@ -414,9 +448,9 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
   const activeRoomMenuRef = useRef(null);
 
   const activeRoomCanDeleteMessages = useMemo(
-  () => activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && isRoomOwner(activeRoom, userId),
-  [activeRoom, userId]
-);
+    () => activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && isRoomOwner(activeRoom, userId),
+    [activeRoom, userId]
+  );
 
   const getRoomImageUrl = useCallback((room) => {
     if (!room?.roomId) return '';
@@ -456,11 +490,7 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
   const renderedMessages = useMemo(() => {
     if (!Array.isArray(messages) || messages.length === 0) return [];
 
-    const uniqueMessages = dedupeMessages(messages);
-
-    return uniqueMessages.length > MAX_RENDERED_MESSAGES
-      ? uniqueMessages.slice(-MAX_RENDERED_MESSAGES)
-      : uniqueMessages;
+    return dedupeMessages(messages).map(normalizeRoomMessageMedia);
   }, [messages]);
 
   const activeRoomImageUrl = useMemo(
@@ -491,7 +521,7 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
       seen.add(key);
       mediaItems.unshift(normalized);
 
-      if (mediaItems.length >= MAX_RENDERED_MEDIA_MESSAGES) break;
+      if (mediaItems.length >= MAX_ROOM_MEDIA_GRID_ITEMS) break;
     }
 
     return mediaItems;
@@ -525,6 +555,60 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
     };
   }, []);
 
+  async function loadOlderRoomMessages() {
+    const room = activeRoomRef.current;
+    const oldestCursor = getOldestMessageCursor(messages);
+
+    if (!room?.roomId || !oldestCursor || olderMessagesLoadingRef.current || !hasOlderMessages) {
+      return;
+    }
+
+    const el = messagesRef.current;
+    const oldHeight = el?.scrollHeight || 0;
+    const oldTop = el?.scrollTop || 0;
+
+    olderMessagesLoadingRef.current = true;
+    setOlderMessagesLoading(true);
+
+    try {
+      const data = await roomApi.getRoomMessages(room.roomId, {
+        before: oldestCursor,
+        beforeMessageId: oldestCursor,
+        cursor: oldestCursor,
+        limit: ROOM_MESSAGES_FETCH_LIMIT,
+      });
+
+      const older = extractRoomArray(data, ['messages', 'Items']).map(normalizeRoomMessageMedia);
+
+      if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) {
+        return;
+      }
+
+      if (older.length === 0) {
+        setHasOlderMessages(false);
+        return;
+      }
+
+      setMessages((prev) =>
+        dedupeMessages([...older, ...prev]).map(normalizeRoomMessageMedia)
+      );
+      setHasOlderMessages(older.length >= ROOM_MESSAGES_FETCH_LIMIT);
+
+      requestAnimationFrame(() => {
+        const nextEl = messagesRef.current;
+        if (!nextEl) return;
+
+        nextEl.scrollTop = nextEl.scrollHeight - oldHeight + oldTop;
+      });
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.response?.data?.error || 'Could not load older messages');
+    } finally {
+      olderMessagesLoadingRef.current = false;
+      if (mountedRef.current) setOlderMessagesLoading(false);
+    }
+  }
+
   const scrollMessagesToBottom = useCallback((behavior = 'smooth') => {
     const el = messagesRef.current;
     if (!el) return;
@@ -545,7 +629,15 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
   }, []);
 
   useEffect(() => {
-    if (!activeRoom) return;
+    if (!activeRoom) return undefined;
+    if (olderMessagesLoadingRef.current || olderMessagesLoading) return undefined;
+
+    const messagesElement = messagesRef.current;
+    const isNearBottom = messagesElement
+      ? messagesElement.scrollHeight - messagesElement.scrollTop - messagesElement.clientHeight < 180
+      : true;
+
+    if (!isNearBottom && renderedMessages.length > 2) return undefined;
 
     const timeoutId = window.setTimeout(() => {
       scrollMessagesToBottom(renderedMessages.length <= 2 ? 'auto' : 'smooth');
@@ -554,7 +646,7 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [activeRoom?.roomId, renderedMessages.length, scrollMessagesToBottom]);
+  }, [activeRoom?.roomId, renderedMessages.length, scrollMessagesToBottom, olderMessagesLoading]);
 
   useEffect(() => {
     if (!activeRoom) return undefined;
@@ -652,16 +744,13 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
       }
     });
 
-    if (selectedMediaPreview?.startsWith('blob:')) {
-      URL.revokeObjectURL(selectedMediaPreview);
-    }
-
     setSelectedMediaFile(null);
     setSelectedMediaFiles([]);
     setSelectedMediaPreview('');
     setSelectedMediaPreviews([]);
     setSelectedMediaType('');
     setMediaUploadProgress(0);
+    setMediaUploadLabel('');
   }
 
   function getRoomMediaType(file) {
@@ -689,20 +778,36 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
       URL.revokeObjectURL(targetPreview);
     }
 
-    setSelectedMediaPreviews((prev) => prev.filter((_, index) => index !== indexToRemove));
+    const nextPreviews = selectedMediaPreviews.filter((_, index) => index !== indexToRemove);
+
+    setSelectedMediaPreviews(nextPreviews);
     setSelectedMediaFiles((prev) => {
       const nextFiles = prev.filter((_, index) => index !== indexToRemove);
       const firstFile = nextFiles[0] || null;
 
       setSelectedMediaFile(firstFile);
       setSelectedMediaType(firstFile ? getRoomMediaType(firstFile).mediaType : '');
-      setSelectedMediaPreview(nextFiles.length ? selectedMediaPreviews.find((_, index) => index !== indexToRemove)?.preview || '' : '');
+      setSelectedMediaPreview(nextPreviews[0]?.preview || '');
+
+      if (nextFiles.length === 0) {
+        setMediaUploadLabel('');
+      }
 
       return nextFiles;
     });
   }
 
+function getOldestMessageCursor(messages = []) {
+  const firstMessage = Array.isArray(messages) && messages.length > 0 ? messages[0] : null;
 
+  return (
+    firstMessage?.messageId ||
+    firstMessage?.createdAtMs ||
+    firstMessage?.createdAt ||
+    firstMessage?.clientId ||
+    ''
+  );
+}
 
 
 
@@ -713,6 +818,17 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
     removeSelectedMedia();
 
     if (files.length === 0) return;
+    if (files.length > ROOM_MEDIA_MAX_FILES_PER_BATCH) {
+        setStatus(`You can upload up to ${ROOM_MEDIA_MAX_FILES_PER_BATCH} files at once.`);
+        return;
+      }
+
+      const totalBytes = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+
+      if (totalBytes > ROOM_MEDIA_MAX_BATCH_BYTES) {
+        setStatus('This batch is too large. Upload fewer files at once.');
+        return;
+      }
 
     const validFiles = [];
     const previewItems = [];
@@ -1447,7 +1563,7 @@ async function toggleActiveInfoSection(section) {
 
       try {
         setMessagesLoading(true);
-        const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId);
+        const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId, { limit: ROOM_MESSAGES_FETCH_LIMIT });
 
         if (mountedRef.current) {
           setMessages(getLoadedRoomMessages(messageData));
@@ -2187,16 +2303,24 @@ async function openRoom(room) {
     setMobileChatOpen(true);
     setMessagesLoading(true);
 
+    setHasOlderMessages(true);
+    setOlderMessagesLoading(false);
+    olderMessagesLoadingRef.current = false;
+
     setRoomUnreadCounts((prev) => ({
       ...prev,
       [room.roomId]: 0,
     }));
 
-    const data = await roomApi.getRoomMessages(room.roomId);
+    const data = await roomApi.getRoomMessages(room.roomId, { limit: ROOM_MESSAGES_FETCH_LIMIT });
 
     if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) return;
 
-    setMessages(getLoadedRoomMessages(data));
+    const loadedRoomMessages = getLoadedRoomMessages(data);
+
+    setMessages(loadedRoomMessages);
+    setHasOlderMessages(loadedRoomMessages.length >= ROOM_MESSAGES_FETCH_LIMIT);
+
     requestAnimationFrame(() => {
       scrollMessagesToBottom('auto');
     });
@@ -2762,19 +2886,37 @@ async function sendMessage(e) {
 
   const cleanText = text.trim();
   const room = activeRoomRef.current;
-  const filesToSend = selectedMediaFiles.length > 0
-    ? selectedMediaFiles
-    : selectedMediaFile
-      ? [selectedMediaFile]
-      : [];
 
-  if ((!cleanText && filesToSend.length === 0) || !room || sendingMessageRef.current) return;
+  const filesToSend =
+    selectedMediaFiles.length > 0
+      ? [...selectedMediaFiles]
+      : selectedMediaFile
+        ? [selectedMediaFile]
+        : [];
+
+  if ((!cleanText && filesToSend.length === 0) || !room || sendingMessageRef.current) {
+    return;
+  }
+
+  if (filesToSend.length > ROOM_MEDIA_MAX_FILES_PER_BATCH) {
+    setStatus(`You can upload up to ${ROOM_MEDIA_MAX_FILES_PER_BATCH} files at once.`);
+    return;
+  }
+
+  const totalBytes = filesToSend.reduce(
+    (sum, file) => sum + Number(file.size || 0),
+    0
+  );
+
+  if (totalBytes > ROOM_MEDIA_MAX_BATCH_BYTES) {
+    setStatus('This batch is too large. Upload fewer files at once.');
+    return;
+  }
 
   sendingMessageRef.current = true;
 
   try {
     setText('');
-    removeSelectedMedia();
 
     if (filesToSend.length === 0) {
       const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -2792,9 +2934,12 @@ async function sendMessage(e) {
         pending: true,
       });
 
-      setMessages((prev) => [...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)), tempMessage]);
+      setMessages((prev) => [
+        ...prev,
+        tempMessage,
+      ]);
 
-      const socketSent = sendRoomMessage({
+      sendRoomMessage({
         action: 'sendRoomMessage',
         roomId: room.roomId,
         text: cleanText,
@@ -2802,12 +2947,7 @@ async function sendMessage(e) {
         clientId,
       });
 
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.clientId === clientId ? { ...msg, pending: false, failed: !socketSent } : msg
-        )
-      );
-
+      removeSelectedMedia();
       return;
     }
 
@@ -2818,17 +2958,29 @@ async function sendMessage(e) {
       const file = filesToSend[index];
       const { mediaType } = getRoomMediaType(file);
 
+      setMediaUploadLabel(`Uploading ${index + 1}/${filesToSend.length}`);
+
       const uploadedMedia = await roomApi.uploadRoomMediaFile(
         room.roomId,
         file,
         (progressValue) => {
-          const safeProgress = Math.max(0, Math.min(100, Number(progressValue || 0)));
-          const totalProgress = Math.round(((index + safeProgress / 100) / filesToSend.length) * 100);
+          const safeProgress = Math.max(
+            0,
+            Math.min(100, Number(progressValue || 0))
+          );
+
+          const totalProgress = Math.round(
+            ((index + safeProgress / 100) / filesToSend.length) * 100
+          );
+
           setMediaUploadProgress(totalProgress);
         }
       );
 
-      const clientId = `temp-${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`;
+      const clientId = `temp-${Date.now()}-${index}-${Math.random()
+        .toString(36)
+        .slice(2)}`;
+
       const messageText = index === 0 ? cleanText : '';
 
       const tempMessage = normalizeRoomMessageMedia({
@@ -2851,9 +3003,12 @@ async function sendMessage(e) {
         mediaName: uploadedMedia?.fileName || file?.name || '',
       });
 
-      setMessages((prev) => [...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)), tempMessage]);
+      setMessages((prev) => [
+        ...prev,
+        tempMessage,
+      ]);
 
-      const socketSent = sendRoomMessage({
+      sendRoomMessage({
         action: 'sendRoomMessage',
         roomId: room.roomId,
         text: messageText,
@@ -2867,19 +3022,22 @@ async function sendMessage(e) {
         mediaName: tempMessage.mediaName,
         clientId,
       });
-
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.clientId === clientId ? { ...msg, pending: false, failed: !socketSent } : msg
-        )
-      );
     }
+
+    removeSelectedMedia();
+    setStatus(filesToSend.length > 1 ? 'Files uploaded' : 'File uploaded');
   } catch (err) {
-    setStatus(err?.response?.data?.error || err?.message || 'Failed to send message');
+    console.error(err);
+    setStatus(
+      err?.response?.data?.error ||
+      err?.message ||
+      'Failed to send message'
+    );
   } finally {
     sendingMessageRef.current = false;
     setUploadingMedia(false);
     setMediaUploadProgress(0);
+    setMediaUploadLabel('');
   }
 }
 
@@ -3284,7 +3442,18 @@ return (
             </div>
           </div>
 
-          <div className="messages" ref={messagesRef}>
+          <div
+  className="messages"
+  ref={messagesRef}
+  onScroll={(event) => {
+    if (event.currentTarget.scrollTop < 80) {
+      loadOlderRoomMessages();
+    }
+  }}
+>
+  {olderMessagesLoading && (
+    <p className="older-messages-loading">Loading older messages...</p>
+  )}
             {messagesLoading ? (
               <p className="empty">Loading messages...</p>
             ) : renderedMessages.length === 0 ? (
@@ -3317,7 +3486,7 @@ return (
                   <div className="room-message-content">
                     {(msg.text || msg.message) && (
                       <p>
-                        {msg.text || msg.message || ''}
+                        {renderMessageWithLinks(msg.text || msg.message || '')}
                         {msg.pending && <span className="msg-state"> Sending...</span>}
                         {msg.failed && <span className="msg-state failed"> Failed</span>}
                       </p>
@@ -3474,10 +3643,25 @@ return (
             </button>
           </div>
 
+          
+
           {renderedMediaMessages.length === 0 ? (
             <p className="room-media-grid-empty">No photos, videos, or files shared yet.</p>
           ) : (
-            <div className="room-media-grid-list">
+           <div
+  className="room-media-grid-list"
+  onScroll={(event) => {
+    const element = event.currentTarget;
+
+    if (
+      element.scrollTop < 120 &&
+      !olderMessagesLoading &&
+      hasOlderMessages
+    ) {
+      loadOlderRoomMessages();
+    }
+  }}
+>
               {renderedMediaMessages.map((item, index) => {
                 const itemUrl = item.mediaUrl || item.fileUrl;
 

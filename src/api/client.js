@@ -474,7 +474,7 @@ export const roomApi = {
       throw new Error('Selected file is empty or unreadable.');
     }
 
-    const maxBytes = isVideo ? 50 * 1024 * 1024 : 8 * 1024 * 1024;
+    const maxBytes = isVideo ? 200 * 1024 * 1024 : 8 * 1024 * 1024;
 
     if (fileSize > maxBytes) {
       throw new Error(isVideo ? 'Video must be 50 MB or smaller.' : 'Image must be 8 MB or smaller.');
