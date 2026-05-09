@@ -699,6 +699,9 @@ joinRoomFromInvite: async (inviteCode) => {
     return parseApiBody(data);
   },
 
+  deleteRoomMessage: (roomId, messageId) =>
+  api.delete(`/rooms/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(messageId)}`),
+
   async getRoomMessages(roomId, params = {}) {
     const { data } = await api.get(
       `/rooms/${encodePathSegment(roomId)}/messages`,
