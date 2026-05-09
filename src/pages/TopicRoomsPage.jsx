@@ -364,6 +364,12 @@ export default function TopicRoomsPage() {
   const [editRoomName, setEditRoomName] = useState('');
   const [editRoomImageFile, setEditRoomImageFile] = useState(null);
   const [editRoomImagePreview, setEditRoomImagePreview] = useState('');
+  const [imageCropModalOpen, setImageCropModalOpen] = useState(false);
+  const [imageCropTarget, setImageCropTarget] = useState('');
+  const [imageCropSourceFile, setImageCropSourceFile] = useState(null);
+  const [imageCropSourceUrl, setImageCropSourceUrl] = useState('');
+  const [imageCropZoom, setImageCropZoom] = useState(1);
+  const [imageCropOffset, setImageCropOffset] = useState({ x: 0, y: 0 });
   const [editRoomSaving, setEditRoomSaving] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRoomMenu, setShowRoomMenu] = useState(false);
@@ -541,8 +547,14 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
   useEffect(() => {
     if (!activeRoom) return;
 
-    scrollMessagesToBottom(renderedMessages.length <= 2 ? 'auto' : 'smooth');
-  }, [activeRoom, renderedMessages.length, scrollMessagesToBottom]);
+    const timeoutId = window.setTimeout(() => {
+      scrollMessagesToBottom(renderedMessages.length <= 2 ? 'auto' : 'smooth');
+    }, 60);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeRoom?.roomId, renderedMessages.length, scrollMessagesToBottom]);
 
   useEffect(() => {
     if (!activeRoom) return undefined;
@@ -599,6 +611,14 @@ const [deletingMessageId, setDeletingMessageId] = useState('');
       }
     };
   }, [editRoomImagePreview]);
+
+  useEffect(() => {
+    return () => {
+      if (imageCropSourceUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(imageCropSourceUrl);
+      }
+    };
+  }, [imageCropSourceUrl]);
 
   useEffect(() => {
     return () => {
@@ -2026,33 +2046,29 @@ if (joinedRoom?.roomId) {
     const file = event.target.files?.[0] || null;
     event.target.value = '';
 
-    if (editRoomImagePreview?.startsWith('blob:')) {
-      URL.revokeObjectURL(editRoomImagePreview);
-    }
-
-    if (!file) {
-      setEditRoomImageFile(null);
-      setEditRoomImagePreview('');
-      return;
-    }
+    if (!file) return;
 
     if (!file.type?.startsWith('image/')) {
-      setEditRoomImageFile(null);
-      setEditRoomImagePreview('');
       setStatus('Please choose an image file');
       return;
     }
 
     if (file.size > ROOM_IMAGE_PICKER_MAX_BYTES) {
-      setEditRoomImageFile(null);
-      setEditRoomImagePreview('');
       setStatus('Image must be smaller than 8 MB before optimization');
       return;
     }
 
+    if (imageCropSourceUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(imageCropSourceUrl);
+    }
+
     setStatus('');
-    setEditRoomImageFile(file);
-    setEditRoomImagePreview(URL.createObjectURL(file));
+    setImageCropTarget('edit');
+    setImageCropSourceFile(file);
+    setImageCropSourceUrl(URL.createObjectURL(file));
+    setImageCropZoom(1);
+    setImageCropOffset({ x: 0, y: 0 });
+    setImageCropModalOpen(true);
   }
 
   function removeEditRoomImage() {
@@ -2108,37 +2124,33 @@ if (joinedRoom?.roomId) {
 
 
   function handleNewRoomImageChange(event) {
-  const file = event.target.files?.[0] || null;
-  event.target.value = '';
+    const file = event.target.files?.[0] || null;
+    event.target.value = '';
 
-  if (newRoomImagePreview?.startsWith('blob:')) {
-    URL.revokeObjectURL(newRoomImagePreview);
+    if (!file) return;
+
+    if (!file.type?.startsWith('image/')) {
+      setStatus('Please choose an image file');
+      return;
+    }
+
+    if (file.size > ROOM_IMAGE_PICKER_MAX_BYTES) {
+      setStatus('Image must be smaller than 8 MB before optimization');
+      return;
+    }
+
+    if (imageCropSourceUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(imageCropSourceUrl);
+    }
+
+    setStatus('');
+    setImageCropTarget('create');
+    setImageCropSourceFile(file);
+    setImageCropSourceUrl(URL.createObjectURL(file));
+    setImageCropZoom(1);
+    setImageCropOffset({ x: 0, y: 0 });
+    setImageCropModalOpen(true);
   }
-
-  if (!file) {
-    setNewRoomImageFile(null);
-    setNewRoomImagePreview('');
-    return;
-  }
-
-  if (!file.type?.startsWith('image/')) {
-    setNewRoomImageFile(null);
-    setNewRoomImagePreview('');
-    setStatus('Please choose an image file');
-    return;
-  }
-
-  if (file.size > ROOM_IMAGE_PICKER_MAX_BYTES) {
-    setNewRoomImageFile(null);
-    setNewRoomImagePreview('');
-    setStatus('Image must be smaller than 8 MB before optimization');
-    return;
-  }
-
-  setStatus('');
-  setNewRoomImageFile(file);
-  setNewRoomImagePreview(URL.createObjectURL(file));
-}
 
 function removeNewRoomImage() {
   if (newRoomImagePreview?.startsWith('blob:')) {
@@ -2185,6 +2197,9 @@ async function openRoom(room) {
     if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) return;
 
     setMessages(getLoadedRoomMessages(data));
+    requestAnimationFrame(() => {
+      scrollMessagesToBottom('auto');
+    });
   } catch (err) {
     console.error(err);
 
