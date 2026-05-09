@@ -2599,3 +2599,317 @@ select:disabled {
     display: none !important;
   }
 }
+
+/* Show full shared media without cropping */
+.room-message-image,
+.room-message-video,
+.room-media-grid-image,
+.room-media-grid-video,
+.room-media-viewer-image,
+.room-media-viewer-video,
+.active-room-info-media-tile img,
+.active-room-info-media-tile video,
+.selected-room-media-preview img,
+.selected-room-media-preview video {
+  object-fit: contain !important;
+  object-position: center !important;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.room-message-image,
+.room-message-video {
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+}
+
+.room-media-grid-image,
+.room-media-grid-video,
+.active-room-info-media-tile img,
+.active-room-info-media-tile video {
+  width: 100%;
+  height: 100%;
+}
+
+.room-media-viewer-image,
+.room-media-viewer-video {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  max-height: calc(100vh - 120px);
+}
+
+.selected-room-media-preview img,
+.selected-room-media-preview video {
+  width: 100%;
+  max-width: 180px;
+  height: auto;
+  max-height: 160px;
+  display: block;
+}
+
+/* Better video player + smoother media navigation */
+.room-message-media-tap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+  background: rgba(2, 8, 23, 0.9);
+  touch-action: manipulation;
+}
+
+.room-message-video,
+.room-media-grid-video,
+.active-room-info-media-tile video,
+.room-media-viewer-video {
+  object-fit: contain !important;
+  object-position: center !important;
+  background: #020617;
+}
+
+.room-video-play-badge,
+.room-media-grid-play {
+  width: 46px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.58);
+  color: white;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.35);
+}
+
+.room-media-viewer {
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+
+.room-media-viewer-card {
+  position: relative;
+  width: min(100vw, 980px);
+  max-height: calc(100vh - 28px);
+  user-select: none;
+}
+
+.room-media-viewer-video {
+  width: 100%;
+  height: auto;
+  max-height: calc(100vh - 112px);
+}
+
+.room-media-viewer-image {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.room-media-viewer-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 5;
+  width: 48px;
+  height: 72px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.68);
+  color: white;
+  font-size: 46px;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+}
+
+.room-media-viewer-prev {
+  left: 10px;
+}
+
+.room-media-viewer-next {
+  right: 10px;
+}
+
+.room-media-grid-list {
+  scroll-snap-type: y proximity;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.room-media-grid-item {
+  scroll-snap-align: start;
+  touch-action: manipulation;
+}
+
+@media (max-width: 720px) {
+  .room-media-viewer-card {
+    width: 100vw;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .room-media-viewer-topbar {
+    position: absolute;
+    top: max(10px, env(safe-area-inset-top));
+    left: 10px;
+    right: 10px;
+    z-index: 8;
+    border-radius: 999px;
+    background: rgba(2, 8, 23, 0.55);
+    backdrop-filter: blur(16px);
+  }
+
+  .room-media-viewer-video,
+  .room-media-viewer-image {
+    max-height: 100dvh;
+  }
+
+  .room-media-viewer-nav {
+    width: 54px;
+    height: 86px;
+    font-size: 52px;
+    background: rgba(15, 23, 42, 0.46);
+  }
+
+  .room-media-viewer-prev {
+    left: 6px;
+  }
+
+  .room-media-viewer-next {
+    right: 6px;
+  }
+}
+
+/* Creator-only delete control */
+.msg {
+  position: relative;
+}
+
+.msg:has(.room-message-delete-btn) {
+  padding-right: 42px;
+}
+
+.room-message-delete-btn {
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  z-index: 12;
+  width: 23px;
+  height: 23px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius:19px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fecaca;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.12), transparent 34%),
+    rgba(127, 29, 29, 0.72);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 17px;
+  font-weight: 950;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.72;
+  transform: scale(0.96);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.msg:hover .room-message-delete-btn,
+.room-message-delete-btn:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.room-message-delete-btn:hover {
+  color: #ffffff;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.16), transparent 34%),
+    rgba(220, 38, 38, 0.9);
+  border-color: rgba(252, 165, 165, 0.5);
+}
+
+.room-message-delete-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  transform: scale(0.96);
+}
+
+.room-message-delete-btn:focus-visible {
+  outline: 2px solid rgba(125, 211, 252, 0.8);
+  outline-offset: 2px;
+}
+
+@media (hover: none) {
+  .room-message-delete-btn {
+    opacity: 0.95;
+  }
+}
+
+.selected-room-media-preview-multiple {
+  width: 100%;
+  max-width: 100%;
+}
+
+.selected-room-media-preview-list {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.selected-room-media-preview-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 86px;
+  height: 86px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(2, 8, 23, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.selected-room-media-preview-item img,
+.selected-room-media-preview-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #020617;
+}
+
+.selected-room-media-preview-item > span {
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 11px;
+  color: rgba(226, 232, 240, 0.9);
+  word-break: break-word;
+}
+
+.room-media-download-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 10;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.75);
+  color: #e0f2fe;
+  font-weight: 900;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}

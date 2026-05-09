@@ -294,6 +294,10 @@ function getRoomImagePatch(imageUrl) {
   };
 }
 
+function getRoomMessageId(message) {
+  return message?.messageId || message?.id || message?.clientId || '';
+}
+
 function getRoomInviteRoomId(invite) {
   if (typeof invite === 'string') return invite;
 
@@ -336,7 +340,9 @@ export default function TopicRoomsPage() {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const [selectedMediaFile, setSelectedMediaFile] = useState(null);
+  const [selectedMediaFiles, setSelectedMediaFiles] = useState([]);
   const [selectedMediaPreview, setSelectedMediaPreview] = useState('');
+  const [selectedMediaPreviews, setSelectedMediaPreviews] = useState([]);
   const [selectedMediaType, setSelectedMediaType] = useState('');
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
@@ -377,7 +383,7 @@ export default function TopicRoomsPage() {
   const [showMembers, setShowMembers] = useState(false);
   const [status, setStatus] = useState('');
   const [creatingRoom, setCreatingRoom] = useState(false);
-
+const [deletingMessageId, setDeletingMessageId] = useState('');
   const activeRoomRef = useRef(null);
   const messagesRef = useRef(null);
   const mountedRef = useRef(true);
@@ -400,6 +406,11 @@ export default function TopicRoomsPage() {
   const roomMenuRef = useRef(null);
   const roomActionMenuRef = useRef(null);
   const activeRoomMenuRef = useRef(null);
+
+  const activeRoomCanDeleteMessages = useMemo(
+  () => activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && isRoomOwner(activeRoom, userId),
+  [activeRoom, userId]
+);
 
   const getRoomImageUrl = useCallback((room) => {
     if (!room?.roomId) return '';
@@ -508,18 +519,29 @@ export default function TopicRoomsPage() {
     };
   }, []);
 
-  const scrollMessagesToBottom = useCallback(() => {
+  const scrollMessagesToBottom = useCallback((behavior = 'smooth') => {
     const el = messagesRef.current;
     if (!el) return;
 
     requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight;
+      const lastMessage = el.lastElementChild;
+
+      if (lastMessage?.scrollIntoView) {
+        lastMessage.scrollIntoView({
+          behavior,
+          block: 'end',
+          inline: 'nearest',
+        });
+      } else {
+        el.scrollTop = el.scrollHeight;
+      }
     });
   }, []);
 
   useEffect(() => {
     if (!activeRoom) return;
-    scrollMessagesToBottom();
+
+    scrollMessagesToBottom(renderedMessages.length <= 2 ? 'auto' : 'smooth');
   }, [activeRoom, renderedMessages.length, scrollMessagesToBottom]);
 
   useEffect(() => {
@@ -604,30 +626,27 @@ export default function TopicRoomsPage() {
   }, [selectedMediaPreview]);
 
   function removeSelectedMedia() {
+    selectedMediaPreviews.forEach((item) => {
+      if (item.preview?.startsWith('blob:')) {
+        URL.revokeObjectURL(item.preview);
+      }
+    });
+
     if (selectedMediaPreview?.startsWith('blob:')) {
       URL.revokeObjectURL(selectedMediaPreview);
     }
 
     setSelectedMediaFile(null);
+    setSelectedMediaFiles([]);
     setSelectedMediaPreview('');
+    setSelectedMediaPreviews([]);
     setSelectedMediaType('');
     setMediaUploadProgress(0);
   }
 
-
-
-
-
-  function handleRoomMediaChange(event) {
-    const file = event.target.files?.[0] || null;
-    event.target.value = '';
-
-    removeSelectedMedia();
-
-    if (!file) return;
-
-    const fileType = String(file.type || '').toLowerCase();
-    const lowerName = String(file.name || '').toLowerCase();
+  function getRoomMediaType(file) {
+    const fileType = String(file?.type || '').toLowerCase();
+    const lowerName = String(file?.name || '').toLowerCase();
     const isImage = fileType.startsWith('image/') || ROOM_MEDIA_IMAGE_EXTENSIONS.test(lowerName);
     const isVideo = fileType.startsWith('video/') || ROOM_MEDIA_VIDEO_EXTENSIONS.test(lowerName);
     const isFile =
@@ -635,20 +654,82 @@ export default function TopicRoomsPage() {
       !isVideo &&
       (ROOM_MEDIA_ALLOWED_TYPES.test(fileType) || ROOM_MEDIA_DOCUMENT_EXTENSIONS.test(lowerName));
 
-    if (!isImage && !isVideo && !isFile) {
-      setStatus('Only images, videos, PDFs, documents, spreadsheets, text files, and zip files are allowed.');
-      return;
+    return {
+      isImage,
+      isVideo,
+      isFile,
+      mediaType: isVideo ? 'video' : isImage ? 'image' : isFile ? 'file' : '',
+    };
+  }
+
+  function removeSelectedMediaAt(indexToRemove) {
+    const targetPreview = selectedMediaPreviews[indexToRemove]?.preview;
+
+    if (targetPreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(targetPreview);
     }
 
-    if (file.size > ROOM_MEDIA_MAX_BYTES) {
-      setStatus('Media must be smaller than 80 MB.');
-      return;
+    setSelectedMediaPreviews((prev) => prev.filter((_, index) => index !== indexToRemove));
+    setSelectedMediaFiles((prev) => {
+      const nextFiles = prev.filter((_, index) => index !== indexToRemove);
+      const firstFile = nextFiles[0] || null;
+
+      setSelectedMediaFile(firstFile);
+      setSelectedMediaType(firstFile ? getRoomMediaType(firstFile).mediaType : '');
+      setSelectedMediaPreview(nextFiles.length ? selectedMediaPreviews.find((_, index) => index !== indexToRemove)?.preview || '' : '');
+
+      return nextFiles;
+    });
+  }
+
+
+
+
+
+  function handleRoomMediaChange(event) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+
+    removeSelectedMedia();
+
+    if (files.length === 0) return;
+
+    const validFiles = [];
+    const previewItems = [];
+
+    for (const file of files) {
+      const { isImage, isVideo, isFile, mediaType } = getRoomMediaType(file);
+
+      if (!isImage && !isVideo && !isFile) {
+        setStatus('Only images, videos, PDFs, documents, spreadsheets, text files, and zip files are allowed.');
+        previewItems.forEach((item) => {
+          if (item.preview?.startsWith('blob:')) URL.revokeObjectURL(item.preview);
+        });
+        return;
+      }
+
+      if (file.size > ROOM_MEDIA_MAX_BYTES) {
+        setStatus('Each media file must be smaller than 80 MB.');
+        previewItems.forEach((item) => {
+          if (item.preview?.startsWith('blob:')) URL.revokeObjectURL(item.preview);
+        });
+        return;
+      }
+
+      validFiles.push(file);
+      previewItems.push({
+        file,
+        preview: URL.createObjectURL(file),
+        mediaType,
+      });
     }
 
     setStatus('');
-    setSelectedMediaFile(file);
-    setSelectedMediaType(isVideo ? 'video' : isImage ? 'image' : 'file');
-    setSelectedMediaPreview(URL.createObjectURL(file));
+    setSelectedMediaFiles(validFiles);
+    setSelectedMediaPreviews(previewItems);
+    setSelectedMediaFile(validFiles[0] || null);
+    setSelectedMediaType(previewItems[0]?.mediaType || '');
+    setSelectedMediaPreview(previewItems[0]?.preview || '');
   }
 
   function openMediaViewer(message, options = {}) {
@@ -2611,123 +2692,179 @@ async function deleteRoom(room) {
   }
 }
 
+function downloadRoomMedia(message) {
+  const normalizedMessage = normalizeRoomMessageMedia(message);
+  const mediaUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl || '';
+
+  if (!mediaUrl) return;
+
+  const fileName =
+    normalizedMessage.fileName ||
+    normalizedMessage.mediaName ||
+    String(mediaUrl).split('/').filter(Boolean).pop()?.split('?')[0] ||
+    'smarty-room-media';
+
+  const link = document.createElement('a');
+  link.href = mediaUrl;
+  link.download = fileName;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+async function deleteRoomMessage(message) {
+  const room = activeRoomRef.current;
+  const messageId = getRoomMessageId(message);
+
+  if (!room?.roomId || !messageId || deletingMessageId) return;
+
+  if (!(room.type === 'custom' && room.privacy === 'private' && isRoomOwner(room, userId))) {
+    setStatus('Only the private group creator can delete messages.');
+    return;
+  }
+
+  const ok = window.confirm(message?.mediaUrl || message?.fileUrl ? 'Delete this media?' : 'Delete this message?');
+  if (!ok) return;
+
+  try {
+    setDeletingMessageId(messageId);
+
+    await roomApi.deleteRoomMessage(room.roomId, messageId);
+
+    setMessages((prev) => prev.filter((item) => getRoomMessageId(item) !== messageId));
+    setStatus('Deleted');
+  } catch (err) {
+    setStatus(err?.response?.data?.error || err?.message || 'Could not delete message');
+  } finally {
+    setDeletingMessageId('');
+  }
+}
+
 async function sendMessage(e) {
   e.preventDefault();
 
   const cleanText = text.trim();
   const room = activeRoomRef.current;
+  const filesToSend = selectedMediaFiles.length > 0
+    ? selectedMediaFiles
+    : selectedMediaFile
+      ? [selectedMediaFile]
+      : [];
 
-  if ((!cleanText && !selectedMediaFile) || !room || sendingMessageRef.current) {
-    return;
-  }
+  if ((!cleanText && filesToSend.length === 0) || !room || sendingMessageRef.current) return;
 
   sendingMessageRef.current = true;
 
-  const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  let uploadedMedia = null;
-
   try {
-    if (selectedMediaFile) {
-      if (selectedMediaFile.size > ROOM_MEDIA_MAX_BYTES) {
-        throw new Error('Media must be smaller than 80 MB.');
-      }
-
-      setUploadingMedia(true);
-      setMediaUploadProgress(0);
-
-      uploadedMedia = await roomApi.uploadRoomMediaFile(
-        room.roomId,
-        selectedMediaFile,
-        setMediaUploadProgress
-      );
-    }
-
-    const tempMessage = normalizeRoomMessageMedia({
-      messageId: clientId,
-      clientId,
-      roomId: room.roomId,
-      senderId: userId,
-      senderName: user?.name || user?.email || 'You',
-      text: cleanText,
-      message: cleanText,
-      createdAt: String(Date.now()),
-      createdAtMs: Date.now(),
-      pending: true,
-      mediaKey: uploadedMedia?.mediaKey || '',
-      mediaUrl: uploadedMedia?.mediaUrl || uploadedMedia?.fileUrl || '',
-      fileUrl: uploadedMedia?.fileUrl || uploadedMedia?.mediaUrl || '',
-      mediaType: uploadedMedia?.mediaType || selectedMediaType || '',
-      contentType: uploadedMedia?.contentType || selectedMediaFile?.type || '',
-      fileName: uploadedMedia?.fileName || selectedMediaFile?.name || '',
-      mediaName: uploadedMedia?.fileName || selectedMediaFile?.name || '',
-    });
-
     setText('');
     removeSelectedMedia();
 
-    setMessages((prev) => {
-      if (prev.some((msg) => (msg.messageId || msg.clientId) === clientId)) return prev;
-      return [...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)), tempMessage];
-    });
+    if (filesToSend.length === 0) {
+      const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-    const socketSent = sendRoomMessage({
-      action: 'sendRoomMessage',
-      roomId: room.roomId,
-      text: cleanText,
-      message: cleanText,
-      mediaKey: tempMessage.mediaKey,
-      mediaUrl: tempMessage.mediaUrl,
-      fileUrl: tempMessage.fileUrl,
-      mediaType: tempMessage.mediaType,
-      contentType: tempMessage.contentType,
-      fileName: tempMessage.fileName,
-      mediaName: tempMessage.mediaName,
-      clientId,
-    });
+      const tempMessage = normalizeRoomMessageMedia({
+        messageId: clientId,
+        clientId,
+        roomId: room.roomId,
+        senderId: userId,
+        senderName: user?.name || user?.email || 'You',
+        text: cleanText,
+        message: cleanText,
+        createdAt: String(Date.now()),
+        createdAtMs: Date.now(),
+        pending: true,
+      });
 
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.clientId === clientId
-          ? { ...msg, pending: false, failed: !socketSent }
-          : msg
-      )
-    );
+      setMessages((prev) => [...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)), tempMessage]);
 
-    if (!socketSent) {
-      setStatus('Message saved locally, but chat socket is not connected. Try again.');
+      const socketSent = sendRoomMessage({
+        action: 'sendRoomMessage',
+        roomId: room.roomId,
+        text: cleanText,
+        message: cleanText,
+        clientId,
+      });
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.clientId === clientId ? { ...msg, pending: false, failed: !socketSent } : msg
+        )
+      );
+
+      return;
+    }
+
+    setUploadingMedia(true);
+    setMediaUploadProgress(0);
+
+    for (let index = 0; index < filesToSend.length; index += 1) {
+      const file = filesToSend[index];
+      const { mediaType } = getRoomMediaType(file);
+
+      const uploadedMedia = await roomApi.uploadRoomMediaFile(
+        room.roomId,
+        file,
+        (progressValue) => {
+          const safeProgress = Math.max(0, Math.min(100, Number(progressValue || 0)));
+          const totalProgress = Math.round(((index + safeProgress / 100) / filesToSend.length) * 100);
+          setMediaUploadProgress(totalProgress);
+        }
+      );
+
+      const clientId = `temp-${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`;
+      const messageText = index === 0 ? cleanText : '';
+
+      const tempMessage = normalizeRoomMessageMedia({
+        messageId: clientId,
+        clientId,
+        roomId: room.roomId,
+        senderId: userId,
+        senderName: user?.name || user?.email || 'You',
+        text: messageText,
+        message: messageText,
+        createdAt: String(Date.now() + index),
+        createdAtMs: Date.now() + index,
+        pending: true,
+        mediaKey: uploadedMedia?.mediaKey || '',
+        mediaUrl: uploadedMedia?.mediaUrl || uploadedMedia?.fileUrl || '',
+        fileUrl: uploadedMedia?.fileUrl || uploadedMedia?.mediaUrl || '',
+        mediaType: uploadedMedia?.mediaType || mediaType || '',
+        contentType: uploadedMedia?.contentType || file?.type || '',
+        fileName: uploadedMedia?.fileName || file?.name || '',
+        mediaName: uploadedMedia?.fileName || file?.name || '',
+      });
+
+      setMessages((prev) => [...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)), tempMessage]);
+
+      const socketSent = sendRoomMessage({
+        action: 'sendRoomMessage',
+        roomId: room.roomId,
+        text: messageText,
+        message: messageText,
+        mediaKey: tempMessage.mediaKey,
+        mediaUrl: tempMessage.mediaUrl,
+        fileUrl: tempMessage.fileUrl,
+        mediaType: tempMessage.mediaType,
+        contentType: tempMessage.contentType,
+        fileName: tempMessage.fileName,
+        mediaName: tempMessage.mediaName,
+        clientId,
+      });
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.clientId === clientId ? { ...msg, pending: false, failed: !socketSent } : msg
+        )
+      );
     }
   } catch (err) {
-    const errorData = err?.response?.data || {};
-    const errorMessage =
-      errorData?.details?.message ||
-      errorData?.details?.Message ||
-      errorData?.details?.code ||
-      errorData?.details?.Code ||
-      errorData?.error ||
-      errorData?.message ||
-      err?.message ||
-      'Failed to send message';
-
-    console.error('Room media/message send failed:', {
-      status: err?.response?.status,
-      data: errorData,
-      message: err?.message,
-    });
-
-    setStatus(errorMessage);
-
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.clientId === clientId ? { ...msg, pending: false, failed: true } : msg
-      )
-    );
+    setStatus(err?.response?.data?.error || err?.message || 'Failed to send message');
   } finally {
     sendingMessageRef.current = false;
-
-    if (mountedRef.current) {
-      setUploadingMedia(false);
-      setMediaUploadProgress(0);
-    }
+    setUploadingMedia(false);
+    setMediaUploadProgress(0);
   }
 }
 
@@ -2845,7 +2982,7 @@ return (
             const isOwner = isRoomOwner(room, userId);
             const isPrivateCustom = room.type === 'custom' && room.privacy === 'private';
             const canLeave = isPrivateCustom && !isOwner;
-            const canDelete = room.type === 'custom' && isOwner;
+            const canDelete = room.type === 'custom' && room.privacy === 'private' && isOwner;
             const unreadCount = roomUnreadCounts[room.roomId] || room.unreadCount || 0;
             const roomImageUrl = roomIndex < ROOM_IMAGE_RENDER_LIMIT ? getRoomImageUrl(room) : '';
             const shouldEagerLoadRoomImage = roomIndex < ROOM_IMAGE_EAGER_LIMIT;
@@ -3143,6 +3280,23 @@ return (
                   key={msg.messageId || msg.clientId || `${msg.createdAt || 'msg'}-${index}`}
                   className={msg.senderId === userId ? 'msg mine' : 'msg'}
                 >
+                  {activeRoomCanDeleteMessages && getRoomMessageId(msg) && (
+                    <button
+                      type="button"
+                      className="room-message-delete-btn"
+                      disabled={deletingMessageId === getRoomMessageId(msg)}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        deleteRoomMessage(msg);
+                      }}
+                      aria-label="Delete message"
+                      title="Delete message"
+                    >
+                      {deletingMessageId === getRoomMessageId(msg) ? '…' : '×'}
+                    </button>
+                  )}
+
                   <b>{msg.senderName || msg.name || 'User'}</b>
 
                   <div className="room-message-content">
@@ -3217,31 +3371,43 @@ return (
           </div>
 
           <form className="input" onSubmit={sendMessage}>
-            {selectedMediaPreview && (
-              <div className="selected-room-media-preview">
-                {selectedMediaType === 'image' ? (
-                  <img src={selectedMediaPreview} alt="Preview" />
-                ) : selectedMediaType === 'video' ? (
-                  <video src={selectedMediaPreview} muted playsInline />
-                ) : (
-                  <span>📎 {selectedMediaFile?.name || 'Attachment'}</span>
-                )}
+{selectedMediaPreviews.length > 0 && (
+  <div className="selected-room-media-preview selected-room-media-preview-multiple">
+    <div className="selected-room-media-preview-list">
+      {selectedMediaPreviews.map((item, index) => (
+        <div className="selected-room-media-preview-item" key={`${item.preview}-${index}`}>
+          {item.mediaType === 'image' ? (
+            <img src={item.preview} alt="Preview" />
+          ) : item.mediaType === 'video' ? (
+            <video
+              src={item.preview}
+              muted
+              playsInline
+              preload="metadata"
+              controls={false}
+            />
+          ) : (
+            <span>📎 {item.file?.name || 'Attachment'}</span>
+          )}
 
-                <button
-                  type="button"
-                  className="remove-selected-room-media"
-                  onClick={removeSelectedMedia}
-                >
-                  ✕
-                </button>
+          <button
+            type="button"
+            className="remove-selected-room-media"
+            onClick={() => removeSelectedMediaAt(index)}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+    </div>
 
-                {uploadingMedia && (
-                  <div className="room-media-upload-progress">
-                    <span style={{ width: `${mediaUploadProgress}%` }} />
-                  </div>
-                )}
-              </div>
-            )}
+    {uploadingMedia && (
+      <div className="room-media-upload-progress">
+        <span style={{ width: `${mediaUploadProgress}%` }} />
+      </div>
+    )}
+  </div>
+)}
 
             <input
               placeholder="Type message..."
@@ -3254,16 +3420,17 @@ return (
             <label className="room-media-picker-btn">
               ＋
               <input
-                type="file"
-                accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zip,.rar"
-                hidden
-                onChange={handleRoomMediaChange}
-              />
+              type="file"
+              accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zip,.rar"
+              multiple
+              hidden
+              onChange={handleRoomMediaChange}
+            />
             </label>
 
             <button
               type="submit"
-              disabled={(!text.trim() && !selectedMediaFile) || !activeRoom || uploadingMedia}
+             disabled={(!text.trim() && selectedMediaFiles.length === 0) || !activeRoom || uploadingMedia}
             >
               {uploadingMedia ? `${mediaUploadProgress || 0}%` : 'Send'}
             </button>
