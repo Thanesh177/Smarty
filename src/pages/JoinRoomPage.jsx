@@ -9,6 +9,8 @@ export default function JoinRoomPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const autoJoinAttemptedRef = useRef('');
+  const pendingInviteKey = `smarty-pending-room-invite-${inviteCode || ''}`;
+  const joinPath = `/rooms/invite/${inviteCode || ''}`;
 
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,12 +39,12 @@ export default function JoinRoomPage() {
   }, [inviteCode]);
 
   const joinRoom = useCallback(async () => {
-    const joinPath = `/rooms/invite/${inviteCode}`;
-
     if (!user) {
       sessionStorage.setItem('smarty-post-login-redirect', joinPath);
       localStorage.setItem('smarty-post-login-redirect', joinPath);
-      navigate('/login', { state: { from: joinPath } });
+      sessionStorage.setItem(pendingInviteKey, '1');
+      localStorage.setItem(pendingInviteKey, '1');
+      navigate(`/login?redirect=${encodeURIComponent(joinPath)}`, { state: { from: joinPath } });
       return;
     }
 
@@ -51,6 +53,10 @@ export default function JoinRoomPage() {
       setStatus('');
 
       const data = await roomApi.joinRoomFromInvite(inviteCode);
+      sessionStorage.removeItem(pendingInviteKey);
+      localStorage.removeItem(pendingInviteKey);
+      sessionStorage.removeItem('smarty-post-login-redirect');
+      localStorage.removeItem('smarty-post-login-redirect');
 
       if (data?.joined) {
         setStatus('Joined room successfully. Opening room...');
@@ -75,17 +81,24 @@ export default function JoinRoomPage() {
     } finally {
       setJoining(false);
     }
-  }, [inviteCode, navigate, user]);
+  }, [inviteCode, joinPath, navigate, pendingInviteKey, user]);
 
   useEffect(() => {
     if (!inviteCode || !user || !invite || loadError || loading) return;
-    if (invite.requiresApproval !== false) return;
     if (autoJoinAttemptedRef.current === inviteCode) return;
 
+    const pendingInvite =
+      sessionStorage.getItem(pendingInviteKey) === '1' ||
+      localStorage.getItem(pendingInviteKey) === '1' ||
+      sessionStorage.getItem('smarty-post-login-redirect') === joinPath ||
+      localStorage.getItem('smarty-post-login-redirect') === joinPath;
+
+    if (invite.requiresApproval !== false && !pendingInvite) return;
+
     autoJoinAttemptedRef.current = inviteCode;
-    setStatus('Instant join enabled. Joining room...');
+    setStatus(invite.requiresApproval ? 'Sending join request...' : 'Instant join enabled. Joining room...');
     joinRoom();
-  }, [invite, inviteCode, joinRoom, loadError, loading, user]);
+  }, [invite, inviteCode, joinPath, joinRoom, loadError, loading, pendingInviteKey, user]);
 
   const roomName = invite?.roomName || 'Private Room';
   const description =

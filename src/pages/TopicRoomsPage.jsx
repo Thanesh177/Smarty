@@ -1494,7 +1494,9 @@ export default function TopicRoomsPage() {
       setShowActiveRoomMenu(false);
 
       const data = await roomApi.createRoomInviteLink(room.roomId, {
+        // Backend Lambda uses requiresApproval. UI toggle uses the opposite meaning.
         requiresApproval: !inviteLinkAutoAccept,
+        autoAccept: inviteLinkAutoAccept,
         maxUses: 100,
       });
 

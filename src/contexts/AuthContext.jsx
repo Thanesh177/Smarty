@@ -88,7 +88,11 @@ function getPostLoginRedirect() {
   try {
     const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
 
-    if (window.location.pathname.startsWith('/rooms/join/')) {
+    if (
+      window.location.pathname.startsWith('/rooms/invite/') ||
+      window.location.pathname.startsWith('/rooms/join/') ||
+      window.location.pathname.startsWith('/room-invites/')
+    ) {
       return currentPath;
     }
 
@@ -107,12 +111,20 @@ function getPostLoginRedirect() {
 }
 
 function redirectAfterLogin() {
-  if (sessionStorage.getItem('smarty-auth-redirecting') === 'true') {
+  const targetPath = getPostLoginRedirect();
+  const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+
+  if (currentPath === targetPath) {
+    sessionStorage.removeItem('smarty-auth-redirecting');
     return;
   }
 
-  sessionStorage.setItem('smarty-auth-redirecting', 'true');
-  window.location.replace(getPostLoginRedirect());
+  if (sessionStorage.getItem('smarty-auth-redirecting') === targetPath) {
+    return;
+  }
+
+  sessionStorage.setItem('smarty-auth-redirecting', targetPath);
+  window.location.replace(targetPath);
 }
 
 function mapCognitoUser(currentUser, session) {
@@ -151,6 +163,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        sessionStorage.removeItem('smarty-auth-redirecting');
         const params = new URLSearchParams(window.location.search);
         const androidCode = params.get('code');
         const isAndroidReturn = params.get('platform') === 'android';

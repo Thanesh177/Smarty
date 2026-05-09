@@ -9,7 +9,7 @@ const WEB_REDIRECT_SIGN_IN = 'https://main.d3qiuefonbp8n9.amplifyapp.com/';
 const WEB_REDIRECT_SIGN_OUT = 'https://main.d3qiuefonbp8n9.amplifyapp.com/login';
 const LOCAL_REDIRECT_SIGN_IN = 'http://localhost:5173/';
 const LOCAL_REDIRECT_SIGN_OUT = 'http://localhost:5173/login';
-const ANDROID_REDIRECT_URI = 'smarty://callback/';
+const ANDROID_REDIRECT_URI = 'smarty://callback';
 const APP_ORIGIN = 'https://main.d3qiuefonbp8n9.amplifyapp.com';
 
 const isBrowser = typeof window !== 'undefined';
@@ -70,7 +70,7 @@ export const startAndroidGoogleLogin = () => {
     response_type: 'code',
     client_id: COGNITO_CLIENT_ID,
     scope: 'openid email profile',
-    state: encodeURIComponent(sessionStorage.getItem('smarty-post-login-redirect') || '/feed'),
+    state: sessionStorage.getItem('smarty-post-login-redirect') || '/feed',
   });
 
   window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${query.toString()}`;

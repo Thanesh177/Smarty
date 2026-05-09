@@ -9,6 +9,54 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT || 20000);
 const AUTH_TOKEN_CACHE_MS = 45 * 1000;
 const APP_ORIGIN = 'https://main.d3qiuefonbp8n9.amplifyapp.com';
+const ROOM_INVITE_API_BASE_URL =
+  import.meta.env.VITE_ROOM_INVITE_API_BASE_URL || API_BASE_URL;
+
+const PENDING_ROOM_INVITE_CODE_KEY = 'smarty_pending_room_invite_code';
+const PENDING_ROOM_INVITE_PATH_KEY = 'smarty_pending_room_invite_path';
+
+export const storePendingRoomInvite = (inviteCode) => {
+  const cleanCode = String(inviteCode || '').trim();
+  if (!cleanCode) return;
+
+  try {
+    sessionStorage.setItem(PENDING_ROOM_INVITE_CODE_KEY, cleanCode);
+    sessionStorage.setItem(PENDING_ROOM_INVITE_PATH_KEY, `/rooms/invite/${encodeURIComponent(cleanCode)}`);
+    localStorage.setItem(PENDING_ROOM_INVITE_CODE_KEY, cleanCode);
+    localStorage.setItem(PENDING_ROOM_INVITE_PATH_KEY, `/rooms/invite/${encodeURIComponent(cleanCode)}`);
+  } catch {
+    // Ignore storage errors.
+  }
+};
+
+export const getPendingRoomInvite = () => {
+  try {
+    const inviteCode =
+      sessionStorage.getItem(PENDING_ROOM_INVITE_CODE_KEY) ||
+      localStorage.getItem(PENDING_ROOM_INVITE_CODE_KEY) ||
+      '';
+
+    if (!inviteCode) return null;
+
+    return {
+      inviteCode,
+      path: `/rooms/invite/${encodeURIComponent(inviteCode)}`,
+    };
+  } catch {
+    return null;
+  }
+};
+
+export const clearPendingRoomInvite = () => {
+  try {
+    sessionStorage.removeItem(PENDING_ROOM_INVITE_CODE_KEY);
+    sessionStorage.removeItem(PENDING_ROOM_INVITE_PATH_KEY);
+    localStorage.removeItem(PENDING_ROOM_INVITE_CODE_KEY);
+    localStorage.removeItem(PENDING_ROOM_INVITE_PATH_KEY);
+  } catch {
+    // Ignore storage errors.
+  }
+};
 
 let cachedAuthToken = '';
 let cachedAuthTokenAt = 0;
@@ -18,6 +66,14 @@ const mockFeed = [];
 const mockUser = null;
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: API_TIMEOUT,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+const roomInviteApi = axios.create({
+  baseURL: ROOM_INVITE_API_BASE_URL,
   timeout: API_TIMEOUT,
   headers: {
     'Content-Type': 'application/json',
@@ -490,11 +546,28 @@ export const roomApi = {
       throw new Error('Room ID is required to create an invite link.');
     }
 
-    const { data } = await api.post('/rooms/invite-link', {
+    const payload = {
       roomId: cleanRoomId,
       requiresApproval: options.requiresApproval ?? true,
       ...(Number(options.maxUses) > 0 ? { maxUses: Number(options.maxUses) } : {}),
-    });
+    };
+
+    let data;
+
+    try {
+      const response = await api.post(
+        `/rooms/${encodePathSegment(cleanRoomId)}/invite-link`,
+        payload
+      );
+      data = response.data;
+    } catch (error) {
+      if (error?.response?.status !== 404) {
+        throw error;
+      }
+
+      const fallbackResponse = await api.post('/rooms/invite-link', payload);
+      data = fallbackResponse.data;
+    }
 
     const parsed = parseApiBody(data);
     const inviteCode = parsed?.inviteCode || parsed?.code || '';
@@ -517,7 +590,11 @@ export const roomApi = {
       throw new Error('Invite code is required.');
     }
 
-    const { data } = await api.get(`/room-invites/${encodePathSegment(cleanCode)}`);
+    storePendingRoomInvite(cleanCode);
+
+    const { data } = await roomInviteApi.get(
+      `/room-invites/${encodePathSegment(cleanCode)}`
+    );
     const parsed = parseApiBody(data);
     const invite = parsed?.invite || parsed || {};
 
@@ -543,8 +620,16 @@ export const roomApi = {
       throw new Error('Invite code is required.');
     }
 
+    storePendingRoomInvite(cleanCode);
+
     const { data } = await api.post(`/room-invites/${encodePathSegment(cleanCode)}/join`);
-    return parseApiBody(data);
+    const parsed = parseApiBody(data);
+
+    if (parsed?.joined || parsed?.requested) {
+      clearPendingRoomInvite();
+    }
+
+    return parsed;
   },
 
   disableInviteLink: async (inviteCode) => {
