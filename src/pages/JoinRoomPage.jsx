@@ -4,6 +4,61 @@ import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import './JoinRoomPage.css';
 
+function parseApiPayload(payload) {
+  let parsedPayload = payload;
+
+  try {
+    parsedPayload = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  } catch {
+    parsedPayload = payload;
+  }
+
+  let parsedBody = parsedPayload?.body;
+
+  try {
+    parsedBody = typeof parsedBody === 'string' ? JSON.parse(parsedBody) : parsedBody;
+  } catch {
+    parsedBody = parsedPayload?.body;
+  }
+
+  return {
+    payload: parsedPayload,
+    body: parsedBody,
+  };
+}
+
+function normalizeInvitePayload(data) {
+  const { payload, body } = parseApiPayload(data);
+
+  const rawInvite =
+    payload?.invite ||
+    payload?.data?.invite ||
+    body?.invite ||
+    body?.data?.invite ||
+    payload ||
+    body ||
+    null;
+
+  if (!rawInvite || typeof rawInvite !== 'object') return null;
+
+  const requiresApproval =
+    rawInvite.requiresApproval === false || rawInvite.requiresApproval === 'false'
+      ? false
+      : true;
+
+  return {
+    ...rawInvite,
+    inviteCode: rawInvite.inviteCode || rawInvite.code || '',
+    roomId: rawInvite.roomId || rawInvite.topicRoomId || rawInvite.groupId || rawInvite.room?.roomId || '',
+    roomName: rawInvite.roomName || rawInvite.name || rawInvite.room?.name || 'Private Room',
+    description: rawInvite.description || rawInvite.roomDescription || rawInvite.about || rawInvite.room?.description || '',
+    roomImageUrl: rawInvite.roomImageUrl || rawInvite.imageUrl || rawInvite.coverImageUrl || rawInvite.room?.imageUrl || '',
+    privacy: rawInvite.privacy || rawInvite.room?.privacy || 'private',
+    memberCount: Number(rawInvite.memberCount || rawInvite.room?.memberCount || 0),
+    requiresApproval,
+  };
+}
+
 export default function JoinRoomPage() {
   const { inviteCode } = useParams();
   const navigate = useNavigate();
@@ -26,10 +81,21 @@ export default function JoinRoomPage() {
         setLoadError('');
 
         const data = await roomApi.getRoomInvite(inviteCode);
-        setInvite(data?.invite || data);
+        const normalizedInvite = normalizeInvitePayload(data);
+
+        if (!normalizedInvite?.inviteCode && !normalizedInvite?.roomId) {
+          throw new Error('Invite response was empty or invalid.');
+        }
+
+        setInvite(normalizedInvite);
       } catch (err) {
         setInvite(null);
-        setLoadError(err?.response?.data?.error || 'Invite link could not be loaded.');
+        setLoadError(
+          err?.response?.data?.error ||
+            err?.response?.data?.message ||
+            err?.message ||
+            'Invite link could not be loaded.'
+        );
       } finally {
         setLoading(false);
       }
@@ -44,7 +110,10 @@ export default function JoinRoomPage() {
       localStorage.setItem('smarty-post-login-redirect', joinPath);
       sessionStorage.setItem(pendingInviteKey, '1');
       localStorage.setItem(pendingInviteKey, '1');
-      navigate(`/login?redirect=${encodeURIComponent(joinPath)}`, { state: { from: joinPath } });
+      navigate(`/login?redirect=${encodeURIComponent(joinPath)}`, {
+        replace: true,
+        state: { from: joinPath },
+      });
       return;
     }
 
@@ -53,31 +122,39 @@ export default function JoinRoomPage() {
       setStatus('');
 
       const data = await roomApi.joinRoomFromInvite(inviteCode);
+      const { payload, body } = parseApiPayload(data);
+      const joinResult = body || payload || data || {};
+
       sessionStorage.removeItem(pendingInviteKey);
       localStorage.removeItem(pendingInviteKey);
       sessionStorage.removeItem('smarty-post-login-redirect');
       localStorage.removeItem('smarty-post-login-redirect');
 
-      if (data?.joined) {
+      if (joinResult?.joined) {
         setStatus('Joined room successfully. Opening room...');
         window.setTimeout(() => {
-          if (data?.roomId) {
-            navigate(`/rooms?roomId=${encodeURIComponent(data.roomId)}`);
+          if (joinResult?.roomId) {
+            navigate(`/rooms?roomId=${encodeURIComponent(joinResult.roomId)}`, { replace: true });
           } else {
-            navigate('/rooms');
+            navigate('/rooms', { replace: true });
           }
         }, 700);
         return;
       }
 
-      if (data?.requested) {
+      if (joinResult?.requested) {
         setStatus('Join request sent. The room creator must approve you.');
         return;
       }
 
-      setStatus(data?.message || 'Request completed.');
+      setStatus(joinResult?.message || 'Request completed.');
     } catch (err) {
-      setStatus(err?.response?.data?.error || 'Could not join this room.');
+      setStatus(
+        err?.response?.data?.error ||
+          err?.response?.data?.message ||
+          err?.message ||
+          'Could not join this room.'
+      );
     } finally {
       setJoining(false);
     }
@@ -94,11 +171,12 @@ export default function JoinRoomPage() {
       localStorage.getItem('smarty-post-login-redirect') === joinPath;
 
     if (invite.requiresApproval !== false && !pendingInvite) return;
+    if (joining) return;
 
     autoJoinAttemptedRef.current = inviteCode;
     setStatus(invite.requiresApproval ? 'Sending join request...' : 'Instant join enabled. Joining room...');
     joinRoom();
-  }, [invite, inviteCode, joinPath, joinRoom, loadError, loading, pendingInviteKey, user]);
+  }, [invite, inviteCode, joinPath, joinRoom, joining, loadError, loading, pendingInviteKey, user]);
 
   const roomName = invite?.roomName || 'Private Room';
   const description =
@@ -148,7 +226,7 @@ export default function JoinRoomPage() {
             <div className="join-room-meta">
               <span>{invite?.privacy === 'private' ? 'Private' : 'Public'}</span>
               <span>{Number(invite?.memberCount || 0)} members</span>
-              <span>{invite?.requiresApproval ? 'Approval required' : 'Instant join'}</span>
+              <span>{invite?.requiresApproval !== false ? 'Approval required' : 'Instant join'}</span>
             </div>
 
             <div className="join-description">
@@ -167,7 +245,7 @@ export default function JoinRoomPage() {
             >
               {joining
                 ? 'Please wait...'
-                : invite?.requiresApproval
+                : invite?.requiresApproval !== false
                   ? 'Request to Join'
                   : 'Join Room'}
             </button>

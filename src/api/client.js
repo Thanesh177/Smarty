@@ -674,6 +674,11 @@ export const roomApi = {
     }
   },
 
+  joinRoomInvite: async (inviteCode) => {
+  const res = await api.post(`/room-invites/${inviteCode}/join`);
+  return res.data;
+},
+
   async joinRoom(roomId, joinCode = '') {
     const { data } = await api.post(`/rooms/${encodePathSegment(roomId)}/join`, {
       joinCode,
