@@ -85,7 +85,17 @@ export default function JoinRoomPage() {
       if (result?.joined) {
         setStatus(result?.message || 'Joined room successfully.');
 
-        navigate('/rooms', { replace: true });
+        const joinedRoomId = result?.roomId || invite?.roomId || '';
+
+        navigate('/rooms', {
+          replace: true,
+          state: joinedRoomId
+            ? {
+                openRoomId: joinedRoomId,
+                openRoomName: result?.roomName || invite?.roomName || '',
+              }
+            : undefined,
+        });
         return;
       }
 
