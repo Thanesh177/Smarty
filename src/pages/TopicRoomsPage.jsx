@@ -212,6 +212,72 @@ function getShortRoomFileName(name = '') {
   return `${baseName.slice(0, 24)}…${extension}`;
 }
 
+// Helper: check if userId is owner (ownerId or createdBy)
+function isRoomOwner(room, userId) {
+  return Boolean(room && userId && (room.ownerId === userId || room.createdBy === userId));
+}
+
+// Helper: deduplicate messages by messageId, clientId, or fallback key
+function dedupeMessages(messages = []) {
+  const seen = new Set();
+  const unique = [];
+
+  for (const msg of messages) {
+    const key =
+      msg.messageId ||
+      msg.clientId ||
+      `${msg.createdAt || 'msg'}-${msg.senderId || 'user'}-${msg.text || msg.message || ''}`;
+
+    if (!key || seen.has(key)) continue;
+
+    seen.add(key);
+    unique.push(msg);
+  }
+
+  return unique;
+}
+
+function getLoadedRoomMessages(data) {
+  const loadedMessages = Array.isArray(data?.messages)
+    ? data.messages
+    : Array.isArray(data)
+      ? data
+      : [];
+
+  return loadedMessages
+    .map(normalizeRoomMessageMedia)
+    .slice(-MAX_RENDERED_MEDIA_MESSAGES);
+}
+
+function areRoomsEqualForList(currentRoom, nextRoom) {
+  return (
+    currentRoom.roomId === nextRoom.roomId &&
+    currentRoom.imageUrl === nextRoom.imageUrl &&
+    currentRoom.roomImageUrl === nextRoom.roomImageUrl &&
+    currentRoom.coverImageUrl === nextRoom.coverImageUrl &&
+    currentRoom.memberCount === nextRoom.memberCount &&
+    currentRoom.name === nextRoom.name &&
+    currentRoom.privacy === nextRoom.privacy &&
+    currentRoom.ownerId === nextRoom.ownerId &&
+    currentRoom.createdBy === nextRoom.createdBy
+  );
+}
+
+function areRoomListsEqual(currentRooms = [], nextRooms = []) {
+  return (
+    currentRooms.length === nextRooms.length &&
+    currentRooms.every((room, index) => areRoomsEqualForList(room, nextRooms[index]))
+  );
+}
+
+function getRoomImagePatch(imageUrl) {
+  return {
+    imageUrl,
+    roomImageUrl: imageUrl,
+    coverImageUrl: imageUrl,
+  };
+}
+
 export default function TopicRoomsPage() {
   const { user } = useAuth();
   const userId = user?.id || user?.userId || user?.sub;
@@ -246,6 +312,7 @@ export default function TopicRoomsPage() {
   const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
   const [inviteLinkDisabling, setInviteLinkDisabling] = useState(false);
   const [inviteLinkModalOpen, setInviteLinkModalOpen] = useState(false);
+  const [inviteLinkAutoAccept, setInviteLinkAutoAccept] = useState(false);
   const [generatedInviteLink, setGeneratedInviteLink] = useState('');
   const [generatedInviteCode, setGeneratedInviteCode] = useState('');
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
@@ -284,12 +351,14 @@ export default function TopicRoomsPage() {
   const [showRoomMenu, setShowRoomMenu] = useState(false);
   const [showActiveRoomMenu, setShowActiveRoomMenu] = useState(false);
   const [showActiveRoomInfo, setShowActiveRoomInfo] = useState(false);
+  const [activeInfoSection, setActiveInfoSection] = useState('');
   const [openRoomActionMenuId, setOpenRoomActionMenuId] = useState('');
   const roomMenuRef = useRef(null);
   const roomActionMenuRef = useRef(null);
   const activeRoomMenuRef = useRef(null);
 
   const [roomSearch, setRoomSearch] = useState('');
+  const [roomPrivacyFilter, setRoomPrivacyFilter] = useState('private');
   const [modalTitle, setModalTitle] = useState('Group Members');
   const [modalMode, setModalMode] = useState('members');
   const [modalRoom, setModalRoom] = useState(null);
@@ -321,27 +390,23 @@ export default function TopicRoomsPage() {
     return imageUrl;
   }, [failedRoomImages, roomImageCache]);
 
-  const sortedVisibleRooms = useMemo(() => rooms.slice(0, MAX_RENDERED_ROOMS), [rooms]);
-
+const sortedVisibleRooms = useMemo(() => {
+  return rooms
+    .filter((room) =>
+      roomPrivacyFilter === 'private'
+        ? room.privacy === 'private'
+        : room.privacy !== 'private'
+    )
+    .slice(0, MAX_RENDERED_ROOMS);
+}, [rooms, roomPrivacyFilter]);
   const renderedMessages = useMemo(() => {
     if (!Array.isArray(messages) || messages.length === 0) return [];
 
-    const seen = new Set();
-    const unique = [];
+    const uniqueMessages = dedupeMessages(messages);
 
-    for (const msg of messages) {
-      const key =
-        msg.messageId ||
-        msg.clientId ||
-        `${msg.createdAt || 'msg'}-${msg.senderId || 'user'}-${msg.text || msg.message || ''}`;
-
-      if (seen.has(key)) continue;
-
-      seen.add(key);
-      unique.push(msg);
-    }
-
-    return unique.length > MAX_RENDERED_MESSAGES ? unique.slice(-MAX_RENDERED_MESSAGES) : unique;
+    return uniqueMessages.length > MAX_RENDERED_MESSAGES
+      ? uniqueMessages.slice(-MAX_RENDERED_MESSAGES)
+      : uniqueMessages;
   }, [messages]);
   
   const activeRoomImageUrl = useMemo(() => getRoomImageUrl(activeRoom), [activeRoom, getRoomImageUrl]);
@@ -383,9 +448,7 @@ export default function TopicRoomsPage() {
 
   const mediaViewerCount = viewableMediaMessages.length;
   const activeRoomCanEdit = useMemo(
-    () =>
-      activeRoom?.type === 'custom' &&
-      (activeRoom?.ownerId === userId || activeRoom?.createdBy === userId),
+    () => activeRoom?.type === 'custom' && isRoomOwner(activeRoom, userId),
     [activeRoom, userId]
   );
 
@@ -621,11 +684,40 @@ function openActiveRoomInfo(event) {
   setShowActiveRoomMenu(false);
   setOpenRoomActionMenuId('');
   setShowRoomMenu(false);
+  setActiveInfoSection('media');
   setShowActiveRoomInfo(true);
 }
 
-function closeActiveRoomInfo() {
-  setShowActiveRoomInfo(false);
+async function toggleActiveInfoSection(section) {
+  if (!activeRoom?.roomId) return;
+
+  const nextSection = activeInfoSection === section ? '' : section;
+  setActiveInfoSection(nextSection);
+
+  if (!nextSection) return;
+
+  if (section === 'members') {
+    await openMembers(activeRoom);
+    setShowMembers(false);
+    setShowActiveRoomInfo(true);
+    setModalRoom(activeRoom);
+    setModalMode('members');
+    return;
+  }
+
+  if (section === 'requests') {
+    await openJoinRequests(activeRoom);
+    setShowMembers(false);
+    setShowActiveRoomInfo(true);
+    setModalRoom(activeRoom);
+    setModalMode('requests');
+    return;
+  }
+
+if (section === 'invite') {
+  setInviteLinkModalOpen(false);
+  setShowActiveRoomInfo(true);
+}
 }
 
 function openMediaFromGrid(message) {
@@ -844,7 +936,7 @@ useEffect(() => {
       });
 
       const visibleRooms = allRooms.filter((room) => {
-        const isOwner = room.ownerId === userId || room.createdBy === userId;
+        const isOwner = isRoomOwner(room, userId);
 
         if (isOwner) return true;
         if (!normalizedSearch) return true;
@@ -853,8 +945,8 @@ useEffect(() => {
       });
 
       visibleRooms.sort((a, b) => {
-        const aOwner = a.ownerId === userId || a.createdBy === userId;
-        const bOwner = b.ownerId === userId || b.createdBy === userId;
+        const aOwner = isRoomOwner(a, userId);
+        const bOwner = isRoomOwner(b, userId);
 
         if (aOwner && !bOwner) return -1;
         if (!aOwner && bOwner) return 1;
@@ -868,27 +960,7 @@ useEffect(() => {
         rooms: visibleRooms,
       };
 
-      setRooms((prev) => {
-        if (
-          prev.length === visibleRooms.length &&
-          prev.every((item, index) => {
-            const next = visibleRooms[index];
-            return (
-              item.roomId === next.roomId &&
-              item.imageUrl === next.imageUrl &&
-              item.roomImageUrl === next.roomImageUrl &&
-              item.coverImageUrl === next.coverImageUrl &&
-              item.memberCount === next.memberCount &&
-              item.name === next.name &&
-              item.privacy === next.privacy
-            );
-          })
-        ) {
-          return prev;
-        }
-
-        return visibleRooms;
-      });
+      setRooms((prev) => (areRoomListsEqual(prev, visibleRooms) ? prev : visibleRooms));
     } catch (err) {
       console.error(err);
       if (mountedRef.current) setStatus('Failed to load rooms');
@@ -1128,15 +1200,13 @@ useEffect(() => {
 
             finalCreatedRoom = {
               ...createdRoom,
-              imageUrl,
-              roomImageUrl: imageUrl,
-              coverImageUrl: imageUrl,
+              ...getRoomImagePatch(imageUrl),
             };
 
             setRooms((prev) =>
               prev.map((item) =>
                 item.roomId === createdRoom.roomId
-                  ? { ...item, imageUrl, roomImageUrl: imageUrl, coverImageUrl: imageUrl }
+                  ? { ...item, ...getRoomImagePatch(imageUrl) }
                   : item
               )
             );
@@ -1187,12 +1257,7 @@ useEffect(() => {
         setMessagesLoading(true);
         const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId);
         if (mountedRef.current) {
-          const loadedMessages = Array.isArray(messageData?.messages)
-            ? messageData.messages
-            : Array.isArray(messageData)
-              ? messageData
-              : [];
-          setMessages(loadedMessages.map(normalizeRoomMessageMedia).slice(-MAX_RENDERED_MEDIA_MESSAGES));
+          setMessages(getLoadedRoomMessages(messageData));
         }
       } catch (messageErr) {
         console.error('Could not load new room messages:', messageErr);
@@ -1345,7 +1410,7 @@ async function rejectRoomInvite(invite) {
 async function generatePrivateRoomInviteLink(room = activeRoom) {
   if (!room?.roomId || inviteLinkLoading) return;
 
-  const isOwner = room.ownerId === userId || room.createdBy === userId;
+  const isOwner = isRoomOwner(room, userId);
 
   if (room.privacy !== 'private') {
     setStatus('Invite links are only available for private rooms.');
@@ -1363,7 +1428,7 @@ async function generatePrivateRoomInviteLink(room = activeRoom) {
     setShowActiveRoomMenu(false);
 
     const data = await roomApi.createRoomInviteLink(room.roomId, {
-      requiresApproval: true,
+      requiresApproval: !inviteLinkAutoAccept,
       maxUses: 100,
     });
 
@@ -1430,6 +1495,7 @@ async function disableGeneratedInviteLink() {
     setGeneratedInviteCode('');
     setGeneratedInviteLink('');
     setInviteLinkCopied(false);
+    setInviteLinkAutoAccept(false);
     setInviteLinkModalOpen(false);
   } catch (err) {
     setStatus(
@@ -1555,7 +1621,7 @@ async function uploadRoomImage(room, file) {
     setRooms((prev) =>
       prev.map((item) =>
         item.roomId === room.roomId
-          ? { ...item, imageUrl, roomImageUrl: imageUrl, coverImageUrl: imageUrl }
+          ? { ...item, ...getRoomImagePatch(imageUrl) }
           : item
       )
     );
@@ -1563,9 +1629,7 @@ async function uploadRoomImage(room, file) {
     if (activeRoomRef.current?.roomId === room.roomId) {
       const updatedRoom = {
         ...activeRoomRef.current,
-        imageUrl,
-        roomImageUrl: imageUrl,
-        coverImageUrl: imageUrl,
+        ...getRoomImagePatch(imageUrl),
       };
 
       activeRoomRef.current = updatedRoom;
@@ -1593,7 +1657,7 @@ async function uploadRoomImage(room, file) {
 async function renameRoom(room, providedName) {
   if (!room?.roomId || renamingRoomId) return false;
 
-  const isOwner = room.ownerId === userId || room.createdBy === userId;
+  const isOwner = isRoomOwner(room, userId);
 
   if (!isOwner) {
     setStatus('Only the room creator can edit the topic name');
@@ -1703,7 +1767,7 @@ function closeEditRoomModal() {
 function openEditRoomModal(room) {
   if (!room?.roomId) return;
 
-  const isOwner = room.ownerId === userId || room.createdBy === userId;
+  const isOwner = isRoomOwner(room, userId);
 
   if (!isOwner) {
     setStatus('Only the room creator can edit this topic');
@@ -1876,13 +1940,7 @@ function removeNewRoomImage() {
       const data = await roomApi.getRoomMessages(room.roomId);
       if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) return;
 
-      const loadedMessages = Array.isArray(data?.messages)
-        ? data.messages
-        : Array.isArray(data)
-          ? data
-          : [];
-
-      setMessages(loadedMessages.map(normalizeRoomMessageMedia).slice(-MAX_RENDERED_MEDIA_MESSAGES));
+      setMessages(getLoadedRoomMessages(data));
     } catch (err) {
       console.error(err);
       if (mountedRef.current) {
@@ -2191,15 +2249,33 @@ async function inviteUser(userToInvite) {
   async function approveJoinRequest(requestUserId) {
     if (!modalRoom?.roomId) return;
 
+    const approvedRoom = modalRoom;
+
     try {
-      await roomApi.approveRoomJoinRequest(modalRoom.roomId, requestUserId);
+      setStatus('');
+      await roomApi.approveRoomJoinRequest(approvedRoom.roomId, requestUserId);
+
       setMembers((prev) => prev.filter((member) => member.userId !== requestUserId));
-      if (modalRoom?.roomId) {
-        delete joinRequestsCacheRef.current[modalRoom.roomId];
-        delete membersCacheRef.current[modalRoom.roomId];
-      }
+
+      delete joinRequestsCacheRef.current[approvedRoom.roomId];
+      delete membersCacheRef.current[approvedRoom.roomId];
+      roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
+
+      setShowMembers(false);
+      setShowInvite(false);
+      setModalMode('members');
+      setModalRoom(null);
+      setMembers([]);
+
       setStatus('Join request approved');
       await loadRooms(roomSearch, { force: true });
+
+      const latestRoom =
+        roomsCacheRef.current.rooms.find((room) => room.roomId === approvedRoom.roomId) ||
+        rooms.find((room) => room.roomId === approvedRoom.roomId) ||
+        approvedRoom;
+
+      await openRoom(latestRoom);
     } catch (err) {
       console.error(err);
       setStatus(err?.response?.data?.error || 'Could not approve request');
@@ -2209,7 +2285,7 @@ async function inviteUser(userToInvite) {
   async function removeRoomMember(member) {
     if (!modalRoom?.roomId || !member?.userId) return;
 
-    const isCreator = modalRoom.ownerId === userId || modalRoom.createdBy === userId;
+    const isCreator = isRoomOwner(modalRoom, userId);
     const isTargetOwner = member.userId === modalRoom.ownerId || member.userId === modalRoom.createdBy;
 
     if (!isCreator) {
@@ -2469,7 +2545,23 @@ async function sendMessage(e) {
 <main className={`rooms-page ${mobileChatOpen && activeRoom ? 'mobile-chat-open' : ''}`}>
       <aside className="sidebar">
         <div className="rooms-title-row">
-          <h2>Rooms</h2>
+        <div className="room-privacy-toggle room-privacy-toggle-title">
+  <button
+    type="button"
+    className={roomPrivacyFilter === 'private' ? 'active' : ''}
+    onClick={() => setRoomPrivacyFilter('private')}
+  >
+    Private
+  </button>
+
+  <button
+    type="button"
+    className={roomPrivacyFilter === 'public' ? 'active' : ''}
+    onClick={() => setRoomPrivacyFilter('public')}
+  >
+    Public
+  </button>
+</div>
 
           <div
             className="rooms-menu-wrap"
@@ -2550,13 +2642,17 @@ async function sendMessage(e) {
 
         {status && <p className="room-status">{status}</p>}
 
+
+
         <div className="room-list">
           {roomsLoading ? (
             <p className="empty">Loading rooms...</p>
           ) : rooms.length === 0 ? (
-            <p className="empty">No rooms found</p>
-          ) : sortedVisibleRooms.map((room, roomIndex) => {
-            const isOwner = room.ownerId === userId || room.createdBy === userId;
+  <p className="empty">No rooms found</p>
+) : sortedVisibleRooms.length === 0 ? (
+  <p className="empty">No {roomPrivacyFilter} rooms found</p>
+) : sortedVisibleRooms.map((room, roomIndex) => {
+            const isOwner = isRoomOwner(room, userId);
             const isPrivateCustom = room.type === 'custom' && room.privacy === 'private';
             const canLeave = isPrivateCustom && !isOwner;
             const canDelete = room.type === 'custom' && isOwner;
@@ -2629,7 +2725,7 @@ async function sendMessage(e) {
                       <div className="room-title-row">
                         <div className="room-name-badge-row">
                           <strong>{room.name}</strong>
-                          {(room.ownerId === userId || room.createdBy === userId) && (
+                          {isOwner && (
                             <span className="room-owner-badge">You</span>
                           )}
                         </div>
@@ -2759,12 +2855,7 @@ async function sendMessage(e) {
     ←
   </button>
 
-  <button
-    type="button"
-    className="active-room-title-wrap"
-    onClick={openActiveRoomInfo}
-    aria-label="Open group info"
-  >
+  <span className="active-room-title-wrap">
     {activeRoomImageUrl && (
       <img
         className="active-room-image"
@@ -2790,7 +2881,7 @@ async function sendMessage(e) {
       />
     )}
     <span>{activeRoom.name}</span>
-  </button>
+  </span>
 
   <div
     className="active-room-menu-wrap"
@@ -2823,8 +2914,28 @@ async function sendMessage(e) {
 
     {showActiveRoomMenu && (
       <div className="active-room-menu-popover">
+{/* {activeRoomCanEdit && activeRoom?.privacy === 'private' && (
+  <button
+    type="button"
+    onClick={(e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setShowActiveRoomMenu(false);
+      openJoinRequests(activeRoom);
+    }}
+  >
+    Requests
+  </button>
+)} */}
 
-        <button
+<button
+  type="button"
+  onClick={openActiveRoomInfo}
+>
+  Group Info
+</button>
+
+        {/* <button
           type="button"
           onClick={(e) => {
             e.preventDefault();
@@ -2834,7 +2945,7 @@ async function sendMessage(e) {
           }}
         >
           Members
-        </button>
+        </button> */}
 
         <button
           type="button"
@@ -2854,7 +2965,7 @@ async function sendMessage(e) {
           )}
         </button>
 
-        {activeRoom?.type === 'custom' &&
+        {/* {activeRoom?.type === 'custom' &&
           activeRoom?.privacy === 'private' &&
           (activeRoom?.ownerId === userId || activeRoom?.createdBy === userId) && (
             <>
@@ -2869,22 +2980,10 @@ async function sendMessage(e) {
               >
                 {inviteLinkLoading ? 'Generating...' : 'Invite Link'}
               </button>
-            </>
-          )}
 
-          {activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && activeRoomCanEdit && (
-  <button
-    type="button"
-    onClick={(event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeActiveRoomInfo();
-      openJoinRequests(activeRoom);
-    }}
-  >
-    Requests
-  </button>
-)}
+
+            </>
+          )} */}
       </div>
     )}
   </div>
@@ -3017,173 +3116,6 @@ accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zi
       </section>
 
 
-{showActiveRoomInfo && activeRoom && (
-  <div
-    className="active-room-info-overlay"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Group information"
-    onClick={closeActiveRoomInfo}
-  >
-    <section
-      className="active-room-info-panel"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="active-room-info-hero">
-        {activeRoomImageUrl ? (
-          <img
-            src={activeRoomImageUrl}
-            alt=""
-            className="active-room-info-image"
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            aria-hidden="true"
-          />
-        ) : (
-          <div className="active-room-info-avatar">
-            {(activeRoom.name || 'R').trim().slice(0, 1).toUpperCase()}
-          </div>
-        )}
-
-        <button
-          type="button"
-          className="active-room-info-close"
-          aria-label="Close group info"
-          onClick={closeActiveRoomInfo}
-        >
-          ×
-        </button>
-      </div>
-
-      <div className="active-room-info-body">
-        <p className="active-room-info-kicker">Group Info</p>
-        <h2>{activeRoom.name}</h2>
-
-        <div className="active-room-info-meta">
-          <span>{activeRoom.privacy === 'private' ? 'Private group' : 'Public group'}</span>
-          {activeRoom.type === 'custom' && <span>Custom room</span>}
-          {activeRoomCanEdit && <span>You created this group</span>}
-        </div>
-
-        <div className="active-room-info-stats">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              closeActiveRoomInfo();
-              openMembers(activeRoom);
-            }}
-          >
-            <strong>{activeRoom.memberCount || membersCacheRef.current[activeRoom.roomId]?.members?.length || 0}</strong>
-            <span>Members</span>
-          </button>
-
-          <button
-            type="button"
-            disabled={renderedMediaMessages.length === 0}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              closeActiveRoomInfo();
-              openRoomMediaGrid(event);
-            }}
-          >
-            <strong>{renderedMediaMessages.length}</strong>
-            <span>Media</span>
-          </button>
-        </div>
-
-        <div className="active-room-info-actions">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              closeActiveRoomInfo();
-              openMembers(activeRoom);
-            }}
-          >
-            Members
-          </button>
-
-          <button
-            type="button"
-            disabled={renderedMediaMessages.length === 0}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              closeActiveRoomInfo();
-              openRoomMediaGrid(event);
-            }}
-          >
-            Media
-          </button>
-
-          {activeRoom?.type === 'custom' && activeRoomCanEdit && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                closeActiveRoomInfo();
-                openEditRoomModal(activeRoom);
-              }}
-            >
-              Edit Group
-            </button>
-          )}
-
-          {activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && activeRoomCanEdit && (
-            <button
-              type="button"
-              disabled={inviteLinkLoading}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                closeActiveRoomInfo();
-                generatePrivateRoomInviteLink(activeRoom);
-              }}
-            >
-              {inviteLinkLoading ? 'Generating...' : 'Invite Link'}
-            </button>
-          )}
-
-          {activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && activeRoomCanEdit && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                closeActiveRoomInfo();
-                openJoinRequests(activeRoom);
-              }}
-            >
-              Requests
-            </button>
-          )}
-
-          {activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && !activeRoomCanEdit && (
-            <button
-              type="button"
-              className="danger-menu-item"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                closeActiveRoomInfo();
-                leaveRoom(activeRoom);
-              }}
-            >
-              Leave Group
-            </button>
-          )}
-        </div>
-      </div>
-    </section>
-  </div>
-)}
-
 {showRoomMediaGrid && activeRoom && (
   <div
     className="room-media-grid-overlay"
@@ -3192,22 +3124,14 @@ accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zi
     aria-label="Room media grid"
     onClick={closeRoomMediaGrid}
   >
-    <div
-      className="room-media-grid-panel"
-      onClick={(event) => event.stopPropagation()}
-    >
+    <div className="room-media-grid-panel" onClick={(event) => event.stopPropagation()}>
       <div className="room-media-grid-header">
         <div>
           <p>Room Media</p>
           <h3>{activeRoom.name}</h3>
         </div>
 
-        <button
-          type="button"
-          className="room-media-grid-close"
-          aria-label="Close media grid"
-          onClick={closeRoomMediaGrid}
-        >
+        <button type="button" className="room-media-grid-close" onClick={closeRoomMediaGrid}>
           ×
         </button>
       </div>
@@ -3232,13 +3156,7 @@ accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zi
               >
                 {item.mediaType === 'video' ? (
                   <>
-                    <video
-                      src={itemUrl}
-                      muted
-                      preload="metadata"
-                      playsInline
-                      className="room-media-grid-video"
-                    />
+                    <video src={itemUrl} muted preload="metadata" playsInline className="room-media-grid-video" />
                     <span className="room-media-grid-play">▶</span>
                   </>
                 ) : item.mediaType === 'file' ? (
@@ -3275,10 +3193,7 @@ accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zi
     onTouchStart={handleMediaViewerTouchStart}
     onTouchEnd={handleMediaViewerTouchEnd}
   >
-    <div
-      className="room-media-viewer-card"
-      onClick={(event) => event.stopPropagation()}
-    >
+    <div className="room-media-viewer-card" onClick={(event) => event.stopPropagation()}>
       <div className="room-media-viewer-topbar">
         <span>{activeMediaViewerItem.senderName || activeMediaViewerItem.name || 'User'}</span>
 
@@ -3286,66 +3201,37 @@ accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zi
           {Number(mediaViewer.index || 0) + 1}/{mediaViewerCount}
         </span>
 
-<button
-  type="button"
-  className="room-media-viewer-back"
-  aria-label="Open media grid"
-  onClick={(event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    backToRoomMediaGrid();
-  }}
->
-  ← Grid
-</button>
+        <button
+          type="button"
+          className="room-media-viewer-back"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            backToRoomMediaGrid();
+          }}
+        >
+          ← Grid
+        </button>
 
-<button
-  type="button"
-  className="room-media-viewer-close"
-  onClick={(event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    closeMediaViewer();
-  }}
-  aria-label="Close media viewer"
->
-  ✕
-</button>
+        <button
+          type="button"
+          className="room-media-viewer-close"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            closeMediaViewer();
+          }}
+        >
+          ✕
+        </button>
       </div>
 
-      {mediaViewerCount > 1 && (
-        <>
-          <button
-            type="button"
-            className="room-media-viewer-nav prev"
-            aria-label="Previous media"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              moveMediaViewer(-1);
-            }}
-          >
-            ‹
-          </button>
 
-          <button
-            type="button"
-            className="room-media-viewer-nav next"
-            aria-label="Next media"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              moveMediaViewer(1);
-            }}
-          >
-            ›
-          </button>
-        </>
-      )}
 
       {activeMediaViewerItem.mediaType === 'video' ? (
         <video
           key={activeMediaViewerItem.mediaUrl || activeMediaViewerItem.fileUrl}
+          ref={mediaViewerVideoRef}
           src={activeMediaViewerItem.mediaUrl || activeMediaViewerItem.fileUrl}
           controls
           autoPlay
@@ -3363,8 +3249,237 @@ accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zi
   </div>
 )}
 
+{showActiveRoomInfo && activeRoom && (
+  <div
+    className="active-room-info-shell"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Group information"
+    onClick={() => setShowActiveRoomInfo(false)}
+  >
+    <section className="active-room-info-panel" onClick={(event) => event.stopPropagation()}>
+      <div className="active-room-info-cover">
+        {activeRoomImageUrl ? (
+          <img src={activeRoomImageUrl} alt={activeRoom.name} />
+        ) : (
+          <span>{(activeRoom.name || 'G').slice(0, 1).toUpperCase()}</span>
+        )}
+      </div>
+
+      <div className="active-room-info-header">
+        <div>
+          <p className="active-room-info-kicker">Group info</p>
+          <h2>{activeRoom.name}</h2>
+          <p>
+            {activeRoom.privacy === 'private' ? 'Private group' : 'Public group'}
+            {activeRoom.memberCount ? ` · ${activeRoom.memberCount} members` : ''}
+          </p>
+
+          {(activeRoom.ownerId === userId || activeRoom.createdBy === userId) && (
+            <span className="room-owner-badge">You created this</span>
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="active-room-info-close"
+          onClick={() => setShowActiveRoomInfo(false)}
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="active-room-info-rows">
+                <button
+          type="button"
+          className={`active-room-info-row ${activeInfoSection === 'media' ? 'open' : ''}`}
+          onClick={() => toggleActiveInfoSection('media')}
+        >
+          Media
+        </button>
+        <button
+          type="button"
+          className={`active-room-info-row ${activeInfoSection === 'members' ? 'open' : ''}`}
+          onClick={() => toggleActiveInfoSection('members')}
+        >
+          Members
+        </button>
 
 
+
+        {activeRoomCanEdit && activeRoom.privacy === 'private' && (
+          <button
+            type="button"
+            className={`active-room-info-row ${activeInfoSection === 'requests' ? 'open' : ''}`}
+            onClick={() => toggleActiveInfoSection('requests')}
+          >
+            Requests
+          </button>
+        )}
+
+        {activeRoomCanEdit && (
+          <button type="button" className="active-room-info-row" onClick={() => openEditRoomModal(activeRoom)}>
+            Edit
+          </button>
+        )}
+
+        {activeRoomCanEdit && activeRoom.privacy === 'private' && (
+          <button
+            type="button"
+            className={`active-room-info-row ${activeInfoSection === 'invite' ? 'open' : ''}`}
+            onClick={() => toggleActiveInfoSection('invite')}
+          >
+            Invite
+          </button>
+        )}
+      </div>
+
+      <div className="active-room-info-expanded-area">
+        {activeInfoSection === 'members' && (
+          <div className="active-room-info-inline-section">
+            {modalMode !== 'members' ? (
+              <p className="active-room-info-empty">Loading members...</p>
+            ) : members.length === 0 ? (
+              <p className="active-room-info-empty">No members loaded.</p>
+            ) : (
+              members.map((member) => (
+                <div className="active-room-info-person" key={member.userId || member.email}>
+                  <div className="active-room-info-avatar">
+                    {member.avatarUrl || member.photoUrl || member.profilePic ? (
+                      <img src={member.avatarUrl || member.photoUrl || member.profilePic} alt="" />
+                    ) : (
+                      <span>{(member.name || member.email || 'U').slice(0, 1).toUpperCase()}</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <strong>{member.name || member.userName || member.email || 'User'}</strong>
+                    <p>{member.email || member.userEmail || member.role || 'Member'}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeInfoSection === 'media' && (
+          <div className="active-room-info-inline-section media-grid">
+            {renderedMediaMessages.length === 0 ? (
+              <p className="active-room-info-empty">No media shared yet.</p>
+            ) : (
+              renderedMediaMessages.map((item) => (
+                <button
+                  type="button"
+                  className={`active-room-info-media-tile ${item.mediaType}`}
+                  key={item.messageId || item.clientId || item.mediaUrl || item.fileUrl}
+                  onClick={() => openMediaFromGrid(item)}
+                >
+                  {item.mediaType === 'image' && (
+                    <img src={item.mediaUrl || item.fileUrl} alt={item.fileName || 'Shared media'} />
+                  )}
+
+                  {item.mediaType === 'video' && (
+                    <>
+                      <video src={item.mediaUrl || item.fileUrl} muted playsInline preload="metadata" />
+                      <span>▶</span>
+                    </>
+                  )}
+
+                  {item.mediaType === 'file' && (
+                    <div className="active-room-info-file-tile">
+                      <strong>FILE</strong>
+                      <small>{getShortRoomFileName(item.fileName || item.mediaName)}</small>
+                    </div>
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeInfoSection === 'requests' && activeRoomCanEdit && activeRoom.privacy === 'private' && (
+          <div className="active-room-info-inline-section">
+            {modalMode !== 'requests' ? (
+              <p className="active-room-info-empty">Loading requests...</p>
+            ) : members.length === 0 ? (
+              <p className="active-room-info-empty">No pending requests.</p>
+            ) : (
+              members.map((request) => (
+                <div className="active-room-info-person request" key={request.userId || request.email}>
+                  <div className="active-room-info-avatar">
+                    {request.avatarUrl || request.photoUrl || request.profilePic ? (
+                      <img src={request.avatarUrl || request.photoUrl || request.profilePic} alt="" />
+                    ) : (
+                      <span>{(request.name || request.userName || request.email || 'U').slice(0, 1).toUpperCase()}</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <strong>{request.name || request.userName || request.email || 'User'}</strong>
+                    <p>
+                      {request.source === 'inviteLink'
+                        ? 'Requested through invite link'
+                        : request.email || request.userEmail || 'Requested to join'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="active-room-info-approve"
+                    onClick={() => approveJoinRequest(request.userId)}
+                  >
+                    Accept
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeInfoSection === 'invite' && activeRoomCanEdit && activeRoom.privacy === 'private' && (
+          <div className="active-room-info-inline-section invite-link-inline">
+            {inviteLinkLoading ? (
+              <p className="active-room-info-empty">Generating invite link...</p>
+            ) : generatedInviteLink ? (
+              <>
+                <input value={generatedInviteLink} readOnly />
+                <button type="button" onClick={copyGeneratedInviteLink}>
+                  {inviteLinkCopied ? 'Copied' : 'Copy link'}
+                </button>
+              </>
+            ) : (
+              <>
+                <label className="invite-link-auto-accept-toggle">
+                  <input
+                    type="checkbox"
+                    checked={inviteLinkAutoAccept}
+                    onChange={(event) => setInviteLinkAutoAccept(event.target.checked)}
+                    disabled={inviteLinkLoading || Boolean(generatedInviteLink)}
+                  />
+
+                  <div className="invite-link-auto-accept-content">
+                    <div className="invite-link-auto-accept-header">
+                      <span>Auto accept members</span>
+                      <strong>{inviteLinkAutoAccept ? 'ON' : 'OFF'}</strong>
+                    </div>
+
+                    <small>
+                      Users joining with this link will instantly enter the group without approval.
+                    </small>
+                  </div>
+                </label>
+
+                <button type="button" onClick={() => generatePrivateRoomInviteLink(activeRoom)}>
+                  {inviteLinkAutoAccept ? 'Generate auto-join link' : 'Generate approval link'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  </div>
+)}
 
       {inviteLinkModalOpen && (
         <div className="members-modal">
@@ -3461,6 +3576,10 @@ accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zi
     </div>
   </div>
 )}
+
+
+
+
 
       {showRoomInvites && (
         <div className="members-modal">
