@@ -40,7 +40,7 @@ const CreatorProfilePage = lazy(() => import('./pages/CreatorProfilePage'));
 const CreatorDashboardPage = lazy(() => import('./pages/CreatorDashboardPage'));
 const FollowRequestsPage = lazy(() => import('./pages/FollowRequestsPage'));
 const TopicRoomsPage = lazy(() => import('./pages/TopicRoomsPage'));
-const JoinRoomPage = lazy(() => import('./pages/JoinRoomPage'));
+import JoinRoomPage from './pages/JoinRoomPage';
 const ReelDetailPage = lazy(() => import('./pages/ReelDetailPage'));
 const NewsPage = lazy(() => import('./pages/NewsPage'));
 const ReadBookPage = lazy(() => import('./pages/ReadBookPage'));

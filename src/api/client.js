@@ -682,9 +682,20 @@ joinRoomFromInvite: async (inviteCode) => {
 },
 
   async joinRoom(roomId, joinCode = '') {
-    const { data } = await api.post(`/rooms/${encodePathSegment(roomId)}/join`, {
-      joinCode,
-    });
+    const cleanRoomId = String(roomId || '').trim();
+
+    if (!cleanRoomId) {
+      throw new Error('Room ID is required.');
+    }
+
+    const { data } = await api.post(
+      `/rooms/${encodePathSegment(cleanRoomId)}/join`,
+      {
+        roomId: cleanRoomId,
+        joinCode,
+      }
+    );
+
     return parseApiBody(data);
   },
 
