@@ -193,19 +193,39 @@ function validatePreparedRoomImagePayload(payload) {
 }
 
 function normalizeRoomMessageMedia(message = {}) {
-  const mediaUrl = message.mediaUrl || message.fileUrl || message.url || '';
-  const contentType = message.contentType || '';
-  const fileName = message.fileName || message.mediaName || '';
+  const mediaUrl = String(
+    message.mediaUrl ||
+      message.fileUrl ||
+      message.url ||
+      message.attachmentUrl ||
+      message.downloadUrl ||
+      message.location ||
+      ''
+  ).trim();
+  const contentType = String(message.contentType || message.mimeType || message.type || '').trim();
+  const fileName = String(
+    message.fileName ||
+      message.mediaName ||
+      message.name ||
+      (mediaUrl ? mediaUrl.split('/').filter(Boolean).pop()?.split('?')[0] : '') ||
+      ''
+  ).trim();
   const lowerUrl = String(mediaUrl || fileName || '').toLowerCase();
 
   let mediaType = message.mediaType || '';
 
-  if (!mediaType && mediaUrl) {
+  if (mediaUrl) {
     if (String(contentType).startsWith('image/') || ROOM_MEDIA_IMAGE_EXTENSIONS.test(lowerUrl)) {
       mediaType = 'image';
     } else if (String(contentType).startsWith('video/') || ROOM_MEDIA_VIDEO_EXTENSIONS.test(lowerUrl)) {
       mediaType = 'video';
-    } else if (ROOM_MEDIA_DOCUMENT_EXTENSIONS.test(lowerUrl) || ROOM_MEDIA_ALLOWED_TYPES.test(String(contentType))) {
+    } else if (
+      mediaType === 'document' ||
+      mediaType === 'attachment' ||
+      mediaType === 'file' ||
+      ROOM_MEDIA_DOCUMENT_EXTENSIONS.test(lowerUrl) ||
+      ROOM_MEDIA_ALLOWED_TYPES.test(String(contentType))
+    ) {
       mediaType = 'file';
     }
   }
@@ -218,11 +238,12 @@ function normalizeRoomMessageMedia(message = {}) {
     ...message,
     mediaKey: message.mediaKey || message.key || '',
     mediaUrl,
-    fileUrl: message.fileUrl || mediaUrl,
+    fileUrl: message.fileUrl || message.mediaUrl || mediaUrl,
     mediaType,
     contentType,
     fileName,
     mediaName: message.mediaName || fileName,
+    hasMediaPreview: Boolean(mediaUrl && (mediaType === 'image' || mediaType === 'video' || mediaType === 'file')),
   };
 }
 
@@ -259,8 +280,22 @@ function dedupeMessages(messages = []) {
   return unique;
 }
 
+function trimRoomMessagesForMemory(messages = []) {
+  const normalizedMessages = Array.isArray(messages)
+    ? messages.map(normalizeRoomMessageMedia)
+    : [];
+
+  if (normalizedMessages.length <= MAX_RENDERED_MEDIA_MESSAGES) {
+    return normalizedMessages;
+  }
+
+  return normalizedMessages.slice(-MAX_RENDERED_MEDIA_MESSAGES);
+}
+
 function getLoadedRoomMessages(data) {
-  return extractRoomArray(data, ['messages', 'Items']).map(normalizeRoomMessageMedia);
+  return trimRoomMessagesForMemory(
+    extractRoomArray(data, ['messages', 'Items']).map(normalizeRoomMessageMedia)
+  );
 }
 
 function areRoomsEqualForList(currentRoom, nextRoom) {
@@ -340,6 +375,39 @@ function renderMessageWithLinks(value = '') {
 
     return <span key={`${part}-${index}`}>{part}</span>;
   });
+}
+
+function RoomMessagePreview({ message, onOpen, onDownload }) {
+  const msg = normalizeRoomMessageMedia(message);
+  const mediaUrl = msg.mediaUrl || msg.fileUrl || '';
+  if (!mediaUrl || !msg.mediaType) return null;
+
+  return (
+    <div className={`room-message-preview-wrap ${msg.mediaType}`}>
+      {msg.mediaType === 'image' && (
+        <button type="button" className="room-message-media-tap" onClick={() => onOpen(msg)}>
+          <img src={mediaUrl} alt={msg.fileName || 'Shared image'} className="room-message-image" loading="lazy" decoding="async" />
+        </button>
+      )}
+
+      {msg.mediaType === 'video' && (
+        <button type="button" className="room-message-media-tap" onClick={() => onOpen(msg)}>
+          <video className="room-message-video" src={mediaUrl} muted preload="metadata" playsInline />
+          <span className="room-video-play-badge">▶</span>
+        </button>
+      )}
+
+      {msg.mediaType === 'file' && (
+        <button type="button" className="room-message-file" onClick={() => onOpen(msg)}>
+          📎 {getShortRoomFileName(msg.fileName || msg.mediaName || 'Attachment')}
+        </button>
+      )}
+
+      <button type="button" className="room-message-download-btn" onClick={() => onDownload(msg)}>
+        ↓
+      </button>
+    </div>
+  );
 }
 
 export default function TopicRoomsPage() {
@@ -446,6 +514,7 @@ export default function TopicRoomsPage() {
   const roomMenuRef = useRef(null);
   const roomActionMenuRef = useRef(null);
   const activeRoomMenuRef = useRef(null);
+  const initialRoomScrollDoneRef = useRef(false);
 
   const activeRoomCanDeleteMessages = useMemo(
     () => activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && isRoomOwner(activeRoom, userId),
@@ -590,7 +659,9 @@ export default function TopicRoomsPage() {
       }
 
       setMessages((prev) =>
-        dedupeMessages([...older, ...prev]).map(normalizeRoomMessageMedia)
+        trimRoomMessagesForMemory(
+          dedupeMessages([...older, ...prev]).map(normalizeRoomMessageMedia)
+        )
       );
       setHasOlderMessages(older.length >= ROOM_MESSAGES_FETCH_LIMIT);
 
@@ -628,31 +699,29 @@ export default function TopicRoomsPage() {
     });
   }, []);
 
-  useEffect(() => {
-    if (!activeRoom) return undefined;
-    if (olderMessagesLoadingRef.current || olderMessagesLoading) return undefined;
+useEffect(() => {
+  if (!activeRoom?.roomId) return undefined;
+  if (olderMessagesLoadingRef.current || olderMessagesLoading) return undefined;
 
-    const messagesElement = messagesRef.current;
-    const isNearBottom = messagesElement
-      ? messagesElement.scrollHeight - messagesElement.scrollTop - messagesElement.clientHeight < 180
-      : true;
+  if (initialRoomScrollDoneRef.current === activeRoom.roomId) {
+    return undefined;
+  }
 
-    if (!isNearBottom && renderedMessages.length > 2) return undefined;
+  const timeoutId = window.setTimeout(() => {
+    scrollMessagesToBottom('auto');
+    initialRoomScrollDoneRef.current = activeRoom.roomId;
+  }, 60);
 
-    const timeoutId = window.setTimeout(() => {
-      scrollMessagesToBottom(renderedMessages.length <= 2 ? 'auto' : 'smooth');
-    }, 60);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [activeRoom?.roomId, renderedMessages.length, scrollMessagesToBottom, olderMessagesLoading]);
+  return () => {
+    window.clearTimeout(timeoutId);
+  };
+}, [activeRoom?.roomId, scrollMessagesToBottom, olderMessagesLoading]);
 
   useEffect(() => {
     if (!activeRoom) return undefined;
 
     const handleViewportResize = () => {
-      scrollMessagesToBottom();
+      
     };
 
     window.visualViewport?.addEventListener('resize', handleViewportResize);
@@ -1369,10 +1438,10 @@ async function toggleActiveInfoSection(section) {
 
             return alreadyExists
               ? prev
-              : [
-                  ...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)),
+              : trimRoomMessagesForMemory([
+                  ...prev,
                   normalizeRoomMessageMedia({ ...msg, pending: false, failed: false }),
-                ];
+                ]);
           }
 
           const copy = [...prev];
@@ -1392,7 +1461,7 @@ async function toggleActiveInfoSection(section) {
             failed: false,
           });
 
-          return copy;
+          return trimRoomMessagesForMemory(copy);
         });
 
         return;
@@ -1427,7 +1496,7 @@ async function toggleActiveInfoSection(section) {
           return prev;
         }
 
-        return [...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)), normalizeRoomMessageMedia(msg)];
+        return trimRoomMessagesForMemory([...prev, normalizeRoomMessageMedia(msg)]);
       });
     });
 
@@ -2299,6 +2368,7 @@ async function openRoom(room) {
 
     setActiveRoom(room);
     activeRoomRef.current = room;
+    initialRoomScrollDoneRef.current = '';
     setMessages((prev) => (prev.length ? [] : prev));
     setMobileChatOpen(true);
     setMessagesLoading(true);
@@ -2934,10 +3004,7 @@ async function sendMessage(e) {
         pending: true,
       });
 
-      setMessages((prev) => [
-        ...prev,
-        tempMessage,
-      ]);
+     setMessages((prev) => trimRoomMessagesForMemory([...prev, tempMessage]));
 
       sendRoomMessage({
         action: 'sendRoomMessage',
@@ -3003,10 +3070,7 @@ async function sendMessage(e) {
         mediaName: uploadedMedia?.fileName || file?.name || '',
       });
 
-      setMessages((prev) => [
-        ...prev,
-        tempMessage,
-      ]);
+      setMessages((prev) => trimRoomMessagesForMemory([...prev, tempMessage]));
 
       sendRoomMessage({
         action: 'sendRoomMessage',
@@ -3493,60 +3557,126 @@ return (
                     )}
 
                     {msg.mediaType === 'image' && (msg.mediaUrl || msg.fileUrl) && (
-                      <button
-                        type="button"
-                        className="room-message-media-tap"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          openMediaViewer(msg);
-                        }}
-                        aria-label="Open image"
-                      >
-                        <img
-                          src={msg.mediaUrl || msg.fileUrl}
-                          alt={msg.fileName || 'Shared image'}
-                          className="room-message-image"
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      </button>
+                      <div className="room-message-media-wrap">
+                        <button
+                          type="button"
+                          className="room-message-media-tap"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            openMediaViewer(msg);
+                          }}
+                          aria-label="Open image"
+                        >
+                          <img
+                            src={msg.mediaUrl || msg.fileUrl}
+                            alt={msg.fileName || 'Shared image'}
+                            className="room-message-image"
+                            loading="lazy"
+                            decoding="async"
+                            referrerPolicy="no-referrer"
+                            onError={(event) => {
+                              event.currentTarget.closest('.room-message-media-wrap')?.classList.add('media-load-failed');
+                            }}
+                          />
+                          <span className="room-media-preview-label">Open image</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="room-message-download-btn"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            downloadRoomMedia(msg);
+                          }}
+                          aria-label="Download image"
+                          title="Download"
+                        >
+                          ↓
+                        </button>
+                      </div>
                     )}
 
                     {msg.mediaType === 'video' && (msg.mediaUrl || msg.fileUrl) && (
-                      <button
-                        type="button"
-                        className="room-message-media-tap"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          openMediaViewer(msg);
-                        }}
-                        aria-label="Play video"
-                      >
-                        <video
-                          className="room-message-video"
-                          src={msg.mediaUrl || msg.fileUrl}
-                          muted
-                          preload="metadata"
-                          playsInline
-                        />
-                        <span className="room-video-play-badge">▶</span>
-                      </button>
+                      <div className="room-message-media-wrap video-preview-wrap">
+                        <button
+                          type="button"
+                          className="room-message-media-tap"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            openMediaViewer(msg);
+                          }}
+                          aria-label="Play video"
+                        >
+                          <video
+                            className="room-message-video"
+                            src={msg.mediaUrl || msg.fileUrl}
+                            muted
+                            preload="metadata"
+                            playsInline
+                            controls={false}
+                            disablePictureInPicture
+                            onLoadedMetadata={(event) => {
+                              try {
+                                event.currentTarget.currentTime = Math.min(0.1, event.currentTarget.duration || 0);
+                              } catch {
+                                // Ignore preview seek failures.
+                              }
+                            }}
+                            onError={(event) => {
+                              event.currentTarget.closest('.room-message-media-wrap')?.classList.add('media-load-failed');
+                            }}
+                          />
+                          <span className="room-video-play-badge">▶</span>
+                          <span className="room-media-preview-label">Play video</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="room-message-download-btn"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            downloadRoomMedia(msg);
+                          }}
+                          aria-label="Download video"
+                          title="Download"
+                        >
+                          ↓
+                        </button>
+                      </div>
                     )}
 
                     {msg.mediaType === 'file' && (msg.mediaUrl || msg.fileUrl) && (
-                      <button
-                        type="button"
-                        className="room-message-file"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          openMediaViewer(msg);
-                        }}
-                      >
-                        📎 {getShortRoomFileName(msg.fileName || msg.mediaName || 'Attachment')}
-                      </button>
+                      <div className="room-message-file-wrap">
+                        <button
+                          type="button"
+                          className="room-message-file"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            openMediaViewer(msg);
+                          }}
+                        >
+                          📎 {getShortRoomFileName(msg.fileName || msg.mediaName || 'Attachment')}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="room-message-download-btn file-download-btn"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            downloadRoomMedia(msg);
+                          }}
+                          aria-label="Download file"
+                          title="Download"
+                        >
+                          ↓
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -3594,12 +3724,15 @@ return (
 )}
 
             <input
-              placeholder="Type message..."
-              disabled={!activeRoom}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onFocus={scrollMessagesToBottom}
-            />
+  placeholder="Type message..."
+  disabled={!activeRoom}
+  value={text}
+  inputMode="text"
+  autoComplete="off"
+  autoCorrect="on"
+  spellCheck="true"
+  onChange={(e) => setText(e.target.value)}
+/>
 
             <label className="room-media-picker-btn">
               ＋
