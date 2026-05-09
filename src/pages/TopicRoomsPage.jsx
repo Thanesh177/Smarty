@@ -390,15 +390,22 @@ export default function TopicRoomsPage() {
     return imageUrl;
   }, [failedRoomImages, roomImageCache]);
 
-const sortedVisibleRooms = useMemo(() => {
-  return rooms
-    .filter((room) =>
-      roomPrivacyFilter === 'private'
-        ? room.privacy === 'private'
-        : room.privacy !== 'private'
-    )
-    .slice(0, MAX_RENDERED_ROOMS);
-}, [rooms, roomPrivacyFilter]);
+  const sortedVisibleRooms = useMemo(() => {
+    const normalizedSearch = roomSearch.trim().toLowerCase();
+
+    return rooms
+      .filter((room) =>
+        roomPrivacyFilter === 'private'
+          ? room.privacy === 'private'
+          : room.privacy !== 'private'
+      )
+      .filter((room) => {
+        if (!normalizedSearch) return true;
+
+        return String(room.name || '').toLowerCase().includes(normalizedSearch);
+      })
+      .slice(0, MAX_RENDERED_ROOMS);
+  }, [rooms, roomPrivacyFilter, roomSearch]);
   const renderedMessages = useMemo(() => {
     if (!Array.isArray(messages) || messages.length === 0) return [];
 
@@ -578,12 +585,6 @@ function handleRoomMediaChange(event) {
   removeSelectedMedia();
 
   if (!file) return;
-
-  console.log('Selected room media:', {
-    name: file.name,
-    type: file.type,
-    size: file.size,
-  });
 
   const fileType = String(file.type || '').toLowerCase();
   const lowerName = String(file.name || '').toLowerCase();
@@ -972,7 +973,7 @@ useEffect(() => {
       if (pendingRoomsReloadRef.current) {
         pendingRoomsReloadRef.current = false;
         window.setTimeout(() => {
-          if (mountedRef.current) loadRooms(searchValue, { force: true });
+          if (mountedRef.current) loadRooms(roomSearch, { force: true });
         }, 100);
       }
     }
@@ -1230,6 +1231,7 @@ useEffect(() => {
       setNewRoomPrivacy('public');
       setShowCreateModal(false);
 
+      roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
       await loadRooms(roomSearch, { force: true });
 
       // Creator is already added as owner/member by backend, so do not call joinRoom here.
@@ -1360,7 +1362,7 @@ async function openRoomInvites() {
 }
 
 async function acceptRoomInvite(invite) {
-  const roomId = invite?.roomId;
+  const roomId = invite?.roomId || invite?.id || invite?.room?.roomId || invite?.room?.id || invite?.topicRoomId;
   if (!roomId || processingInviteId) return;
 
   try {
@@ -1376,6 +1378,7 @@ async function acceptRoomInvite(invite) {
     membersCacheRef.current = {};
     joinRequestsCacheRef.current = {};
     await loadRooms(roomSearch, { force: true });
+    setShowRoomInvites(false);
   } catch (err) {
     console.error(err);
     if (mountedRef.current) setStatus(err?.response?.data?.error || 'Could not accept invite');
@@ -1386,8 +1389,14 @@ async function acceptRoomInvite(invite) {
 
 
 async function rejectRoomInvite(invite) {
-  const roomId = invite?.roomId;
-  if (!roomId || processingInviteId) return;
+const roomId =
+  invite?.roomId ||
+  invite?.topicRoomId ||
+  invite?.groupId ||
+  invite?.room?.roomId ||
+  invite?.room?.id ||
+  invite?.id ||
+  '';  if (!roomId || processingInviteId) return;
 
   try {
     setProcessingInviteId(roomId);
@@ -1399,6 +1408,9 @@ async function rejectRoomInvite(invite) {
     setRoomInvites((prev) => prev.filter((item) => (item.roomId || item.id) !== roomId));
 
     setStatus('Room invite rejected');
+    if (roomInvites.length <= 1) {
+      setShowRoomInvites(false);
+    }
   } catch (err) {
     console.error(err);
     if (mountedRef.current) setStatus(err?.response?.data?.error || 'Could not reject invite');
@@ -1432,14 +1444,14 @@ async function generatePrivateRoomInviteLink(room = activeRoom) {
       maxUses: 100,
     });
 
-    const inviteUrl = data.inviteUrl;
-    const inviteCode = data.inviteCode;
+    const inviteCode = data.inviteCode || data.code || '';
+    const inviteUrl = data.inviteUrl || data.url || (inviteCode ? `${APP_ORIGIN}/rooms/invite/${inviteCode}` : '');
 
     if (!inviteUrl) {
-      throw new Error('Invite link was created, but no invite code was returned');
+      throw new Error('Invite link was created, but no invite URL was returned');
     }
 
-    setGeneratedInviteCode(inviteCode || String(inviteUrl).split('/').pop() || '');
+    setGeneratedInviteCode(inviteCode || String(inviteUrl).split('/').filter(Boolean).pop() || '');
     setGeneratedInviteLink(inviteUrl);
     setInviteLinkCopied(false);
     setInviteLinkModalOpen(true);
@@ -1481,7 +1493,7 @@ async function copyGeneratedInviteLink() {
 }
 
 async function disableGeneratedInviteLink() {
-  const inviteCode = generatedInviteCode || String(generatedInviteLink || '').split('/').pop() || '';
+  const inviteCode = generatedInviteCode || String(generatedInviteLink || '').split('/').filter(Boolean).pop() || '';
 
   if (!inviteCode || inviteLinkDisabling) return;
 
@@ -1926,6 +1938,11 @@ function removeNewRoomImage() {
       setStatus('');
       setOpenRoomActionMenuId('');
       setShowActiveRoomMenu(false);
+      setShowActiveRoomInfo(false);
+      setActiveInfoSection('');
+      setShowRoomMediaGrid(false);
+      setMediaViewer(null);
+      setMediaViewerReturnToGrid(false);
 
       setActiveRoom(room);
       activeRoomRef.current = room;
@@ -2331,6 +2348,11 @@ async function inviteUser(userToInvite) {
       activeRoomRef.current = null;
       setMessages([]);
       setMobileChatOpen(false);
+      setShowActiveRoomInfo(false);
+      setActiveInfoSection('');
+      setShowRoomMediaGrid(false);
+      setMediaViewer(null);
+      setMediaViewerReturnToGrid(false);
     }
 
     setRooms((prev) => prev.filter((item) => item.roomId !== room.roomId));
@@ -2367,10 +2389,16 @@ async function inviteUser(userToInvite) {
         return copy;
       });
 
-      if (activeRoom?.roomId === room.roomId) {
+      if (activeRoomRef.current?.roomId === room.roomId) {
         setActiveRoom(null);
         activeRoomRef.current = null;
         setMessages([]);
+        setMobileChatOpen(false);
+        setShowActiveRoomInfo(false);
+        setActiveInfoSection('');
+        setShowRoomMediaGrid(false);
+        setMediaViewer(null);
+        setMediaViewerReturnToGrid(false);
       }
 
       await loadRooms(roomSearch, { force: true });
@@ -2394,10 +2422,16 @@ async function inviteUser(userToInvite) {
         return copy;
       });
 
-      if (activeRoom?.roomId === room.roomId) {
+      if (activeRoomRef.current?.roomId === room.roomId) {
         setActiveRoom(null);
         activeRoomRef.current = null;
         setMessages([]);
+        setMobileChatOpen(false);
+        setShowActiveRoomInfo(false);
+        setActiveInfoSection('');
+        setShowRoomMediaGrid(false);
+        setMediaViewer(null);
+        setMediaViewerReturnToGrid(false);
       }
 
       await loadRooms(roomSearch, { force: true });
@@ -3600,8 +3634,14 @@ accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zi
               <p className="member-empty">No pending room invites.</p>
             ) : (
               roomInvites.map((invite, index) => {
-                const inviteRoomId = invite.roomId || invite.id;
-
+const inviteRoomId =
+  invite?.roomId ||
+  invite?.topicRoomId ||
+  invite?.groupId ||
+  invite?.room?.roomId ||
+  invite?.room?.id ||
+  invite?.id ||
+  '';
                 return (
                   <div key={inviteRoomId || `invite-${index}`} className="member-row room-invite-row">
                     <div>

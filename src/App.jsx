@@ -168,7 +168,9 @@ function Layout() {
     location.pathname === '/register' ||
     location.pathname === '/confirm';
 
-  const isInviteJoinPage = location.pathname.startsWith('/rooms/join/');
+  const isInviteJoinPage =
+    location.pathname.startsWith('/rooms/invite/') ||
+    location.pathname.startsWith('/rooms/join/');
 
   const goBack = useCallback(() => {
     window.history.back();
@@ -754,6 +756,7 @@ function Layout() {
                   }
                 />
 
+                <Route path="/rooms/invite/:inviteCode" element={<JoinRoomPage />} />
                 <Route path="/rooms/join/:inviteCode" element={<JoinRoomPage />} />
 
                 <Route

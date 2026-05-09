@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +8,7 @@ export default function JoinRoomPage() {
   const { inviteCode } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const autoJoinAttemptedRef = useRef('');
 
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -35,8 +36,8 @@ export default function JoinRoomPage() {
     if (inviteCode) loadInvite();
   }, [inviteCode]);
 
-  async function joinRoom() {
-    const joinPath = `/rooms/join/${inviteCode}`;
+  const joinRoom = useCallback(async () => {
+    const joinPath = `/rooms/invite/${inviteCode}`;
 
     if (!user) {
       sessionStorage.setItem('smarty-post-login-redirect', joinPath);
@@ -74,7 +75,18 @@ export default function JoinRoomPage() {
     } finally {
       setJoining(false);
     }
-  }
+  }, [inviteCode, navigate, user]);
+
+
+  useEffect(() => {
+    if (!inviteCode || !user || !invite || loadError || loading) return;
+    if (invite.requiresApproval !== false) return;
+    if (autoJoinAttemptedRef.current === inviteCode) return;
+
+    autoJoinAttemptedRef.current = inviteCode;
+    setStatus('Instant join enabled. Joining room...');
+    joinRoom();
+  }, [invite, inviteCode, joinRoom, loadError, loading, user]);
 
   const roomName = invite?.roomName || 'Private Room';
   const description =

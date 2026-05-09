@@ -502,9 +502,11 @@ export const roomApi = {
     return {
       ...parsed,
       inviteCode,
-      inviteUrl: inviteCode
-        ? `${APP_ORIGIN}/rooms/join/${encodeURIComponent(inviteCode)}`
-        : parsed?.inviteUrl || parsed?.link || parsed?.url || '',
+      inviteUrl:
+        parsed?.inviteUrl ||
+        parsed?.link ||
+        parsed?.url ||
+        (inviteCode ? `${APP_ORIGIN}/rooms/invite/${encodeURIComponent(inviteCode)}` : ''),
     };
   },
 
@@ -526,7 +528,10 @@ export const roomApi = {
         description: invite.description || invite.roomDescription || invite.about || '',
         roomImageUrl: invite.roomImageUrl || invite.imageUrl || invite.coverImageUrl || '',
         memberCount: Number(invite.memberCount || invite.membersCount || 0),
-        requiresApproval: invite.requiresApproval !== false,
+        requiresApproval:
+          invite.requiresApproval === false || invite.autoAccept === true
+            ? false
+            : true,
       },
     };
   },

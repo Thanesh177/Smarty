@@ -42,7 +42,7 @@ export default function PostAiPage() {
   const mountedRef = useRef(true);
   const { user } = useAuth();
 
-  const postFromState = location.state?.post || null;
+  const postFromState = useMemo(() => location.state?.post || null, [location.state]);
   const creatorName = location.state?.creatorName || 'Smarty creator';
 
   const [post, setPost] = useState(postFromState);
@@ -175,7 +175,7 @@ export default function PostAiPage() {
     }
 
     loadExplanation();
-  }, [body, postId, readableError, title]);
+  }, [postId, readableError]);
 
   const askDoubt = useCallback(async (event) => {
     event.preventDefault();
@@ -202,7 +202,7 @@ export default function PostAiPage() {
         userId,
         title,
         body,
-        explanation: getUsableDetailedExplanation(post) || displayExplanation,
+        explanation: displayExplanation || getUsableDetailedExplanation(post),
         question: cleanQuestion,
       });
 
@@ -286,7 +286,7 @@ export default function PostAiPage() {
               <p>AI is explaining this post in detail...</p>
             </div>
           ) : (
-            <p>{String(displayExplanation || 'No explanation available yet.')}</p>
+            <p>{String(displayExplanation || status || 'No explanation available yet.')}</p>
           )}
 
           {status && <div className="post-ai-status">{status}</div>}
