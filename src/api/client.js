@@ -380,6 +380,91 @@ export const roomApi = {
     };
   },
 
+  getRoomMediaUploadUrl: async (roomId, file) => {
+    const cleanRoomId = String(roomId || '').trim();
+
+    if (!cleanRoomId) {
+      throw new Error('Room ID is required to upload media.');
+    }
+
+    if (!file) {
+      throw new Error('Please choose an image or video to upload.');
+    }
+
+    const contentType = String(file.type || '').trim().toLowerCase() || 'application/octet-stream';
+    const fileName = String(file.name || 'room-media').trim();
+    const fileSize = Number(file.size || 0);
+    const isImage = contentType.startsWith('image/');
+    const isVideo = contentType.startsWith('video/');
+
+    const allowedTypes = new Set([
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'video/mp4',
+      'video/webm',
+      'video/quicktime',
+    ]);
+
+    if (!allowedTypes.has(contentType) || (!isImage && !isVideo)) {
+      throw new Error('Only JPG, PNG, WEBP, GIF, MP4, WEBM, and MOV files are allowed.');
+    }
+
+    if (!fileSize) {
+      throw new Error('Selected file is empty or unreadable.');
+    }
+
+    const maxBytes = isVideo ? 50 * 1024 * 1024 : 8 * 1024 * 1024;
+
+    if (fileSize > maxBytes) {
+      throw new Error(isVideo ? 'Video must be 50 MB or smaller.' : 'Image must be 8 MB or smaller.');
+    }
+
+    const { data } = await api.post(`/rooms/${encodePathSegment(cleanRoomId)}/media-upload-url`, {
+      roomId: cleanRoomId,
+      fileName,
+      fileSize,
+      contentType,
+    });
+
+    const parsed = parseApiBody(data);
+
+    return {
+      ...parsed,
+      uploadUrl: parsed?.uploadUrl || '',
+      mediaKey: parsed?.mediaKey || parsed?.key || '',
+      mediaUrl: parsed?.mediaUrl || parsed?.fileUrl || parsed?.url || '',
+      fileUrl: parsed?.fileUrl || parsed?.mediaUrl || parsed?.url || '',
+      mediaType: parsed?.mediaType || (isVideo ? 'video' : 'image'),
+      contentType: parsed?.contentType || contentType,
+      fileName: parsed?.fileName || fileName,
+    };
+  },
+
+  uploadRoomMediaFile: async (roomId, file, onProgress) => {
+    const uploadData = await roomApi.getRoomMediaUploadUrl(roomId, file);
+
+    if (!uploadData.uploadUrl) {
+      throw new Error('Upload URL was not returned.');
+    }
+
+    await axios.put(uploadData.uploadUrl, file, {
+      headers: {
+        'Content-Type': uploadData.contentType || file.type || 'application/octet-stream',
+      },
+      withCredentials: false,
+      transformRequest: [(body) => body],
+      onUploadProgress: (event) => {
+        if (typeof onProgress === 'function' && event.total) {
+          onProgress(Math.round((event.loaded * 100) / event.total));
+        }
+      },
+    });
+
+    return uploadData;
+  },
+
   getRoomInvites: async () => {
     const { data } = await api.get('/rooms/invites');
     return {
@@ -511,7 +596,36 @@ export const roomApi = {
       `/rooms/${encodePathSegment(roomId)}/messages`,
       { params }
     );
-    return data;
+
+    const parsed = parseApiBody(data);
+    const messages = normalizeList(parsed);
+    const normalizeRoomMessage = (message = {}) => ({
+      ...message,
+      mediaKey: message.mediaKey || message.key || '',
+      mediaUrl: message.mediaUrl || message.fileUrl || message.url || '',
+      fileUrl: message.fileUrl || message.mediaUrl || message.url || '',
+      mediaType: message.mediaType || '',
+      contentType: message.contentType || '',
+      fileName: message.fileName || message.mediaName || '',
+      mediaName: message.mediaName || message.fileName || '',
+    });
+
+    if (Array.isArray(parsed)) {
+      return parsed.map(normalizeRoomMessage);
+    }
+
+    if (messages.length) {
+      return messages.map(normalizeRoomMessage);
+    }
+
+    if (Array.isArray(parsed?.messages)) {
+      return {
+        ...parsed,
+        messages: parsed.messages.map(normalizeRoomMessage),
+      };
+    }
+
+    return parsed;
   },
 
   async getRoomMembers(roomId) {
@@ -1476,9 +1590,12 @@ async reportUser(payload) {
     return normalizeList(data).map((message) => ({
       ...message,
       mediaKey: message.mediaKey || message.key || '',
-      mediaUrl: message.mediaUrl || message.fileUrl || '',
-      mediaName: message.mediaName || '',
+      mediaUrl: message.mediaUrl || message.fileUrl || message.url || '',
+      fileUrl: message.fileUrl || message.mediaUrl || message.url || '',
+      mediaName: message.mediaName || message.fileName || '',
+      fileName: message.fileName || message.mediaName || '',
       mediaType: message.mediaType || '',
+      contentType: message.contentType || '',
       reactions: message.reactions || {},
     }));
   },
@@ -1511,6 +1628,7 @@ async reportUser(payload) {
     const { data } = await api.post('/media/upload-url', {
       fileName,
       fileType,
+      contentType: fileType,
     });
 
     const parsed = parseApiBody(data);

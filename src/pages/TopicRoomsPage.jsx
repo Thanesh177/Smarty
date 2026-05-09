@@ -7,17 +7,25 @@ import './TopicRoomsPage.css';
 
 const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
 const API_ORIGIN = 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com';
-const APP_ORIGIN = 'https://main.d3qiuefonbp8n9.amplifyapp.com';
+const APP_ORIGIN = import.meta.env.PROD
+  ? 'https://main.d3qiuefonbp8n9.amplifyapp.com'
+  : window.location.origin;
 const ROOM_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const ROOM_IMAGE_PICKER_MAX_BYTES = 8 * 1024 * 1024;
+const ROOM_MEDIA_MAX_BYTES = 80 * 1024 * 1024;
 const ROOM_LIST_CACHE_MS = 25_000;
 const ROOM_MEMBERS_CACHE_MS = 30_000;
 const USER_SEARCH_DEBOUNCE_MS = 350;
 const ROOM_INVITES_REFRESH_MS = 45_000;
-const MAX_RENDERED_MESSAGES = 40;
-const MAX_RENDERED_ROOMS = 60;
-const ROOM_IMAGE_EAGER_LIMIT = 8;
-const ROOM_IMAGE_RENDER_LIMIT = 24;
+const MAX_RENDERED_MESSAGES = 35;
+const MAX_RENDERED_MEDIA_MESSAGES = 80;
+const MAX_RENDERED_ROOMS = 50;
+const ROOM_IMAGE_EAGER_LIMIT = 4;
+const ROOM_IMAGE_RENDER_LIMIT = 16;
+const ROOM_MEDIA_IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
+const ROOM_MEDIA_VIDEO_EXTENSIONS = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
+const ROOM_MEDIA_DOCUMENT_EXTENSIONS = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|csv|txt|rtf|zip|rar)(\?|#|$)/i;
+const ROOM_MEDIA_ALLOWED_TYPES = /^(image\/|video\/|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument|application\/vnd\.ms-|text\/plain|text\/csv|application\/zip|application\/x-zip-compressed|application\/x-rar-compressed)/i;
 
 function getStoredRoomImages() {
   try {
@@ -160,6 +168,50 @@ function validatePreparedRoomImagePayload(payload) {
   return payload;
 }
 
+// Normalize message media fields for room messages
+function normalizeRoomMessageMedia(message = {}) {
+  const mediaUrl = message.mediaUrl || message.fileUrl || message.url || '';
+  const contentType = message.contentType || '';
+  const fileName = message.fileName || message.mediaName || '';
+  const lowerUrl = String(mediaUrl || fileName || '').toLowerCase();
+
+  let mediaType = message.mediaType || '';
+
+  if (!mediaType && mediaUrl) {
+    if (String(contentType).startsWith('image/') || ROOM_MEDIA_IMAGE_EXTENSIONS.test(lowerUrl)) {
+      mediaType = 'image';
+    } else if (String(contentType).startsWith('video/') || ROOM_MEDIA_VIDEO_EXTENSIONS.test(lowerUrl)) {
+      mediaType = 'video';
+    } else if (ROOM_MEDIA_DOCUMENT_EXTENSIONS.test(lowerUrl) || ROOM_MEDIA_ALLOWED_TYPES.test(String(contentType))) {
+      mediaType = 'file';
+    }
+  }
+
+  if (mediaType !== 'image' && mediaType !== 'video' && mediaType !== 'file') {
+    mediaType = '';
+  }
+
+  return {
+    ...message,
+    mediaKey: message.mediaKey || message.key || '',
+    mediaUrl,
+    fileUrl: message.fileUrl || mediaUrl,
+    mediaType,
+    contentType,
+    fileName,
+    mediaName: message.mediaName || fileName,
+  };
+}
+
+function getShortRoomFileName(name = '') {
+  const cleanName = String(name || 'Attachment').trim() || 'Attachment';
+  if (cleanName.length <= 34) return cleanName;
+
+  const extension = cleanName.includes('.') ? `.${cleanName.split('.').pop()}` : '';
+  const baseName = extension ? cleanName.slice(0, -extension.length) : cleanName;
+  return `${baseName.slice(0, 24)}…${extension}`;
+}
+
 export default function TopicRoomsPage() {
   const { user } = useAuth();
   const userId = user?.id || user?.userId || user?.sub;
@@ -180,6 +232,7 @@ export default function TopicRoomsPage() {
   const joinRequestsCacheRef = useRef({});
   const userSearchCacheRef = useRef({});
   const userSearchTimerRef = useRef(null);
+  const inviteCopiedTimerRef = useRef(null);
   const roomInvitesLoadingRef = useRef(false);
   const sendingMessageRef = useRef(false);
   const [hiddenRooms, setHiddenRooms] = useState([]);
@@ -201,6 +254,16 @@ export default function TopicRoomsPage() {
   const [activeRoom, setActiveRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
+  const [selectedMediaFile, setSelectedMediaFile] = useState(null);
+  const [selectedMediaPreview, setSelectedMediaPreview] = useState('');
+  const [selectedMediaType, setSelectedMediaType] = useState('');
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
+  const [mediaViewer, setMediaViewer] = useState(null);
+  const [mediaViewerReturnToGrid, setMediaViewerReturnToGrid] = useState(false);
+  const [showRoomMediaGrid, setShowRoomMediaGrid] = useState(false);
+  const mediaViewerTouchStartRef = useRef(null);
+  const mediaViewerVideoRef = useRef(null);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteSearch, setInviteSearch] = useState('');
   const [inviteResults, setInviteResults] = useState([]);
@@ -220,6 +283,7 @@ export default function TopicRoomsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showRoomMenu, setShowRoomMenu] = useState(false);
   const [showActiveRoomMenu, setShowActiveRoomMenu] = useState(false);
+  const [showActiveRoomInfo, setShowActiveRoomInfo] = useState(false);
   const [openRoomActionMenuId, setOpenRoomActionMenuId] = useState('');
   const roomMenuRef = useRef(null);
   const roomActionMenuRef = useRef(null);
@@ -237,25 +301,25 @@ export default function TopicRoomsPage() {
   // Prevent duplicate room creation submissions
   const [creatingRoom, setCreatingRoom] = useState(false);
 
-const getRoomImageUrl = useCallback((room) => {
-  if (!room?.roomId) return '';
+  const getRoomImageUrl = useCallback((room) => {
+    if (!room?.roomId) return '';
 
-  const imageUrl = normalizeRoomImageUrl(
-    room.imageUrl ||
-      room.roomImageUrl ||
-      room.coverImageUrl ||
-      room.avatarUrl ||
-      room.coverUrl ||
-      roomImageCache[room.roomId] ||
-      ''
-  );
+    const imageUrl = normalizeRoomImageUrl(
+      room.imageUrl ||
+        room.roomImageUrl ||
+        room.coverImageUrl ||
+        room.avatarUrl ||
+        room.coverUrl ||
+        roomImageCache[room.roomId] ||
+        ''
+    );
 
-  if (!imageUrl) return '';
+    if (!imageUrl) return '';
 
-  if (failedRoomImages[room.roomId] === imageUrl) return '';
+    if (failedRoomImages[room.roomId] === imageUrl) return '';
 
-  return imageUrl;
-}, [failedRoomImages, roomImageCache]);
+    return imageUrl;
+  }, [failedRoomImages, roomImageCache]);
 
   const sortedVisibleRooms = useMemo(() => rooms.slice(0, MAX_RENDERED_ROOMS), [rooms]);
 
@@ -279,8 +343,45 @@ const getRoomImageUrl = useCallback((room) => {
 
     return unique.length > MAX_RENDERED_MESSAGES ? unique.slice(-MAX_RENDERED_MESSAGES) : unique;
   }, [messages]);
-
+  
   const activeRoomImageUrl = useMemo(() => getRoomImageUrl(activeRoom), [activeRoom, getRoomImageUrl]);
+  const renderedMediaMessages = useMemo(() => {
+    const seen = new Set();
+    const mediaItems = [];
+
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const normalized = normalizeRoomMessageMedia(messages[index]);
+      const mediaUrl = normalized.mediaUrl || normalized.fileUrl || '';
+
+      if (
+        !mediaUrl ||
+        (normalized.mediaType !== 'image' && normalized.mediaType !== 'video' && normalized.mediaType !== 'file')
+      ) {
+        continue;
+      }
+
+      const key = normalized.messageId || normalized.clientId || mediaUrl;
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      mediaItems.unshift(normalized);
+
+      if (mediaItems.length >= MAX_RENDERED_MEDIA_MESSAGES) break;
+    }
+
+    return mediaItems;
+  }, [messages]);
+
+  
+  const viewableMediaMessages = useMemo(
+    () =>
+      renderedMediaMessages.filter(
+        (item) => item.mediaType === 'image' || item.mediaType === 'video'
+      ),
+    [renderedMediaMessages]
+  );
+
+  const mediaViewerCount = viewableMediaMessages.length;
   const activeRoomCanEdit = useMemo(
     () =>
       activeRoom?.type === 'custom' &&
@@ -379,6 +480,305 @@ useEffect(() => {
     }
   };
 }, []);
+
+useEffect(() => {
+  return () => {
+    if (inviteCopiedTimerRef.current) {
+      window.clearTimeout(inviteCopiedTimerRef.current);
+      inviteCopiedTimerRef.current = null;
+    }
+  };
+}, []);
+
+useEffect(() => {
+  return () => {
+    if (selectedMediaPreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(selectedMediaPreview);
+    }
+  };
+}, [selectedMediaPreview]);
+function removeSelectedMedia() {
+  if (selectedMediaPreview?.startsWith('blob:')) {
+    URL.revokeObjectURL(selectedMediaPreview);
+  }
+
+  setSelectedMediaFile(null);
+  setSelectedMediaPreview('');
+  setSelectedMediaType('');
+  setMediaUploadProgress(0);
+}
+
+function handleRoomMediaChange(event) {
+  const file = event.target.files?.[0] || null;
+  event.target.value = '';
+
+  removeSelectedMedia();
+
+  if (!file) return;
+
+  console.log('Selected room media:', {
+    name: file.name,
+    type: file.type,
+    size: file.size,
+  });
+
+  const fileType = String(file.type || '').toLowerCase();
+  const lowerName = String(file.name || '').toLowerCase();
+  const isImage = fileType.startsWith('image/') || ROOM_MEDIA_IMAGE_EXTENSIONS.test(lowerName);
+  const isVideo = fileType.startsWith('video/') || ROOM_MEDIA_VIDEO_EXTENSIONS.test(lowerName);
+  const isFile =
+    !isImage &&
+    !isVideo &&
+    (ROOM_MEDIA_ALLOWED_TYPES.test(fileType) || ROOM_MEDIA_DOCUMENT_EXTENSIONS.test(lowerName));
+
+  if (!isImage && !isVideo && !isFile) {
+    setStatus('Only images, videos, PDFs, documents, spreadsheets, text files, and zip files are allowed.');
+    return;
+  }
+
+  if (file.size > ROOM_MEDIA_MAX_BYTES) {
+    setStatus('Media must be smaller than 80 MB.');
+    return;
+  }
+
+  setStatus('');
+  setSelectedMediaFile(file);
+  setSelectedMediaType(isVideo ? 'video' : isImage ? 'image' : 'file');
+  setSelectedMediaPreview(URL.createObjectURL(file));
+}
+
+function openMediaViewer(message, options = {}) {
+  const normalizedMessage = normalizeRoomMessageMedia(message);
+  const mediaUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl || '';
+
+  if (!mediaUrl) return;
+
+  if (normalizedMessage.mediaType === 'file') {
+    const openedWindow = window.open(mediaUrl, '_blank', 'noopener,noreferrer');
+
+    if (!openedWindow) {
+      setStatus('Pop-up blocked. Please allow pop-ups to open this file.');
+    }
+
+    return;
+  }
+
+  if (normalizedMessage.mediaType !== 'image' && normalizedMessage.mediaType !== 'video') return;
+
+  const mediaIndex = viewableMediaMessages.findIndex((item) => {
+    const itemUrl = item.mediaUrl || item.fileUrl || '';
+
+    return (
+      item.messageId === normalizedMessage.messageId ||
+      item.clientId === normalizedMessage.clientId ||
+      itemUrl === mediaUrl
+    );
+  });
+
+  setMediaViewerReturnToGrid(Boolean(options.fromGrid));
+  setMediaViewer({
+    index: mediaIndex >= 0 ? mediaIndex : 0,
+    openedAt: Date.now(),
+  });
+}
+
+
+function closeMediaViewer() {
+  setMediaViewer(null);
+  setMediaViewerReturnToGrid(false);
+}
+
+function backToRoomMediaGrid() {
+  setMediaViewer(null);
+  setMediaViewerReturnToGrid(false);
+  setShowRoomMediaGrid(true);
+}
+
+function openRoomMediaGrid(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  event?.nativeEvent?.stopImmediatePropagation?.();
+
+  setShowActiveRoomMenu(false);
+  setShowRoomMenu(false);
+  setOpenRoomActionMenuId('');
+  setMediaViewer(null);
+  setMediaViewerReturnToGrid(false);
+  setShowRoomMediaGrid(true);
+}
+
+function closeRoomMediaGrid() {
+  setShowRoomMediaGrid(false);
+  setMediaViewerReturnToGrid(false);
+}
+
+function openActiveRoomInfo(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+
+  if (!activeRoom) return;
+
+  setShowActiveRoomMenu(false);
+  setOpenRoomActionMenuId('');
+  setShowRoomMenu(false);
+  setShowActiveRoomInfo(true);
+}
+
+function closeActiveRoomInfo() {
+  setShowActiveRoomInfo(false);
+}
+
+function openMediaFromGrid(message) {
+  const normalizedMessage = normalizeRoomMessageMedia(message);
+
+  if (normalizedMessage.mediaType === 'file') {
+    const fileUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl;
+
+    if (fileUrl) {
+      const openedWindow = window.open(fileUrl, '_blank', 'noopener,noreferrer');
+
+      if (!openedWindow) {
+        setStatus('Pop-up blocked. Please allow pop-ups to open this file.');
+      }
+    }
+
+    return;
+  }
+
+  setShowRoomMediaGrid(false);
+  openMediaViewer(normalizedMessage, { fromGrid: true });
+}
+
+function openMediaGridFromMessage(message) {
+  const normalizedMessage = normalizeRoomMessageMedia(message);
+  const mediaUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl || '';
+
+  if (!mediaUrl) return;
+
+  if (normalizedMessage.mediaType === 'file') {
+    openMediaViewer(normalizedMessage);
+    return;
+  }
+
+  if (normalizedMessage.mediaType !== 'image' && normalizedMessage.mediaType !== 'video') return;
+
+  setMediaViewer(null);
+  setMediaViewerReturnToGrid(false);
+  setShowRoomMediaGrid(true);
+}
+
+const moveMediaViewer = useCallback((direction) => {
+  if (!viewableMediaMessages.length) return;
+
+  setMediaViewer((current) => {
+    if (!current) return current;
+
+    const currentIndex = Math.min(
+      Math.max(Number(current.index || 0), 0),
+      viewableMediaMessages.length - 1
+    );
+    const nextIndex =
+      (currentIndex + direction + viewableMediaMessages.length) % viewableMediaMessages.length;
+
+    return {
+      ...current,
+      index: nextIndex,
+      openedAt: Date.now(),
+    };
+  });
+}, [viewableMediaMessages.length]);
+
+function handleMediaViewerTouchStart(event) {
+  const touch = event.touches?.[0];
+  if (!touch) return;
+
+  mediaViewerTouchStartRef.current = {
+    x: touch.clientX,
+    y: touch.clientY,
+  };
+}
+
+function handleMediaViewerTouchEnd(event) {
+  const start = mediaViewerTouchStartRef.current;
+  const touch = event.changedTouches?.[0];
+  mediaViewerTouchStartRef.current = null;
+
+  if (!start || !touch) return;
+
+  const deltaX = touch.clientX - start.x;
+  const deltaY = touch.clientY - start.y;
+
+  if (Math.abs(deltaX) < 45 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+
+  moveMediaViewer(deltaX < 0 ? 1 : -1);
+}
+
+const activeMediaViewerItem = mediaViewer
+  ? viewableMediaMessages[
+      Math.min(
+        Math.max(Number(mediaViewer.index || 0), 0),
+        Math.max(viewableMediaMessages.length - 1, 0)
+      )
+    ] || null
+  : null;
+
+
+
+useEffect(() => {
+  if (!mediaViewer) return;
+
+  if (!mediaViewerCount) {
+    setMediaViewer(null);
+    return;
+  }
+
+  const safeIndex = Math.min(
+    Math.max(Number(mediaViewer.index || 0), 0),
+    mediaViewerCount - 1
+  );
+
+  if (safeIndex !== mediaViewer.index) {
+    setMediaViewer((current) => (current ? { ...current, index: safeIndex } : current));
+  }
+}, [mediaViewer, mediaViewerCount]);
+
+useEffect(() => {
+  if (!activeMediaViewerItem || activeMediaViewerItem.mediaType !== 'video') return;
+
+  const video = mediaViewerVideoRef.current;
+  if (!video) return;
+
+  video.currentTime = 0;
+  const playPromise = video.play?.();
+  playPromise?.catch?.(() => {});
+}, [activeMediaViewerItem?.messageId, activeMediaViewerItem?.clientId, activeMediaViewerItem?.mediaUrl, activeMediaViewerItem?.fileUrl, activeMediaViewerItem?.mediaType, mediaViewer?.openedAt]);
+
+useEffect(() => {
+  if (!mediaViewer) return undefined;
+
+  const handleViewerKeyDown = (event) => {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      moveMediaViewer(-1);
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      moveMediaViewer(1);
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMediaViewer();
+    }
+  };
+
+  window.addEventListener('keydown', handleViewerKeyDown);
+
+  return () => {
+    window.removeEventListener('keydown', handleViewerKeyDown);
+  };
+}, [mediaViewer, moveMediaViewer]);
 
   async function loadRooms(searchValue = roomSearch, options = {}) {
     const normalizedSearch = String(searchValue || '').trim().toLowerCase();
@@ -554,7 +954,7 @@ useEffect(() => {
     const unsubscribe = connectChatSocket(userId, (data) => {
       if (!mountedRef.current) return;
 
-      const msg = data?.message;
+      const msg = data?.message ? normalizeRoomMessageMedia(data.message) : null;
       const current = activeRoomRef.current;
 
       if (data.type === 'roomInvite' && data.invite) {
@@ -581,21 +981,43 @@ useEffect(() => {
 
         setMessages((prev) => {
           const index = prev.findIndex(
-            (m) => m.clientId === msg.clientId || m.messageId === msg.clientId
+            (m) =>
+              m.clientId === msg.clientId ||
+              m.messageId === msg.clientId ||
+              (msg.messageId && m.messageId === msg.messageId)
           );
 
           if (index === -1) {
-            const alreadyExists = prev.some((m) => m.messageId === msg.messageId);
-            return alreadyExists ? prev : [...prev.slice(-(MAX_RENDERED_MESSAGES - 1)), msg];
+            const alreadyExists = prev.some(
+              (m) =>
+                (msg.messageId && m.messageId === msg.messageId) ||
+                (msg.clientId && m.clientId === msg.clientId)
+            );
+            return alreadyExists
+              ? prev
+              : [
+                  ...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)),
+                  normalizeRoomMessageMedia({ ...msg, pending: false, failed: false }),
+                ];
           }
 
           const copy = [...prev];
-          copy[index] = {
-            ...copy[index],
+          const existingMessage = copy[index] || {};
+          const mergedMessage = {
+            ...existingMessage,
             ...msg,
+            mediaKey: msg.mediaKey || existingMessage.mediaKey || '',
+            mediaUrl: msg.mediaUrl || existingMessage.mediaUrl || existingMessage.fileUrl || '',
+            fileUrl: msg.fileUrl || msg.mediaUrl || existingMessage.fileUrl || existingMessage.mediaUrl || '',
+            mediaType: msg.mediaType || existingMessage.mediaType || '',
+            contentType: msg.contentType || existingMessage.contentType || '',
+            fileName: msg.fileName || existingMessage.fileName || existingMessage.mediaName || '',
+            mediaName: msg.mediaName || msg.fileName || existingMessage.mediaName || existingMessage.fileName || '',
             pending: false,
             failed: false,
           };
+
+          copy[index] = normalizeRoomMessageMedia(mergedMessage);
           return copy;
         });
 
@@ -617,12 +1039,20 @@ useEffect(() => {
 
       setMessages((prev) => {
         const key = msg.messageId || msg.clientId;
-if (!key) return prev;
+        if (!key) return prev;
 
-if (prev.some((m) => (m.messageId || m.clientId) === key)) {
-  return prev;
-}
-        return [...prev.slice(-(MAX_RENDERED_MESSAGES - 1)), msg];
+        if (
+          prev.some(
+            (m) =>
+              m.messageId === msg.messageId ||
+              m.clientId === msg.clientId ||
+              (m.messageId || m.clientId) === key
+          )
+        ) {
+          return prev;
+        }
+
+        return [...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)), normalizeRoomMessageMedia(msg)];
       });
     });
 
@@ -762,7 +1192,7 @@ if (prev.some((m) => (m.messageId || m.clientId) === key)) {
             : Array.isArray(messageData)
               ? messageData
               : [];
-          setMessages(loadedMessages.slice(-MAX_RENDERED_MESSAGES));
+          setMessages(loadedMessages.map(normalizeRoomMessageMedia).slice(-MAX_RENDERED_MEDIA_MESSAGES));
         }
       } catch (messageErr) {
         console.error('Could not load new room messages:', messageErr);
@@ -937,8 +1367,8 @@ async function generatePrivateRoomInviteLink(room = activeRoom) {
       maxUses: 100,
     });
 
-const inviteUrl = data.inviteUrl;
-const inviteCode = data.inviteCode;
+    const inviteUrl = data.inviteUrl;
+    const inviteCode = data.inviteCode;
 
     if (!inviteUrl) {
       throw new Error('Invite link was created, but no invite code was returned');
@@ -971,8 +1401,13 @@ async function copyGeneratedInviteLink() {
     setInviteLinkCopied(true);
     setStatus('Copied to clipboard');
 
-    window.setTimeout(() => {
+    if (inviteCopiedTimerRef.current) {
+      window.clearTimeout(inviteCopiedTimerRef.current);
+    }
+
+    inviteCopiedTimerRef.current = window.setTimeout(() => {
       if (mountedRef.current) setInviteLinkCopied(false);
+      inviteCopiedTimerRef.current = null;
     }, 1800);
   } catch {
     setInviteLinkCopied(false);
@@ -1447,7 +1882,7 @@ function removeNewRoomImage() {
           ? data
           : [];
 
-      setMessages(loadedMessages.slice(-MAX_RENDERED_MESSAGES));
+      setMessages(loadedMessages.map(normalizeRoomMessageMedia).slice(-MAX_RENDERED_MEDIA_MESSAGES));
     } catch (err) {
       console.error(err);
       if (mountedRef.current) {
@@ -1896,46 +2331,123 @@ async function inviteUser(userToInvite) {
     }
   }
 
-function sendMessage(e) {
+async function sendMessage(e) {
   e.preventDefault();
 
   const cleanText = text.trim();
   const room = activeRoomRef.current;
 
-  if (!cleanText || !room || sendingMessageRef.current) return;
+  if ((!cleanText && !selectedMediaFile) || !room || sendingMessageRef.current) {
+    return;
+  }
 
   sendingMessageRef.current = true;
 
   const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  const tempMessage = {
-    messageId: clientId,
-    clientId,
-    roomId: room.roomId,
-    senderId: userId,
-    senderName: user?.name || user?.email || 'You',
-    text: cleanText,
-    createdAt: String(Date.now()),
-    createdAtMs: Date.now(),
-    pending: true,
-  };
-
-  setText('');
-  setMessages((prev) => {
-    if (prev.some((msg) => (msg.messageId || msg.clientId) === clientId)) return prev;
-    return [...prev.slice(-(MAX_RENDERED_MESSAGES - 1)), tempMessage];
-  });
+  let uploadedMedia = null;
 
   try {
-    sendRoomMessage({
+    if (selectedMediaFile) {
+      if (selectedMediaFile.size > ROOM_MEDIA_MAX_BYTES) {
+        throw new Error('Media must be smaller than 80 MB.');
+      }
+
+      setUploadingMedia(true);
+      setMediaUploadProgress(0);
+
+      uploadedMedia = await roomApi.uploadRoomMediaFile(
+        room.roomId,
+        selectedMediaFile,
+        setMediaUploadProgress
+      );
+    }
+
+    const tempMessage = normalizeRoomMessageMedia({
+      messageId: clientId,
+      clientId,
+      roomId: room.roomId,
+      senderId: userId,
+      senderName: user?.name || user?.email || 'You',
+      text: cleanText,
+      message: cleanText,
+      createdAt: String(Date.now()),
+      createdAtMs: Date.now(),
+      pending: true,
+
+      mediaKey: uploadedMedia?.mediaKey || '',
+      mediaUrl: uploadedMedia?.mediaUrl || uploadedMedia?.fileUrl || '',
+      fileUrl: uploadedMedia?.fileUrl || uploadedMedia?.mediaUrl || '',
+      mediaType: uploadedMedia?.mediaType || selectedMediaType || '',
+      contentType: uploadedMedia?.contentType || selectedMediaFile?.type || '',
+      fileName: uploadedMedia?.fileName || selectedMediaFile?.name || '',
+      mediaName: uploadedMedia?.fileName || selectedMediaFile?.name || '',
+    });
+
+    setText('');
+    removeSelectedMedia();
+
+    setMessages((prev) => {
+      if (prev.some((msg) => (msg.messageId || msg.clientId) === clientId)) {
+        return prev;
+      }
+      return [...prev.slice(-(MAX_RENDERED_MEDIA_MESSAGES - 1)), tempMessage];
+    });
+
+    const socketSent = sendRoomMessage({
       action: 'sendRoomMessage',
       roomId: room.roomId,
       text: cleanText,
+      message: cleanText,
+      mediaKey: tempMessage.mediaKey,
+      mediaUrl: tempMessage.mediaUrl,
+      fileUrl: tempMessage.fileUrl,
+      mediaType: tempMessage.mediaType,
+      contentType: tempMessage.contentType,
+      fileName: tempMessage.fileName,
+      mediaName: tempMessage.mediaName,
+
       clientId,
     });
+
+    if (socketSent) {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.clientId === clientId
+            ? { ...msg, pending: false, failed: false }
+            : msg
+        )
+      );
+    } else {
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.clientId === clientId
+            ? { ...msg, pending: false, failed: true }
+            : msg
+        )
+      );
+      setStatus('Message saved locally, but chat socket is not connected. Try again.');
+    }
   } catch (err) {
-    console.error(err);
-    setStatus('Failed to send message');
+    const errorData = err?.response?.data || {};
+    const errorMessage =
+      errorData?.details?.message ||
+      errorData?.details?.Message ||
+      errorData?.details?.code ||
+      errorData?.details?.Code ||
+      errorData?.error ||
+      errorData?.message ||
+      err?.message ||
+      'Failed to send message';
+
+    console.error('Room media/message send failed:', {
+      status: err?.response?.status,
+      data: errorData,
+      message: err?.message,
+    });
+
+    setStatus(errorMessage);
+
     setMessages((prev) =>
       prev.map((msg) =>
         msg.clientId === clientId
@@ -1945,6 +2457,11 @@ function sendMessage(e) {
     );
   } finally {
     sendingMessageRef.current = false;
+
+    if (mountedRef.current) {
+      setUploadingMedia(false);
+      setMediaUploadProgress(0);
+    }
   }
 }
 
@@ -2242,7 +2759,12 @@ function sendMessage(e) {
     ←
   </button>
 
-  <span className="active-room-title-wrap">
+  <button
+    type="button"
+    className="active-room-title-wrap"
+    onClick={openActiveRoomInfo}
+    aria-label="Open group info"
+  >
     {activeRoomImageUrl && (
       <img
         className="active-room-image"
@@ -2268,7 +2790,7 @@ function sendMessage(e) {
       />
     )}
     <span>{activeRoom.name}</span>
-  </span>
+  </button>
 
   <div
     className="active-room-menu-wrap"
@@ -2301,23 +2823,6 @@ function sendMessage(e) {
 
     {showActiveRoomMenu && (
       <div className="active-room-menu-popover">
-        {activeRoomCanEdit && (
-            <button
-              type="button"
-              disabled={
-                uploadingRoomImageId === activeRoom.roomId ||
-                renamingRoomId === activeRoom.roomId ||
-                editRoomSaving
-              }
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openEditRoomModal(activeRoom);
-              }}
-            >
-              Edit
-            </button>
-        )}
 
         <button
           type="button"
@@ -2329,6 +2834,24 @@ function sendMessage(e) {
           }}
         >
           Members
+        </button>
+
+        <button
+          type="button"
+          disabled={renderedMediaMessages.length === 0}
+          onClick={(e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  e.nativeEvent?.stopImmediatePropagation?.();
+  openRoomMediaGrid(e);
+}}
+        >
+          Media
+          {renderedMediaMessages.length > 0 && (
+            <span className="active-room-menu-count">
+              {renderedMediaMessages.length > 99 ? '99+' : renderedMediaMessages.length}
+            </span>
+          )}
         </button>
 
         {activeRoom?.type === 'custom' &&
@@ -2346,20 +2869,22 @@ function sendMessage(e) {
               >
                 {inviteLinkLoading ? 'Generating...' : 'Invite Link'}
               </button>
-
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setShowActiveRoomMenu(false);
-                  openJoinRequests(activeRoom);
-                }}
-              >
-                Requests
-              </button>
             </>
           )}
+
+          {activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && activeRoomCanEdit && (
+  <button
+    type="button"
+    onClick={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeActiveRoomInfo();
+      openJoinRequests(activeRoom);
+    }}
+  >
+    Requests
+  </button>
+)}
       </div>
     )}
   </div>
@@ -2377,18 +2902,87 @@ function sendMessage(e) {
                     className={msg.senderId === userId ? 'msg mine' : 'msg'}
                   >
                     <b>{msg.senderName || msg.name || 'User'}</b>
-                    <p>
-                      {msg.text || msg.message || ''}
-                      {msg.pending && <span className="msg-state"> Sending...</span>}
-                      {msg.failed && <span className="msg-state failed"> Failed</span>}
-                    </p>
+<div className="room-message-content">
+  {(msg.text || msg.message) && (
+    <p>
+      {msg.text || msg.message || ''}
+      {msg.pending && <span className="msg-state"> Sending...</span>}
+      {msg.failed && <span className="msg-state failed"> Failed</span>}
+    </p>
+  )}
+
+  {msg.mediaType === 'image' && (msg.mediaUrl || msg.fileUrl) && (
+    <button
+      type="button"
+      className="room-message-media-tap"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openMediaViewer(msg);
+      }}
+      aria-label="Open image"
+    >
+      <img
+        src={msg.mediaUrl || msg.fileUrl}
+        alt={msg.fileName || 'Shared image'}
+        className="room-message-image"
+        loading="lazy"
+        decoding="async"
+      />
+    </button>
+  )}
+
+  {msg.mediaType === 'video' && (msg.mediaUrl || msg.fileUrl) && (
+    <button
+      type="button"
+      className="room-message-media-tap"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openMediaViewer(msg);
+      }}
+      aria-label="Play video"
+    >
+      <video
+        className="room-message-video"
+        src={msg.mediaUrl || msg.fileUrl}
+        muted
+        preload="metadata"
+        playsInline
+      />
+      <span className="room-video-play-badge">▶</span>
+    </button>
+  )}
+</div>
                   </div>
                 ))
               )}
             </div>
 
             <form className="input" onSubmit={sendMessage}>
+{selectedMediaPreview && (
+  <div className="selected-room-media-preview">
+    {selectedMediaType === 'image' ? (
+      <img src={selectedMediaPreview} alt="Preview" />
+    ) : (
+      <video src={selectedMediaPreview} muted playsInline />
+    )}
 
+    <button
+      type="button"
+      className="remove-selected-room-media"
+      onClick={removeSelectedMedia}
+    >
+      ✕
+    </button>
+
+    {uploadingMedia && (
+      <div className="room-media-upload-progress">
+        <span style={{ width: `${mediaUploadProgress}%` }} />
+      </div>
+    )}
+  </div>
+)}
 
 <input
   placeholder="Type message..."
@@ -2399,12 +2993,378 @@ function sendMessage(e) {
   }}
   onFocus={scrollMessagesToBottom}
 />
-              <button type="submit" disabled={!text.trim() || !activeRoom}>Send</button>
-            </form>
+<label className="room-media-picker-btn">
+  ＋
+  <input
+    type="file"
+accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zip,.rar"    hidden
+    onChange={handleRoomMediaChange}
+  />
+</label>
+<button
+  type="submit"
+  disabled={
+    (!text.trim() && !selectedMediaFile) ||
+    !activeRoom ||
+    uploadingMedia
+  }
+>
+  {uploadingMedia ? `${mediaUploadProgress || 0}%` : 'Send'}
+</button>            </form>
 
           </>
         )}
       </section>
+
+
+{showActiveRoomInfo && activeRoom && (
+  <div
+    className="active-room-info-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Group information"
+    onClick={closeActiveRoomInfo}
+  >
+    <section
+      className="active-room-info-panel"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="active-room-info-hero">
+        {activeRoomImageUrl ? (
+          <img
+            src={activeRoomImageUrl}
+            alt=""
+            className="active-room-info-image"
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            aria-hidden="true"
+          />
+        ) : (
+          <div className="active-room-info-avatar">
+            {(activeRoom.name || 'R').trim().slice(0, 1).toUpperCase()}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="active-room-info-close"
+          aria-label="Close group info"
+          onClick={closeActiveRoomInfo}
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="active-room-info-body">
+        <p className="active-room-info-kicker">Group Info</p>
+        <h2>{activeRoom.name}</h2>
+
+        <div className="active-room-info-meta">
+          <span>{activeRoom.privacy === 'private' ? 'Private group' : 'Public group'}</span>
+          {activeRoom.type === 'custom' && <span>Custom room</span>}
+          {activeRoomCanEdit && <span>You created this group</span>}
+        </div>
+
+        <div className="active-room-info-stats">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              closeActiveRoomInfo();
+              openMembers(activeRoom);
+            }}
+          >
+            <strong>{activeRoom.memberCount || membersCacheRef.current[activeRoom.roomId]?.members?.length || 0}</strong>
+            <span>Members</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={renderedMediaMessages.length === 0}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              closeActiveRoomInfo();
+              openRoomMediaGrid(event);
+            }}
+          >
+            <strong>{renderedMediaMessages.length}</strong>
+            <span>Media</span>
+          </button>
+        </div>
+
+        <div className="active-room-info-actions">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              closeActiveRoomInfo();
+              openMembers(activeRoom);
+            }}
+          >
+            Members
+          </button>
+
+          <button
+            type="button"
+            disabled={renderedMediaMessages.length === 0}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              closeActiveRoomInfo();
+              openRoomMediaGrid(event);
+            }}
+          >
+            Media
+          </button>
+
+          {activeRoom?.type === 'custom' && activeRoomCanEdit && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeActiveRoomInfo();
+                openEditRoomModal(activeRoom);
+              }}
+            >
+              Edit Group
+            </button>
+          )}
+
+          {activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && activeRoomCanEdit && (
+            <button
+              type="button"
+              disabled={inviteLinkLoading}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeActiveRoomInfo();
+                generatePrivateRoomInviteLink(activeRoom);
+              }}
+            >
+              {inviteLinkLoading ? 'Generating...' : 'Invite Link'}
+            </button>
+          )}
+
+          {activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && activeRoomCanEdit && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeActiveRoomInfo();
+                openJoinRequests(activeRoom);
+              }}
+            >
+              Requests
+            </button>
+          )}
+
+          {activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && !activeRoomCanEdit && (
+            <button
+              type="button"
+              className="danger-menu-item"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                closeActiveRoomInfo();
+                leaveRoom(activeRoom);
+              }}
+            >
+              Leave Group
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  </div>
+)}
+
+{showRoomMediaGrid && activeRoom && (
+  <div
+    className="room-media-grid-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Room media grid"
+    onClick={closeRoomMediaGrid}
+  >
+    <div
+      className="room-media-grid-panel"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="room-media-grid-header">
+        <div>
+          <p>Room Media</p>
+          <h3>{activeRoom.name}</h3>
+        </div>
+
+        <button
+          type="button"
+          className="room-media-grid-close"
+          aria-label="Close media grid"
+          onClick={closeRoomMediaGrid}
+        >
+          ×
+        </button>
+      </div>
+
+      {renderedMediaMessages.length === 0 ? (
+        <p className="room-media-grid-empty">No photos, videos, or files shared yet.</p>
+      ) : (
+        <div className="room-media-grid-list">
+          {renderedMediaMessages.map((item, index) => {
+            const itemUrl = item.mediaUrl || item.fileUrl;
+
+            return (
+              <button
+                type="button"
+                key={item.messageId || item.clientId || item.mediaKey || itemUrl || index}
+                className={`room-media-grid-item ${item.mediaType === 'file' ? 'room-media-grid-file-item' : ''}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openMediaFromGrid(item);
+                }}
+              >
+                {item.mediaType === 'video' ? (
+                  <>
+                    <video
+                      src={itemUrl}
+                      muted
+                      preload="metadata"
+                      playsInline
+                      className="room-media-grid-video"
+                    />
+                    <span className="room-media-grid-play">▶</span>
+                  </>
+                ) : item.mediaType === 'file' ? (
+                  <span className="room-media-grid-file-card">
+                    <span className="room-media-grid-file-icon">📎</span>
+                    <strong>{getShortRoomFileName(item.fileName || item.mediaName || 'Attachment')}</strong>
+                    <small>{item.contentType || 'File'}</small>
+                  </span>
+                ) : (
+                  <img
+                    src={itemUrl}
+                    alt={item.fileName || item.mediaName || 'Room media'}
+                    className="room-media-grid-image"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
+{mediaViewer && activeMediaViewerItem && (
+  <div
+    className="room-media-viewer"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Media viewer"
+    onClick={closeMediaViewer}
+    onTouchStart={handleMediaViewerTouchStart}
+    onTouchEnd={handleMediaViewerTouchEnd}
+  >
+    <div
+      className="room-media-viewer-card"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="room-media-viewer-topbar">
+        <span>{activeMediaViewerItem.senderName || activeMediaViewerItem.name || 'User'}</span>
+
+        <span className="room-media-viewer-count">
+          {Number(mediaViewer.index || 0) + 1}/{mediaViewerCount}
+        </span>
+
+<button
+  type="button"
+  className="room-media-viewer-back"
+  aria-label="Open media grid"
+  onClick={(event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    backToRoomMediaGrid();
+  }}
+>
+  ← Grid
+</button>
+
+<button
+  type="button"
+  className="room-media-viewer-close"
+  onClick={(event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeMediaViewer();
+  }}
+  aria-label="Close media viewer"
+>
+  ✕
+</button>
+      </div>
+
+      {mediaViewerCount > 1 && (
+        <>
+          <button
+            type="button"
+            className="room-media-viewer-nav prev"
+            aria-label="Previous media"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              moveMediaViewer(-1);
+            }}
+          >
+            ‹
+          </button>
+
+          <button
+            type="button"
+            className="room-media-viewer-nav next"
+            aria-label="Next media"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              moveMediaViewer(1);
+            }}
+          >
+            ›
+          </button>
+        </>
+      )}
+
+      {activeMediaViewerItem.mediaType === 'video' ? (
+        <video
+          key={activeMediaViewerItem.mediaUrl || activeMediaViewerItem.fileUrl}
+          src={activeMediaViewerItem.mediaUrl || activeMediaViewerItem.fileUrl}
+          controls
+          autoPlay
+          playsInline
+          className="room-media-viewer-video"
+        />
+      ) : (
+        <img
+          src={activeMediaViewerItem.mediaUrl || activeMediaViewerItem.fileUrl}
+          alt={activeMediaViewerItem.fileName || activeMediaViewerItem.mediaName || 'Shared media'}
+          className="room-media-viewer-image"
+        />
+      )}
+    </div>
+  </div>
+)}
+
+
+
 
       {inviteLinkModalOpen && (
         <div className="members-modal">
@@ -2413,10 +3373,16 @@ function sendMessage(e) {
               type="button"
               className="close-members"
               onClick={() => {
+                if (inviteCopiedTimerRef.current) {
+                  window.clearTimeout(inviteCopiedTimerRef.current);
+                  inviteCopiedTimerRef.current = null;
+                }
                 setInviteLinkModalOpen(false);
                 setGeneratedInviteCode('');
                 setGeneratedInviteLink('');
                 setInviteLinkCopied(false);
+                setInviteLinkLoading(false);
+                setInviteLinkDisabling(false);
               }}
             >
               ✕
@@ -2572,7 +3538,7 @@ function sendMessage(e) {
 
             <h3>{modalTitle}</h3>
 
-{modalMode !== 'requests' && (
+{/* {modalMode !== 'requests' && (
   <button
     type="button"
     className="approve-request-btn"
@@ -2580,7 +3546,7 @@ function sendMessage(e) {
   >
     ➕ Send Invite Request
   </button>
-)}
+)} */}
 
 {showInvite && (
   <div className="invite-box">

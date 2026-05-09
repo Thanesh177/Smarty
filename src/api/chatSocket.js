@@ -12,7 +12,7 @@ let manuallyClosed = false;
 let lastUrl = '';
 let outboundQueue = [];
 
-const MAX_RECONNECT_ATTEMPTS = 8;
+const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 12000;
 const HEARTBEAT_INTERVAL = 25000;
@@ -107,7 +107,13 @@ const startHeartbeat = () => {
 
 const scheduleReconnect = () => {
   if (manuallyClosed || !currentUserId || !hasSocketDemand()) return;
-  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
+
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    if (import.meta.env.DEV) {
+      console.error('Chat WebSocket max reconnect attempts reached');
+    }
+    return;
+  }
 
   reconnectAttempts += 1;
   clearReconnectTimer();
@@ -284,6 +290,12 @@ function sendSocketPayload(payload, options = {}) {
 
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     if (queueIfClosed) {
+      const clientId = payload.clientId || '';
+
+      if (clientId) {
+        outboundQueue = outboundQueue.filter((item) => item.clientId !== clientId);
+      }
+
       outboundQueue.push(payload);
 
       if (outboundQueue.length > MAX_QUEUE_SIZE) {
@@ -347,8 +359,15 @@ export function sendRoomMessage(payload = {}) {
   const success = sendSocketPayload({
     action: 'sendRoomMessage',
     roomId: payload.roomId,
-    text: payload.text,
-    clientId: payload.clientId,
+    text: payload.text || '',
+    mediaKey: payload.mediaKey || '',
+    mediaUrl: payload.mediaUrl || payload.fileUrl || '',
+    fileUrl: payload.fileUrl || payload.mediaUrl || '',
+    mediaType: payload.mediaType || '',
+    contentType: payload.contentType || '',
+    fileName: payload.fileName || payload.mediaName || '',
+    mediaName: payload.mediaName || payload.fileName || '',
+    clientId: payload.clientId || '',
   });
 
   if (!success && import.meta.env.DEV) {
