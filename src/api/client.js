@@ -8,6 +8,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT || 20000);
 const AUTH_TOKEN_CACHE_MS = 45 * 1000;
+const APP_ORIGIN = 'https://main.d3qiuefonbp8n9.amplifyapp.com';
 
 let cachedAuthToken = '';
 let cachedAuthTokenAt = 0;
@@ -397,6 +398,91 @@ export const roomApi = {
     return parseApiBody(data);
   },
 
+  createRoomInviteLink: async (roomId, options = {}) => {
+    const cleanRoomId = String(roomId || '').trim();
+
+    if (!cleanRoomId) {
+      throw new Error('Room ID is required to create an invite link.');
+    }
+
+    const { data } = await api.post(`/rooms/${encodePathSegment(cleanRoomId)}/invite-link`, {
+      roomId: cleanRoomId,
+      requiresApproval: options.requiresApproval ?? true,
+      ...(Number(options.maxUses) > 0 ? { maxUses: Number(options.maxUses) } : {}),
+    });
+
+    const parsed = parseApiBody(data);
+    const inviteCode = parsed?.inviteCode || parsed?.code || '';
+
+    return {
+      ...parsed,
+      inviteCode,
+      inviteUrl: inviteCode
+        ? `${APP_ORIGIN}/rooms/join/${encodeURIComponent(inviteCode)}`
+        : parsed?.inviteUrl || parsed?.link || parsed?.url || '',
+    };
+  },
+
+  getRoomInvite: async (inviteCode) => {
+    const cleanCode = String(inviteCode || '').trim();
+
+    if (!cleanCode) {
+      throw new Error('Invite code is required.');
+    }
+
+    const { data } = await api.get(`/rooms/invite/${encodePathSegment(cleanCode)}`);
+    const parsed = parseApiBody(data);
+    const invite = parsed?.invite || parsed || {};
+
+    return {
+      ...parsed,
+      invite: {
+        ...invite,
+        description: invite.description || invite.roomDescription || invite.about || '',
+        roomImageUrl: invite.roomImageUrl || invite.imageUrl || invite.coverImageUrl || '',
+        memberCount: Number(invite.memberCount || invite.membersCount || 0),
+        requiresApproval: invite.requiresApproval !== false,
+      },
+    };
+  },
+
+  joinRoomFromInvite: async (inviteCode) => {
+    const cleanCode = String(inviteCode || '').trim();
+
+    if (!cleanCode) {
+      throw new Error('Invite code is required.');
+    }
+
+    const { data } = await api.post(`/rooms/invite/${encodePathSegment(cleanCode)}/join`);
+    return parseApiBody(data);
+  },
+
+  disableInviteLink: async (inviteCode) => {
+    const cleanCode = String(inviteCode || '').trim();
+
+    if (!cleanCode) {
+      throw new Error('Invite code is required.');
+    }
+
+    const { data } = await api.post(`/rooms/invite/${encodePathSegment(cleanCode)}/disable`);
+    return parseApiBody(data);
+  },
+
+  approveRoomInviteJoinRequest: async (roomId, userId) => {
+    const cleanRoomId = String(roomId || '').trim();
+    const cleanUserId = String(userId || '').trim();
+
+    if (!cleanRoomId || !cleanUserId) {
+      throw new Error('Room ID and user ID are required to approve a join request.');
+    }
+
+    const { data } = await api.post(`/rooms/${encodePathSegment(cleanRoomId)}/requests/approve`, {
+      userId: cleanUserId,
+    });
+
+    return parseApiBody(data);
+  },
+
   createRoom: async (payload) => {
     try {
       const { data } = await api.post('/rooms', payload);
@@ -492,11 +578,7 @@ export const roomApi = {
   },
 
   async approveRoomJoinRequest(roomId, userId) {
-    const { data } = await api.post(
-      `/rooms/${encodePathSegment(roomId)}/requests/approve`,
-      { userId }
-    );
-    return parseApiBody(data);
+    return this.approveRoomInviteJoinRequest(roomId, userId);
   },
 
   async hideRoom(roomId) {
@@ -1197,8 +1279,20 @@ export const userApi = {
         message: parsed?.message || '',
       };
     } catch (error) {
-      if (error?.response?.status === 404) {
+      const status = error?.response?.status;
+
+      if (status === 404) {
         return { exists: false, provider: '', message: '' };
+      }
+
+      if (status === 401 || status === 403) {
+        console.warn('CHECK EMAIL API IS PROTECTED; CONTINUING WITHOUT PRE-CHECK:', error?.response?.data || error?.message || error);
+        return {
+          exists: false,
+          provider: '',
+          message: 'Email check unavailable before login.',
+          unavailable: true,
+        };
       }
 
       console.error('CHECK EMAIL API ERROR:', error?.response?.data || error);

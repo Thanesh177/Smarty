@@ -2,12 +2,38 @@ import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { fetchAuthSession } from 'aws-amplify/auth';
 
+function getSavedRedirectPath() {
+  const fallback = '/feed';
+
+  try {
+    const savedPath =
+      sessionStorage.getItem('smarty-post-login-redirect') ||
+      localStorage.getItem('smarty-post-login-redirect') ||
+      fallback;
+
+    sessionStorage.removeItem('smarty-post-login-redirect');
+    localStorage.removeItem('smarty-post-login-redirect');
+
+    if (!savedPath || savedPath === '/login' || savedPath === '/register') {
+      return fallback;
+    }
+
+    return savedPath;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function AuthRedirectHandler() {
   const location = useLocation();
   const navigate = useNavigate();
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+
+    if (location.pathname.startsWith('/rooms/join/')) {
+      return;
+    }
 
     const hasOAuthCode = params.has('code') && params.has('state');
 
@@ -16,15 +42,22 @@ export default function AuthRedirectHandler() {
     const finishLogin = async () => {
       try {
         await fetchAuthSession({ forceRefresh: true });
-        navigate('/feed', { replace: true });
+        navigate(getSavedRedirectPath(), { replace: true });
       } catch (error) {
         console.error('OAuth redirect handling failed:', error);
-        navigate('/login', { replace: true });
+        const currentPath = `${location.pathname}${location.search || ''}`;
+
+        if (currentPath && currentPath !== '/login') {
+          sessionStorage.setItem('smarty-post-login-redirect', currentPath);
+          localStorage.setItem('smarty-post-login-redirect', currentPath);
+        }
+
+        navigate('/login', { replace: true, state: { from: currentPath } });
       }
     };
 
     finishLogin();
-  }, [location.search, navigate]);
+  }, [location.pathname, location.search, navigate]);
 
   return null;
 }

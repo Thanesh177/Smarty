@@ -40,6 +40,7 @@ const CreatorProfilePage = lazy(() => import('./pages/CreatorProfilePage'));
 const CreatorDashboardPage = lazy(() => import('./pages/CreatorDashboardPage'));
 const FollowRequestsPage = lazy(() => import('./pages/FollowRequestsPage'));
 const TopicRoomsPage = lazy(() => import('./pages/TopicRoomsPage'));
+const JoinRoomPage = lazy(() => import('./pages/JoinRoomPage'));
 const ReelDetailPage = lazy(() => import('./pages/ReelDetailPage'));
 const NewsPage = lazy(() => import('./pages/NewsPage'));
 const ReadBookPage = lazy(() => import('./pages/ReadBookPage'));
@@ -49,7 +50,17 @@ const PostAiPage = lazy(() => import('./pages/PostAiPage'));
 const GLOBAL_PULL_REFRESH_RATIO = 0.4;
 
 function PageLoader() {
-  return <p className="status">Loading page...</p>;
+  return (
+    <div className="app-page-loader" role="status" aria-live="polite">
+      <div className="app-page-loader-card">
+        <span className="app-page-loader-orb" aria-hidden="true" />
+        <div>
+          <strong>Loading</strong>
+          <p>Preparing your Smarty space</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 class RouteErrorBoundary extends Component {
@@ -83,7 +94,7 @@ function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) return <p className="status">Loading...</p>;
+  if (loading) return null;
 
   return user ? children : <Navigate to="/login" replace state={{ from: location }} />;
 }
@@ -156,6 +167,8 @@ function Layout() {
     location.pathname === '/login' ||
     location.pathname === '/register' ||
     location.pathname === '/confirm';
+
+  const isInviteJoinPage = location.pathname.startsWith('/rooms/join/');
 
   const goBack = useCallback(() => {
     window.history.back();
@@ -544,7 +557,7 @@ function Layout() {
 
   return (
     <>
-      <AuthRedirectHandler />
+      {!isInviteJoinPage && <AuthRedirectHandler />}
 
       <ReminderPopup
         title={popupNotification?.title || 'Smarty'}
@@ -741,6 +754,8 @@ function Layout() {
                   }
                 />
 
+                <Route path="/rooms/join/:inviteCode" element={<JoinRoomPage />} />
+
                 <Route
                   path="/chat"
                   element={
@@ -819,6 +834,96 @@ function Layout() {
 function ReminderPopupStyles() {
   return (
     <style>{`
+      .app-page-loader {
+        width: 100%;
+        min-height: calc(100dvh - 96px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 18px;
+        color: #f8fafc;
+      }
+
+      .app-page-loader-card {
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 18px;
+        border-radius: 24px;
+        background:
+          radial-gradient(circle at 20% 10%, rgba(56, 189, 248, 0.14), transparent 42%),
+          linear-gradient(180deg, rgba(10, 15, 28, 0.78), rgba(6, 10, 20, 0.9));
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        box-shadow:
+          0 24px 70px rgba(0, 0, 0, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(18px) saturate(150%);
+        -webkit-backdrop-filter: blur(18px) saturate(150%);
+      }
+
+      .app-page-loader-orb {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        background:
+          conic-gradient(from 120deg, rgba(56, 189, 248, 0), rgba(56, 189, 248, 0.95), rgba(34, 197, 94, 0.85), rgba(168, 85, 247, 0.8), rgba(56, 189, 248, 0)),
+          rgba(15, 23, 42, 0.7);
+        position: relative;
+        animation: appLoaderSpin 0.95s linear infinite;
+        box-shadow: 0 0 26px rgba(56, 189, 248, 0.2);
+      }
+
+      .app-page-loader-orb::after {
+        content: '';
+        position: absolute;
+        inset: 4px;
+        border-radius: inherit;
+        background: #07101f;
+      }
+
+      .app-page-loader-card strong {
+        display: block;
+        font-size: 0.92rem;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        color: rgba(248, 250, 252, 0.96);
+      }
+
+      .app-page-loader-card p {
+        margin: 2px 0 0;
+        font-size: 0.74rem;
+        font-weight: 700;
+        color: rgba(148, 163, 184, 0.9);
+      }
+
+      @keyframes appLoaderSpin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (max-width: 640px) {
+        .app-page-loader {
+          min-height: calc(100dvh - 82px);
+          padding: 24px 14px;
+        }
+
+        .app-page-loader-card {
+          padding: 12px 15px;
+          border-radius: 22px;
+        }
+
+        .app-page-loader-orb {
+          width: 30px;
+          height: 30px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .app-page-loader-orb {
+          animation: none;
+        }
+      }
       .global-pull-refresh {
         position: fixed;
         top: 72px;

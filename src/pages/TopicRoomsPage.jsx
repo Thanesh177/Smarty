@@ -7,6 +7,7 @@ import './TopicRoomsPage.css';
 
 const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
 const API_ORIGIN = 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com';
+const APP_ORIGIN = 'https://main.d3qiuefonbp8n9.amplifyapp.com';
 const ROOM_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const ROOM_IMAGE_PICKER_MAX_BYTES = 8 * 1024 * 1024;
 const ROOM_LIST_CACHE_MS = 25_000;
@@ -189,6 +190,12 @@ export default function TopicRoomsPage() {
   const [showRoomInvites, setShowRoomInvites] = useState(false);
   const [roomInvitesLoading, setRoomInvitesLoading] = useState(false);
   const [processingInviteId, setProcessingInviteId] = useState('');
+  const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
+  const [inviteLinkDisabling, setInviteLinkDisabling] = useState(false);
+  const [inviteLinkModalOpen, setInviteLinkModalOpen] = useState(false);
+  const [generatedInviteLink, setGeneratedInviteLink] = useState('');
+  const [generatedInviteCode, setGeneratedInviteCode] = useState('');
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [rooms, setRooms] = useState([]);
   const [roomUnreadCounts, setRoomUnreadCounts] = useState({});
   const [activeRoom, setActiveRoom] = useState(null);
@@ -882,6 +889,7 @@ async function acceptRoomInvite(invite) {
   }
 }
 
+
 async function rejectRoomInvite(invite) {
   const roomId = invite?.roomId;
   if (!roomId || processingInviteId) return;
@@ -901,6 +909,102 @@ async function rejectRoomInvite(invite) {
     if (mountedRef.current) setStatus(err?.response?.data?.error || 'Could not reject invite');
   } finally {
     if (mountedRef.current) setProcessingInviteId('');
+  }
+}
+
+async function generatePrivateRoomInviteLink(room = activeRoom) {
+  if (!room?.roomId || inviteLinkLoading) return;
+
+  const isOwner = room.ownerId === userId || room.createdBy === userId;
+
+  if (room.privacy !== 'private') {
+    setStatus('Invite links are only available for private rooms.');
+    return;
+  }
+
+  if (!isOwner) {
+    setStatus('Only the room creator can generate an invite link.');
+    return;
+  }
+
+  try {
+    setStatus('');
+    setInviteLinkLoading(true);
+    setShowActiveRoomMenu(false);
+
+    const data = await roomApi.createRoomInviteLink(room.roomId, {
+      requiresApproval: true,
+      maxUses: 100,
+    });
+
+const inviteUrl = data.inviteUrl;
+const inviteCode = data.inviteCode;
+
+    if (!inviteUrl) {
+      throw new Error('Invite link was created, but no invite code was returned');
+    }
+
+    setGeneratedInviteCode(inviteCode || String(inviteUrl).split('/').pop() || '');
+    setGeneratedInviteLink(inviteUrl);
+    setInviteLinkCopied(false);
+    setInviteLinkModalOpen(true);
+  } catch (err) {
+    console.error(err);
+    setStatus(
+      err?.response?.data?.details?.message ||
+        err?.response?.data?.details?.Message ||
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Could not generate invite link'
+    );
+  } finally {
+    if (mountedRef.current) setInviteLinkLoading(false);
+  }
+}
+
+async function copyGeneratedInviteLink() {
+  if (!generatedInviteLink) return;
+
+  try {
+    await navigator.clipboard.writeText(generatedInviteLink);
+    setInviteLinkCopied(true);
+    setStatus('Copied to clipboard');
+
+    window.setTimeout(() => {
+      if (mountedRef.current) setInviteLinkCopied(false);
+    }, 1800);
+  } catch {
+    setInviteLinkCopied(false);
+    setStatus('Could not copy invite link. Please copy it manually.');
+  }
+}
+
+async function disableGeneratedInviteLink() {
+  const inviteCode = generatedInviteCode || String(generatedInviteLink || '').split('/').pop() || '';
+
+  if (!inviteCode || inviteLinkDisabling) return;
+
+  try {
+    setInviteLinkDisabling(true);
+    setStatus('');
+
+    await roomApi.disableInviteLink(inviteCode);
+
+    setStatus('Invite link disabled');
+    setGeneratedInviteCode('');
+    setGeneratedInviteLink('');
+    setInviteLinkCopied(false);
+    setInviteLinkModalOpen(false);
+  } catch (err) {
+    setStatus(
+      err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Could not disable invite link'
+    );
+  } finally {
+    if (mountedRef.current) setInviteLinkDisabling(false);
   }
 }
 
@@ -2230,17 +2334,31 @@ function sendMessage(e) {
         {activeRoom?.type === 'custom' &&
           activeRoom?.privacy === 'private' &&
           (activeRoom?.ownerId === userId || activeRoom?.createdBy === userId) && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setShowActiveRoomMenu(false);
-                openJoinRequests(activeRoom);
-              }}
-            >
-              Requests
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={inviteLinkLoading}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  generatePrivateRoomInviteLink(activeRoom);
+                }}
+              >
+                {inviteLinkLoading ? 'Generating...' : 'Invite Link'}
+              </button>
+
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowActiveRoomMenu(false);
+                  openJoinRequests(activeRoom);
+                }}
+              >
+                Requests
+              </button>
+            </>
           )}
       </div>
     )}
@@ -2288,6 +2406,62 @@ function sendMessage(e) {
         )}
       </section>
 
+      {inviteLinkModalOpen && (
+        <div className="members-modal">
+          <div className="members-card create-room-modal">
+            <button
+              type="button"
+              className="close-members"
+              onClick={() => {
+                setInviteLinkModalOpen(false);
+                setGeneratedInviteCode('');
+                setGeneratedInviteLink('');
+                setInviteLinkCopied(false);
+              }}
+            >
+              ✕
+            </button>
+
+            <h3>Private Room Invite Link</h3>
+            <p className="member-empty">Share this link with users you want to invite. They must be logged in and the room creator will approve the request.</p>
+
+            <div className="invite-search-row">
+              <input
+                readOnly
+                value={generatedInviteLink}
+                onFocus={(event) => event.target.select()}
+              />
+
+              <button
+                type="button"
+                className="approve-request-btn"
+                disabled={!generatedInviteLink}
+                onClick={copyGeneratedInviteLink}
+              >
+                {inviteLinkCopied ? 'Copied' : 'Copy'}
+              </button>
+
+              <button
+                type="button"
+                className="approve-request-btn"
+                disabled={!generatedInviteLink}
+                onClick={() => window.open(generatedInviteLink, '_blank', 'noopener,noreferrer')}
+              >
+                Open
+              </button>
+
+              <button
+                type="button"
+                className="reject-request-btn"
+                disabled={!generatedInviteLink || inviteLinkDisabling}
+                onClick={disableGeneratedInviteLink}
+              >
+                {inviteLinkDisabling ? 'Disabling...' : 'Disable'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showHidden && (
   <div className="members-modal">
     <div className="members-card">

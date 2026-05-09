@@ -10,6 +10,7 @@ const WEB_REDIRECT_SIGN_OUT = 'https://main.d3qiuefonbp8n9.amplifyapp.com/login'
 const LOCAL_REDIRECT_SIGN_IN = 'http://localhost:5173/';
 const LOCAL_REDIRECT_SIGN_OUT = 'http://localhost:5173/login';
 const ANDROID_REDIRECT_URI = 'smarty://callback/';
+const APP_ORIGIN = 'https://main.d3qiuefonbp8n9.amplifyapp.com';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -40,6 +41,17 @@ const getWebRedirectSignOut = () => (
   isLocalhost ? LOCAL_REDIRECT_SIGN_OUT : WEB_REDIRECT_SIGN_OUT
 );
 
+const saveCurrentRedirectPath = () => {
+  if (!isBrowser) return;
+
+  const currentPath = `${window.location.pathname || '/'}${window.location.search || ''}${window.location.hash || ''}`;
+
+  if (currentPath && currentPath !== '/login' && currentPath !== '/register') {
+    sessionStorage.setItem('smarty-post-login-redirect', currentPath);
+    localStorage.setItem('smarty-post-login-redirect', currentPath);
+  }
+};
+
 const redirectSignIn = getWebRedirectSignIn();
 const redirectSignOut = getWebRedirectSignOut();
 
@@ -50,12 +62,15 @@ export const startAndroidGoogleLogin = () => {
     throw new Error('Missing Cognito domain or client ID. Check VITE_COGNITO_DOMAIN and VITE_COGNITO_CLIENT_ID.');
   }
 
+  saveCurrentRedirectPath();
+
   const query = new URLSearchParams({
     identity_provider: 'Google',
     redirect_uri: ANDROID_REDIRECT_URI,
     response_type: 'code',
     client_id: COGNITO_CLIENT_ID,
     scope: 'openid email profile',
+    state: encodeURIComponent(sessionStorage.getItem('smarty-post-login-redirect') || '/feed'),
   });
 
   window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${query.toString()}`;
@@ -108,8 +123,8 @@ Amplify.configure({
         oauth: {
           domain: COGNITO_DOMAIN,
           scopes: ['openid', 'email', 'profile'],
-          redirectSignIn: [redirectSignIn],
-          redirectSignOut: [redirectSignOut],
+          redirectSignIn: [redirectSignIn, APP_ORIGIN, ANDROID_REDIRECT_URI],
+          redirectSignOut: [redirectSignOut, `${APP_ORIGIN}/login`, ANDROID_REDIRECT_URI],
           responseType: 'code',
         },
       },

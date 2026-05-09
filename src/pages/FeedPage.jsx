@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Bookmark,
-  Bot,
   MessageCircle,
   Sparkles,
   Loader2,
@@ -399,7 +398,6 @@ export default function FeedPage() {
   const highlightRemoveTimerRef = useRef(null);
   const requestedCreatorIdsRef = useRef(new Set());
   const toastTimerRef = useRef(null);
-  const scrollRafRef = useRef(0);
   const restoredFeedPositionRef = useRef(false);
 
   const {
@@ -412,7 +410,6 @@ export default function FeedPage() {
     refetch,
     refresh,
     reload,
-    likePost,
     savePost,
   } = useFeed();
 
@@ -435,7 +432,6 @@ export default function FeedPage() {
       mountedRef.current = false;
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
       if (highlightRemoveTimerRef.current) clearTimeout(highlightRemoveTimerRef.current);
-      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
     };
   }, []);
 
@@ -787,24 +783,12 @@ export default function FeedPage() {
     }, duration);
   }, []);
 
-  const handleFeedScroll = useCallback(() => {
-    if (scrollRafRef.current) return;
-
-    scrollRafRef.current = requestAnimationFrame(() => {
-      scrollRafRef.current = 0;
-    });
-  }, []);
 
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
         toastTimerRef.current = null;
-      }
-
-      if (scrollRafRef.current) {
-        cancelAnimationFrame(scrollRafRef.current);
-        scrollRafRef.current = 0;
       }
     };
   }, []);
@@ -889,16 +873,6 @@ export default function FeedPage() {
     }
   }, [explaining, simpleExplanations, showToast]);
 
-  const handleLike = useCallback(async (postId) => {
-    if (!postId) return;
-    try {
-      await likePost(postId);
-      showToast('Liked ❤️');
-    } catch (err) {
-      console.error('Like failed:', err);
-      showToast('Like failed');
-    }
-  }, [likePost, showToast]);
 
   const handleTopicSelect = useCallback((item) => {
     setSelectedTopic(item);
@@ -1053,7 +1027,6 @@ export default function FeedPage() {
     <main
       ref={feedRef}
       className="snap-feed-page"
-      onScroll={handleFeedScroll}
       style={{ overscrollBehaviorY: 'auto' }}
     >
       <button

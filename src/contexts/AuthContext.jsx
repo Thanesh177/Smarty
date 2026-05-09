@@ -62,6 +62,59 @@ function clearAuthStorage() {
   localStorage.removeItem('eduscroll_access_token');
 }
 
+function normalizeRedirectPath(value) {
+  const fallback = '/feed';
+  const text = String(value || '').trim();
+
+  if (!text || text === '/login' || text === '/register') {
+    return fallback;
+  }
+
+  if (text.startsWith('/')) {
+    return text;
+  }
+
+  try {
+    const url = new URL(text);
+    return `${url.pathname}${url.search || ''}${url.hash || ''}` || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function getPostLoginRedirect() {
+  const fallback = '/feed';
+
+  try {
+    const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
+
+    if (window.location.pathname.startsWith('/rooms/join/')) {
+      return currentPath;
+    }
+
+    const stored =
+      sessionStorage.getItem('smarty-post-login-redirect') ||
+      localStorage.getItem('smarty-post-login-redirect') ||
+      fallback;
+
+    sessionStorage.removeItem('smarty-post-login-redirect');
+    localStorage.removeItem('smarty-post-login-redirect');
+
+    return normalizeRedirectPath(stored);
+  } catch {
+    return fallback;
+  }
+}
+
+function redirectAfterLogin() {
+  if (sessionStorage.getItem('smarty-auth-redirecting') === 'true') {
+    return;
+  }
+
+  sessionStorage.setItem('smarty-auth-redirecting', 'true');
+  window.location.replace(getPostLoginRedirect());
+}
+
 function mapCognitoUser(currentUser, session) {
   const idTokenObject = session?.tokens?.idToken;
   const accessTokenObject = session?.tokens?.accessToken;
@@ -101,9 +154,6 @@ export function AuthProvider({ children }) {
         const params = new URLSearchParams(window.location.search);
         const androidCode = params.get('code');
         const isAndroidReturn = params.get('platform') === 'android';
-console.log('AUTH URL:', window.location.href);
-
-console.log('ANDROID CODE:', androidCode)
         if (isAndroidReturn && androidCode) {
           const tokens = await exchangeAndroidCodeForTokens(androidCode);
           const payload = decodeJwtPayload(tokens.id_token);
@@ -123,7 +173,7 @@ console.log('ANDROID CODE:', androidCode)
           saveAuthUser(authUser);
           setUser(authUser);
           setLoading(false);
-          window.location.replace('/feed');
+          redirectAfterLogin();
           return;
         }
 
@@ -140,30 +190,26 @@ console.log('ANDROID CODE:', androidCode)
 
         const currentUser = await getCurrentUser();
         const session = await fetchAuthSession();
-        console.log('Session loaded:', session);
 
         const authUser = mapCognitoUser(currentUser, session);
 
         saveAuthUser(authUser);
         setUser(authUser);
-} catch (err) {
-  const message =
-    err?.name ||
-    err?.message ||
-    '';
+      } catch (err) {
+        const message = err?.name || err?.message || '';
 
-  const isUnauthenticated =
-    String(message).includes('UserUnAuthenticatedException') ||
-    String(message).includes('needs to be authenticated') ||
-    String(message).includes('No current user');
+        const isUnauthenticated =
+          String(message).includes('UserUnAuthenticatedException') ||
+          String(message).includes('needs to be authenticated') ||
+          String(message).includes('No current user');
 
-  if (!isUnauthenticated) {
-    console.error('Auth init failed:', err);
-  }
+        if (!isUnauthenticated) {
+          console.error('Auth init failed:', err);
+        }
 
-  clearAuthStorage();
-  setUser(null);
-} finally {
+        clearAuthStorage();
+        setUser(null);
+      } finally {
         setLoading(false);
       }
     };
@@ -179,14 +225,13 @@ console.log('ANDROID CODE:', androidCode)
         payload.event === 'cognitoHostedUI'
       ) {
         try {
-          console.log('Auth event:', payload.event);
           const currentUser = await getCurrentUser();
           const session = await fetchAuthSession();
           const authUser = mapCognitoUser(currentUser, session);
 
           saveAuthUser(authUser);
           setUser(authUser);
-          window.location.replace('/feed');
+          redirectAfterLogin();
         } catch (err) {
           console.error('OAuth login failed:', err);
         }
@@ -196,28 +241,28 @@ console.log('ANDROID CODE:', androidCode)
     return () => unsubscribe();
   }, []);
 
-const login = async (email, password) => {
-  const result = await signIn({
-    username: email,
-    password,
-  });
+  const login = async (email, password) => {
+    const result = await signIn({
+      username: email,
+      password,
+    });
 
-  if (result.isSignedIn) {
-    const currentUser = await getCurrentUser();
-    const session = await fetchAuthSession();
-    const authUser = mapCognitoUser(currentUser, session);
+    if (result.isSignedIn) {
+      const currentUser = await getCurrentUser();
+      const session = await fetchAuthSession();
+      const authUser = mapCognitoUser(currentUser, session);
 
-    saveAuthUser(authUser);
-    setUser(authUser);
+      saveAuthUser(authUser);
+      setUser(authUser);
 
-    return { success: true };
-  }
+      return { success: true };
+    }
 
-  return {
-    success: false,
-    nextStep: result.nextStep,
+    return {
+      success: false,
+      nextStep: result.nextStep,
+    };
   };
-};
 
   const register = async (name, email, password) => {
     const result = await signUp({
