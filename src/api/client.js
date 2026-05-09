@@ -616,24 +616,9 @@ export const roomApi = {
     };
   },
 
-  joinRoomFromInvite: async (inviteCode) => {
-    const cleanCode = String(inviteCode || '').trim();
-
-    if (!cleanCode) {
-      throw new Error('Invite code is required.');
-    }
-
-    storePendingRoomInvite(cleanCode);
-
-    const { data } = await roomInviteApi.post(`/room-invites/${encodePathSegment(cleanCode)}/join`);
-    const parsed = parseApiBody(data);
-
-    if (parsed?.joined || parsed?.requested) {
-      clearPendingRoomInvite();
-    }
-
-    return parsed;
-  },
+joinRoomFromInvite: async (inviteCode) => {
+  return roomApi.joinRoomInvite(inviteCode);
+},
 
   disableInviteLink: async (inviteCode) => {
     const cleanCode = String(inviteCode || '').trim();
@@ -677,9 +662,26 @@ export const roomApi = {
     }
   },
 
-  joinRoomInvite: async (inviteCode) => {
-  const res = await api.post(`/room-invites/${inviteCode}/join`);
-  return res.data;
+joinRoomInvite: async (inviteCode) => {
+  const cleanCode = String(inviteCode || '').trim();
+
+  if (!cleanCode) {
+    throw new Error('Invite code is required.');
+  }
+
+  storePendingRoomInvite(cleanCode);
+
+  const { data } = await roomInviteApi.post(
+    `/room-invites/${encodePathSegment(cleanCode)}/join`
+  );
+
+  const parsed = parseApiBody(data);
+
+  if (parsed?.joined || parsed?.requested) {
+    clearPendingRoomInvite();
+  }
+
+  return parsed;
 },
 
   async joinRoom(roomId, joinCode = '') {
