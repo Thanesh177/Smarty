@@ -64,8 +64,9 @@ export default function JoinRoomPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const autoJoinAttemptedRef = useRef('');
-  const pendingInviteKey = `smarty-pending-room-invite-${inviteCode || ''}`;
-  const joinPath = `/rooms/invite/${inviteCode || ''}`;
+  const safeInviteCode = String(inviteCode || '').trim();
+  const pendingInviteKey = `smarty-pending-room-invite-${safeInviteCode}`;
+  const joinPath = `/rooms/invite/${safeInviteCode}`;
 
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -80,7 +81,7 @@ export default function JoinRoomPage() {
         setStatus('');
         setLoadError('');
 
-        const data = await roomApi.getRoomInvite(inviteCode);
+        const data = await roomApi.getRoomInvite(safeInviteCode);
         const normalizedInvite = normalizeInvitePayload(data);
 
         if (!normalizedInvite?.inviteCode && !normalizedInvite?.roomId) {
@@ -101,8 +102,13 @@ export default function JoinRoomPage() {
       }
     }
 
-    if (inviteCode) loadInvite();
-  }, [inviteCode]);
+    if (safeInviteCode) {
+      loadInvite();
+    } else {
+      setLoading(false);
+      setLoadError('Invite code is missing from the link.');
+    }
+  }, [safeInviteCode]);
 
   const joinRoom = useCallback(async () => {
     if (!user) {
@@ -121,9 +127,14 @@ export default function JoinRoomPage() {
       setJoining(true);
       setStatus('');
 
-      const data = await roomApi.joinRoomFromInvite(inviteCode);
+      const data = await roomApi.joinRoomFromInvite(safeInviteCode);
       const { payload, body } = parseApiPayload(data);
       const joinResult = body || payload || data || {};
+      const joinedRoomId =
+        joinResult?.roomId ||
+        joinResult?.room?.roomId ||
+        invite?.roomId ||
+        '';
 
       sessionStorage.removeItem(pendingInviteKey);
       localStorage.removeItem(pendingInviteKey);
@@ -133,8 +144,10 @@ export default function JoinRoomPage() {
       if (joinResult?.joined) {
         setStatus('Joined room successfully. Opening room...');
         window.setTimeout(() => {
-          if (joinResult?.roomId) {
-            navigate(`/rooms?roomId=${encodeURIComponent(joinResult.roomId)}`, { replace: true });
+          if (joinedRoomId) {
+            sessionStorage.setItem('smarty-open-room-id', joinedRoomId);
+            localStorage.setItem('smarty-open-room-id', joinedRoomId);
+            navigate(`/rooms?roomId=${encodeURIComponent(joinedRoomId)}`, { replace: true });
           } else {
             navigate('/rooms', { replace: true });
           }
@@ -158,11 +171,11 @@ export default function JoinRoomPage() {
     } finally {
       setJoining(false);
     }
-  }, [inviteCode, joinPath, navigate, pendingInviteKey, user]);
+  }, [invite, joinPath, navigate, pendingInviteKey, safeInviteCode, user]);
 
   useEffect(() => {
-    if (!inviteCode || !user || !invite || loadError || loading) return;
-    if (autoJoinAttemptedRef.current === inviteCode) return;
+    if (!safeInviteCode || !user || !invite || loadError || loading) return;
+    if (autoJoinAttemptedRef.current === safeInviteCode) return;
 
     const pendingInvite =
       sessionStorage.getItem(pendingInviteKey) === '1' ||
@@ -173,10 +186,10 @@ export default function JoinRoomPage() {
     if (invite.requiresApproval !== false && !pendingInvite) return;
     if (joining) return;
 
-    autoJoinAttemptedRef.current = inviteCode;
+    autoJoinAttemptedRef.current = safeInviteCode;
     setStatus(invite.requiresApproval ? 'Sending join request...' : 'Instant join enabled. Joining room...');
     joinRoom();
-  }, [invite, inviteCode, joinPath, joinRoom, joining, loadError, loading, pendingInviteKey, user]);
+  }, [invite, joinPath, joinRoom, joining, loadError, loading, pendingInviteKey, safeInviteCode, user]);
 
   const roomName = invite?.roomName || 'Private Room';
   const description =
@@ -240,7 +253,7 @@ export default function JoinRoomPage() {
             <button
               type="button"
               className="join-room-btn"
-              disabled={joining || !invite || Boolean(loadError)}
+              disabled={joining || !invite || Boolean(loadError) || !safeInviteCode}
               onClick={joinRoom}
             >
               {joining

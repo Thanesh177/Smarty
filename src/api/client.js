@@ -160,7 +160,7 @@ export const newsApi = {
   },
 };
 
-api.interceptors.request.use(async (config) => {
+const attachAuthHeader = async (config) => {
   const token = await getAuthToken();
 
   if (token) {
@@ -170,7 +170,10 @@ api.interceptors.request.use(async (config) => {
   }
 
   return config;
-});
+};
+
+api.interceptors.request.use(attachAuthHeader);
+roomInviteApi.interceptors.request.use(attachAuthHeader);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -565,7 +568,7 @@ export const roomApi = {
         throw error;
       }
 
-      const fallbackResponse = await api.post('/rooms/invite-link', payload);
+      const fallbackResponse = await roomInviteApi.post('/rooms/invite-link', payload);
       data = fallbackResponse.data;
     }
 
@@ -622,7 +625,7 @@ export const roomApi = {
 
     storePendingRoomInvite(cleanCode);
 
-    const { data } = await api.post(`/room-invites/${encodePathSegment(cleanCode)}/join`);
+    const { data } = await roomInviteApi.post(`/room-invites/${encodePathSegment(cleanCode)}/join`);
     const parsed = parseApiBody(data);
 
     if (parsed?.joined || parsed?.requested) {
@@ -639,7 +642,7 @@ export const roomApi = {
       throw new Error('Invite code is required.');
     }
 
-    const { data } = await api.post(`/room-invites/${encodePathSegment(cleanCode)}/disable`);
+    const { data } = await roomInviteApi.post(`/room-invites/${encodePathSegment(cleanCode)}/disable`);
     return parseApiBody(data);
   },
 
