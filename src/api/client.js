@@ -490,7 +490,7 @@ export const roomApi = {
       throw new Error('Room ID is required to create an invite link.');
     }
 
-    const { data } = await api.post(`/rooms/${encodePathSegment(cleanRoomId)}/invite-link`, {
+    const { data } = await api.post('/rooms/invite-link', {
       roomId: cleanRoomId,
       requiresApproval: options.requiresApproval ?? true,
       ...(Number(options.maxUses) > 0 ? { maxUses: Number(options.maxUses) } : {}),
@@ -517,7 +517,7 @@ export const roomApi = {
       throw new Error('Invite code is required.');
     }
 
-    const { data } = await api.get(`/rooms/invite/${encodePathSegment(cleanCode)}`);
+    const { data } = await api.get(`/room-invites/${encodePathSegment(cleanCode)}`);
     const parsed = parseApiBody(data);
     const invite = parsed?.invite || parsed || {};
 
@@ -543,7 +543,7 @@ export const roomApi = {
       throw new Error('Invite code is required.');
     }
 
-    const { data } = await api.post(`/rooms/invite/${encodePathSegment(cleanCode)}/join`);
+    const { data } = await api.post(`/room-invites/${encodePathSegment(cleanCode)}/join`);
     return parseApiBody(data);
   },
 
@@ -554,7 +554,7 @@ export const roomApi = {
       throw new Error('Invite code is required.');
     }
 
-    const { data } = await api.post(`/rooms/invite/${encodePathSegment(cleanCode)}/disable`);
+    const { data } = await api.post(`/room-invites/${encodePathSegment(cleanCode)}/disable`);
     return parseApiBody(data);
   },
 

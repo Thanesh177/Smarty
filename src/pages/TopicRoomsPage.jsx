@@ -1032,11 +1032,24 @@ useEffect(() => {
 
       if (data.type === 'roomInvite' && data.invite) {
         const invite = data.invite;
-        const inviteRoomId = invite.roomId || invite.id;
-
+const inviteRoomId =
+  invite?.roomId ||
+  invite?.topicRoomId ||
+  invite?.groupId ||
+  invite?.room?.roomId ||
+  invite?.room?.id ||
+  invite?.id ||
+  '';
         if (inviteRoomId) {
           setRoomInvites((prev) => {
-            if (prev.some((item) => (item.roomId || item.id) === inviteRoomId)) {
+            if (prev.some((item) => (
+  item?.roomId ||
+  item?.topicRoomId ||
+  item?.groupId ||
+  item?.room?.roomId ||
+  item?.room?.id ||
+  item?.id
+) === inviteRoomId)) {
               return prev;
             }
 
@@ -1372,8 +1385,19 @@ async function acceptRoomInvite(invite) {
     await roomApi.acceptRoomInvite(roomId);
     if (!mountedRef.current) return;
 
-    setRoomInvites((prev) => prev.filter((item) => (item.roomId || item.id) !== roomId));
-
+setRoomInvites((prev) =>
+  prev.filter(
+    (item) =>
+      (
+        item?.roomId ||
+        item?.topicRoomId ||
+        item?.groupId ||
+        item?.room?.roomId ||
+        item?.room?.id ||
+        item?.id
+      ) !== roomId
+  )
+);
     setStatus('Room invite accepted');
     membersCacheRef.current = {};
     joinRequestsCacheRef.current = {};

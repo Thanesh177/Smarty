@@ -77,7 +77,6 @@ export default function JoinRoomPage() {
     }
   }, [inviteCode, navigate, user]);
 
-
   useEffect(() => {
     if (!inviteCode || !user || !invite || loadError || loading) return;
     if (invite.requiresApproval !== false) return;

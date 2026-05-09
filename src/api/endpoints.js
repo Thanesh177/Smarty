@@ -31,10 +31,10 @@ export const endpoints = {
     rejectInvite: (roomId) => `/rooms/${roomId}/invites/reject`,
 
     // Invite links
-    createInviteLink: (roomId) => `/rooms/${roomId}/invite-link`,
-    invitePreview: (inviteCode) => `/rooms/invite/${inviteCode}`,
-    joinFromInvite: (inviteCode) => `/rooms/invite/${inviteCode}/join`,
-    disableInviteLink: (inviteCode) => `/rooms/invite/${inviteCode}/disable`,
+    createInviteLink: '/rooms/invite-link',
+    invitePreview: (inviteCode) => `/room-invites/${inviteCode}`,
+    joinFromInvite: (inviteCode) => `/room-invites/${inviteCode}/join`,
+    disableInviteLink: (inviteCode) => `/room-invites/${inviteCode}/disable`,
 
     // Join requests
     joinRequests: (roomId) => `/rooms/${roomId}/requests`,
