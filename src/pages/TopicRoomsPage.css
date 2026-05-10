@@ -3230,10 +3230,10 @@ select:disabled {
   flex-direction: row !important;
   align-items: center !important;
   gap: 6px !important;
-  min-height: 46px !important;
+  min-height: 42px !important;
   margin: 0 12px max(14px, env(safe-area-inset-bottom)) !important;
-  padding: 6px 8px !important;
-  border-radius: 20px !important;
+  padding: 5px 7px !important;
+  border-radius: 18px !important;
   background: rgba(2, 6, 23, 0.94) !important;
   border: 1px solid rgba(125, 211, 252, 0.2) !important;
   box-shadow:
@@ -3246,9 +3246,9 @@ select:disabled {
 .input input {
   flex: 1 1 auto !important;
   min-width: 0 !important;
-  height: 34px !important;
-  min-height: 34px !important;
-  padding: 0 12px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 10px !important;
   border-radius: 999px !important;
   font-size: 15px !important;
 }
@@ -3277,19 +3277,19 @@ select:disabled {
 }
 
 .room-media-picker-btn {
-  flex: 0 0 34px !important;
-  width: 34px !important;
-  min-width: 34px !important;
-  height: 34px !important;
-  min-height: 34px !important;
+  flex: 0 0 32px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
   font-size: 17px !important;
 }
 
 .input button[type="submit"] {
   flex: 0 0 auto !important;
-  min-width: 54px !important;
-  height: 34px !important;
-  min-height: 34px !important;
+  min-width: 50px !important;
+  height: 32px !important;
+  min-height: 32px !important;
   padding: 0 12px !important;
   font-size: 12px !important;
 }
@@ -3322,26 +3322,26 @@ select:disabled {
   .input {
     bottom: max(22px, env(safe-area-inset-bottom)) !important;
     margin: 0 10px max(22px, env(safe-area-inset-bottom)) !important;
-    min-height: 56px !important;
+    min-height: 50px !important;
     padding: 8px !important;
-    border-radius: 24px !important;
+    border-radius: 20px !important;
   }
 
   .input input {
-    height: 42px !important;
-    min-height: 42px !important;
+    height: 38px !important;
+    min-height: 38px !important;
   }
 
   .room-media-picker-btn,
   .input button[type="submit"] {
-    height: 42px !important;
-    min-height: 42px !important;
+    height: 38px !important;
+    min-height: 38px !important;
   }
 
   .room-media-picker-btn {
-    width: 42px !important;
-    min-width: 42px !important;
-    flex-basis: 42px !important;
+    width: 38px !important;
+    min-width: 38px !important;
+    flex-basis: 38px !important;
   }
 }
 /* ===== FINAL MEDIA GRID STABILITY FIX ===== */

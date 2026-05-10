@@ -2974,6 +2974,7 @@ if (activeRoomRef.current?.roomId === editRoomTarget.roomId) {
 roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
 roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
 await loadRooms(roomSearch, { force: true });
+
 setStatus('Topic updated');
 setShowEditRoomModal(false);
 setEditRoomTarget(null);
