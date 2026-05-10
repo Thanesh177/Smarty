@@ -27,8 +27,10 @@ const MAX_RENDERED_MEDIA_MESSAGES = 260;
 const ROOM_MESSAGES_FETCH_LIMIT = 10;
 const ROOM_MESSAGES_REVEAL_STEP = 10;
 const ROOM_INITIAL_VISIBLE_MESSAGES = 10;
-const MAX_ROOM_MEDIA_GRID_ITEMS = 80;
+const MAX_ROOM_MEDIA_GRID_ITEMS = 2000;
 const ROOM_MEDIA_PREVIEW_EAGER_LIMIT = 2;
+const ROOM_MEDIA_GRID_INITIAL_ITEMS = 24;
+const ROOM_MEDIA_GRID_LOAD_STEP = 18;
 
 const ROOM_MEDIA_IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
 const ROOM_MEDIA_VIDEO_EXTENSIONS = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
@@ -315,6 +317,7 @@ function dedupeMessages(messages = []) {
   return unique;
 }
 
+
 function getStableRoomMessageKey(message = {}) {
   return String(
     message.messageId ||
@@ -325,6 +328,54 @@ function getStableRoomMessageKey(message = {}) {
       message.fileUrl ||
       `${message.createdAt || message.createdAtMs || 'msg'}-${message.senderId || 'user'}-${String(message.text || message.message || '').slice(0, 80)}`
   );
+}
+
+function areRoomMediaItemsSame(a = {}, b = {}) {
+  const aMessageId = String(a.messageId || a.id || '').trim();
+  const bMessageId = String(b.messageId || b.id || '').trim();
+  if (aMessageId && bMessageId && aMessageId === bMessageId) return true;
+
+  const aClientId = String(a.clientId || '').trim();
+  const bClientId = String(b.clientId || '').trim();
+  if (aClientId && bClientId && aClientId === bClientId) return true;
+
+  const aMediaKey = String(a.mediaKey || a.key || '').trim();
+  const bMediaKey = String(b.mediaKey || b.key || '').trim();
+  if (aMediaKey && bMediaKey && aMediaKey === bMediaKey) return true;
+
+  const aUrl = String(a.mediaUrl || a.fileUrl || a.url || '').trim();
+  const bUrl = String(b.mediaUrl || b.fileUrl || b.url || '').trim();
+  if (aUrl && bUrl && aUrl === bUrl) return true;
+
+  return getStableRoomMessageKey(a) === getStableRoomMessageKey(b);
+}
+
+function getRoomVideoCacheKey(message = {}) {
+  return String(
+    message.mediaKey ||
+      message.messageId ||
+      message.clientId ||
+      message.mediaUrl ||
+      message.fileUrl ||
+      ''
+  ).trim();
+}
+
+function hasCachedRoomVideoMetadata(cacheRef, message = {}) {
+  const key = getRoomVideoCacheKey(message);
+  return Boolean(key && cacheRef?.current?.has(key));
+}
+
+function saveCachedRoomVideoMetadata(cacheRef, message = {}, video = null) {
+  const key = getRoomVideoCacheKey(message);
+  if (!key || !cacheRef?.current || !video) return;
+
+  cacheRef.current.set(key, {
+    duration: Number.isFinite(video.duration) ? video.duration : 0,
+    width: video.videoWidth || 0,
+    height: video.videoHeight || 0,
+    cachedAt: Date.now(),
+  });
 }
 
 function trimRoomMessagesForMemory(messages = []) {
@@ -374,7 +425,9 @@ function mergeRoomMediaMessages(currentMedia = [], nextMessages = []) {
     mediaMap.set(key, message);
   });
 
-  return Array.from(mediaMap.values()).slice(-MAX_ROOM_MEDIA_GRID_ITEMS);
+  return Array.from(mediaMap.values())
+    .sort((a, b) => getRoomMessageTimeValue(b) - getRoomMessageTimeValue(a))
+    .slice(0, MAX_ROOM_MEDIA_GRID_ITEMS);
 }
 
 function areRoomsEqualForList(currentRoom, nextRoom) {
@@ -464,33 +517,67 @@ function RoomMessagePreview({ message, onOpen, onDownload }) {
   return (
     <div className={`room-message-preview-wrap ${msg.mediaType}`}>
       {msg.mediaType === 'image' && (
-        <button type="button" className="room-message-media-tap" onClick={() => onOpen(msg)}>
+        <button
+          type="button"
+          className="room-message-media-tap"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpen?.(msg);
+          }}
+        >
           <img
-  src={mediaUrl}
-  alt={msg.fileName || 'Shared image'}
-  className="room-message-image"
-  loading="lazy"
-  decoding="async"
-  fetchPriority="low"
-  sizes="280px"
-/>
+            src={mediaUrl}
+            alt={msg.fileName || 'Shared image'}
+            className="room-message-image"
+            loading="lazy"
+            decoding="async"
+            fetchPriority="low"
+            sizes="280px"
+          />
         </button>
       )}
 
       {msg.mediaType === 'video' && (
-        <button type="button" className="room-message-media-tap" onClick={() => onOpen(msg)}>
+        <button
+          type="button"
+          className="room-message-media-tap"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpen?.(msg);
+          }}
+        >
           <video className="room-message-video" src={mediaUrl} muted preload="none" playsInline />
           <span className="room-video-play-badge">▶</span>
         </button>
       )}
 
       {msg.mediaType === 'file' && (
-        <button type="button" className="room-message-file" onClick={() => onOpen(msg)}>
+        <button
+          type="button"
+          className="room-message-file"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpen?.(msg);
+          }}
+        >
           📎 {getShortRoomFileName(msg.fileName || msg.mediaName || 'Attachment')}
         </button>
       )}
 
-      <button type="button" className="room-message-download-btn" onClick={() => onDownload(msg)} aria-label="Download" title="Download">
+      <button
+        type="button"
+        className="room-message-download-btn"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onDownload?.(msg);
+        }}
+        aria-label="Download"
+        title="Download"
+      >
         <Download size={17} strokeWidth={2.4} />
       </button>
     </div>
@@ -535,8 +622,10 @@ export default function TopicRoomsPage() {
   const [mediaUploadProgress, setMediaUploadProgress] = useState(0);
   const [mediaUploadLabel, setMediaUploadLabel] = useState('');
   const [mediaViewer, setMediaViewer] = useState(null);
+  const [mediaViewerLoading, setMediaViewerLoading] = useState(false);
   const [mediaViewerReturnToGrid, setMediaViewerReturnToGrid] = useState(false);
   const [showRoomMediaGrid, setShowRoomMediaGrid] = useState(false);
+  const [roomMediaGridVisibleCount, setRoomMediaGridVisibleCount] = useState(ROOM_MEDIA_GRID_INITIAL_ITEMS);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteSearch, setInviteSearch] = useState('');
   const [inviteResults, setInviteResults] = useState([]);
@@ -603,10 +692,13 @@ export default function TopicRoomsPage() {
   const sendingMessageRef = useRef(false);
   const mediaViewerTouchStartRef = useRef(null);
   const mediaViewerVideoRef = useRef(null);
+  const roomVideoMetadataCacheRef = useRef(new Map());
   const roomMenuRef = useRef(null);
   const olderScrollAnchorRef = useRef(null);
-  const roomActionMenuRef = useRef(null);
-  const activeRoomMenuRef = useRef(null);
+const roomActionMenuRef = useRef(null);
+const activeRoomMenuRef = useRef(null);
+const roomMediaGridListRef = useRef(null);
+const roomMediaGridLoadOlderRef = useRef(false);
   const initialRoomScrollDoneRef = useRef('');
   const selectedMediaPreviewsRef = useRef([]);
   const pendingMessageIdsRef = useRef(new Set());
@@ -664,29 +756,25 @@ const renderedMessages = useMemo(() => {
     () => getRoomImageUrl(activeRoom),
     [activeRoom, getRoomImageUrl]
   );
+  
 
 const renderedMediaMessages = useMemo(() => {
-  if (!showRoomMediaGrid && !mediaViewer) {
-    return [];
-  }
+  const roomId = activeRoom?.roomId;
 
-  const cachedMedia = activeRoom?.roomId
-    ? roomMediaCacheRef.current[activeRoom.roomId] || []
-    : [];
+  if (!roomId) return [];
 
+  const cachedMedia = roomMediaCacheRef.current[roomId] || [];
   const mergedMedia = mergeRoomMediaMessages(cachedMedia, messages);
 
-  if (activeRoom?.roomId) {
-    roomMediaCacheRef.current[activeRoom.roomId] = mergedMedia;
-  }
+  roomMediaCacheRef.current[roomId] = mergedMedia;
 
   return mergedMedia;
-}, [
-  activeRoom?.roomId,
-  messages,
-  showRoomMediaGrid,
-  mediaViewer,
-]);
+}, [activeRoom?.roomId, messages]);
+
+const visibleRoomMediaMessages = useMemo(
+  () => renderedMediaMessages.slice(0, roomMediaGridVisibleCount),
+  [renderedMediaMessages, roomMediaGridVisibleCount]
+);
 
   const viewableMediaMessages = useMemo(
     () => renderedMediaMessages.filter((item) => item.mediaType === 'image' || item.mediaType === 'video'),
@@ -715,6 +803,27 @@ const renderedMediaMessages = useMemo(() => {
   useEffect(() => {
     messagesStateRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+  if (!showRoomMediaGrid) return undefined;
+
+  const list = roomMediaGridListRef.current;
+  if (!list) return undefined;
+
+  list.scrollTop = 0;
+
+  const stopGridScrollBubble = (event) => {
+    event.stopPropagation();
+  };
+
+  list.addEventListener('wheel', stopGridScrollBubble, { passive: true });
+  list.addEventListener('touchmove', stopGridScrollBubble, { passive: true });
+
+  return () => {
+    list.removeEventListener('wheel', stopGridScrollBubble);
+    list.removeEventListener('touchmove', stopGridScrollBubble);
+  };
+}, [showRoomMediaGrid, activeRoom?.roomId]);
 
   useLayoutEffect(() => {
     const anchor = olderScrollAnchorRef.current;
@@ -1188,46 +1297,140 @@ function markPendingRoomMessageFailed(clientId) {
 
     if (normalizedMessage.mediaType !== 'image' && normalizedMessage.mediaType !== 'video') return;
 
-    const targetMessageId = String(normalizedMessage.messageId || '').trim();
-    const targetClientId = String(normalizedMessage.clientId || '').trim();
-    const targetMediaKey = String(normalizedMessage.mediaKey || '').trim();
-    const targetUrl = String(mediaUrl || '').trim();
+    const availableMediaMessages =
+      viewableMediaMessages.length > 0
+        ? viewableMediaMessages
+        : mergeRoomMediaMessages(
+            activeRoomRef.current?.roomId
+              ? roomMediaCacheRef.current[activeRoomRef.current.roomId] || []
+              : [],
+            messagesStateRef.current
+          ).filter((item) => item.mediaType === 'image' || item.mediaType === 'video');
 
-    const mediaIndex = viewableMediaMessages.findIndex((item) => {
-      const itemMessageId = String(item.messageId || '').trim();
-      const itemClientId = String(item.clientId || '').trim();
-      const itemMediaKey = String(item.mediaKey || '').trim();
-      const itemUrl = String(item.mediaUrl || item.fileUrl || '').trim();
+    const mediaIndex = availableMediaMessages.findIndex((item) =>
+      areRoomMediaItemsSame(item, normalizedMessage)
+    );
 
-      return (
-        (targetMessageId && itemMessageId && itemMessageId === targetMessageId) ||
-        (targetClientId && itemClientId && itemClientId === targetClientId) ||
-        (targetMediaKey && itemMediaKey && itemMediaKey === targetMediaKey) ||
-        (targetUrl && itemUrl && itemUrl === targetUrl)
-      );
+    const selectedMediaItem = mediaIndex >= 0 ? availableMediaMessages[mediaIndex] : normalizedMessage;
+
+    if (selectedMediaItem?.mediaType === 'video') {
+      const hasCachedMetadata = hasCachedRoomVideoMetadata(roomVideoMetadataCacheRef, selectedMediaItem);
+      setMediaViewerLoading(!hasCachedMetadata);
+
+      if (!hasCachedMetadata) {
+        const warmVideo = document.createElement('video');
+        warmVideo.preload = 'metadata';
+        warmVideo.muted = true;
+        warmVideo.playsInline = true;
+        warmVideo.src = selectedMediaItem.mediaUrl || selectedMediaItem.fileUrl || mediaUrl;
+        warmVideo.onloadedmetadata = () => {
+          saveCachedRoomVideoMetadata(roomVideoMetadataCacheRef, selectedMediaItem, warmVideo);
+          setMediaViewerLoading(false);
+        };
+        warmVideo.onerror = () => setMediaViewerLoading(false);
+        warmVideo.load?.();
+      }
+    } else {
+      setMediaViewerLoading(false);
+    }
+    setMediaViewerReturnToGrid(Boolean(options.fromGrid));
+    setMediaViewer({
+      index: mediaIndex >= 0 ? mediaIndex : 0,
+      mediaKey: getStableRoomMessageKey(selectedMediaItem),
+      openedAt: Date.now(),
     });
-
-
-const selectedMediaItem = mediaIndex >= 0 ? viewableMediaMessages[mediaIndex] : normalizedMessage;
-
-setMediaViewerReturnToGrid(Boolean(options.fromGrid));
-setMediaViewer({
-  index: mediaIndex >= 0 ? mediaIndex : 0,
-  mediaKey: getStableRoomMessageKey(selectedMediaItem),
-  openedAt: Date.now(),
-});
   }
 
   function closeMediaViewer() {
     setMediaViewer(null);
+    setMediaViewerLoading(false);
     setMediaViewerReturnToGrid(false);
   }
 
   function backToRoomMediaGrid() {
+    const currentViewerItem = activeMediaViewerItem;
+
     setMediaViewer(null);
+    setMediaViewerLoading(false);
     setMediaViewerReturnToGrid(false);
+    roomMediaGridLoadOlderRef.current = false;
+
+    if (!currentViewerItem) {
+      setRoomMediaGridVisibleCount((count) =>
+        Math.max(count, ROOM_MEDIA_GRID_INITIAL_ITEMS)
+      );
+      setShowRoomMediaGrid(true);
+      return;
+    }
+
+    const mediaIndex = renderedMediaMessages.findIndex((item) =>
+      areRoomMediaItemsSame(item, currentViewerItem)
+    );
+
+    const nextVisibleCount =
+      mediaIndex >= 0
+        ? Math.max(
+            roomMediaGridVisibleCount,
+            mediaIndex + ROOM_MEDIA_GRID_LOAD_STEP
+          )
+        : Math.max(roomMediaGridVisibleCount, ROOM_MEDIA_GRID_INITIAL_ITEMS);
+
+    setRoomMediaGridVisibleCount(nextVisibleCount);
     setShowRoomMediaGrid(true);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const grid = roomMediaGridListRef.current;
+        if (!grid) return;
+
+        const mediaTiles = Array.from(
+          grid.querySelectorAll('.standalone-media-tile, .active-room-info-media-tile')
+        );
+
+        const targetTile = mediaTiles[mediaIndex];
+        if (!targetTile) return;
+
+        targetTile.scrollIntoView({
+          block: 'center',
+          inline: 'nearest',
+          behavior: 'auto',
+        });
+      });
+    });
   }
+
+  function handleRoomMediaGridScroll(event) {
+  event.stopPropagation();
+
+  const element = event.currentTarget;
+  const distanceFromBottom =
+    element.scrollHeight - element.scrollTop - element.clientHeight;
+
+  if (distanceFromBottom > 420) return;
+
+  if (roomMediaGridVisibleCount < renderedMediaMessages.length) {
+    setRoomMediaGridVisibleCount((current) =>
+      Math.min(renderedMediaMessages.length, current + ROOM_MEDIA_GRID_LOAD_STEP)
+    );
+    return;
+  }
+
+  if (
+    !hasOlderMessages ||
+    olderMessagesLoadingRef.current ||
+    roomMediaGridLoadOlderRef.current
+  ) {
+    return;
+  }
+
+  roomMediaGridLoadOlderRef.current = true;
+
+  Promise.resolve(loadOlderRoomMessages()).finally(() => {
+    window.setTimeout(() => {
+      roomMediaGridLoadOlderRef.current = false;
+    }, 160);
+  });
+}
 
   function openRoomMediaGrid(event) {
     event?.preventDefault?.();
@@ -1238,28 +1441,102 @@ setMediaViewer({
     setShowRoomMenu(false);
     setOpenRoomActionMenuId('');
     setMediaViewer(null);
+    setMediaViewerLoading(false);
     setMediaViewerReturnToGrid(false);
+    setRoomMediaGridVisibleCount(ROOM_MEDIA_GRID_INITIAL_ITEMS);
+    roomMediaGridLoadOlderRef.current = false;
     setShowRoomMediaGrid(true);
   }
 
-  function closeRoomMediaGrid() {
-    setShowRoomMediaGrid(false);
-    setMediaViewerReturnToGrid(false);
-  }
+function closeRoomMediaGrid() {
+  setShowRoomMediaGrid(false);
+  setMediaViewerReturnToGrid(false);
+  setRoomMediaGridVisibleCount(ROOM_MEDIA_GRID_INITIAL_ITEMS);
+  roomMediaGridLoadOlderRef.current = false;
+}
 
-  function openActiveRoomInfo(event) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
+async function loadActiveRoomInfoMembers(room = activeRoomRef.current || activeRoom) {
+  if (!room?.roomId) return;
 
-    if (!activeRoom) return;
+  const cacheKey = room.roomId;
+  const cached = membersCacheRef.current[cacheKey];
+  const now = Date.now();
 
-    setShowActiveRoomMenu(false);
-    setOpenRoomActionMenuId('');
-    setShowRoomMenu(false);
-    setActiveInfoSection('media');
+  if (
+    cached &&
+    Array.isArray(cached.members) &&
+    now - cached.timestamp < ROOM_MEMBERS_CACHE_MS
+  ) {
+    setActiveInfoMembers(cached.members);
     setActiveInfoLoading(false);
-    setShowActiveRoomInfo(true);
+    return;
   }
+
+  setActiveInfoLoading(true);
+
+  try {
+    const data = await roomApi.getRoomMembers(room.roomId);
+
+    if (!mountedRef.current) return;
+
+    const nextMembers = extractRoomArray(data, ['members']);
+
+    membersCacheRef.current[cacheKey] = {
+      timestamp: Date.now(),
+      members: nextMembers,
+    };
+
+    setActiveInfoMembers(nextMembers);
+  } catch (err) {
+    console.error(err);
+    setActiveInfoMembers([]);
+    setStatus(err?.response?.data?.error || 'Could not load members');
+  } finally {
+    if (mountedRef.current) setActiveInfoLoading(false);
+  }
+}
+
+
+async function openActiveRoomInfo(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+
+  const room = activeRoomRef.current || activeRoom;
+  if (!room?.roomId) return;
+
+  setShowActiveRoomMenu(false);
+  setShowRoomMenu(false);
+  setOpenRoomActionMenuId('');
+  setShowRoomMediaGrid(false);
+  setMediaViewer(null);
+  setMediaViewerLoading(false);
+  setMediaViewerReturnToGrid(false);
+
+  setActiveInfoSection('members');
+  setShowActiveRoomInfo(true);
+
+  await loadActiveRoomInfoMembers(room);
+}
+
+function openActiveRoomMediaPopup(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  event?.nativeEvent?.stopImmediatePropagation?.();
+
+  if (!activeRoom) return;
+
+  setShowActiveRoomMenu(false);
+  setOpenRoomActionMenuId('');
+  setShowRoomMenu(false);
+  setShowActiveRoomInfo(false);
+  setActiveInfoSection('');
+  setMediaViewer(null);
+  setMediaViewerLoading(false);
+  setMediaViewerReturnToGrid(false);
+  setRoomMediaGridVisibleCount(ROOM_MEDIA_GRID_INITIAL_ITEMS);
+  roomMediaGridLoadOlderRef.current = false;
+  setShowRoomMediaGrid(true);
+}
 
   async function toggleActiveInfoSection(section) {
     if (!activeRoom?.roomId) return;
@@ -1336,27 +1613,73 @@ setMediaViewer({
       return;
     }
 
+    setMediaViewerReturnToGrid(true);
     setShowRoomMediaGrid(false);
     openMediaViewer(normalizedMessage, { fromGrid: true });
   }
 
-  function openMediaGridFromMessage(message) {
-    const normalizedMessage = normalizeRoomMessageMedia(message);
-    const mediaUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl || '';
+function openMediaGridFromMessage(message) {
+  const normalizedMessage = normalizeRoomMessageMedia(message);
+  const mediaUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl || '';
 
-    if (!mediaUrl) return;
+  if (!mediaUrl) return;
 
-    if (normalizedMessage.mediaType === 'file') {
-      openMediaViewer(normalizedMessage);
-      return;
-    }
-
-    if (normalizedMessage.mediaType !== 'image' && normalizedMessage.mediaType !== 'video') return;
-
-    setMediaViewer(null);
-    setMediaViewerReturnToGrid(false);
-    setShowRoomMediaGrid(true);
+  if (normalizedMessage.mediaType === 'file') {
+    openMediaViewer(normalizedMessage);
+    return;
   }
+
+  if (
+    normalizedMessage.mediaType !== 'image' &&
+    normalizedMessage.mediaType !== 'video'
+  ) {
+    return;
+  }
+
+  const mediaIndex = renderedMediaMessages.findIndex((item) =>
+    areRoomMediaItemsSame(item, normalizedMessage)
+  );
+
+  const nextVisibleCount =
+    mediaIndex >= 0
+      ? Math.max(
+          ROOM_MEDIA_GRID_INITIAL_ITEMS,
+          mediaIndex + ROOM_MEDIA_GRID_LOAD_STEP
+        )
+      : ROOM_MEDIA_GRID_INITIAL_ITEMS;
+
+  setMediaViewer(null);
+  setMediaViewerLoading(false);
+  setMediaViewerReturnToGrid(false);
+
+  roomMediaGridLoadOlderRef.current = false;
+
+  setRoomMediaGridVisibleCount(nextVisibleCount);
+  setShowActiveRoomInfo(false);
+  setShowRoomMediaGrid(true);
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const grid = roomMediaGridListRef.current;
+      if (!grid) return;
+
+      const mediaTiles = Array.from(
+        grid.querySelectorAll(
+          '.standalone-media-tile, .active-room-info-media-tile'
+        )
+      );
+
+      const targetTile = mediaTiles[mediaIndex];
+      if (!targetTile) return;
+
+      targetTile.scrollIntoView({
+        block: 'center',
+        inline: 'nearest',
+        behavior: 'auto',
+      });
+    });
+  });
+}
 
   const moveMediaViewer = useCallback((direction) => {
     if (!viewableMediaMessages.length) return;
@@ -1364,22 +1687,41 @@ setMediaViewer({
     setMediaViewer((current) => {
       if (!current) return current;
 
-      const currentIndex = Math.min(
-        Math.max(Number(current.index || 0), 0),
-        viewableMediaMessages.length - 1
-      );
+      const currentKey = String(current.mediaKey || '').trim();
+      const keyIndex = currentKey
+        ? viewableMediaMessages.findIndex(
+            (item) => getStableRoomMessageKey(item) === currentKey
+          )
+        : -1;
+
+      const currentIndex =
+        keyIndex >= 0
+          ? keyIndex
+          : Math.min(
+              Math.max(Number(current.index || 0), 0),
+              viewableMediaMessages.length - 1
+            );
 
       const nextIndex =
         (currentIndex + direction + viewableMediaMessages.length) %
         viewableMediaMessages.length;
 
+      const nextItem = viewableMediaMessages[nextIndex] || {};
+      const nextKey = getStableRoomMessageKey(nextItem);
+
+      setMediaViewerLoading(
+  nextItem.mediaType === 'video' &&
+    !hasCachedRoomVideoMetadata(roomVideoMetadataCacheRef, nextItem)
+);
+
       return {
         ...current,
         index: nextIndex,
+        mediaKey: nextKey,
         openedAt: Date.now(),
       };
     });
-  }, [viewableMediaMessages.length]);
+  }, [viewableMediaMessages]);
 
   function handleMediaViewerTouchStart(event) {
     const touch = event.touches?.[0];
@@ -1403,20 +1745,27 @@ setMediaViewer({
 
     if (Math.abs(deltaX) < 45 || Math.abs(deltaX) < Math.abs(deltaY)) return;
 
-    moveMediaViewer(deltaX < 0 ? 1 : -1);
+    moveMediaViewer(deltaX > 0 ? 1 : -1);
   }
 
 const activeMediaViewerIndex = mediaViewer
   ? (() => {
       const targetKey = String(mediaViewer.mediaKey || '').trim();
 
-      const foundIndex = targetKey
+      const foundByKeyIndex = targetKey
         ? viewableMediaMessages.findIndex(
             (item) => getStableRoomMessageKey(item) === targetKey
           )
         : -1;
 
-      if (foundIndex >= 0) return foundIndex;
+      if (foundByKeyIndex >= 0) return foundByKeyIndex;
+
+      const currentItem = viewableMediaMessages[Number(mediaViewer.index || 0)] || null;
+      const foundByIdentityIndex = currentItem
+        ? viewableMediaMessages.findIndex((item) => areRoomMediaItemsSame(item, currentItem))
+        : -1;
+
+      if (foundByIdentityIndex >= 0) return foundByIdentityIndex;
 
       return Math.min(
         Math.max(Number(mediaViewer.index || 0), 0),
@@ -1434,6 +1783,16 @@ const activeMediaViewerItem = mediaViewer
 
     if (!mediaViewerCount) {
       setMediaViewer(null);
+      setMediaViewerLoading(false);
+      return;
+    }
+
+    const targetKey = String(mediaViewer.mediaKey || '').trim();
+    const indexFromKey = targetKey
+      ? viewableMediaMessages.findIndex((item) => getStableRoomMessageKey(item) === targetKey)
+      : -1;
+
+    if (indexFromKey < 0 && targetKey) {
       return;
     }
 
@@ -1442,10 +1801,22 @@ const activeMediaViewerItem = mediaViewer
       mediaViewerCount - 1
     );
 
-    if (safeIndex !== mediaViewer.index) {
-      setMediaViewer((current) => (current ? { ...current, index: safeIndex } : current));
+    const nextIndex = indexFromKey >= 0 ? indexFromKey : safeIndex;
+    const nextItem = viewableMediaMessages[nextIndex] || null;
+    const nextKey = targetKey || (nextItem ? getStableRoomMessageKey(nextItem) : '');
+
+    if (nextIndex !== mediaViewer.index || (!mediaViewer.mediaKey && nextKey)) {
+      setMediaViewer((current) =>
+        current
+          ? {
+              ...current,
+              index: nextIndex,
+              mediaKey: current.mediaKey || nextKey,
+            }
+          : current
+      );
     }
-  }, [mediaViewer, mediaViewerCount]);
+  }, [mediaViewer?.index, mediaViewer?.mediaKey, mediaViewerCount, viewableMediaMessages]);
 
   useEffect(() => {
     if (!activeMediaViewerItem || activeMediaViewerItem.mediaType !== 'video') return;
@@ -2402,7 +2773,11 @@ const activeMediaViewerItem = mediaViewer
         throw new Error('renameRoom API method is missing in client.js');
       }
 
-      const data = await roomApi.renameRoom(room.roomId, cleanName);
+      const data = await roomApi.renameRoom(room.roomId, {
+  name: cleanName,
+  roomName: cleanName,
+  title: cleanName,
+});
       const { payload, body } = parseApiPayload(data);
 
       const updatedRoom =
@@ -2489,12 +2864,15 @@ const activeMediaViewerItem = mediaViewer
       URL.revokeObjectURL(editRoomImagePreview);
     }
 
-    setShowActiveRoomMenu(false);
-    setEditRoomTarget(room);
-    setEditRoomName(room.name || '');
-    setEditRoomImageFile(null);
-    setEditRoomImagePreview('');
-    setShowEditRoomModal(true);
+setStatus('');
+setShowActiveRoomMenu(false);
+setShowActiveRoomInfo(false);
+setActiveInfoSection('');
+setEditRoomTarget(room);
+setEditRoomName(room.name || '');
+setEditRoomImageFile(null);
+setEditRoomImagePreview('');
+setShowEditRoomModal(true);
   }
 
   function handleEditRoomImageChange(event) {
@@ -2568,9 +2946,40 @@ const activeMediaViewerItem = mediaViewer
         if (!uploaded) return;
       }
 
-      roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
-      setStatus('Topic updated');
-      closeEditRoomModal();
+const latestRoom =
+  activeRoomRef.current?.roomId === editRoomTarget.roomId
+    ? activeRoomRef.current
+    : editRoomTarget;
+
+const nextRoom = {
+  ...latestRoom,
+  name: cleanName,
+  nameLower: cleanName.toLowerCase(),
+};
+
+setRooms((prev) =>
+  prev.map((room) =>
+    room.roomId === editRoomTarget.roomId ? { ...room, ...nextRoom } : room
+  )
+);
+
+if (activeRoomRef.current?.roomId === editRoomTarget.roomId) {
+  activeRoomRef.current = {
+    ...activeRoomRef.current,
+    ...nextRoom,
+  };
+  setActiveRoom(activeRoomRef.current);
+}
+
+roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
+roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
+await loadRooms(roomSearch, { force: true });
+setStatus('Topic updated');
+setShowEditRoomModal(false);
+setEditRoomTarget(null);
+setEditRoomName('');
+setEditRoomImageFile(null);
+setEditRoomImagePreview('');
     } finally {
       if (mountedRef.current) setEditRoomSaving(false);
     }
@@ -3752,33 +4161,20 @@ return (
                 ⋯
               </button>
 
-              {showActiveRoomMenu && (
-                <div className="active-room-menu-popover">
-                  <button type="button" onClick={openActiveRoomInfo}>
-                    Group Info
-                  </button>
+          {showActiveRoomMenu && (
+  <div
+    className="active-room-menu-popover"
+    onClick={(event) => event.stopPropagation()}
+  >
+<button type="button" onClick={openActiveRoomInfo}>
+  Group Info
+</button>
 
-                  <button
-                    type="button"
-                    disabled={!roomMediaCacheRef.current[activeRoom?.roomId || '']?.length}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.nativeEvent?.stopImmediatePropagation?.();
-                      openRoomMediaGrid(e);
-                    }}
-                  >
-                    Media
-                   {roomMediaCacheRef.current[activeRoom?.roomId || '']?.length > 0 && (
-                      <span className="active-room-menu-count">
-                       {roomMediaCacheRef.current[activeRoom?.roomId || '']?.length > 99
-  ? '99+'
-  : roomMediaCacheRef.current[activeRoom?.roomId || '']?.length}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              )}
+<button type="button" onClick={openActiveRoomMediaPopup}>
+  Media
+</button>
+  </div>
+)}
             </div>
           </div>
 
@@ -3788,7 +4184,7 @@ return (
 onScroll={(event) => {
   const element = event.currentTarget;
 
-  if (element.scrollTop < 80) {
+  if (element.scrollTop < 380) {
     loadOlderRoomMessages();
   }
 
@@ -3847,15 +4243,14 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
                     {msg.mediaType === 'image' && (msg.mediaUrl || msg.fileUrl) && (
                       <div className="room-message-media-wrap">
                         <button
-                          type="button"
-                          className="room-message-media-tap"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            openMediaViewer(msg);
-                          }}
-                          aria-label="Open image"
-                        >
+  type="button"
+  className="room-message-media-tap"
+  onClick={(event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onOpen?.(msg);
+  }}
+>
                           <img
                             src={msg.mediaUrl || msg.fileUrl}
                             alt={msg.fileName || 'Shared image'}
@@ -3891,30 +4286,30 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
                     {msg.mediaType === 'video' && (msg.mediaUrl || msg.fileUrl) && (
                       <div className="room-message-media-wrap video-preview-wrap">
                         <button
-                          type="button"
-                          className="room-message-media-tap"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            openMediaViewer(msg);
-                          }}
-                          aria-label="Play video"
-                        >
+  type="button"
+  className="room-message-media-tap"
+  onClick={(event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openMediaViewer?.(msg);
+  }}
+>
                           <video
                             className="room-message-video"
                             src={msg.mediaUrl || msg.fileUrl}
                             muted
-                            preload="metadata"
-                            playsInline
-                            controls={false}
-                            disablePictureInPicture
+                            preload={hasCachedRoomVideoMetadata(roomVideoMetadataCacheRef, msg) ? 'none' : 'metadata'}
                             onLoadedMetadata={(event) => {
+                              saveCachedRoomVideoMetadata(roomVideoMetadataCacheRef, msg, event.currentTarget);
                               try {
                                 event.currentTarget.currentTime = Math.min(0.1, event.currentTarget.duration || 0);
                               } catch {
                                 // Ignore preview seek failures.
                               }
                             }}
+                            playsInline
+                            controls={false}
+                            disablePictureInPicture
                             onError={(event) => {
                               event.currentTarget.closest('.room-message-media-wrap')?.classList.add('media-load-failed');
                             }}
@@ -3942,14 +4337,14 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
                     {msg.mediaType === 'file' && (msg.mediaUrl || msg.fileUrl) && (
                       <div className="room-message-file-wrap">
                         <button
-                          type="button"
-                          className="room-message-file"
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            openMediaViewer(msg);
-                          }}
-                        >
+  type="button"
+  className="room-message-file"
+  onClick={(event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openMediaGridFromMessage?.(msg);
+  }}
+>
                           📎 {getShortRoomFileName(msg.fileName || msg.mediaName || 'Attachment')}
                         </button>
 
@@ -4072,86 +4467,57 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
       )}
     </section>
 
-    {showRoomMediaGrid && activeRoom && (
-      <div
-        className="room-media-grid-overlay"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Room media grid"
-        onClick={closeRoomMediaGrid}
-      >
-        <div className="room-media-grid-panel" onClick={(event) => event.stopPropagation()}>
-          <div className="room-media-grid-header">
-            <div>
-              <p>Room Media</p>
-              <h3>{activeRoom.name}</h3>
-            </div>
-
-            <button type="button" className="room-media-grid-close" onClick={closeRoomMediaGrid}>
-              ×
-            </button>
-          </div>
-
-          
-
-          {renderedMediaMessages.length === 0 ? (
-            <p className="room-media-grid-empty">No photos, videos, or files shared yet.</p>
-          ) : (
-           <div
-  className="room-media-grid-list"
-onScroll={(event) => {
-  const element = event.currentTarget;
-  const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
-
-  setShowScrollToBottom(distanceFromBottom > 220);
-
-  if (element.scrollTop < 80) {
-    loadOlderRoomMessages();
-  }
-}}
->
-              {renderedMediaMessages.map((item, index) => {
-                const itemUrl = item.mediaUrl || item.fileUrl;
-
-                return (
-                  <button
-                    type="button"
-                    key={item.messageId || item.clientId || item.mediaKey || itemUrl || index}
-                    className={`room-media-grid-item ${item.mediaType === 'file' ? 'room-media-grid-file-item' : ''}`}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      openMediaFromGrid(item);
-                    }}
-                  >
-                    {item.mediaType === 'video' ? (
-                      <>
-                        <video src={itemUrl} muted preload="metadata" playsInline className="room-media-grid-video" />
-                        <span className="room-media-grid-play">▶</span>
-                      </>
-                    ) : item.mediaType === 'file' ? (
-                      <span className="room-media-grid-file-card">
-                        <span className="room-media-grid-file-icon">📎</span>
-                        <strong>{getShortRoomFileName(item.fileName || item.mediaName || 'Attachment')}</strong>
-                        <small>{item.contentType || 'File'}</small>
-                      </span>
-                    ) : (
-                      <img
-                        src={itemUrl}
-                        alt={item.fileName || item.mediaName || 'Room media'}
-                        className="room-media-grid-image"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+{showRoomMediaGrid && activeRoom && (
+  <div className="standalone-media-modal" onClick={closeRoomMediaGrid}>
+    <section className="standalone-media-panel" onClick={(e) => e.stopPropagation()}>
+      <header className="standalone-media-header">
+        <div>
+          <p>Shared media</p>
+          <h2>Media</h2>
+          <span>{activeRoom.name}</span>
         </div>
+
+        <button type="button" className="standalone-media-close" onClick={closeRoomMediaGrid}>
+          ✕
+        </button>
+      </header>
+
+<div
+  ref={roomMediaGridListRef}
+  className="standalone-media-grid"
+  onScroll={handleRoomMediaGridScroll}
+>
+        {visibleRoomMediaMessages.length === 0 ? (
+          <p className="standalone-media-empty">No media shared yet.</p>
+        ) : (
+          visibleRoomMediaMessages.map((item) => (
+            <button
+              type="button"
+              className={`standalone-media-tile ${item.mediaType}`}
+              key={item.messageId || item.clientId || item.mediaUrl || item.fileUrl}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openMediaFromGrid(item);
+              }}
+            >
+              {item.mediaType === 'image' && (
+                <img src={item.mediaUrl || item.fileUrl} alt={item.fileName || 'Shared media'} />
+              )}
+
+              {item.mediaType === 'video' && (
+                <>
+                  <video src={item.mediaUrl || item.fileUrl} muted playsInline preload="metadata" />
+                  <span className="standalone-media-play">▶</span>
+                </>
+              )}
+            </button>
+          ))
+        )}
       </div>
-    )}
+    </section>
+  </div>
+)}
 
     {mediaViewer && activeMediaViewerItem && (
       <div
@@ -4258,13 +4624,6 @@ onScroll={(event) => {
           </div>
 
           <div className="active-room-info-rows">
-            <button
-              type="button"
-              className={`active-room-info-row ${activeInfoSection === 'media' ? 'open' : ''}`}
-              onClick={() => toggleActiveInfoSection('media')}
-            >
-              Media
-            </button>
 
             <button
               type="button"
@@ -4285,9 +4644,17 @@ onScroll={(event) => {
             )}
 
             {activeRoomCanEdit && (
-              <button type="button" className="active-room-info-row" onClick={() => openEditRoomModal(activeRoom)}>
-                Edit
-              </button>
+<button
+  type="button"
+  className="active-room-info-row"
+  onClick={(event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openEditRoomModal(activeRoom);
+  }}
+>
+  Edit
+</button>
             )}
 
             {activeRoomCanEdit && activeRoom.privacy === 'private' && (
@@ -4344,40 +4711,8 @@ onScroll={(event) => {
               </div>
             )}
 
-            {activeInfoSection === 'media' && (
-              <div className="active-room-info-inline-section media-grid">
-                {renderedMediaMessages.length === 0 ? (
-                  <p className="active-room-info-empty">No media shared yet.</p>
-                ) : (
-                  renderedMediaMessages.map((item) => (
-                    <button
-                      type="button"
-                      className={`active-room-info-media-tile ${item.mediaType}`}
-                      key={item.messageId || item.clientId || item.mediaUrl || item.fileUrl}
-                      onClick={() => openMediaFromGrid(item)}
-                    >
-                      {item.mediaType === 'image' && (
-                        <img src={item.mediaUrl || item.fileUrl} alt={item.fileName || 'Shared media'} />
-                      )}
 
-                      {item.mediaType === 'video' && (
-                        <>
-                          <video src={item.mediaUrl || item.fileUrl} muted playsInline preload="metadata" />
-                          <span>▶</span>
-                        </>
-                      )}
-
-                      {item.mediaType === 'file' && (
-                        <div className="active-room-info-file-tile">
-                          <strong>FILE</strong>
-                          <small>{getShortRoomFileName(item.fileName || item.mediaName)}</small>
-                        </div>
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
+            
 
             {activeInfoSection === 'requests' && activeRoomCanEdit && activeRoom.privacy === 'private' && (
               <div className="active-room-info-inline-section">
