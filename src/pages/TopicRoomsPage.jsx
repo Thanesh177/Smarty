@@ -4631,8 +4631,15 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
 
               {item.mediaType === 'video' && (
                 <>
-                  <video src={item.mediaUrl || item.fileUrl} muted playsInline preload="none" />
-                  <span className="standalone-media-play">▶</span>
+<video
+  src={item.mediaUrl || item.fileUrl}
+  muted
+  playsInline
+  autoPlay
+  loop
+  preload="metadata"
+  className="standalone-media-preview-video"
+/>                  <span className="standalone-media-play">▶</span>
                 </>
               )}
             </button>
