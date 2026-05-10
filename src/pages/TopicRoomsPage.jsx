@@ -165,6 +165,45 @@ function extractRoomArray(data, keys = []) {
   return [];
 }
 
+function getRoomMembersFromResponse(data) {
+  const { payload, body } = parseApiPayload(data);
+  const responseData = body?.data || payload?.data || body || payload || data || {};
+
+  const candidates = [
+    data?.members,
+    data?.Items,
+    data?.users,
+    data?.roomMembers,
+    data?.data?.members,
+    data?.data?.Items,
+    data?.data?.users,
+    data?.data?.roomMembers,
+    payload?.members,
+    payload?.Items,
+    payload?.users,
+    payload?.roomMembers,
+    payload?.data?.members,
+    payload?.data?.Items,
+    payload?.data?.users,
+    payload?.data?.roomMembers,
+    body?.members,
+    body?.Items,
+    body?.users,
+    body?.roomMembers,
+    body?.data?.members,
+    body?.data?.Items,
+    body?.data?.users,
+    body?.data?.roomMembers,
+    responseData?.members,
+    responseData?.Items,
+    responseData?.users,
+    responseData?.roomMembers,
+  ];
+
+  const members = candidates.find((candidate) => Array.isArray(candidate));
+  return members || [];
+}
+
 function getUploadedRoomImageUrl(uploadResponse) {
   const { payload, body } = parseApiPayload(uploadResponse);
 
@@ -523,7 +562,7 @@ function RoomMessagePreview({ message, onOpen, onDownload }) {
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            onOpen?.(msg);
+            openMediaViewer?.(msg);
           }}
         >
           <img
@@ -1455,16 +1494,21 @@ function closeRoomMediaGrid() {
   roomMediaGridLoadOlderRef.current = false;
 }
 
-async function loadActiveRoomInfoMembers(room = activeRoomRef.current || activeRoom) {
+
+async function loadActiveRoomInfoMembers(room = activeRoomRef.current || activeRoom, options = {}) {
   if (!room?.roomId) return;
+
+  activeRoomRef.current = room;
 
   const cacheKey = room.roomId;
   const cached = membersCacheRef.current[cacheKey];
   const now = Date.now();
 
   if (
+    !options.force &&
     cached &&
     Array.isArray(cached.members) &&
+    cached.members.length > 0 &&
     now - cached.timestamp < ROOM_MEMBERS_CACHE_MS
   ) {
     setActiveInfoMembers(cached.members);
@@ -1476,10 +1520,9 @@ async function loadActiveRoomInfoMembers(room = activeRoomRef.current || activeR
 
   try {
     const data = await roomApi.getRoomMembers(room.roomId);
-
     if (!mountedRef.current) return;
 
-    const nextMembers = extractRoomArray(data, ['members']);
+    const nextMembers = getRoomMembersFromResponse(data).filter(Boolean);
 
     membersCacheRef.current[cacheKey] = {
       timestamp: Date.now(),
@@ -1504,6 +1547,8 @@ async function openActiveRoomInfo(event) {
   const room = activeRoomRef.current || activeRoom;
   if (!room?.roomId) return;
 
+  activeRoomRef.current = room;
+
   setShowActiveRoomMenu(false);
   setShowRoomMenu(false);
   setOpenRoomActionMenuId('');
@@ -1512,10 +1557,13 @@ async function openActiveRoomInfo(event) {
   setMediaViewerLoading(false);
   setMediaViewerReturnToGrid(false);
 
-  setActiveInfoSection('members');
+  setModalRoom(room);
+  setModalMode('members');
   setShowActiveRoomInfo(true);
+  setActiveInfoSection('members');
+  setActiveInfoMembers([]);
 
-  await loadActiveRoomInfoMembers(room);
+  await loadActiveRoomInfoMembers(room, { force: true });
 }
 
 function openActiveRoomMediaPopup(event) {
@@ -1547,24 +1595,15 @@ function openActiveRoomMediaPopup(event) {
     if (!nextSection) return;
 
     if (section === 'members') {
-      setActiveInfoLoading(true);
-      setActiveInfoMembers([]);
-      setModalRoom(activeRoom);
+      const room = activeRoomRef.current || activeRoom;
+      if (!room?.roomId) return;
+
+      activeRoomRef.current = room;
+      setModalRoom(room);
       setModalMode('members');
+      setActiveInfoMembers([]);
 
-      try {
-        const data = await roomApi.getRoomMembers(activeRoom.roomId);
-
-        const nextMembers = extractRoomArray(data, ['members']);
-
-        setActiveInfoMembers(nextMembers);
-      } catch (err) {
-        console.error(err);
-        setStatus(err?.response?.data?.error || 'Could not load members');
-      } finally {
-        setActiveInfoLoading(false);
-      }
-
+      await loadActiveRoomInfoMembers(room, { force: true });
       return;
     }
 
@@ -1745,7 +1784,7 @@ function openMediaGridFromMessage(message) {
 
     if (Math.abs(deltaX) < 45 || Math.abs(deltaX) < Math.abs(deltaY)) return;
 
-    moveMediaViewer(deltaX > 0 ? 1 : -1);
+    moveMediaViewer(deltaX > 0 ? -1 : 1);
   }
 
 const activeMediaViewerIndex = mediaViewer
@@ -2723,7 +2762,7 @@ const activeMediaViewerItem = mediaViewer
       setShowActiveRoomMenu(false);
       setStatus('Room image updated');
 
-      return true;
+return imageUrl;
     } catch (err) {
       console.error(err);
 
@@ -2773,11 +2812,8 @@ const activeMediaViewerItem = mediaViewer
         throw new Error('renameRoom API method is missing in client.js');
       }
 
-      const data = await roomApi.renameRoom(room.roomId, {
-  name: cleanName,
-  roomName: cleanName,
-  title: cleanName,
-});
+const data = await roomApi.renameRoom(room.roomId, cleanName);
+
       const { payload, body } = parseApiPayload(data);
 
       const updatedRoom =
@@ -2875,34 +2911,59 @@ setEditRoomImagePreview('');
 setShowEditRoomModal(true);
   }
 
-  function handleEditRoomImageChange(event) {
-    const file = event.target.files?.[0] || null;
-    event.target.value = '';
+function handleCropPointerDown(event) {
+  event.preventDefault();
 
-    if (!file) return;
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const startOffset = { ...imageCropOffset };
 
-    if (!file.type?.startsWith('image/')) {
-      setStatus('Please choose an image file');
-      return;
-    }
-
-    if (file.size > ROOM_IMAGE_PICKER_MAX_BYTES) {
-      setStatus('Image must be smaller than 8 MB before optimization');
-      return;
-    }
-
-    if (imageCropSourceUrl?.startsWith('blob:')) {
-      URL.revokeObjectURL(imageCropSourceUrl);
-    }
-
-    setStatus('');
-    setImageCropTarget('edit');
-    setImageCropSourceFile(file);
-    setImageCropSourceUrl(URL.createObjectURL(file));
-    setImageCropZoom(1);
-    setImageCropOffset({ x: 0, y: 0 });
-    setImageCropModalOpen(true);
+  function handlePointerMove(moveEvent) {
+    setImageCropOffset({
+      x: startOffset.x + moveEvent.clientX - startX,
+      y: startOffset.y + moveEvent.clientY - startY,
+    });
   }
+
+  function handlePointerUp() {
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerup', handlePointerUp);
+  }
+
+  window.addEventListener('pointermove', handlePointerMove);
+  window.addEventListener('pointerup', handlePointerUp);
+}
+
+
+
+function handleEditRoomImageChange(event) {
+  const file = event.target.files?.[0] || null;
+  event.target.value = '';
+
+  if (!file) return;
+
+  if (!file.type?.startsWith('image/')) {
+    setStatus('Please choose an image file');
+    return;
+  }
+
+  if (file.size > ROOM_IMAGE_PICKER_MAX_BYTES) {
+    setStatus('Image must be smaller than 8 MB before optimization');
+    return;
+  }
+
+  if (imageCropSourceUrl?.startsWith('blob:')) {
+    URL.revokeObjectURL(imageCropSourceUrl);
+  }
+
+  setStatus('');
+  setImageCropTarget('edit');
+  setImageCropSourceFile(file);
+  setImageCropSourceUrl(URL.createObjectURL(file));
+  setImageCropZoom(1);
+  setImageCropOffset({ x: 0, y: 0 });
+  setImageCropModalOpen(true);
+}
 
   function removeEditRoomImage() {
     if (editRoomImagePreview?.startsWith('blob:')) {
@@ -2913,78 +2974,140 @@ setShowEditRoomModal(true);
     setEditRoomImagePreview('');
   }
 
-  async function saveEditRoom(e) {
-    e.preventDefault();
 
-    if (!editRoomTarget?.roomId || editRoomSaving) return;
+function closeImageCropModal() {
+  if (imageCropSourceUrl?.startsWith('blob:')) {
+    URL.revokeObjectURL(imageCropSourceUrl);
+  }
 
-    const cleanName = editRoomName.trim().replace(/\s+/g, ' ');
-    const currentName = String(editRoomTarget.name || '').trim();
-    const shouldRename = cleanName.toLowerCase() !== currentName.toLowerCase();
-
-    if (!cleanName) {
-      setStatus('Topic name cannot be empty');
-      return;
-    }
-
-    if (cleanName.length > 60) {
-      setStatus('Topic name must be 60 characters or fewer');
-      return;
-    }
-
-    try {
-      setStatus('');
-      setEditRoomSaving(true);
-
-      if (shouldRename) {
-        const renamed = await renameRoom(editRoomTarget, cleanName);
-        if (!renamed) return;
-      }
-
-      if (editRoomImageFile) {
-        const uploaded = await uploadRoomImage(editRoomTarget, editRoomImageFile);
-        if (!uploaded) return;
-      }
-
-const latestRoom =
-  activeRoomRef.current?.roomId === editRoomTarget.roomId
-    ? activeRoomRef.current
-    : editRoomTarget;
-
-const nextRoom = {
-  ...latestRoom,
-  name: cleanName,
-  nameLower: cleanName.toLowerCase(),
-};
-
-setRooms((prev) =>
-  prev.map((room) =>
-    room.roomId === editRoomTarget.roomId ? { ...room, ...nextRoom } : room
-  )
-);
-
-if (activeRoomRef.current?.roomId === editRoomTarget.roomId) {
-  activeRoomRef.current = {
-    ...activeRoomRef.current,
-    ...nextRoom,
-  };
-  setActiveRoom(activeRoomRef.current);
+  setImageCropModalOpen(false);
+  setImageCropTarget('');
+  setImageCropSourceFile(null);
+  setImageCropSourceUrl('');
+  setImageCropZoom(1);
+  setImageCropOffset({ x: 0, y: 0 });
 }
 
-roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
-roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
-await loadRooms(roomSearch, { force: true });
+function confirmImageCrop() {
+  if (!imageCropSourceFile || !imageCropSourceUrl) return;
 
-setStatus('Topic updated');
-setShowEditRoomModal(false);
-setEditRoomTarget(null);
-setEditRoomName('');
-setEditRoomImageFile(null);
-setEditRoomImagePreview('');
-    } finally {
-      if (mountedRef.current) setEditRoomSaving(false);
+  if (imageCropTarget === 'edit') {
+    if (editRoomImagePreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(editRoomImagePreview);
     }
+
+    setEditRoomImageFile(imageCropSourceFile);
+    setEditRoomImagePreview(imageCropSourceUrl);
   }
+
+  if (imageCropTarget === 'create') {
+    if (newRoomImagePreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(newRoomImagePreview);
+    }
+
+    setNewRoomImageFile(imageCropSourceFile);
+    setNewRoomImagePreview(imageCropSourceUrl);
+  }
+
+  setImageCropModalOpen(false);
+  setImageCropTarget('');
+  setImageCropSourceFile(null);
+  setImageCropSourceUrl('');
+  setImageCropZoom(1);
+  setImageCropOffset({ x: 0, y: 0 });
+}
+
+
+async function saveEditRoom(e) {
+  e.preventDefault();
+
+  if (!editRoomTarget?.roomId || editRoomSaving) return;
+
+  const cleanName = editRoomName.trim().replace(/\s+/g, ' ');
+  const currentName = String(editRoomTarget.name || '').trim();
+  const shouldRename = cleanName.toLowerCase() !== currentName.toLowerCase();
+
+  if (!cleanName) {
+    setStatus('Topic name cannot be empty');
+    return;
+  }
+
+  if (cleanName.length > 60) {
+    setStatus('Topic name must be 60 characters or fewer');
+    return;
+  }
+
+  try {
+    setStatus('');
+    setEditRoomSaving(true);
+
+    let imagePatch = {};
+
+if (shouldRename) {
+  const renamed = await renameRoom(editRoomTarget, cleanName);
+  if (!renamed) return;
+}
+
+if (editRoomImageFile) {
+  const uploadedImageUrl = await uploadRoomImage(editRoomTarget, editRoomImageFile);
+  if (!uploadedImageUrl) return;
+
+  imagePatch = getRoomImagePatch(uploadedImageUrl);
+}
+
+    const nextPatch = {
+      name: cleanName,
+      nameLower: cleanName.toLowerCase(),
+      ...imagePatch,
+    };
+
+    setRooms((prev) =>
+      prev.map((room) =>
+        room.roomId === editRoomTarget.roomId
+          ? { ...room, ...nextPatch }
+          : room
+      )
+    );
+
+    if (activeRoomRef.current?.roomId === editRoomTarget.roomId) {
+      const nextActiveRoom = {
+        ...activeRoomRef.current,
+        ...nextPatch,
+      };
+
+      activeRoomRef.current = nextActiveRoom;
+      setActiveRoom(nextActiveRoom);
+    }
+
+    roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
+
+    setStatus('Topic updated');
+
+    if (editRoomImagePreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(editRoomImagePreview);
+    }
+
+    setShowEditRoomModal(false);
+    setEditRoomTarget(null);
+    setEditRoomName('');
+    setEditRoomImageFile(null);
+    setEditRoomImagePreview('');
+
+    window.setTimeout(() => {
+      if (mountedRef.current) loadRooms(roomSearch, { force: true });
+    }, 300);
+  } catch (err) {
+    console.error(err);
+    setStatus(
+      err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Could not update topic'
+    );
+  } finally {
+    if (mountedRef.current) setEditRoomSaving(false);
+  }
+}
 
 
 
@@ -4249,7 +4372,7 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
   onClick={(event) => {
     event.preventDefault();
     event.stopPropagation();
-    onOpen?.(msg);
+    openMediaViewer?.(msg);
   }}
 >
                           <img
@@ -4343,7 +4466,7 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
   onClick={(event) => {
     event.preventDefault();
     event.stopPropagation();
-    openMediaGridFromMessage?.(msg);
+    openMediaViewer(msg);
   }}
 >
                           📎 {getShortRoomFileName(msg.fileName || msg.mediaName || 'Attachment')}
@@ -4531,6 +4654,33 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
         onTouchEnd={handleMediaViewerTouchEnd}
       >
         <div className="room-media-viewer-card" onClick={(event) => event.stopPropagation()}>
+          {mediaViewerCount > 1 && (
+  <>
+    <button
+      type="button"
+      className="room-media-viewer-nav room-media-viewer-prev"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        moveMediaViewer(-1);
+      }}
+    >
+      ‹
+    </button>
+
+    <button
+      type="button"
+      className="room-media-viewer-nav room-media-viewer-next"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        moveMediaViewer(1);
+      }}
+    >
+      ›
+    </button>
+  </>
+)}
           <div className="room-media-viewer-topbar">
             <span>{activeMediaViewerItem.senderName || activeMediaViewerItem.name || 'User'}</span>
 
@@ -4562,6 +4712,34 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
               ✕
             </button>
           </div>
+
+          {mediaViewerCount > 1 && (
+  <>
+    <button
+      type="button"
+      className="room-media-viewer-nav room-media-viewer-prev"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        moveMediaViewer(-1);
+      }}
+    >
+      ‹
+    </button>
+
+    <button
+      type="button"
+      className="room-media-viewer-nav room-media-viewer-next"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        moveMediaViewer(1);
+      }}
+    >
+      ›
+    </button>
+  </>
+)}
 
           {activeMediaViewerItem.mediaType === 'video' ? (
             <video
@@ -4626,13 +4804,21 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
 
           <div className="active-room-info-rows">
 
-            <button
-              type="button"
-              className={`active-room-info-row ${activeInfoSection === 'members' ? 'open' : ''}`}
-              onClick={() => toggleActiveInfoSection('members')}
-            >
-              Members
-            </button>
+<button
+  type="button"
+  className={`active-room-info-row ${activeInfoSection === 'members' ? 'open' : ''}`}
+  onClick={async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setActiveInfoSection('members');
+    setActiveInfoMembers([]);
+
+    await loadActiveRoomInfoMembers(activeRoom);
+  }}
+>
+  Members
+</button>
 
             {activeRoomCanEdit && activeRoom.privacy === 'private' && (
               <button
@@ -5103,80 +5289,84 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
       </div>
     )}
 
-    {showEditRoomModal && editRoomTarget && (
-      <div className="members-modal">
-        <div className="members-card create-room-modal">
-          <button
-            type="button"
-            className="close-members"
+{showEditRoomModal && editRoomTarget && (
+  <div className="members-modal" onClick={closeEditRoomModal}>
+    <div
+      className="members-card create-room-modal"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="close-members"
+        disabled={editRoomSaving}
+        onClick={closeEditRoomModal}
+      >
+        ✕
+      </button>
+
+      <h3>Edit Topic</h3>
+      {status && <p className="room-status">{status}</p>}
+
+      <form onSubmit={saveEditRoom} className="create-form">
+        <label className="edit-room-field-label">
+          <span>Topic name</span>
+          <input
+            name="topicName"
+            placeholder="Topic name..."
+            value={editRoomName}
+            maxLength={60}
+            autoFocus
             disabled={editRoomSaving}
-            onClick={closeEditRoomModal}
-          >
-            ✕
-          </button>
+            onChange={(event) => {
+              setStatus('');
+              setEditRoomName(event.target.value);
+            }}
+          />
+        </label>
 
-          <h3>Edit Topic</h3>
-          {status && <p className="room-status">{status}</p>}
+        <label className="create-room-image-picker">
+          <span>Topic image</span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            disabled={editRoomSaving}
+            onChange={handleEditRoomImageChange}
+          />
+        </label>
 
-          <form onSubmit={saveEditRoom} className="create-form">
-            <label className="edit-room-field-label">
-              <span>Topic name</span>
-              <input
-                placeholder="Topic name..."
-                value={editRoomName}
-                maxLength={60}
-                autoFocus
+        {(editRoomImagePreview || getRoomImageUrl(editRoomTarget)) && (
+          <div className="create-room-image-preview-row">
+            <img
+              src={editRoomImagePreview || getRoomImageUrl(editRoomTarget)}
+              alt="Topic preview"
+              width="56"
+              height="56"
+            />
+
+            {editRoomImagePreview && (
+              <button
+                type="button"
+                className="delete-room-btn"
                 disabled={editRoomSaving}
-                onChange={(event) => {
-                  setStatus('');
-                  setEditRoomName(event.target.value);
-                }}
-              />
-            </label>
-
-            <label className="create-room-image-picker">
-              <span>Topic image</span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                disabled={editRoomSaving}
-                onChange={handleEditRoomImageChange}
-              />
-            </label>
-
-            {(editRoomImagePreview || getRoomImageUrl(editRoomTarget)) && (
-              <div className="create-room-image-preview-row">
-                <img
-                  src={editRoomImagePreview || getRoomImageUrl(editRoomTarget)}
-                  alt="Topic preview"
-                  width="56"
-                  height="56"
-                />
-
-                {editRoomImagePreview && (
-                  <button
-                    type="button"
-                    className="delete-room-btn"
-                    disabled={editRoomSaving}
-                    onClick={removeEditRoomImage}
-                  >
-                    Remove selected image
-                  </button>
-                )}
-              </div>
+                onClick={removeEditRoomImage}
+              >
+                Remove selected image
+              </button>
             )}
+          </div>
+        )}
 
-            <button
-              type="submit"
-              className="approve-request-btn"
-              disabled={editRoomSaving || !editRoomName.trim()}
-            >
-              {editRoomSaving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </form>
-        </div>
-      </div>
-    )}
+        <button
+          type="submit"
+          className="approve-request-btn"
+          disabled={editRoomSaving || !editRoomName.trim()}
+        >
+          {editRoomSaving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </form>
+    </div>
+  </div>
+)}
 
     {showCreateModal && (
       <div className="members-modal">
@@ -5260,6 +5450,57 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
         </div>
       </div>
     )}
+
+    {imageCropModalOpen && imageCropSourceUrl && (
+  <div className="members-modal" onClick={closeImageCropModal}>
+    <div
+      className="members-card create-room-modal image-crop-card"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button type="button" className="close-members" onClick={closeImageCropModal}>
+        ✕
+      </button>
+
+      <h3>Adjust Image</h3>
+
+<div
+  className="image-crop-preview"
+  onPointerDown={handleCropPointerDown}
+>
+  <img
+    src={imageCropSourceUrl}
+    alt="Crop preview"
+    draggable="false"
+    style={{
+      transform: `translate(${imageCropOffset.x}px, ${imageCropOffset.y}px) scale(${imageCropZoom})`,
+    }}
+  />
+</div>
+
+      <label className="edit-room-field-label">
+        <span>Zoom</span>
+        <input
+          type="range"
+          min="1"
+          max="2.5"
+          step="0.05"
+          value={imageCropZoom}
+          onChange={(event) => setImageCropZoom(Number(event.target.value))}
+        />
+      </label>
+
+      <div className="crop-actions">
+        <button type="button" className="delete-room-btn" onClick={closeImageCropModal}>
+          Cancel
+        </button>
+
+        <button type="button" className="approve-request-btn" onClick={confirmImageCrop}>
+          Use Image
+        </button>
+      </div>
+    </div>
+  </div>
+)}
   </main>
 );
 }

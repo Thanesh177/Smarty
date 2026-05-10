@@ -739,12 +739,58 @@ joinRoomFromInvite: async (inviteCode) => {
     return parsed;
   },
 
-  async getRoomMembers(roomId) {
-    const { data } = await api.get(
-      `/rooms/${encodePathSegment(roomId)}/members`
-    );
-    return normalizeList(data);
-  },
+async getRoomMembers(roomId) {
+  const cleanRoomId = String(roomId || '').trim();
+
+  if (!cleanRoomId) {
+    throw new Error('Room ID is required to load room members.');
+  }
+
+  const { data } = await api.get(
+    `/rooms/${encodePathSegment(cleanRoomId)}/members`,
+    {
+      params: {
+        roomId: cleanRoomId,
+        groupId: cleanRoomId,
+      },
+    }
+  );
+
+  const parsed = parseApiBody(data);
+
+  const rawMembers =
+    Array.isArray(parsed?.members) ? parsed.members :
+    Array.isArray(parsed?.items) ? parsed.items :
+    Array.isArray(parsed?.users) ? parsed.users :
+    Array.isArray(parsed?.Items) ? parsed.Items :
+    Array.isArray(parsed?.data?.members) ? parsed.data.members :
+    Array.isArray(parsed?.data?.items) ? parsed.data.items :
+    Array.isArray(parsed?.data?.Items) ? parsed.data.Items :
+    Array.isArray(parsed) ? parsed :
+    normalizeList(parsed);
+
+  const members = rawMembers.map((member) => ({
+    ...member,
+    userId: member.userId || member.id || member.sub || member.memberId || '',
+    id: member.id || member.userId || member.sub || member.memberId || '',
+    name:
+      member.name ||
+      member.userName ||
+      member.username ||
+      member.displayName ||
+      member.email ||
+      'User',
+    email: member.email || member.userEmail || '',
+    role: member.role || 'member',
+  }));
+
+  return {
+    ...parsed,
+    members,
+    items: members,
+    users: members,
+  };
+},
 
   async removeRoomMember(roomId, userId) {
     const { data } = await api.post(

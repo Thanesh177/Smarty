@@ -34,6 +34,39 @@
    Page Layout
    ========================= */
 
+   .image-crop-card {
+  max-width: 380px;
+}
+
+.image-crop-preview {
+  width: 180px;
+  height: 180px;
+  margin: 12px auto;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+    touch-action: none;
+
+  cursor: grab;
+}
+
+.image-crop-preview img {
+  width: 100%;
+  height: 100%;
+    user-select: none;
+
+  pointer-events: none;
+  object-fit: cover;
+  transform-origin: center;
+}
+
+.crop-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .rooms-page {
   height: calc(100vh - 90px);
   min-height: 0;
@@ -45,6 +78,12 @@
     radial-gradient(circle at 12% -8%, rgba(14, 165, 233, 0.12), transparent 34%),
     radial-gradient(circle at 96% 6%, rgba(99, 102, 241, 0.1), transparent 32%),
     linear-gradient(180deg, var(--rooms-bg) 0%, var(--rooms-bg-soft) 100%);
+}
+
+.image-crop-preview:active {
+
+  cursor: grabbing;
+
 }
 
 .sidebar {
@@ -231,10 +270,11 @@
 }
 
 .active-room-info-panel {
-  width: min(720px, 96vw);
+  width: min(520px, 96vw);
   max-height: 90vh;
   overflow-y: auto;
   border-radius: 28px;
+  padding: 20px;
   background: rgba(8, 13, 28, 0.97);
   border: 1px solid rgba(148, 163, 184, 0.14);
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
@@ -625,6 +665,7 @@
   .active-room-info-panel {
     width: 96vw !important;
     max-height: 90vh !important;
+    padding: 11px;
     border-radius: 26px !important;
   }
 
