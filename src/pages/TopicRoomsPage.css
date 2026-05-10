@@ -745,6 +745,20 @@
   box-shadow: 0 16px 45px rgba(0, 0, 0, 0.28);
 }
 
+.messages {
+  position: relative !important;
+}
+
+.older-messages-loading {
+  position: absolute !important;
+  top: 8px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 20 !important;
+  margin: 0 !important;
+  pointer-events: none !important;
+}
+
 .selected-room-media-preview img,
 .selected-room-media-preview video {
   width: 100%;
@@ -1408,19 +1422,20 @@ select:disabled {
   padding: 11px 13px;
   border-radius: 19px 19px 19px 7px;
   color: var(--rooms-text);
-  background: rgba(15, 23, 42, 0.72);
+  background: transparent;
   border: 1px solid rgba(148, 163, 184, 0.1);
   text-align: left;
   word-break: break-word;
-  animation: messageIn 0.14s ease both;
+  animation: none !important;
 }
 
 .msg.mine {
   margin-left: auto;
+  padding: 20px 0 ;
   margin-right: 0;
   align-self: flex-end;
   border-radius: 19px 19px 7px 19px;
-  background: rgba(30, 41, 59, 0.82);
+  background: transparent;
   border-color: rgba(125, 211, 252, 0.18);
 }
 
@@ -1449,15 +1464,18 @@ select:disabled {
   position: sticky;
   display: flex;
   flex-direction: row;
-  bottom: 0;
+  bottom: max(12px, env(safe-area-inset-bottom));
   z-index: 40;
   min-height: 54px;
-  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  margin: 0 10px 12px;
+  padding: 8px 10px;
   gap: 8px;
-  background: rgba(2, 6, 23, 0.88);
+  border-radius: 22px;
+  background: rgba(2, 6, 23, 0.92);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(10, 108, 246, 0.24);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.34);
 }
 
 .input input {
@@ -1844,8 +1862,10 @@ select:disabled {
 
   .input {
     gap: 8px;
+    margin: 0 8px max(12px, env(safe-area-inset-bottom));
     padding: 10px;
-    padding-bottom: max(14px, env(safe-area-inset-bottom));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    border-radius: 20px;
   }
 
   .input button {
@@ -3124,5 +3144,174 @@ select:disabled {
   .room-message-preview-wrap .room-message-video {
     max-width: 82vw;
     max-height: 260px;
+  }
+}
+
+/* ===== FINAL PATCH: prevent visible message jump/scroll on room open ===== */
+.messages {
+  scroll-behavior: auto !important;
+  overflow-anchor: none !important;
+  contain: layout paint !important;
+}
+
+.messages .msg {
+  animation: none !important;
+  transition: none !important;
+}
+
+.messages[style*="hidden"] .msg,
+.messages[style*="visibility: hidden"] .msg {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* ===== FINAL PRODUCTION FIX: visible input + stable chat scroll ===== */
+.chat {
+  height: 100% !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.chat-header {
+  flex: 0 0 auto !important;
+}
+
+.messages {
+  position: relative !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 9px !important;
+  padding: 16px 14px 18px !important;
+  scroll-padding-bottom: 118px !important;
+  scroll-behavior: auto !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch !important;
+  overflow-anchor: none !important;
+  contain: layout paint !important;
+}
+
+.older-messages-loading {
+  position: sticky !important;
+  top: 8px !important;
+  align-self: center !important;
+  z-index: 30 !important;
+  width: fit-content !important;
+  max-width: calc(100% - 32px) !important;
+  margin: 0 auto 8px !important;
+  padding: 7px 12px !important;
+  transform: none !important;
+  pointer-events: none !important;
+  border-radius: 999px !important;
+  background: rgba(15, 23, 42, 0.82) !important;
+  color: rgba(226, 232, 240, 0.76) !important;
+  font-size: 11px !important;
+  font-weight: 850 !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22) !important;
+}
+
+.input {
+  position: sticky !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: max(18px, env(safe-area-inset-bottom)) !important;
+  z-index: 500 !important;
+  flex: 0 0 auto !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 54px !important;
+  margin: 0 12px max(18px, env(safe-area-inset-bottom)) !important;
+  padding: 8px 10px !important;
+  border-radius: 24px !important;
+  background: rgba(2, 6, 23, 0.94) !important;
+  border: 1px solid rgba(125, 211, 252, 0.2) !important;
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+}
+
+.input input {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 14px !important;
+  border-radius: 999px !important;
+  font-size: 16px !important;
+}
+
+.room-media-picker-btn {
+  flex: 0 0 40px !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+}
+
+.input button[type="submit"] {
+  flex: 0 0 auto !important;
+  min-width: 62px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 14px !important;
+}
+
+.selected-room-media-preview {
+  position: absolute !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: calc(100% + 10px) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 82px !important;
+  max-height: 132px !important;
+  overflow: hidden !important;
+  border-radius: 20px !important;
+}
+
+@media (max-width: 760px) {
+  .rooms-page.mobile-chat-open .chat {
+    height: calc(100dvh - 54px) !important;
+    max-height: calc(100dvh - 54px) !important;
+  }
+
+  .messages {
+    gap: 8px !important;
+    padding: 12px 10px 16px !important;
+    scroll-padding-bottom: 132px !important;
+  }
+
+  .input {
+    bottom: max(22px, env(safe-area-inset-bottom)) !important;
+    margin: 0 10px max(22px, env(safe-area-inset-bottom)) !important;
+    min-height: 56px !important;
+    padding: 8px !important;
+    border-radius: 24px !important;
+  }
+
+  .input input {
+    height: 42px !important;
+    min-height: 42px !important;
+  }
+
+  .room-media-picker-btn,
+  .input button[type="submit"] {
+    height: 42px !important;
+    min-height: 42px !important;
+  }
+
+  .room-media-picker-btn {
+    width: 42px !important;
+    min-width: 42px !important;
+    flex-basis: 42px !important;
   }
 }

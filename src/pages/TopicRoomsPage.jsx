@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
-
+import { ArrowDown, Download, Trash2, X } from 'lucide-react';
 import './TopicRoomsPage.css';
 
 const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
@@ -21,12 +21,14 @@ const ROOM_MEMBERS_CACHE_MS = 30_000;
 const USER_SEARCH_DEBOUNCE_MS = 350;
 const ROOM_INVITES_REFRESH_MS = 45_000;
 const MAX_RENDERED_ROOMS = 250;
-const ROOM_IMAGE_EAGER_LIMIT = 4;
-const ROOM_IMAGE_RENDER_LIMIT = 16;
-const MAX_RENDERED_MESSAGES = 90;
+const ROOM_IMAGE_EAGER_LIMIT = 2;
+const ROOM_IMAGE_RENDER_LIMIT = 10;
 const MAX_RENDERED_MEDIA_MESSAGES = 260;
-const ROOM_MESSAGES_FETCH_LIMIT = 50;
-const MAX_ROOM_MEDIA_GRID_ITEMS = 160;
+const ROOM_MESSAGES_FETCH_LIMIT = 10;
+const ROOM_MESSAGES_REVEAL_STEP = 10;
+const ROOM_INITIAL_VISIBLE_MESSAGES = 10;
+const MAX_ROOM_MEDIA_GRID_ITEMS = 80;
+const ROOM_MEDIA_PREVIEW_EAGER_LIMIT = 2;
 
 const ROOM_MEDIA_IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
 const ROOM_MEDIA_VIDEO_EXTENSIONS = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
@@ -105,6 +107,39 @@ function parseApiPayload(payload) {
     body: parsedBody,
   };
 }
+
+
+function getRoomMessageTimeValue(message = {}) {
+  const rawValue =
+    message.createdAtMs ||
+    message.createdAt ||
+    message.timestamp ||
+    message.sentAt ||
+    0;
+
+  if (typeof rawValue === 'number') return rawValue;
+
+  const numericValue = Number(rawValue);
+  if (Number.isFinite(numericValue) && numericValue > 0) return numericValue;
+
+  const parsedValue = Date.parse(String(rawValue || ''));
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
+
+function sortRoomMessages(messages = []) {
+  return [...messages].sort((a, b) => getRoomMessageTimeValue(a) - getRoomMessageTimeValue(b));
+}
+
+function formatRoomMessageTime(message = {}) {
+  const value = getRoomMessageTimeValue(message);
+  if (!value) return '';
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
 
 function extractRoomArray(data, keys = []) {
   const { payload, body } = parseApiPayload(data);
@@ -280,9 +315,21 @@ function dedupeMessages(messages = []) {
   return unique;
 }
 
+function getStableRoomMessageKey(message = {}) {
+  return String(
+    message.messageId ||
+      message.id ||
+      message.clientId ||
+      message.mediaKey ||
+      message.mediaUrl ||
+      message.fileUrl ||
+      `${message.createdAt || message.createdAtMs || 'msg'}-${message.senderId || 'user'}-${String(message.text || message.message || '').slice(0, 80)}`
+  );
+}
+
 function trimRoomMessagesForMemory(messages = []) {
   const normalizedMessages = Array.isArray(messages)
-    ? messages.map(normalizeRoomMessageMedia)
+    ? sortRoomMessages(dedupeMessages(messages.map(normalizeRoomMessageMedia)))
     : [];
 
   if (normalizedMessages.length <= MAX_RENDERED_MEDIA_MESSAGES) {
@@ -292,10 +339,42 @@ function trimRoomMessagesForMemory(messages = []) {
   return normalizedMessages.slice(-MAX_RENDERED_MEDIA_MESSAGES);
 }
 
+
 function getLoadedRoomMessages(data) {
-  return trimRoomMessagesForMemory(
-    extractRoomArray(data, ['messages', 'Items']).map(normalizeRoomMessageMedia)
+  return extractRoomArray(data, ['messages', 'Items']).map(normalizeRoomMessageMedia);
+}
+
+function getRoomMediaCacheKey(message = {}) {
+  return (
+    message.messageId ||
+    message.clientId ||
+    message.mediaKey ||
+    message.mediaUrl ||
+    message.fileUrl ||
+    ''
   );
+}
+
+function mergeRoomMediaMessages(currentMedia = [], nextMessages = []) {
+  const mediaMap = new Map();
+
+  [...currentMedia, ...nextMessages.map(normalizeRoomMessageMedia)].forEach((message) => {
+    const mediaUrl = message.mediaUrl || message.fileUrl || '';
+
+    if (
+      !mediaUrl ||
+      (message.mediaType !== 'image' && message.mediaType !== 'video' && message.mediaType !== 'file')
+    ) {
+      return;
+    }
+
+    const key = getRoomMediaCacheKey(message);
+    if (!key || mediaMap.has(key)) return;
+
+    mediaMap.set(key, message);
+  });
+
+  return Array.from(mediaMap.values()).slice(-MAX_ROOM_MEDIA_GRID_ITEMS);
 }
 
 function areRoomsEqualForList(currentRoom, nextRoom) {
@@ -386,13 +465,21 @@ function RoomMessagePreview({ message, onOpen, onDownload }) {
     <div className={`room-message-preview-wrap ${msg.mediaType}`}>
       {msg.mediaType === 'image' && (
         <button type="button" className="room-message-media-tap" onClick={() => onOpen(msg)}>
-          <img src={mediaUrl} alt={msg.fileName || 'Shared image'} className="room-message-image" loading="lazy" decoding="async" />
+          <img
+  src={mediaUrl}
+  alt={msg.fileName || 'Shared image'}
+  className="room-message-image"
+  loading="lazy"
+  decoding="async"
+  fetchPriority="low"
+  sizes="280px"
+/>
         </button>
       )}
 
       {msg.mediaType === 'video' && (
         <button type="button" className="room-message-media-tap" onClick={() => onOpen(msg)}>
-          <video className="room-message-video" src={mediaUrl} muted preload="metadata" playsInline />
+          <video className="room-message-video" src={mediaUrl} muted preload="none" playsInline />
           <span className="room-video-play-badge">▶</span>
         </button>
       )}
@@ -403,8 +490,8 @@ function RoomMessagePreview({ message, onOpen, onDownload }) {
         </button>
       )}
 
-      <button type="button" className="room-message-download-btn" onClick={() => onDownload(msg)}>
-        ↓
+      <button type="button" className="room-message-download-btn" onClick={() => onDownload(msg)} aria-label="Download" title="Download">
+        <Download size={17} strokeWidth={2.4} />
       </button>
     </div>
   );
@@ -491,10 +578,15 @@ export default function TopicRoomsPage() {
   const [status, setStatus] = useState('');
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [deletingMessageId, setDeletingMessageId] = useState('');
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const activeRoomRef = useRef(null);
   const messagesRef = useRef(null);
+  const messagesStateRef = useRef([]);
+  const roomMessagesCacheRef = useRef({});
+  const roomMediaCacheRef = useRef({});
   const mountedRef = useRef(true);
   const loadingRoomRef = useRef(false);
+  const roomOpenRequestIdRef = useRef(0);
   const olderMessagesLoadingRef = useRef(false);
   const roomsLoadingRef = useRef(false);
   const roomsLoadInFlightKeyRef = useRef('');
@@ -512,9 +604,13 @@ export default function TopicRoomsPage() {
   const mediaViewerTouchStartRef = useRef(null);
   const mediaViewerVideoRef = useRef(null);
   const roomMenuRef = useRef(null);
+  const olderScrollAnchorRef = useRef(null);
   const roomActionMenuRef = useRef(null);
   const activeRoomMenuRef = useRef(null);
-  const initialRoomScrollDoneRef = useRef(false);
+  const initialRoomScrollDoneRef = useRef('');
+  const selectedMediaPreviewsRef = useRef([]);
+  const pendingMessageIdsRef = useRef(new Set());
+  
 
   const activeRoomCanDeleteMessages = useMemo(
     () => activeRoom?.type === 'custom' && activeRoom?.privacy === 'private' && isRoomOwner(activeRoom, userId),
@@ -556,45 +652,41 @@ export default function TopicRoomsPage() {
       .slice(0, MAX_RENDERED_ROOMS);
   }, [rooms, roomPrivacyFilter, roomSearch]);
 
-  const renderedMessages = useMemo(() => {
-    if (!Array.isArray(messages) || messages.length === 0) return [];
+const renderedMessages = useMemo(() => {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
 
-    return dedupeMessages(messages).map(normalizeRoomMessageMedia);
-  }, [messages]);
+  return sortRoomMessages(
+    dedupeMessages(messages.map(normalizeRoomMessageMedia))
+  );
+}, [messages]);
 
   const activeRoomImageUrl = useMemo(
     () => getRoomImageUrl(activeRoom),
     [activeRoom, getRoomImageUrl]
   );
 
-  const renderedMediaMessages = useMemo(() => {
-    const seen = new Set();
-    const mediaItems = [];
+const renderedMediaMessages = useMemo(() => {
+  if (!showRoomMediaGrid && !mediaViewer) {
+    return [];
+  }
 
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const normalized = normalizeRoomMessageMedia(messages[index]);
-      const mediaUrl = normalized.mediaUrl || normalized.fileUrl || '';
+  const cachedMedia = activeRoom?.roomId
+    ? roomMediaCacheRef.current[activeRoom.roomId] || []
+    : [];
 
-      if (
-        !mediaUrl ||
-        (normalized.mediaType !== 'image' &&
-          normalized.mediaType !== 'video' &&
-          normalized.mediaType !== 'file')
-      ) {
-        continue;
-      }
+  const mergedMedia = mergeRoomMediaMessages(cachedMedia, messages);
 
-      const key = normalized.messageId || normalized.clientId || mediaUrl;
-      if (seen.has(key)) continue;
+  if (activeRoom?.roomId) {
+    roomMediaCacheRef.current[activeRoom.roomId] = mergedMedia;
+  }
 
-      seen.add(key);
-      mediaItems.unshift(normalized);
-
-      if (mediaItems.length >= MAX_ROOM_MEDIA_GRID_ITEMS) break;
-    }
-
-    return mediaItems;
-  }, [messages]);
+  return mergedMedia;
+}, [
+  activeRoom?.roomId,
+  messages,
+  showRoomMediaGrid,
+  mediaViewer,
+]);
 
   const viewableMediaMessages = useMemo(
     () => renderedMediaMessages.filter((item) => item.mediaType === 'image' || item.mediaType === 'video'),
@@ -609,12 +701,80 @@ export default function TopicRoomsPage() {
   );
 
   useEffect(() => {
+    selectedMediaPreviewsRef.current = selectedMediaPreviews;
+  }, [selectedMediaPreviews]);
+
+  useEffect(() => {
     activeRoomImageUrlRef.current = activeRoomImageUrl;
   }, [activeRoomImageUrl]);
 
   useEffect(() => {
     activeRoomRef.current = activeRoom;
   }, [activeRoom]);
+
+  useEffect(() => {
+    messagesStateRef.current = messages;
+  }, [messages]);
+
+  useLayoutEffect(() => {
+    const anchor = olderScrollAnchorRef.current;
+    if (!anchor) return;
+
+    const container = messagesRef.current;
+    if (!container) {
+      olderScrollAnchorRef.current = null;
+      return;
+    }
+
+    const selector = `[data-message-key="${CSS.escape(anchor.key)}"]`;
+    const anchoredElement = container.querySelector(selector);
+
+    if (!anchoredElement) {
+      olderScrollAnchorRef.current = null;
+      return;
+    }
+
+    const containerTop = container.getBoundingClientRect().top;
+    const nextTop = anchoredElement.getBoundingClientRect().top - containerTop;
+    const delta = nextTop - anchor.top;
+
+    if (Math.abs(delta) > 0.5) {
+      container.scrollTop += delta;
+    }
+
+    const restoreLateLayoutShift = () => {
+      const lateAnchor = olderScrollAnchorRef.current;
+      if (!lateAnchor) return;
+
+      const lateContainer = messagesRef.current;
+      if (!lateContainer) {
+        olderScrollAnchorRef.current = null;
+        return;
+      }
+
+      const lateSelector = `[data-message-key="${CSS.escape(lateAnchor.key)}"]`;
+      const lateElement = lateContainer.querySelector(lateSelector);
+
+      if (!lateElement) {
+        olderScrollAnchorRef.current = null;
+        return;
+      }
+
+      const lateContainerTop = lateContainer.getBoundingClientRect().top;
+      const lateTop = lateElement.getBoundingClientRect().top - lateContainerTop;
+      const lateDelta = lateTop - lateAnchor.top;
+
+      if (Math.abs(lateDelta) > 0.5) {
+        lateContainer.scrollTop += lateDelta;
+      }
+    };
+
+    window.setTimeout(restoreLateLayoutShift, 40);
+    window.setTimeout(() => {
+      restoreLateLayoutShift();
+      olderScrollAnchorRef.current = null;
+    }, 140);
+  }, [renderedMessages.length]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -626,15 +786,33 @@ export default function TopicRoomsPage() {
 
   async function loadOlderRoomMessages() {
     const room = activeRoomRef.current;
-    const oldestCursor = getOldestMessageCursor(messages);
+    const cachedRoomMessages = room?.roomId ? roomMessagesCacheRef.current[room.roomId] || [] : [];
+    const oldestCursor = getOldestMessageCursor(messagesStateRef.current);
 
-    if (!room?.roomId || !oldestCursor || olderMessagesLoadingRef.current || !hasOlderMessages) {
+    if (!room?.roomId || olderMessagesLoadingRef.current || messagesLoading || !hasOlderMessages) {
       return;
     }
 
-    const el = messagesRef.current;
-    const oldHeight = el?.scrollHeight || 0;
-    const oldTop = el?.scrollTop || 0;
+    if (cachedRoomMessages.length > messagesStateRef.current.length) {
+      captureOlderScrollAnchor();
+
+      const currentlyVisible = messagesStateRef.current.length;
+      const nextVisibleCount = Math.min(
+        cachedRoomMessages.length,
+        currentlyVisible + ROOM_MESSAGES_REVEAL_STEP
+      );
+
+      const nextMessages = cachedRoomMessages.slice(-nextVisibleCount);
+
+      setMessages(nextMessages);
+      syncRoomMessageCache(room.roomId, cachedRoomMessages);
+      setHasOlderMessages(nextVisibleCount < cachedRoomMessages.length);
+
+
+      return;
+    }
+
+    if (!oldestCursor) return;
 
     olderMessagesLoadingRef.current = true;
     setOlderMessagesLoading(true);
@@ -658,19 +836,28 @@ export default function TopicRoomsPage() {
         return;
       }
 
-      setMessages((prev) =>
-        trimRoomMessagesForMemory(
-          dedupeMessages([...older, ...prev]).map(normalizeRoomMessageMedia)
-        )
+      roomMediaCacheRef.current[room.roomId] = mergeRoomMediaMessages(
+        roomMediaCacheRef.current[room.roomId] || [],
+        older
       );
+
+      captureOlderScrollAnchor();
+
+      setMessages((prev) => {
+        const expandedMessages = sortRoomMessages(dedupeMessages(
+          [...older, ...prev].map(normalizeRoomMessageMedia)
+        ));
+        const nextVisibleCount = Math.min(
+          expandedMessages.length,
+          prev.length + ROOM_MESSAGES_REVEAL_STEP
+        );
+        const nextMessages = expandedMessages.slice(-nextVisibleCount);
+
+        syncRoomMessageCache(room.roomId, expandedMessages);
+        return nextMessages;
+      });
       setHasOlderMessages(older.length >= ROOM_MESSAGES_FETCH_LIMIT);
 
-      requestAnimationFrame(() => {
-        const nextEl = messagesRef.current;
-        if (!nextEl) return;
-
-        nextEl.scrollTop = nextEl.scrollHeight - oldHeight + oldTop;
-      });
     } catch (err) {
       console.error(err);
       setStatus(err?.response?.data?.error || 'Could not load older messages');
@@ -680,58 +867,30 @@ export default function TopicRoomsPage() {
     }
   }
 
-  const scrollMessagesToBottom = useCallback((behavior = 'smooth') => {
-    const el = messagesRef.current;
-    if (!el) return;
+const scrollMessagesToBottom = useCallback((behavior = 'smooth') => {
+  const el = messagesRef.current;
+  if (!el) return;
 
+  el.scrollTo({
+    top: el.scrollHeight,
+    behavior,
+  });
+}, []);
+
+const jumpMessagesToBottomOnce = useCallback(() => {
+  requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      const lastMessage = el.lastElementChild;
-
-      if (lastMessage?.scrollIntoView) {
-        lastMessage.scrollIntoView({
-          behavior,
-          block: 'end',
-          inline: 'nearest',
-        });
-      } else {
-        el.scrollTop = el.scrollHeight;
-      }
+      scrollMessagesToBottom('auto');
     });
+  });
+}, [scrollMessagesToBottom]);
+
+  const setMessagesContainerRef = useCallback((node) => {
+    messagesRef.current = node;
   }, []);
 
-useEffect(() => {
-  if (!activeRoom?.roomId) return undefined;
-  if (olderMessagesLoadingRef.current || olderMessagesLoading) return undefined;
 
-  if (initialRoomScrollDoneRef.current === activeRoom.roomId) {
-    return undefined;
-  }
 
-  const timeoutId = window.setTimeout(() => {
-    scrollMessagesToBottom('auto');
-    initialRoomScrollDoneRef.current = activeRoom.roomId;
-  }, 60);
-
-  return () => {
-    window.clearTimeout(timeoutId);
-  };
-}, [activeRoom?.roomId, scrollMessagesToBottom, olderMessagesLoading]);
-
-  useEffect(() => {
-    if (!activeRoom) return undefined;
-
-    const handleViewportResize = () => {
-      
-    };
-
-    window.visualViewport?.addEventListener('resize', handleViewportResize);
-    window.addEventListener('resize', handleViewportResize);
-
-    return () => {
-      window.visualViewport?.removeEventListener('resize', handleViewportResize);
-      window.removeEventListener('resize', handleViewportResize);
-    };
-  }, [activeRoom, scrollMessagesToBottom]);
 
   useEffect(() => {
     const handleOutsidePointerDown = (event) => {
@@ -800,11 +959,36 @@ useEffect(() => {
 
   useEffect(() => {
     return () => {
-      if (selectedMediaPreview?.startsWith('blob:')) {
-        URL.revokeObjectURL(selectedMediaPreview);
-      }
+      selectedMediaPreviewsRef.current.forEach((item) => {
+        if (item.preview?.startsWith('blob:')) {
+          URL.revokeObjectURL(item.preview);
+        }
+      });
     };
-  }, [selectedMediaPreview]);
+  }, []);
+  function captureOlderScrollAnchor() {
+    const container = messagesRef.current;
+    if (!container) {
+      olderScrollAnchorRef.current = null;
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const firstVisible = Array.from(container.querySelectorAll('[data-message-key]')).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.bottom > containerRect.top + 8;
+    });
+
+    if (!firstVisible) {
+      olderScrollAnchorRef.current = null;
+      return;
+    }
+
+    olderScrollAnchorRef.current = {
+      key: firstVisible.getAttribute('data-message-key') || '',
+      top: firstVisible.getBoundingClientRect().top - containerRect.top,
+    };
+  }
 
   function removeSelectedMedia() {
     selectedMediaPreviews.forEach((item) => {
@@ -821,6 +1005,52 @@ useEffect(() => {
     setMediaUploadProgress(0);
     setMediaUploadLabel('');
   }
+
+  function syncRoomMessageCache(roomId, nextMessages) {
+  if (!roomId) return;
+
+  const normalizedMessages = trimRoomMessagesForMemory(nextMessages);
+  roomMessagesCacheRef.current[roomId] = normalizedMessages;
+  roomMediaCacheRef.current[roomId] = mergeRoomMediaMessages(
+    roomMediaCacheRef.current[roomId] || [],
+    normalizedMessages
+  );
+}
+
+function appendRoomMessage(roomId, message) {
+  const normalizedMessage = normalizeRoomMessageMedia(message);
+
+  setMessages((prev) => {
+    const nextMessages = trimRoomMessagesForMemory([...prev, normalizedMessage]);
+    syncRoomMessageCache(roomId, nextMessages);
+    return nextMessages;
+  });
+
+  requestAnimationFrame(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 360) scrollMessagesToBottom('smooth');
+  });
+}
+
+function markPendingRoomMessageFailed(clientId) {
+  if (!clientId) return;
+
+  setMessages((prev) => {
+    const nextMessages = prev.map((message) =>
+      message.clientId === clientId || message.messageId === clientId
+        ? normalizeRoomMessageMedia({ ...message, pending: false, failed: true })
+        : message
+    );
+
+    syncRoomMessageCache(activeRoomRef.current?.roomId, nextMessages);
+    return nextMessages;
+  });
+
+  pendingMessageIdsRef.current.delete(clientId);
+}
 
   function getRoomMediaType(file) {
     const fileType = String(file?.type || '').toLowerCase();
@@ -866,17 +1096,17 @@ useEffect(() => {
     });
   }
 
-function getOldestMessageCursor(messages = []) {
-  const firstMessage = Array.isArray(messages) && messages.length > 0 ? messages[0] : null;
+  function getOldestMessageCursor(messages = []) {
+    const firstMessage = Array.isArray(messages) && messages.length > 0 ? messages[0] : null;
 
-  return (
-    firstMessage?.messageId ||
-    firstMessage?.createdAtMs ||
-    firstMessage?.createdAt ||
-    firstMessage?.clientId ||
-    ''
-  );
-}
+    return (
+      firstMessage?.createdAtMs ||
+      firstMessage?.createdAt ||
+      firstMessage?.messageId ||
+      firstMessage?.clientId ||
+      ''
+    );
+  }
 
 
 
@@ -887,17 +1117,18 @@ function getOldestMessageCursor(messages = []) {
     removeSelectedMedia();
 
     if (files.length === 0) return;
+
     if (files.length > ROOM_MEDIA_MAX_FILES_PER_BATCH) {
-        setStatus(`You can upload up to ${ROOM_MEDIA_MAX_FILES_PER_BATCH} files at once.`);
-        return;
-      }
+      setStatus(`You can upload up to ${ROOM_MEDIA_MAX_FILES_PER_BATCH} files at once.`);
+      return;
+    }
 
-      const totalBytes = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+    const totalBytes = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
 
-      if (totalBytes > ROOM_MEDIA_MAX_BATCH_BYTES) {
-        setStatus('This batch is too large. Upload fewer files at once.');
-        return;
-      }
+    if (totalBytes > ROOM_MEDIA_MAX_BATCH_BYTES) {
+      setStatus('This batch is too large. Upload fewer files at once.');
+      return;
+    }
 
     const validFiles = [];
     const previewItems = [];
@@ -937,6 +1168,8 @@ function getOldestMessageCursor(messages = []) {
     setSelectedMediaPreview(previewItems[0]?.preview || '');
   }
 
+  
+
   function openMediaViewer(message, options = {}) {
     const normalizedMessage = normalizeRoomMessageMedia(message);
     const mediaUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl || '';
@@ -955,21 +1188,34 @@ function getOldestMessageCursor(messages = []) {
 
     if (normalizedMessage.mediaType !== 'image' && normalizedMessage.mediaType !== 'video') return;
 
+    const targetMessageId = String(normalizedMessage.messageId || '').trim();
+    const targetClientId = String(normalizedMessage.clientId || '').trim();
+    const targetMediaKey = String(normalizedMessage.mediaKey || '').trim();
+    const targetUrl = String(mediaUrl || '').trim();
+
     const mediaIndex = viewableMediaMessages.findIndex((item) => {
-      const itemUrl = item.mediaUrl || item.fileUrl || '';
+      const itemMessageId = String(item.messageId || '').trim();
+      const itemClientId = String(item.clientId || '').trim();
+      const itemMediaKey = String(item.mediaKey || '').trim();
+      const itemUrl = String(item.mediaUrl || item.fileUrl || '').trim();
 
       return (
-        item.messageId === normalizedMessage.messageId ||
-        item.clientId === normalizedMessage.clientId ||
-        itemUrl === mediaUrl
+        (targetMessageId && itemMessageId && itemMessageId === targetMessageId) ||
+        (targetClientId && itemClientId && itemClientId === targetClientId) ||
+        (targetMediaKey && itemMediaKey && itemMediaKey === targetMediaKey) ||
+        (targetUrl && itemUrl && itemUrl === targetUrl)
       );
     });
 
-    setMediaViewerReturnToGrid(Boolean(options.fromGrid));
-    setMediaViewer({
-      index: mediaIndex >= 0 ? mediaIndex : 0,
-      openedAt: Date.now(),
-    });
+
+const selectedMediaItem = mediaIndex >= 0 ? viewableMediaMessages[mediaIndex] : normalizedMessage;
+
+setMediaViewerReturnToGrid(Boolean(options.fromGrid));
+setMediaViewer({
+  index: mediaIndex >= 0 ? mediaIndex : 0,
+  mediaKey: getStableRoomMessageKey(selectedMediaItem),
+  openedAt: Date.now(),
+});
   }
 
   function closeMediaViewer() {
@@ -1015,63 +1261,63 @@ function getOldestMessageCursor(messages = []) {
     setShowActiveRoomInfo(true);
   }
 
-async function toggleActiveInfoSection(section) {
-  if (!activeRoom?.roomId) return;
+  async function toggleActiveInfoSection(section) {
+    if (!activeRoom?.roomId) return;
 
-  const nextSection = activeInfoSection === section ? '' : section;
-  setActiveInfoSection(nextSection);
+    const nextSection = activeInfoSection === section ? '' : section;
+    setActiveInfoSection(nextSection);
 
-  if (!nextSection) return;
+    if (!nextSection) return;
 
-  if (section === 'members') {
-    setActiveInfoLoading(true);
-    setActiveInfoMembers([]);
-    setModalRoom(activeRoom);
-    setModalMode('members');
+    if (section === 'members') {
+      setActiveInfoLoading(true);
+      setActiveInfoMembers([]);
+      setModalRoom(activeRoom);
+      setModalMode('members');
 
-    try {
-      const data = await roomApi.getRoomMembers(activeRoom.roomId);
+      try {
+        const data = await roomApi.getRoomMembers(activeRoom.roomId);
 
-      const nextMembers = extractRoomArray(data, ['members']);
+        const nextMembers = extractRoomArray(data, ['members']);
 
-      setActiveInfoMembers(nextMembers);
-    } catch (err) {
-      console.error(err);
-      setStatus(err?.response?.data?.error || 'Could not load members');
-    } finally {
-      setActiveInfoLoading(false);
+        setActiveInfoMembers(nextMembers);
+      } catch (err) {
+        console.error(err);
+        setStatus(err?.response?.data?.error || 'Could not load members');
+      } finally {
+        setActiveInfoLoading(false);
+      }
+
+      return;
     }
 
-    return;
-  }
+    if (section === 'requests') {
+      setActiveInfoLoading(true);
+      setActiveInfoRequests([]);
+      setModalRoom(activeRoom);
+      setModalMode('requests');
 
-  if (section === 'requests') {
-    setActiveInfoLoading(true);
-    setActiveInfoRequests([]);
-    setModalRoom(activeRoom);
-    setModalMode('requests');
+      try {
+        const data = await roomApi.getRoomJoinRequests(activeRoom.roomId);
 
-    try {
-      const data = await roomApi.getRoomJoinRequests(activeRoom.roomId);
+        const nextRequests = extractRoomArray(data, ['requests']);
 
-      const nextRequests = extractRoomArray(data, ['requests']);
+        setActiveInfoRequests(nextRequests);
+      } catch (err) {
+        console.error(err);
+        setStatus(err?.response?.data?.error || 'Could not load join requests');
+      } finally {
+        setActiveInfoLoading(false);
+      }
 
-      setActiveInfoRequests(nextRequests);
-    } catch (err) {
-      console.error(err);
-      setStatus(err?.response?.data?.error || 'Could not load join requests');
-    } finally {
-      setActiveInfoLoading(false);
+      return;
     }
 
-    return;
+    if (section === 'invite') {
+      setInviteLinkModalOpen(false);
+      setShowActiveRoomInfo(true);
+    }
   }
-
-  if (section === 'invite') {
-    setInviteLinkModalOpen(false);
-    setShowActiveRoomInfo(true);
-  }
-}
 
   function openMediaFromGrid(message) {
     const normalizedMessage = normalizeRoomMessageMedia(message);
@@ -1160,14 +1406,28 @@ async function toggleActiveInfoSection(section) {
     moveMediaViewer(deltaX < 0 ? 1 : -1);
   }
 
-  const activeMediaViewerItem = mediaViewer
-    ? viewableMediaMessages[
-        Math.min(
-          Math.max(Number(mediaViewer.index || 0), 0),
-          Math.max(viewableMediaMessages.length - 1, 0)
-        )
-      ] || null
-    : null;
+const activeMediaViewerIndex = mediaViewer
+  ? (() => {
+      const targetKey = String(mediaViewer.mediaKey || '').trim();
+
+      const foundIndex = targetKey
+        ? viewableMediaMessages.findIndex(
+            (item) => getStableRoomMessageKey(item) === targetKey
+          )
+        : -1;
+
+      if (foundIndex >= 0) return foundIndex;
+
+      return Math.min(
+        Math.max(Number(mediaViewer.index || 0), 0),
+        Math.max(viewableMediaMessages.length - 1, 0)
+      );
+    })()
+  : -1;
+
+const activeMediaViewerItem = mediaViewer
+  ? viewableMediaMessages[activeMediaViewerIndex] || null
+  : null;
 
   useEffect(() => {
     if (!mediaViewer) return;
@@ -1429,6 +1689,8 @@ async function toggleActiveInfoSection(section) {
               (msg.messageId && m.messageId === msg.messageId)
           );
 
+          let nextMessages = prev;
+
           if (index === -1) {
             const alreadyExists = prev.some(
               (m) =>
@@ -1436,32 +1698,38 @@ async function toggleActiveInfoSection(section) {
                 (msg.clientId && m.clientId === msg.clientId)
             );
 
-            return alreadyExists
+            nextMessages = alreadyExists
               ? prev
               : trimRoomMessagesForMemory([
                   ...prev,
                   normalizeRoomMessageMedia({ ...msg, pending: false, failed: false }),
                 ]);
+          } else {
+            const copy = [...prev];
+            const existingMessage = copy[index] || {};
+
+            copy[index] = normalizeRoomMessageMedia({
+              ...existingMessage,
+              ...msg,
+              mediaKey: msg.mediaKey || existingMessage.mediaKey || '',
+              mediaUrl: msg.mediaUrl || existingMessage.mediaUrl || existingMessage.fileUrl || '',
+              fileUrl: msg.fileUrl || msg.mediaUrl || existingMessage.fileUrl || existingMessage.mediaUrl || '',
+              mediaType: msg.mediaType || existingMessage.mediaType || '',
+              contentType: msg.contentType || existingMessage.contentType || '',
+              fileName: msg.fileName || existingMessage.fileName || existingMessage.mediaName || '',
+              mediaName: msg.mediaName || msg.fileName || existingMessage.mediaName || existingMessage.fileName || '',
+              pending: false,
+              failed: false,
+            });
+
+            nextMessages = trimRoomMessagesForMemory(copy);
           }
 
-          const copy = [...prev];
-          const existingMessage = copy[index] || {};
+          if (current?.roomId) {
+            syncRoomMessageCache(current.roomId, nextMessages);
+          }
 
-          copy[index] = normalizeRoomMessageMedia({
-            ...existingMessage,
-            ...msg,
-            mediaKey: msg.mediaKey || existingMessage.mediaKey || '',
-            mediaUrl: msg.mediaUrl || existingMessage.mediaUrl || existingMessage.fileUrl || '',
-            fileUrl: msg.fileUrl || msg.mediaUrl || existingMessage.fileUrl || existingMessage.mediaUrl || '',
-            mediaType: msg.mediaType || existingMessage.mediaType || '',
-            contentType: msg.contentType || existingMessage.contentType || '',
-            fileName: msg.fileName || existingMessage.fileName || existingMessage.mediaName || '',
-            mediaName: msg.mediaName || msg.fileName || existingMessage.mediaName || existingMessage.fileName || '',
-            pending: false,
-            failed: false,
-          });
-
-          return trimRoomMessagesForMemory(copy);
+          return nextMessages;
         });
 
         return;
@@ -1496,7 +1764,9 @@ async function toggleActiveInfoSection(section) {
           return prev;
         }
 
-        return trimRoomMessagesForMemory([...prev, normalizeRoomMessageMedia(msg)]);
+        const nextMessages = trimRoomMessagesForMemory([...prev, normalizeRoomMessageMedia(msg)]);
+        syncRoomMessageCache(msg.roomId, nextMessages);
+        return nextMessages;
       });
     });
 
@@ -1769,17 +2039,17 @@ async function toggleActiveInfoSection(section) {
 
       await loadRooms(roomSearch, { force: true });
 
-const joinedRoom =
-  roomsCacheRef.current.rooms.find((room) => room.roomId === roomId) ||
-  rooms.find((room) => room.roomId === roomId) ||
-  invite?.room ||
-  null;
+      const joinedRoom =
+        roomsCacheRef.current.rooms.find((room) => room.roomId === roomId) ||
+        rooms.find((room) => room.roomId === roomId) ||
+        invite?.room ||
+        null;
 
-setShowRoomInvites(false);
+      setShowRoomInvites(false);
 
-if (joinedRoom?.roomId) {
-  await openRoom(joinedRoom);
-}
+      if (joinedRoom?.roomId) {
+        await openRoom(joinedRoom);
+      }
     } catch (err) {
       console.error(err);
 
@@ -2337,300 +2607,286 @@ if (joinedRoom?.roomId) {
     setImageCropModalOpen(true);
   }
 
-function removeNewRoomImage() {
-  if (newRoomImagePreview?.startsWith('blob:')) {
-    URL.revokeObjectURL(newRoomImagePreview);
-  }
-
-  setNewRoomImageFile(null);
-  setNewRoomImagePreview('');
-}
-
-async function openRoom(room) {
-  if (!room?.roomId || loadingRoomRef.current) return;
-
-  if (activeRoomRef.current?.roomId === room.roomId) {
-    setMobileChatOpen(true);
-    return;
-  }
-
-  loadingRoomRef.current = true;
-
-  try {
-    setStatus('');
-    setOpenRoomActionMenuId('');
-    setShowActiveRoomMenu(false);
-    setShowActiveRoomInfo(false);
-    setActiveInfoSection('');
-    setShowRoomMediaGrid(false);
-    setMediaViewer(null);
-    setMediaViewerReturnToGrid(false);
-
-    setActiveRoom(room);
-    activeRoomRef.current = room;
-    initialRoomScrollDoneRef.current = '';
-    setMessages((prev) => (prev.length ? [] : prev));
-    setMobileChatOpen(true);
-    setMessagesLoading(true);
-
-    setHasOlderMessages(true);
-    setOlderMessagesLoading(false);
-    olderMessagesLoadingRef.current = false;
-
-    setRoomUnreadCounts((prev) => ({
-      ...prev,
-      [room.roomId]: 0,
-    }));
-
-    const data = await roomApi.getRoomMessages(room.roomId, { limit: ROOM_MESSAGES_FETCH_LIMIT });
-
-    if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) return;
-
-    const loadedRoomMessages = getLoadedRoomMessages(data);
-
-    setMessages(loadedRoomMessages);
-    setHasOlderMessages(loadedRoomMessages.length >= ROOM_MESSAGES_FETCH_LIMIT);
-
-    requestAnimationFrame(() => {
-      scrollMessagesToBottom('auto');
-    });
-  } catch (err) {
-    console.error(err);
-
-    if (mountedRef.current) {
-      setActiveRoom(null);
-      activeRoomRef.current = null;
-      setMessages([]);
-      setMobileChatOpen(false);
-      setStatus(err?.response?.data?.error || 'Could not open room');
+  function removeNewRoomImage() {
+    if (newRoomImagePreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(newRoomImagePreview);
     }
-  } finally {
-    loadingRoomRef.current = false;
-    if (mountedRef.current) setMessagesLoading(false);
-  }
-}
 
-async function openMembers(room) {
-  if (!room?.roomId) return;
-
-  const cacheKey = room.roomId;
-  const cached = membersCacheRef.current[cacheKey];
-  const now = Date.now();
-
-  setStatus('');
-  setShowInvite(false);
-  setInviteSearch('');
-  setInviteResults([]);
-  setPendingInviteUserIds(new Set());
-  setModalTitle(`${room.name} members`);
-  setModalMode('members');
-  setModalRoom(room);
-  setShowMembers(true);
-
-  if (
-  modalRoom?.roomId === room.roomId &&
-  modalMode === 'members' &&
-  members.length > 0 &&
-  showActiveRoomInfo
-) {
-  return;
-}
-
-  if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
-    setMembers(cached.members);
-    return;
+    setNewRoomImageFile(null);
+    setNewRoomImagePreview('');
   }
 
-  setMembers([]);
+  async function openRoom(room) {
+    if (!room?.roomId || loadingRoomRef.current) return;
 
-  try {
-    const data = await roomApi.getRoomMembers(room.roomId);
+    if (activeRoomRef.current?.roomId === room.roomId) {
+      setMobileChatOpen(true);
+      return;
+    }
 
-    if (!mountedRef.current) return;
+    loadingRoomRef.current = true;
 
-    const nextMembers = extractRoomArray(data, ['members']);
+    try {
+      setStatus('');
+      setOpenRoomActionMenuId('');
+      setShowActiveRoomMenu(false);
+      setShowActiveRoomInfo(false);
+      setActiveInfoSection('');
+      setShowRoomMediaGrid(false);
+      setMediaViewer(null);
+      setMediaViewerReturnToGrid(false);
+      const cachedMessages = (roomMessagesCacheRef.current[room.roomId] || []).slice(-ROOM_INITIAL_VISIBLE_MESSAGES);
 
-    membersCacheRef.current[cacheKey] = {
-      timestamp: Date.now(),
-      members: nextMembers,
-    };
+      setMobileChatOpen(true);
+      setActiveRoom(room);
+      activeRoomRef.current = room;
+      initialRoomScrollDoneRef.current = room.roomId;
+      setMessages(cachedMessages);
+      jumpMessagesToBottomOnce();
+      setMessagesLoading(cachedMessages.length === 0);
 
-    setMembers(nextMembers);
-  } catch (err) {
-    console.error(err);
-    setStatus(err?.response?.data?.error || 'Could not load members');
+      setHasOlderMessages(true);
+      setOlderMessagesLoading(false);
+      olderMessagesLoadingRef.current = false;
+
+      setRoomUnreadCounts((prev) => ({
+        ...prev,
+        [room.roomId]: 0,
+      }));
+
+      const data = await roomApi.getRoomMessages(room.roomId, { limit: ROOM_MESSAGES_FETCH_LIMIT });
+
+      if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) return;
+
+      const loadedRoomMessages = getLoadedRoomMessages(data);
+      const initialVisibleMessages = loadedRoomMessages.slice(
+        -Math.max(ROOM_INITIAL_VISIBLE_MESSAGES, ROOM_MESSAGES_FETCH_LIMIT)
+      );
+
+      syncRoomMessageCache(room.roomId, loadedRoomMessages);
+      setMessages(initialVisibleMessages);
+      jumpMessagesToBottomOnce();
+      setHasOlderMessages(loadedRoomMessages.length > ROOM_INITIAL_VISIBLE_MESSAGES);
+      setMessagesLoading(false);
+    } catch (err) {
+      console.error(err);
+
+      if (mountedRef.current) {
+        setActiveRoom(null);
+        activeRoomRef.current = null;
+        setMessages([]);
+        setMobileChatOpen(false);
+        setStatus(err?.response?.data?.error || 'Could not open room');
+      }
+    } finally {
+      loadingRoomRef.current = false;
+      if (mountedRef.current) setMessagesLoading(false);
+    }
   }
-}
 
-async function searchUsers(searchValue = inviteSearch) {
-  const query = String(searchValue || '').trim().toLowerCase();
+  async function openMembers(room) {
+    if (!room?.roomId) return;
 
-  if (!query) {
-    setInviteResults([]);
-    return;
-  }
+    const cacheKey = room.roomId;
+    const cached = membersCacheRef.current[cacheKey];
+    const now = Date.now();
 
-  const cached = userSearchCacheRef.current[query];
-  const now = Date.now();
-
-  if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
-    setInviteResults(dedupeInviteUsers(cached.users));
-    return;
-  }
-
-  try {
     setStatus('');
+    setShowInvite(false);
+    setInviteSearch('');
+    setInviteResults([]);
+    setPendingInviteUserIds(new Set());
+    setModalTitle(`${room.name} members`);
+    setModalMode('members');
+    setModalRoom(room);
+    setShowMembers(true);
 
-    const data = await roomApi.searchUsers(query);
+    if (
+      modalRoom?.roomId === room.roomId &&
+      modalMode === 'members' &&
+      members.length > 0 &&
+      showMembers
+    ) {
+      return;
+    }
 
-    if (!mountedRef.current) return;
+    if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
+      setMembers(cached.members);
+      return;
+    }
 
-    const users = dedupeInviteUsers(
-      Array.isArray(data?.users) ? data.users : Array.isArray(data) ? data : []
-    );
+    setMembers([]);
 
-    userSearchCacheRef.current[query] = {
-      timestamp: Date.now(),
-      users,
-    };
+    try {
+      const data = await roomApi.getRoomMembers(room.roomId);
 
-    setInviteResults(users);
-  } catch (err) {
-    console.error(err);
-    setStatus(err?.response?.data?.error || 'Search failed');
-  }
-}
+      if (!mountedRef.current) return;
 
-function getInviteUserId(user) {
-  if (typeof user === 'string') return user;
-  return user?.userId || user?.id || user?.sub || user?.invitedUserId || '';
-}
+      const nextMembers = extractRoomArray(data, ['members']);
 
-function getInviteUserEmail(user) {
-  return String(user?.email || '').trim().toLowerCase();
-}
+      membersCacheRef.current[cacheKey] = {
+        timestamp: Date.now(),
+        members: nextMembers,
+      };
 
-function normalizeInviteKey(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/^mailto:/, '')
-    .replace(/\s+/g, '');
-}
-
-function getEmailLocalPart(email) {
-  const cleanEmail = normalizeInviteKey(email);
-  return cleanEmail.includes('@') ? cleanEmail.split('@')[0] : '';
-}
-
-function dedupeInviteUsers(users = []) {
-  const seen = new Set();
-  const unique = [];
-
-  for (const user of users) {
-    const userIdValue = normalizeInviteKey(getInviteUserId(user));
-    const emailValue = normalizeInviteKey(getInviteUserEmail(user));
-    const usernameValue = normalizeInviteKey(user?.username);
-    const nameValue = normalizeInviteKey(user?.name || user?.displayName);
-    const emailLocalValue = getEmailLocalPart(emailValue);
-
-    const keys = [
-      userIdValue && `id:${userIdValue}`,
-      emailValue && `email:${emailValue}`,
-      usernameValue && `username:${usernameValue}`,
-      emailLocalValue && `username:${emailLocalValue}`,
-      nameValue && emailValue && `name-email:${nameValue}:${emailValue}`,
-      nameValue && userIdValue && `name-id:${nameValue}:${userIdValue}`,
-    ].filter(Boolean);
-
-    if (keys.some((key) => seen.has(key))) continue;
-
-    keys.forEach((key) => seen.add(key));
-    unique.push(user);
+      setMembers(nextMembers);
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.response?.data?.error || 'Could not load members');
+    }
   }
 
-  return unique;
-}
+  async function searchUsers(searchValue = inviteSearch) {
+    const query = String(searchValue || '').trim().toLowerCase();
 
-function isExistingRoomMember(user) {
-  const targetId = getInviteUserId(user);
-  const targetEmail = getInviteUserEmail(user);
+    if (!query) {
+      setInviteResults([]);
+      return;
+    }
 
-  return members.some((member) => {
-    const memberId = getInviteUserId(member);
-    const memberEmail = getInviteUserEmail(member);
+    const cached = userSearchCacheRef.current[query];
+    const now = Date.now();
+
+    if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
+      setInviteResults(dedupeInviteUsers(cached.users));
+      return;
+    }
+
+    try {
+      setStatus('');
+
+      const data = await roomApi.searchUsers(query);
+
+      if (!mountedRef.current) return;
+
+      const users = dedupeInviteUsers(
+        Array.isArray(data?.users) ? data.users : Array.isArray(data) ? data : []
+      );
+
+      userSearchCacheRef.current[query] = {
+        timestamp: Date.now(),
+        users,
+      };
+
+      setInviteResults(users);
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.response?.data?.error || 'Search failed');
+    }
+  }
+
+  function getInviteUserId(user) {
+    if (typeof user === 'string') return user;
+    return user?.userId || user?.id || user?.sub || user?.invitedUserId || '';
+  }
+
+  function getInviteUserEmail(user) {
+    return String(user?.email || '').trim().toLowerCase();
+  }
+
+  function normalizeInviteKey(value) {
+    return String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/^mailto:/, '')
+      .replace(/\s+/g, '');
+  }
+
+  function getEmailLocalPart(email) {
+    const cleanEmail = normalizeInviteKey(email);
+    return cleanEmail.includes('@') ? cleanEmail.split('@')[0] : '';
+  }
+
+  function dedupeInviteUsers(users = []) {
+    const seen = new Set();
+    const unique = [];
+
+    for (const user of users) {
+      const userIdValue = normalizeInviteKey(getInviteUserId(user));
+      const emailValue = normalizeInviteKey(getInviteUserEmail(user));
+      const usernameValue = normalizeInviteKey(user?.username);
+      const nameValue = normalizeInviteKey(user?.name || user?.displayName);
+      const emailLocalValue = getEmailLocalPart(emailValue);
+
+      const keys = [
+        userIdValue && `id:${userIdValue}`,
+        emailValue && `email:${emailValue}`,
+        usernameValue && `username:${usernameValue}`,
+        emailLocalValue && `username:${emailLocalValue}`,
+        nameValue && emailValue && `name-email:${nameValue}:${emailValue}`,
+        nameValue && userIdValue && `name-id:${nameValue}:${userIdValue}`,
+      ].filter(Boolean);
+
+      if (keys.some((key) => seen.has(key))) continue;
+
+      keys.forEach((key) => seen.add(key));
+      unique.push(user);
+    }
+
+    return unique;
+  }
+
+  function isExistingRoomMember(user) {
+    const targetId = getInviteUserId(user);
+    const targetEmail = getInviteUserEmail(user);
+
+    return members.some((member) => {
+      const memberId = getInviteUserId(member);
+      const memberEmail = getInviteUserEmail(member);
+
+      return (
+        (targetId && memberId && targetId === memberId) ||
+        (targetEmail && memberEmail && targetEmail === memberEmail)
+      );
+    });
+  }
+
+  function isRoomOwnerUser(user, room = modalRoom || activeRoom) {
+    const targetId = getInviteUserId(user);
+    const ownerId = room?.ownerId || room?.createdBy || '';
+    return Boolean(targetId && ownerId && targetId === ownerId);
+  }
+
+  function canInviteUserToCurrentRoom(user) {
+    const targetId = getInviteUserId(user);
+    if (!targetId) return false;
 
     return (
-      (targetId && memberId && targetId === memberId) ||
-      (targetEmail && memberEmail && targetEmail === memberEmail)
+      !pendingInviteUserIds.has(targetId) &&
+      !isExistingRoomMember(user) &&
+      !isRoomOwnerUser(user)
     );
-  });
-}
-
-function isRoomOwnerUser(user, room = modalRoom || activeRoom) {
-  const targetId = getInviteUserId(user);
-  const ownerId = room?.ownerId || room?.createdBy || '';
-  return Boolean(targetId && ownerId && targetId === ownerId);
-}
-
-function canInviteUserToCurrentRoom(user) {
-  const targetId = getInviteUserId(user);
-  if (!targetId) return false;
-
-  return (
-    !pendingInviteUserIds.has(targetId) &&
-    !isExistingRoomMember(user) &&
-    !isRoomOwnerUser(user)
-  );
-}
-
-async function inviteUser(userToInvite) {
-  const targetUserId = getInviteUserId(userToInvite);
-
-  if (!modalRoom?.roomId || !targetUserId) {
-    setStatus('Could not find user to invite');
-    return;
   }
 
-  const selectedUser =
-    typeof userToInvite === 'string'
-      ? inviteResults.find((item) => getInviteUserId(item) === userToInvite) || { userId: userToInvite }
-      : userToInvite;
+  async function inviteUser(userToInvite) {
+    const targetUserId = getInviteUserId(userToInvite);
 
-  if (!canInviteUserToCurrentRoom(selectedUser)) {
-    setPendingInviteUserIds((prev) => {
-      const next = new Set(prev);
-      next.add(targetUserId);
-      return next;
-    });
+    if (!modalRoom?.roomId || !targetUserId) {
+      setStatus('Could not find user to invite');
+      return;
+    }
 
-    setStatus('This user is already invited or already a member.');
-    return;
-  }
+    const selectedUser =
+      typeof userToInvite === 'string'
+        ? inviteResults.find((item) => getInviteUserId(item) === userToInvite) || { userId: userToInvite }
+        : userToInvite;
 
-  try {
-    setStatus('');
+    if (!canInviteUserToCurrentRoom(selectedUser)) {
+      setPendingInviteUserIds((prev) => {
+        const next = new Set(prev);
+        next.add(targetUserId);
+        return next;
+      });
 
-    const data = await roomApi.inviteUserToRoom(modalRoom.roomId, targetUserId);
+      setStatus('This user is already invited or already a member.');
+      return;
+    }
 
-    setPendingInviteUserIds((prev) => {
-      const next = new Set(prev);
-      next.add(targetUserId);
-      return next;
-    });
+    try {
+      setStatus('');
 
-    setInviteResults((prev) =>
-      prev.map((item) =>
-        getInviteUserId(item) === targetUserId ? { ...item, invited: true } : item
-      )
-    );
+      const data = await roomApi.inviteUserToRoom(modalRoom.roomId, targetUserId);
 
-    setStatus(data?.message || 'Invite request sent. The user must accept before joining.');
-  } catch (err) {
-    const statusCode = err?.response?.status;
-    const message = err?.response?.data?.error || err?.response?.data?.message || '';
-
-    if (statusCode === 409) {
       setPendingInviteUserIds((prev) => {
         const next = new Set(prev);
         next.add(targetUserId);
@@ -2643,66 +2899,84 @@ async function inviteUser(userToInvite) {
         )
       );
 
-      setStatus(message || 'Invite already sent');
+      setStatus(data?.message || 'Invite request sent. The user must accept before joining.');
+    } catch (err) {
+      const statusCode = err?.response?.status;
+      const message = err?.response?.data?.error || err?.response?.data?.message || '';
+
+      if (statusCode === 409) {
+        setPendingInviteUserIds((prev) => {
+          const next = new Set(prev);
+          next.add(targetUserId);
+          return next;
+        });
+
+        setInviteResults((prev) =>
+          prev.map((item) =>
+            getInviteUserId(item) === targetUserId ? { ...item, invited: true } : item
+          )
+        );
+
+        setStatus(message || 'Invite already sent');
+        return;
+      }
+
+      console.error(err);
+      setStatus(statusCode === 403 ? message || 'Only the room creator can invite users.' : message || 'Invite failed');
+    }
+  }
+
+  async function openJoinRequests(room) {
+    if (!room?.roomId) return;
+
+    const cacheKey = room.roomId;
+    const cached = joinRequestsCacheRef.current[cacheKey];
+    const now = Date.now();
+
+    setStatus('');
+    setShowInvite(false);
+    setInviteSearch('');
+    setInviteResults([]);
+    setPendingInviteUserIds(new Set());
+    setModalTitle(`${room.name} join requests`);
+    setModalMode('requests');
+    setModalRoom(room);
+    setShowMembers(true);
+
+    if (
+      modalRoom?.roomId === room.roomId &&
+      modalMode === 'requests' &&
+      members.length > 0 &&
+      showMembers
+    ) {
       return;
     }
 
-    console.error(err);
-    setStatus(statusCode === 403 ? message || 'Only the room creator can invite users.' : message || 'Invite failed');
+    if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
+      setMembers(cached.requests);
+      return;
+    }
+
+    setMembers([]);
+
+    try {
+      const data = await roomApi.getRoomJoinRequests(room.roomId);
+
+      if (!mountedRef.current) return;
+
+      const nextRequests = extractRoomArray(data, ['requests']);
+
+      joinRequestsCacheRef.current[cacheKey] = {
+        timestamp: Date.now(),
+        requests: nextRequests,
+      };
+
+      setMembers(nextRequests);
+    } catch (err) {
+      console.error(err);
+      setStatus(err?.response?.data?.error || 'Could not load join requests');
+    }
   }
-}
-
-async function openJoinRequests(room) {
-  if (!room?.roomId) return;
-
-  const cacheKey = room.roomId;
-  const cached = joinRequestsCacheRef.current[cacheKey];
-  const now = Date.now();
-
-  setStatus('');
-  setShowInvite(false);
-  setInviteSearch('');
-  setInviteResults([]);
-  setPendingInviteUserIds(new Set());
-  setModalTitle(`${room.name} join requests`);
-  setModalMode('requests');
-  setModalRoom(room);
-  setShowMembers(true);
-
-if (
-  modalRoom?.roomId === room.roomId &&
-  modalMode === 'requests' &&
-  members.length > 0 &&
-  showActiveRoomInfo
-) {
-  return;
-}
-
-  if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
-    setMembers(cached.requests);
-    return;
-  }
-
-  setMembers([]);
-
-  try {
-    const data = await roomApi.getRoomJoinRequests(room.roomId);
-
-    if (!mountedRef.current) return;
-
-    const nextRequests = extractRoomArray(data, ['requests']);
-
-    joinRequestsCacheRef.current[cacheKey] = {
-      timestamp: Date.now(),
-      requests: nextRequests,
-    };
-
-    setMembers(nextRequests);
-  } catch (err) {
-    console.error(err);
-    setStatus(err?.response?.data?.error || 'Could not load join requests');
-  }
-}
 
 async function approveJoinRequest(requestUserId) {
   if (!modalRoom?.roomId || !requestUserId) return;
@@ -3400,7 +3674,7 @@ return (
     </aside>
 
     <section className="chat">
-      {!activeRoom ? (
+      {!activeRoom && !mobileChatOpen ? (
         <div className="empty">Select a room</div>
       ) : (
         <>
@@ -3486,7 +3760,7 @@ return (
 
                   <button
                     type="button"
-                    disabled={renderedMediaMessages.length === 0}
+                    disabled={!roomMediaCacheRef.current[activeRoom?.roomId || '']?.length}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -3495,9 +3769,11 @@ return (
                     }}
                   >
                     Media
-                    {renderedMediaMessages.length > 0 && (
+                   {roomMediaCacheRef.current[activeRoom?.roomId || '']?.length > 0 && (
                       <span className="active-room-menu-count">
-                        {renderedMediaMessages.length > 99 ? '99+' : renderedMediaMessages.length}
+                       {roomMediaCacheRef.current[activeRoom?.roomId || '']?.length > 99
+  ? '99+'
+  : roomMediaCacheRef.current[activeRoom?.roomId || '']?.length}
                       </span>
                     )}
                   </button>
@@ -3506,27 +3782,39 @@ return (
             </div>
           </div>
 
-          <div
+<div
   className="messages"
-  ref={messagesRef}
-  onScroll={(event) => {
-    if (event.currentTarget.scrollTop < 80) {
-      loadOlderRoomMessages();
-    }
-  }}
+  ref={setMessagesContainerRef}
+onScroll={(event) => {
+  const element = event.currentTarget;
+
+  if (element.scrollTop < 80) {
+    loadOlderRoomMessages();
+  }
+
+  const distanceFromBottom =
+    element.scrollHeight - element.scrollTop - element.clientHeight;
+
+  setShowScrollToBottom(distanceFromBottom > 220);
+}}
 >
   {olderMessagesLoading && (
     <p className="older-messages-loading">Loading older messages...</p>
   )}
-            {messagesLoading ? (
-              <p className="empty">Loading messages...</p>
-            ) : renderedMessages.length === 0 ? (
+           {messagesLoading && renderedMessages.length === 0 ? (
+  <div className="room-loading-shell">
+    <div className="room-loading-bubble" />
+    <div className="room-loading-bubble mine" />
+    <div className="room-loading-bubble short" />
+  </div>
+) : renderedMessages.length === 0 ? (
               <p className="empty">No messages yet</p>
             ) : (
               renderedMessages.map((msg, index) => (
                 <div
-                  key={msg.messageId || msg.clientId || `${msg.createdAt || 'msg'}-${index}`}
-                  className={msg.senderId === userId ? 'msg mine' : 'msg'}
+                  key={getStableRoomMessageKey(msg)}
+data-message-key={getStableRoomMessageKey(msg)}
+className={msg.senderId === userId ? 'msg mine' : 'msg'}
                 >
                   {activeRoomCanDeleteMessages && getRoomMessageId(msg) && (
                     <button
@@ -3541,7 +3829,7 @@ return (
                       aria-label="Delete message"
                       title="Delete message"
                     >
-                      {deletingMessageId === getRoomMessageId(msg) ? '…' : '×'}
+                      {deletingMessageId === getRoomMessageId(msg) ? '…' : <Trash2 size={15} strokeWidth={2.4} />}
                     </button>
                   )}
 
@@ -3574,6 +3862,8 @@ return (
                             className="room-message-image"
                             loading="lazy"
                             decoding="async"
+                            fetchPriority="low"
+                            sizes="(max-width: 760px) 72vw, 280px"
                             referrerPolicy="no-referrer"
                             onError={(event) => {
                               event.currentTarget.closest('.room-message-media-wrap')?.classList.add('media-load-failed');
@@ -3593,7 +3883,7 @@ return (
                           aria-label="Download image"
                           title="Download"
                         >
-                          ↓
+                          <Download size={17} strokeWidth={2.4} />
                         </button>
                       </div>
                     )}
@@ -3644,7 +3934,7 @@ return (
                           aria-label="Download video"
                           title="Download"
                         >
-                          ↓
+                          <Download size={17} strokeWidth={2.4} />
                         </button>
                       </div>
                     )}
@@ -3674,7 +3964,7 @@ return (
                           aria-label="Download file"
                           title="Download"
                         >
-                          ↓
+                          <Download size={17} strokeWidth={2.4} />
                         </button>
                       </div>
                     )}
@@ -3683,6 +3973,32 @@ return (
               ))
             )}
           </div>
+          {showScrollToBottom && (
+  <button
+    type="button"
+    aria-label="Scroll to latest message"
+    onClick={() => {
+      scrollMessagesToBottom('smooth');
+      setShowScrollToBottom(false);
+    }}
+    style={{
+      position: 'absolute',
+      left: '18px',
+      bottom: '92px',
+      width: '42px',
+      height: '42px',
+      borderRadius: '999px',
+      border: '1px solid rgba(255,255,255,0.08)',
+      background: 'rgba(15, 23, 42, 0.92)',
+      color: '#fff',
+      fontSize: '20px',
+      fontWeight: 700,
+      zIndex: 40,
+    }}
+  >
+    ↓
+  </button>
+)}
 
           <form className="input" onSubmit={sendMessage}>
 {selectedMediaPreviews.length > 0 && (
@@ -3709,7 +4025,7 @@ return (
             className="remove-selected-room-media"
             onClick={() => removeSelectedMediaAt(index)}
           >
-            ✕
+           <X size={18} strokeWidth={2.5} />
           </button>
         </div>
       ))}
@@ -3783,17 +4099,16 @@ return (
           ) : (
            <div
   className="room-media-grid-list"
-  onScroll={(event) => {
-    const element = event.currentTarget;
+onScroll={(event) => {
+  const element = event.currentTarget;
+  const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
 
-    if (
-      element.scrollTop < 120 &&
-      !olderMessagesLoading &&
-      hasOlderMessages
-    ) {
-      loadOlderRoomMessages();
-    }
-  }}
+  setShowScrollToBottom(distanceFromBottom > 220);
+
+  if (element.scrollTop < 80) {
+    loadOlderRoomMessages();
+  }
+}}
 >
               {renderedMediaMessages.map((item, index) => {
                 const itemUrl = item.mediaUrl || item.fileUrl;
@@ -3853,7 +4168,7 @@ return (
             <span>{activeMediaViewerItem.senderName || activeMediaViewerItem.name || 'User'}</span>
 
             <span className="room-media-viewer-count">
-              {Number(mediaViewer.index || 0) + 1}/{mediaViewerCount}
+              {activeMediaViewerIndex + 1}/{mediaViewerCount}
             </span>
 
             <button
