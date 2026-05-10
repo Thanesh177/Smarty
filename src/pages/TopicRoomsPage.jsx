@@ -4631,7 +4631,7 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
 
               {item.mediaType === 'video' && (
                 <>
-                  <video src={item.mediaUrl || item.fileUrl} muted playsInline preload="metadata" />
+                  <video src={item.mediaUrl || item.fileUrl} muted playsInline preload="none" />
                   <span className="standalone-media-play">▶</span>
                 </>
               )}
