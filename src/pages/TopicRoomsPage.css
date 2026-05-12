@@ -2793,6 +2793,7 @@ select:disabled {
 }
 
 .room-media-viewer-nav {
+  display: none;
   position: absolute;
   top: 50%;
   z-index: 5;
@@ -2847,6 +2848,7 @@ select:disabled {
   }
 
   .room-media-viewer-nav {
+    display: none;
     width: 54px;
     height: 86px;
     font-size: 52px;
@@ -4119,5 +4121,87 @@ select:disabled {
 
   .msg {
     max-width: 86% !important;
+  }
+}
+
+/* ===== FINAL FIX: stop .chat from moving while scrolling/typing ===== */
+.rooms-page {
+  height: calc(100dvh - 90px) !important;
+  max-height: calc(100dvh - 90px) !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.chat {
+  position: relative !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  transform: none !important;
+  translate: none !important;
+  contain: layout paint !important;
+}
+
+.chat-header {
+  flex: 0 0 auto !important;
+}
+
+.messages {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-bottom: 112px !important;
+  scroll-padding-bottom: 112px !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.input {
+  position: absolute !important;
+  left: 12px !important;
+  right: 12px !important;
+  bottom: max(12px, env(safe-area-inset-bottom)) !important;
+  width: auto !important;
+  max-width: none !important;
+  transform: none !important;
+  margin: 0 !important;
+  z-index: 600 !important;
+}
+
+.input input {
+  touch-action: manipulation !important;
+}
+
+@media (max-width: 760px) {
+  .rooms-page,
+  .rooms-page.mobile-chat-open {
+    height: calc(100dvh - 54px) !important;
+    max-height: calc(100dvh - 54px) !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .rooms-page.mobile-chat-open .chat {
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    transform: none !important;
+  }
+
+  .messages {
+    padding-bottom: 118px !important;
+    scroll-padding-bottom: 118px !important;
+  }
+
+  .input {
+    left: 9px !important;
+    right: 9px !important;
+    bottom: max(9px, env(safe-area-inset-bottom)) !important;
+    width: auto !important;
+    transform: none !important;
   }
 }
