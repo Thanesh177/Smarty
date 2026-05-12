@@ -544,7 +544,7 @@ button {
   height: 100%;
   max-height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   background: rgba(2, 6, 23, 0.42);
 }
 
@@ -750,7 +750,7 @@ button {
   flex-direction: column;
   align-items: stretch;
   gap: 7px;
-  padding: 18px 16px 104px;
+  padding: 18px 16px 128px;
   background: rgba(2, 6, 23, 0.34);
 }
 
@@ -941,15 +941,22 @@ button {
 ========================= */
 
 .composer-shell {
-  position: sticky;
-  bottom: 0;
-  z-index: 30;
-  padding: 12px 14px 14px;
-  background: rgba(2, 6, 23, 0.72);
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  position: fixed !important;
+  left: calc(350px + 24px) !important;
+  right: 16px !important;
+  bottom: max(16px, env(safe-area-inset-bottom, 0px)) !important;
+  z-index: 500 !important;
+  padding: 10px !important;
+  border-radius: 24px !important;
+  background: rgba(2, 6, 23, 0.94) !important;
+  border: 1px solid rgba(125, 211, 252, 0.18) !important;
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(20px) saturate(135%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(135%) !important;
+  transform: translateZ(0) !important;
+  will-change: transform !important;
 }
 
 .message-form {
@@ -1355,6 +1362,10 @@ button {
   .chat-window {
     border-radius: 22px;
   }
+  .composer-shell {
+    left: calc(320px + 18px) !important;
+    right: 12px !important;
+  }
 }
 
 /* =========================
@@ -1512,7 +1523,7 @@ button {
   .messages {
     min-height: 0;
     height: 100%;
-    padding: 12px 10px 94px;
+    padding: 12px 10px 132px;
     gap: 6px;
     overflow-y: auto;
   }
@@ -1541,7 +1552,15 @@ button {
   }
 
   .composer-shell {
-    padding: 9px 10px max(12px, env(safe-area-inset-bottom));
+    position: fixed !important;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: max(10px, env(safe-area-inset-bottom, 0px)) !important;
+    z-index: 500 !important;
+    padding: 8px !important;
+    border-radius: 22px !important;
+    transform: translateZ(0) !important;
+    will-change: transform !important;
   }
 
   .message-form {
@@ -2711,5 +2730,51 @@ button {
 
   .voice-ready-cancel-btn {
     width: 100% !important;
+  }
+}
+
+/* ===== FINAL STABLE CHAT COMPOSER OVERRIDE ===== */
+.chat-window {
+  overflow: hidden !important;
+}
+
+.messages {
+  padding-bottom: 132px !important;
+  scroll-padding-bottom: 132px !important;
+  overflow-anchor: none !important;
+  overscroll-behavior: contain !important;
+}
+
+.composer-shell {
+  flex: 0 0 auto !important;
+}
+
+.message-form {
+  min-width: 0 !important;
+  width: 100% !important;
+}
+
+.message-form input {
+  min-width: 0 !important;
+}
+
+@media (max-width: 860px) {
+  .chat-page.mobile-chat-open .chat-window {
+    height: calc(100dvh - 72px) !important;
+    max-height: calc(100dvh - 72px) !important;
+    overflow: hidden !important;
+  }
+
+  .messages {
+    padding-bottom: 138px !important;
+    scroll-padding-bottom: 138px !important;
+  }
+
+  .composer-shell {
+    width: calc(100vw - 20px) !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: max(10px, env(safe-area-inset-bottom, 0px)) !important;
+    transform: translateX(-50%) translateZ(0) !important;
   }
 }
