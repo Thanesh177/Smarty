@@ -4205,3 +4205,39 @@ select:disabled {
     transform: none !important;
   }
 }
+
+/* REAL FIX: keyboard should not push whole chat up */
+@media (max-width: 760px) {
+  .rooms-page,
+  .rooms-page.mobile-chat-open {
+    height: calc(100vh - 54px) !important;
+    max-height: calc(100vh - 54px) !important;
+    overflow: hidden !important;
+  }
+
+  .chat,
+  .rooms-page.mobile-chat-open .chat {
+    position: relative !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow: hidden !important;
+    transform: none !important;
+  }
+
+  .messages {
+    height: auto !important;
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    padding-bottom: 105px !important;
+  }
+
+  .input {
+    position: fixed !important;
+    left: 9px !important;
+    right: 9px !important;
+    bottom: 8px !important;
+    width: auto !important;
+    transform: none !important;
+    margin: 0 !important;
+  }
+}
