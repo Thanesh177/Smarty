@@ -1149,28 +1149,7 @@ const jumpMessagesToBottomOnce = useCallback(() => {
     };
   }, []);
 
-  useEffect(() => {
-  if (!showRoomMediaGrid && !messages.length) return;
 
-  const visibleVideos = [
-    ...visibleRoomMediaMessages,
-    ...renderedMessages,
-  ]
-    .filter((item) => item?.mediaType === 'video')
-    .slice(0, 18);
-
-  visibleVideos.forEach((item) => {
-    const thumb = getRoomVideoThumbnailUrl(item);
-
-    if (!thumb) {
-      captureRoomVideoThumbnail(item);
-    }
-  });
-}, [
-  showRoomMediaGrid,
-  visibleRoomMediaMessages,
-  renderedMessages,
-]);
 
   useEffect(() => {
     return () => {
@@ -1560,14 +1539,58 @@ function markPendingRoomMessageFailed(clientId) {
     setMediaViewerReturnToGrid(false);
     setRoomMediaGridVisibleCount(ROOM_MEDIA_GRID_INITIAL_ITEMS);
     roomMediaGridLoadOlderRef.current = false;
-    setShowRoomMediaGrid(true);
-  }
+setShowRoomMediaGrid(true);
+
+window.setTimeout(() => {
+  if (mountedRef.current) ensureRoomMediaGridHasContent();
+}, 0);  }
 
 function closeRoomMediaGrid() {
   setShowRoomMediaGrid(false);
   setMediaViewerReturnToGrid(false);
   setRoomMediaGridVisibleCount(ROOM_MEDIA_GRID_INITIAL_ITEMS);
   roomMediaGridLoadOlderRef.current = false;
+}
+
+async function ensureRoomMediaGridHasContent() {
+  const room = activeRoomRef.current;
+  if (!room?.roomId) return;
+
+  const cachedMedia = roomMediaCacheRef.current[room.roomId] || [];
+  const currentMedia = mergeRoomMediaMessages(cachedMedia, messagesStateRef.current);
+  roomMediaCacheRef.current[room.roomId] = currentMedia;
+
+  if (currentMedia.length > 0) {
+    setMessages((prev) => [...prev]);
+    return;
+  }
+
+  if (messagesLoading || olderMessagesLoadingRef.current) return;
+
+  try {
+    setMessagesLoading(true);
+
+    const data = await roomApi.getRoomMessages(room.roomId, {
+      limit: Math.max(60, ROOM_MESSAGES_FETCH_LIMIT, ROOM_INITIAL_VISIBLE_MESSAGES),
+    });
+
+    if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) return;
+
+    const loadedMessages = getLoadedRoomMessages(data);
+    const mergedMessages = trimRoomMessagesForMemory([
+      ...messagesStateRef.current,
+      ...loadedMessages,
+    ]);
+
+    syncRoomMessageCache(room.roomId, mergedMessages);
+    setMessages(mergedMessages.slice(-ROOM_INITIAL_VISIBLE_MESSAGES));
+    setHasOlderMessages(loadedMessages.length >= ROOM_MESSAGES_FETCH_LIMIT);
+  } catch (err) {
+    console.error(err);
+    setStatus(err?.response?.data?.error || 'Could not load media');
+  } finally {
+    if (mountedRef.current) setMessagesLoading(false);
+  }
 }
 
 function captureRoomVideoThumbnail(message) {
@@ -1602,7 +1625,6 @@ function captureRoomVideoThumbnail(message) {
   roomVideoThumbQueueRef.current.add(messageKey);
 
   const video = document.createElement('video');
-  video.crossOrigin = 'anonymous';
   video.muted = true;
   video.playsInline = true;
   video.preload = 'metadata';
@@ -1762,6 +1784,10 @@ function openActiveRoomMediaPopup(event) {
   setRoomMediaGridVisibleCount(ROOM_MEDIA_GRID_INITIAL_ITEMS);
   roomMediaGridLoadOlderRef.current = false;
   setShowRoomMediaGrid(true);
+
+  window.setTimeout(() => {
+  if (mountedRef.current) ensureRoomMediaGridHasContent();
+}, 0);
 }
 
   async function toggleActiveInfoSection(section) {
@@ -1874,6 +1900,10 @@ function openMediaGridFromMessage(message) {
   setRoomMediaGridVisibleCount(nextVisibleCount);
   setShowActiveRoomInfo(false);
   setShowRoomMediaGrid(true);
+  
+  window.setTimeout(() => {
+  if (mountedRef.current) ensureRoomMediaGridHasContent();
+}, 0);
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
