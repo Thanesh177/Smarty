@@ -4225,17 +4225,17 @@ select:disabled {
   }
 
   .messages {
-    height: auto !important;
     flex: 1 1 auto !important;
     overflow-y: auto !important;
     padding-bottom: 105px !important;
+    max-height: 80% !important;
   }
 
   .input {
     position: fixed !important;
     left: 9px !important;
     right: 9px !important;
-    bottom: 8px !important;
+    bottom: 41px !important;
     width: auto !important;
     transform: none !important;
     margin: 0 !important;

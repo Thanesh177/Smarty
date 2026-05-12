@@ -427,16 +427,6 @@ export default function RoomMediaModal({
     setMediaViewer(null);
   }
 
-  function toggleViewerPlayback() {
-    const video = mediaViewerVideoRef.current;
-    if (!video) return;
-
-    if (video.paused) {
-      video.play?.().catch?.(() => {});
-    } else {
-      video.pause?.();
-    }
-  }
 
   function seekViewerVideo(seconds = 0) {
     const video = mediaViewerVideoRef.current;
@@ -643,6 +633,11 @@ export default function RoomMediaModal({
     const deltaX = touch.clientX - start.x;
     const deltaY = touch.clientY - start.y;
 
+    if (Math.abs(deltaY) > 70 && Math.abs(deltaY) > Math.abs(deltaX) * 1.15) {
+      closeMediaViewer();
+      return;
+    }
+
     if (Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY)) {
       moveMediaViewer(deltaX > 0 ? 1 : -1);
       return;
@@ -665,9 +660,7 @@ export default function RoomMediaModal({
       return;
     }
 
-    mediaViewerTapTimeoutRef.current = window.setTimeout(() => {
-      toggleViewerPlayback();
-    }, 220);
+    mediaViewerTapTimeoutRef.current = window.setTimeout(() => {}, 220);
   }
 
   useEffect(() => {
