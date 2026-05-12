@@ -3791,3 +3791,333 @@ select:disabled {
     border-radius: 18px !important;
   }
 }
+/* ===== INSTAGRAM-LIKE ROOM CHAT POLISH: spacing + text box focus ===== */
+.rooms-page {
+  background:
+    radial-gradient(circle at 14% -8%, rgba(34, 211, 238, 0.11), transparent 32%),
+    radial-gradient(circle at 95% 4%, rgba(168, 85, 247, 0.1), transparent 30%),
+    linear-gradient(180deg, #020617 0%, #030712 48%, #020617 100%) !important;
+}
+
+.chat {
+  background:
+    radial-gradient(circle at 50% -18%, rgba(34, 211, 238, 0.08), transparent 34%),
+    rgba(2, 6, 23, 0.72) !important;
+}
+
+.chat-header {
+  min-height: 58px !important;
+  padding: 0 14px !important;
+  gap: 10px !important;
+  background: rgba(2, 6, 23, 0.86) !important;
+  backdrop-filter: blur(18px) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(130%) !important;
+}
+
+.active-room-title-wrap {
+  gap: 9px !important;
+}
+
+.active-room-title-wrap > span {
+  font-size: 0.98rem !important;
+  font-weight: 950 !important;
+  letter-spacing: -0.035em !important;
+}
+
+.active-room-image {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  border-radius: 999px !important;
+  border-color: rgba(125, 211, 252, 0.22) !important;
+}
+
+.messages {
+  gap: 6px !important;
+  padding: 12px 14px 98px !important;
+  scroll-padding-bottom: 112px !important;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(2, 6, 23, 0.14)) !important;
+}
+
+.msg {
+  max-width: min(620px, 76%) !important;
+  padding: 7px 10px !important;
+  border-radius: 18px 18px 18px 6px !important;
+  background: rgba(15, 23, 42, 0.62) !important;
+  border: 1px solid rgba(148, 163, 184, 0.08) !important;
+  box-shadow: none !important;
+}
+
+.msg.mine {
+  padding: 7px 10px !important;
+  border-radius: 18px 18px 6px 18px !important;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.22), rgba(34, 197, 94, 0.14)) !important;
+  border-color: rgba(125, 211, 252, 0.13) !important;
+}
+
+.msg b {
+  margin-bottom: 3px !important;
+  font-size: 0.68rem !important;
+  line-height: 1.15 !important;
+  color: rgba(203, 213, 225, 0.58) !important;
+}
+
+.msg p {
+  font-size: 0.93rem !important;
+  line-height: 1.38 !important;
+}
+
+.room-message-content {
+  gap: 5px !important;
+}
+
+.room-message-preview-wrap,
+.room-message-media-tap {
+  margin-top: 5px !important;
+  border-radius: 18px !important;
+}
+
+.room-message-image,
+.room-message-video,
+.room-message-preview-wrap .room-message-image,
+.room-message-preview-wrap .room-message-video {
+  border-radius: 18px !important;
+  max-height: 340px !important;
+}
+
+.input {
+  width: min(calc(100vw - 28px), 720px) !important;
+  min-height: 46px !important;
+  bottom: max(12px, env(safe-area-inset-bottom)) !important;
+  padding: 6px !important;
+  gap: 6px !important;
+  border-radius: 999px !important;
+  background: rgba(2, 6, 23, 0.82) !important;
+  border: 1px solid rgba(148, 163, 184, 0.16) !important;
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+  backdrop-filter: blur(22px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(150%) !important;
+}
+
+.input:focus-within {
+  border-color: rgba(125, 211, 252, 0.34) !important;
+  box-shadow:
+    0 20px 54px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(34, 211, 238, 0.08),
+    0 0 28px rgba(34, 211, 238, 0.12) !important;
+}
+
+.input input {
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: rgba(15, 23, 42, 0.62) !important;
+  color: #f8fafc !important;
+  font-size: 16px !important;
+  font-weight: 650 !important;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08) !important;
+}
+
+.input input:focus {
+  background: rgba(15, 23, 42, 0.86) !important;
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.18) !important;
+}
+
+.input input::placeholder {
+  color: rgba(203, 213, 225, 0.45) !important;
+  font-weight: 700 !important;
+}
+
+.room-media-picker-btn {
+  flex: 0 0 34px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  border-radius: 999px !important;
+  color: #67e8f9 !important;
+  background: rgba(15, 23, 42, 0.76) !important;
+  border: 1px solid rgba(125, 211, 252, 0.16) !important;
+  font-size: 18px !important;
+}
+
+.input button[type="submit"] {
+  min-width: 52px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 13px !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  color: #04111d !important;
+  background: linear-gradient(135deg, #67e8f9, #86efac) !important;
+  font-size: 12px !important;
+  font-weight: 950 !important;
+  box-shadow: 0 10px 24px rgba(34, 211, 238, 0.18) !important;
+}
+
+.input button[type="submit"]:disabled {
+  color: rgba(226, 232, 240, 0.52) !important;
+  background: rgba(15, 23, 42, 0.68) !important;
+  box-shadow: none !important;
+}
+
+.selected-room-media-preview {
+  bottom: calc(100% + 8px) !important;
+  min-height: 74px !important;
+  max-height: 118px !important;
+  border-radius: 22px !important;
+  background: rgba(2, 6, 23, 0.9) !important;
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+.selected-room-media-preview-list {
+  gap: 7px !important;
+  padding: 5px 6px 7px !important;
+}
+
+.selected-room-media-preview-item {
+  width: 68px !important;
+  height: 68px !important;
+  flex-basis: 68px !important;
+  border-radius: 16px !important;
+}
+
+.room-list {
+  gap: 10px !important;
+  padding: 2px 5px 132px 0 !important;
+}
+
+.room-item {
+  min-height: 68px !important;
+  padding: 11px 12px !important;
+  border-radius: 22px !important;
+}
+
+.room-image-wrap {
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  border-radius: 999px !important;
+}
+
+.room-info strong,
+.room-text-block strong,
+.room-title-row strong {
+  font-size: 0.94rem !important;
+}
+
+.room-info span,
+.room-text-block span,
+.chat-room-title small,
+.member-row small,
+.member-empty,
+.empty {
+  font-size: 0.74rem !important;
+}
+
+@media (max-width: 760px) {
+  .rooms-page.mobile-chat-open .chat {
+    height: calc(100dvh - 54px) !important;
+    max-height: calc(100dvh - 54px) !important;
+  }
+
+  .chat-header {
+    min-height: 54px !important;
+    padding: 0 10px !important;
+  }
+
+  .active-room-image {
+    width: 34px !important;
+    height: 34px !important;
+    min-width: 34px !important;
+  }
+
+  .messages {
+    gap: 5px !important;
+    padding: 10px 9px 92px !important;
+    scroll-padding-bottom: 104px !important;
+  }
+
+  .msg {
+    max-width: 82% !important;
+    padding: 7px 9px !important;
+  }
+
+  .msg p {
+    font-size: 0.92rem !important;
+  }
+
+  .input {
+    width: calc(100vw - 18px) !important;
+    min-height: 48px !important;
+    bottom: max(9px, env(safe-area-inset-bottom)) !important;
+    padding: 6px !important;
+    gap: 5px !important;
+  }
+
+  .input input {
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 11px !important;
+  }
+
+  .room-media-picker-btn,
+  .input button[type="submit"] {
+    height: 36px !important;
+    min-height: 36px !important;
+  }
+
+  .room-media-picker-btn {
+    width: 36px !important;
+    min-width: 36px !important;
+    flex-basis: 36px !important;
+  }
+
+  .input button[type="submit"] {
+    min-width: 50px !important;
+    padding: 0 12px !important;
+  }
+
+  .room-message-preview-wrap,
+  .room-message-media-tap {
+    max-width: min(82vw, 330px) !important;
+  }
+
+  .msg.mine .room-message-preview-wrap,
+  .msg.mine .room-message-media-tap {
+    margin-left: auto !important;
+  }
+
+  .room-message-image,
+  .room-message-video,
+  .room-message-preview-wrap .room-message-image,
+  .room-message-preview-wrap .room-message-video {
+    max-height: 38vh !important;
+  }
+}
+
+@media (max-width: 380px) {
+  .input {
+    width: calc(100vw - 12px) !important;
+  }
+
+  .input button[type="submit"] {
+    min-width: 46px !important;
+    padding: 0 10px !important;
+  }
+
+  .room-media-picker-btn {
+    width: 34px !important;
+    min-width: 34px !important;
+    flex-basis: 34px !important;
+  }
+
+  .msg {
+    max-width: 86% !important;
+  }
+}
