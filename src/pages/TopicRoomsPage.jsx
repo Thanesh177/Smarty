@@ -3811,70 +3811,102 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
   </button>
 )}
 
-          <form className="input" onSubmit={sendMessage}>
-{selectedMediaPreviews.length > 0 && (
-  <div className="selected-room-media-preview selected-room-media-preview-multiple">
-    <div className="selected-room-media-preview-list">
-      {selectedMediaPreviews.map((item, index) => (
-        <div className="selected-room-media-preview-item" key={`${item.preview}-${index}`}>
-          {item.mediaType === 'image' ? (
-            <img src={item.preview} alt="Preview" />
-          ) : item.mediaType === 'video' ? (
-            <video
-              src={item.preview}
-              muted
-              playsInline
-              preload="metadata"
-              controls={false}
-            />
-          ) : (
-            <span>📎 {item.file?.name || 'Attachment'}</span>
-          )}
 
-          <button
-            type="button"
-            className="remove-selected-room-media"
-            onClick={() => removeSelectedMediaAt(index)}
+          <form
+            className="input"
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+
+              if (
+                (!text.trim() && selectedMediaFiles.length === 0) ||
+                !activeRoom ||
+                uploadingMedia
+              ) {
+                return;
+              }
+
+              sendMessage(event);
+            }}
           >
-           <X size={18} strokeWidth={2.5} />
-          </button>
-        </div>
-      ))}
-    </div>
+            {selectedMediaPreviews.length > 0 && (
+              <div className="selected-room-media-preview selected-room-media-preview-multiple">
+                <div className="selected-room-media-preview-list">
+                  {selectedMediaPreviews.map((item, index) => (
+                    <div className="selected-room-media-preview-item" key={`${item.preview}-${index}`}>
+                      {item.mediaType === 'image' ? (
+                        <img src={item.preview} alt="Preview" />
+                      ) : item.mediaType === 'video' ? (
+                        <video
+                          src={item.preview}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          controls={false}
+                        />
+                      ) : (
+                        <span>📎 {item.file?.name || 'Attachment'}</span>
+                      )}
 
-    {uploadingMedia && (
-      <div className="room-media-upload-progress">
-        <span style={{ width: `${mediaUploadProgress}%` }} />
-      </div>
-    )}
-  </div>
-)}
+                      <button
+                        type="button"
+                        className="remove-selected-room-media"
+                        onClick={() => removeSelectedMediaAt(index)}
+                      >
+                        <X size={18} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {uploadingMedia && (
+                  <div className="room-media-upload-progress">
+                    <span style={{ width: `${mediaUploadProgress}%` }} />
+                  </div>
+                )}
+              </div>
+            )}
 
             <input
-  placeholder="Type message..."
-  disabled={!activeRoom}
-  value={text}
-  inputMode="text"
-  autoComplete="off"
-  autoCorrect="on"
-  spellCheck="true"
-  onChange={(e) => setText(e.target.value)}
-/>
+              type="text"
+              placeholder="Type message..."
+              disabled={!activeRoom}
+              value={text}
+              inputMode="text"
+              autoComplete="off"
+              autoCorrect="on"
+              spellCheck="true"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+
+                  if ((text || '').trim() || selectedMediaFiles.length > 0) {
+                    sendMessage(event);
+                  }
+                }
+              }}
+              onChange={(event) => setText(event.target.value)}
+            />
 
             <label className="room-media-picker-btn">
               ＋
               <input
-              type="file"
-              accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zip,.rar"
-              multiple
-              hidden
-              onChange={handleRoomMediaChange}
-            />
+                type="file"
+                accept="image/*,video/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.txt,.rtf,.zip,.rar"
+                multiple
+                hidden
+                onChange={handleRoomMediaChange}
+              />
             </label>
 
             <button
               type="submit"
-             disabled={(!text.trim() && selectedMediaFiles.length === 0) || !activeRoom || uploadingMedia}
+              className="send-message-btn"
+              disabled={
+                (!text.trim() && selectedMediaFiles.length === 0) ||
+                !activeRoom ||
+                uploadingMedia
+              }
             >
               {uploadingMedia ? `${mediaUploadProgress || 0}%` : 'Send'}
             </button>
