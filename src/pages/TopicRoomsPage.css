@@ -908,6 +908,37 @@ video {
   font-weight: 900;
 
   cursor: pointer;
+  isolation: isolate;
+}
+
+.room-media-picker-btn input[type='file'] {
+  position: absolute !important;
+  inset: 0 !important;
+
+  width: 100% !important;
+  height: 100% !important;
+
+  opacity: 0 !important;
+
+  cursor: pointer !important;
+
+  font-size: 0 !important;
+  color: transparent !important;
+
+  border: 0 !important;
+  background: transparent !important;
+
+  z-index: 3 !important;
+}
+
+.room-media-picker-btn input[type='file']::-webkit-file-upload-button {
+  visibility: hidden !important;
+  display: none !important;
+}
+
+.room-media-picker-btn input[type='file']::file-selector-button {
+  visibility: hidden !important;
+  display: none !important;
 }
 
 .input button[type="submit"] {
@@ -2590,7 +2621,7 @@ video {
 
   max-height:
     calc(
-      100dvh -
+      90dvh -
       max(28px, env(safe-area-inset-top))
     );
 
@@ -2959,6 +2990,96 @@ video {
   text-overflow: ellipsis;
 }
 
+
+
+/* GLOBAL ROOM MESSAGE DOWNLOAD BUTTON STYLES */
+.room-message-download-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+
+  width: 38px;
+  height: 38px;
+
+  min-width: 38px;
+
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 999px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(2, 6, 23, 0.78);
+
+  color: #f8fafc;
+
+  cursor: pointer;
+
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  transition:
+    transform 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease,
+    opacity 0.16s ease;
+
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.22);
+
+  z-index: 12;
+
+  opacity: 0;
+  pointer-events: none;
+}
+
+.room-message-media-tap:hover .room-message-download-btn,
+.room-message-media-tap:focus-within .room-message-download-btn,
+.msg:hover .room-message-download-btn,
+.msg:focus-within .room-message-download-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.room-message-download-btn:hover {
+  background: rgba(15, 23, 42, 0.96);
+
+  border-color: rgba(103, 232, 249, 0.28);
+}
+
+.room-message-download-btn:active {
+  transform: scale(0.94);
+}
+
+.room-message-download-btn svg {
+  width: 18px;
+  height: 18px;
+
+  stroke-width: 2.4;
+}
+
+/* mobile */
+@media (max-width: 760px) {
+  .room-message-download-btn {
+    width: 34px;
+    height: 34px;
+
+    min-width: 34px;
+
+    bottom: 8px;
+    right: 8px;
+
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .room-message-download-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
 /* =========================================================
    BATCH 6 — MOBILE + RESPONSIVE + FINAL FIXES
    ========================================================= */
@@ -3107,74 +3228,7 @@ video {
   }
 
 
-  .room-message-download-btn {
-  width: 38px;
-  height: 38px;
 
-  min-width: 38px;
-
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 999px;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  background: rgba(15, 23, 42, 0.92);
-
-  color: #f8fafc;
-
-  cursor: pointer;
-
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-
-  transition:
-    transform 0.16s ease,
-    background 0.16s ease,
-    border-color 0.16s ease,
-    box-shadow 0.16s ease;
-
-  box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.22);
-
-  z-index: 5;
-}
-
-.room-message-download-btn:hover {
-  background: rgba(30, 41, 59, 0.96);
-
-  border-color: rgba(103, 232, 249, 0.28);
-
-  box-shadow:
-    0 14px 30px rgba(0, 0, 0, 0.3);
-}
-
-.room-message-download-btn:active {
-  transform: scale(0.94);
-}
-
-.room-message-download-btn svg {
-  width: 18px;
-  height: 18px;
-
-  stroke-width: 2.4;
-}
-
-/* mobile */
-@media (max-width: 760px) {
-  .room-message-download-btn {
-    width: 34px;
-    height: 34px;
-
-    min-width: 34px;
-  }
-
-  .room-message-download-btn svg {
-    width: 16px;
-    height: 16px;
-  }
-}
 
   /* =========================================
      MOBILE MEDIA
@@ -3413,6 +3467,10 @@ video {
       );
 
     border-radius: 28px;
+  }
+
+  .active-room-info-panel{
+    max-height: 90%;
   }
 
   .active-room-info-cover {
@@ -4456,13 +4514,29 @@ body {
 }
 /* =========================================================
    REAL COMPOSER FIX
-   selected media previews were pushing the input off-screen
+   keep selected media preview compact above composer
    ========================================================= */
+
+.input {
+  position: sticky !important;
+  bottom: 0;
+  left: 0;
+
+  width: 100%;
+
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto !important;
+  align-items: end !important;
+  gap: 8px !important;
+
+  max-height: 42vh !important;
+}
 
 .selected-room-media-preview,
 .selected-room-media-preview-multiple {
-  flex: 0 0 100% !important;
+  grid-column: 1 / -1 !important;
   width: 100% !important;
+  max-height: 132px !important;
   order: -1 !important;
 
   display: flex !important;
@@ -4470,19 +4544,153 @@ body {
 
   gap: 8px !important;
 
-  margin-bottom: 8px !important;
+  margin: 0 0 8px !important;
+  padding: 8px !important;
+
+  overflow: hidden !important;
+
+  border-radius: 18px !important;
+
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(148, 163, 184, 0.14) !important;
+
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28) !important;
 }
 
 .selected-room-media-preview-list {
   width: 100% !important;
+  max-width: 100% !important;
+  max-height: 104px !important;
 
   display: flex !important;
+  align-items: center !important;
   gap: 8px !important;
 
   overflow-x: auto !important;
   overflow-y: hidden !important;
+
+  overscroll-behavior-x: contain !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.selected-room-media-preview-list::-webkit-scrollbar {
+  height: 4px !important;
 }
 
 .selected-room-media-preview-item {
-  flex: 0 0 auto !important;
+  position: relative !important;
+
+  flex: 0 0 92px !important;
+
+  width: 92px !important;
+  height: 92px !important;
+  max-width: 92px !important;
+  max-height: 92px !important;
+
+  overflow: hidden !important;
+
+  border-radius: 16px !important;
+
+  background: rgba(2, 6, 23, 0.95) !important;
+  border: 1px solid rgba(148, 163, 184, 0.14) !important;
+}
+
+.selected-room-media-preview-item img,
+.selected-room-media-preview-item video,
+.selected-room-media-preview img,
+.selected-room-media-preview video,
+.selected-room-media-preview-multiple img,
+.selected-room-media-preview-multiple video {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 92px !important;
+
+  object-fit: cover !important;
+
+  border-radius: 16px !important;
+}
+
+.selected-room-media-preview-item button,
+.selected-room-media-remove-btn,
+.selected-room-media-preview button[type="button"] {
+  position: absolute !important;
+  top: 5px !important;
+  right: 5px !important;
+
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+
+  padding: 0 !important;
+
+  border: 0 !important;
+  border-radius: 999px !important;
+
+  display: grid !important;
+  place-items: center !important;
+
+  background: rgba(127, 29, 29, 0.88) !important;
+  color: #ffffff !important;
+
+  font-size: 0.8rem !important;
+  font-weight: 950 !important;
+
+  cursor: pointer !important;
+  z-index: 5 !important;
+}
+
+.selected-room-media-preview-file,
+.selected-room-media-file-card {
+  width: 100% !important;
+  height: 100% !important;
+
+  display: grid !important;
+  place-items: center !important;
+
+  padding: 8px !important;
+
+  color: #f8fafc !important;
+  text-align: center !important;
+
+  font-size: 0.72rem !important;
+  font-weight: 850 !important;
+}
+
+@media (max-width: 760px) {
+  .input {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) auto !important;
+    align-items: end !important;
+
+    max-height: 38vh !important;
+  }
+
+  .selected-room-media-preview,
+  .selected-room-media-preview-multiple {
+    max-height: 118px !important;
+    padding: 7px !important;
+  }
+
+  .selected-room-media-preview-list {
+    max-height: 94px !important;
+  }
+
+  .selected-room-media-preview-item {
+    flex-basis: 82px !important;
+
+    width: 82px !important;
+    height: 82px !important;
+    max-width: 82px !important;
+    max-height: 82px !important;
+  }
+
+  .selected-room-media-preview-item img,
+  .selected-room-media-preview-item video,
+  .selected-room-media-preview img,
+  .selected-room-media-preview video,
+  .selected-room-media-preview-multiple img,
+  .selected-room-media-preview-multiple video {
+    max-height: 82px !important;
+  }
 }
