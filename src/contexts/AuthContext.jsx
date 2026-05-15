@@ -62,6 +62,10 @@ function clearAuthStorage() {
   localStorage.removeItem('eduscroll_access_token');
 }
 
+function isRunningInsideAndroidApp() {
+  return Boolean(window.AndroidBridge || window.SmartyAndroid || navigator.userAgent.includes('SmartyAndroid'));
+}
+
 function normalizeRedirectPath(value) {
   const fallback = '/feed';
   const text = String(value || '').trim();
@@ -166,8 +170,10 @@ export function AuthProvider({ children }) {
         sessionStorage.removeItem('smarty-auth-redirecting');
         const params = new URLSearchParams(window.location.search);
         const androidCode = params.get('code');
-        const isAndroidReturn = params.get('platform') === 'android';
-        if (isAndroidReturn && androidCode) {
+        const hasOAuthState = params.has('state');
+        const isAndroidReturn = params.get('platform') === 'android' || isRunningInsideAndroidApp();
+
+        if (isAndroidReturn && androidCode && hasOAuthState) {
           const tokens = await exchangeAndroidCodeForTokens(androidCode);
           const payload = decodeJwtPayload(tokens.id_token);
 
@@ -184,6 +190,7 @@ export function AuthProvider({ children }) {
           };
 
           saveAuthUser(authUser);
+          window.history.replaceState({}, document.title, getPostLoginRedirect());
           setUser(authUser);
           setLoading(false);
           redirectAfterLogin();
