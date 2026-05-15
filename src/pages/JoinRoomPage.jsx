@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { roomApi, storePendingRoomInvite } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import './JoinRoomPage.css';
@@ -7,7 +7,9 @@ import './JoinRoomPage.css';
 export default function JoinRoomPage() {
   const { inviteCode } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+  const autoJoinAttemptedRef = useRef('');
 
   const cleanInviteCode = useMemo(
     () => String(inviteCode || '').trim(),
@@ -64,7 +66,8 @@ export default function JoinRoomPage() {
       navigate('/login', {
         replace: false,
         state: {
-          redirectTo: `/rooms/invite/${encodeURIComponent(cleanInviteCode)}`,
+          redirectTo: location.pathname || `/rooms/invite/${encodeURIComponent(cleanInviteCode)}`,
+          pendingInviteCode: cleanInviteCode,
         },
       });
 
@@ -131,6 +134,8 @@ export default function JoinRoomPage() {
             joinedRoom,
             openJoinedRoom: true,
             refreshRooms: true,
+            inviteCode: cleanInviteCode,
+            joinedAt: Date.now(),
           },
         });
         return;
@@ -153,6 +158,8 @@ export default function JoinRoomPage() {
             joinedRoom,
             openJoinedRoom: true,
             refreshRooms: true,
+            inviteCode: cleanInviteCode,
+            joinedAt: Date.now(),
           },
         });
         return;
@@ -172,6 +179,16 @@ export default function JoinRoomPage() {
       setJoining(false);
     }
   }
+
+  useEffect(() => {
+    if (!user || loading || joining || !cleanInviteCode || !invite) return;
+
+    const autoJoinKey = `${user?.id || user?.userId || user?.sub || 'user'}:${cleanInviteCode}`;
+    if (autoJoinAttemptedRef.current === autoJoinKey) return;
+
+    autoJoinAttemptedRef.current = autoJoinKey;
+    handleJoinRoom();
+  }, [user, loading, joining, cleanInviteCode, invite]);
 
   if (loading) {
     return (

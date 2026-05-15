@@ -3,7 +3,7 @@ import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
 import { Download, Trash2, X } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import './TopicRoomsPage.css';
 import RoomMediaModal from './RoomMediaModal';
 import RoomMediaPreview from './RoomMediaPreview';
@@ -482,6 +482,8 @@ function getRoomInviteRoomId(invite) {
 }
 
 function getNavigationRoomOpenId(locationState = {}) {
+  if (!locationState?.openJoinedRoom) return '';
+
   return String(
     locationState?.openRoomId ||
       locationState?.selectedRoomId ||
@@ -531,6 +533,7 @@ function renderMessageWithLinks(value = '') {
 export default function TopicRoomsPage() {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const userId = user?.id || user?.userId || user?.sub;
 
   function getInviteUserId(userValue) {
@@ -634,6 +637,7 @@ export default function TopicRoomsPage() {
   const loadingRoomRef = useRef(false);
   const roomOpenRequestIdRef = useRef(0);
   const pendingNavigationOpenRoomIdRef = useRef('');
+  const handledNavigationOpenKeyRef = useRef('');
   const olderMessagesLoadingRef = useRef(false);
   const roomsLoadingRef = useRef(false);
   const roomsLoadInFlightKeyRef = useRef('');
@@ -1585,10 +1589,17 @@ async function approveJoinRequest(requestUserId) {
   }
 
   const openRoomFromNavigationState = useCallback(async (options = {}) => {
-    const navigationState = location.state || {};
-    const requestedRoomId = getNavigationRoomOpenId(navigationState);
+    const currentUserId = user?.id || user?.userId || user?.sub || '';
+    const navigationState =
+      location.state && typeof location.state === 'object' ? location.state : {};
 
-    if (!userId || !requestedRoomId) return;
+    if (navigationState.openJoinedRoom !== true) return;
+
+    const requestedRoomId = getNavigationRoomOpenId(navigationState);
+    const navigationOpenKey = `${requestedRoomId}:${navigationState?.joinedAt || navigationState?.inviteCode || 'join-link'}`;
+
+    if (!currentUserId || !requestedRoomId) return;
+    if (handledNavigationOpenKeyRef.current === navigationOpenKey) return;
     if (!options.force && pendingNavigationOpenRoomIdRef.current === requestedRoomId) return;
 
     pendingNavigationOpenRoomIdRef.current = requestedRoomId;
@@ -1631,14 +1642,23 @@ async function approveJoinRequest(requestUserId) {
 
       if (!roomToOpen?.roomId) return;
 
+      handledNavigationOpenKeyRef.current = navigationOpenKey;
+
       setRooms((prev) => {
         if (prev.some((room) => String(room.roomId || room.id || '') === String(roomToOpen.roomId))) return prev;
         return [roomToOpen, ...prev];
       });
 
       await openRoom(roomToOpen);
+
+      navigate('/rooms', {
+        replace: true,
+        state: null,
+      });
     } catch (err) {
       console.error('OPEN JOINED ROOM FROM NAVIGATION ERROR:', err);
+      handledNavigationOpenKeyRef.current = '';
+
       if (mountedRef.current) {
         setStatus(err?.response?.data?.error || 'Joined, but could not open the group automatically.');
       }
@@ -1649,18 +1669,21 @@ async function approveJoinRequest(requestUserId) {
         }
       }, 1500);
     }
-  }, [location.state, rooms, userId]);
+  }, [location.state, navigate, rooms, user]);
 
   useEffect(() => {
-  const currentUserId = user?.id || user?.userId || user?.sub || '';
-  const navigationState =
-    location.state && typeof location.state === 'object' ? location.state : {};
-  const requestedRoomId = getNavigationRoomOpenId(navigationState);
+    const currentUserId = user?.id || user?.userId || user?.sub || '';
+    const navigationState =
+      location.state && typeof location.state === 'object' ? location.state : {};
 
-  if (!currentUserId || !requestedRoomId) return;
+    if (navigationState.openJoinedRoom !== true) return;
 
-  openRoomFromNavigationState({ force: true });
-}, [user, location.state, openRoomFromNavigationState]);
+    const requestedRoomId = getNavigationRoomOpenId(navigationState);
+
+    if (!currentUserId || !requestedRoomId) return;
+
+    openRoomFromNavigationState({ force: true });
+  }, [user, location.state, openRoomFromNavigationState]);
 
   useEffect(() => {
     if (!userId) return;
@@ -4623,71 +4646,4 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
   </main>
 );
 }
-  async function openRoomFromNavigationState(options = {}) {
-    const navigationState = location.state || {};
-    const requestedRoomId = getNavigationRoomOpenId(navigationState);
-
-    const currentUserId = user?.id || user?.userId || user?.sub || '';
-    if (!currentUserId || !requestedRoomId) return;
-    if (!options.force && pendingNavigationOpenRoomIdRef.current === requestedRoomId) return;
-
-    pendingNavigationOpenRoomIdRef.current = requestedRoomId;
-
-    try {
-      setStatus('');
-      setRoomPrivacyFilter('private');
-      setRoomSearch('');
-
-      roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
-      await loadRooms('', { force: true });
-
-      if (!mountedRef.current) return;
-
-      const latestRooms = Array.isArray(roomsCacheRef.current.rooms)
-        ? roomsCacheRef.current.rooms
-        : [];
-
-      const fallbackRoom = navigationState?.joinedRoom || null;
-      const roomToOpen =
-        latestRooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
-        rooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
-        (fallbackRoom
-          ? {
-              ...fallbackRoom,
-              roomId: fallbackRoom.roomId || fallbackRoom.id || requestedRoomId,
-              name:
-                fallbackRoom.name ||
-                fallbackRoom.roomName ||
-                navigationState?.openRoomName ||
-                'Joined group',
-              privacy: fallbackRoom.privacy || 'private',
-            }
-          : {
-              roomId: requestedRoomId,
-              name: navigationState?.openRoomName || 'Joined group',
-              privacy: 'private',
-              type: 'custom',
-            });
-
-      if (!roomToOpen?.roomId) return;
-
-      setRooms((prev) => {
-        if (prev.some((room) => room.roomId === roomToOpen.roomId)) return prev;
-        return [roomToOpen, ...prev];
-      });
-
-      await openRoom(roomToOpen);
-    } catch (err) {
-      console.error('OPEN JOINED ROOM FROM NAVIGATION ERROR:', err);
-      if (mountedRef.current) {
-        setStatus(err?.response?.data?.error || 'Joined, but could not open the group automatically.');
-      }
-    } finally {
-      window.setTimeout(() => {
-        if (pendingNavigationOpenRoomIdRef.current === requestedRoomId) {
-          pendingNavigationOpenRoomIdRef.current = '';
-        }
-      }, 1500);
-    }
-  }
 
