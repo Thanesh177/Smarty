@@ -17,8 +17,8 @@ const APP_ORIGIN = import.meta.env.PROD
 const ROOM_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 const ROOM_IMAGE_PICKER_MAX_BYTES = 8 * 1024 * 1024;
 const ROOM_MEDIA_MAX_BYTES = 80 * 1024 * 1024;
-const ROOM_MEDIA_MAX_FILES_PER_BATCH = 20;
-const ROOM_MEDIA_MAX_BATCH_BYTES = 500 * 1024 * 1024;
+const ROOM_MEDIA_MAX_FILES_PER_BATCH = 50;
+const ROOM_MEDIA_MAX_BATCH_BYTES = 1024 * 1024 * 1024;
 const ROOM_LIST_CACHE_MS = 25_000;
 const ROOM_MEMBERS_CACHE_MS = 30_000;
 const USER_SEARCH_DEBOUNCE_MS = 350;
@@ -34,8 +34,8 @@ const ROOM_INITIAL_VISIBLE_MESSAGES = 10;
 
 const ROOM_MEDIA_IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
 const ROOM_MEDIA_VIDEO_EXTENSIONS = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
-const ROOM_MEDIA_DOCUMENT_EXTENSIONS = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|csv|txt|rtf|zip|rar)(\?|#|$)/i;
-const ROOM_MEDIA_ALLOWED_TYPES = /^(image\/|video\/|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument|application\/vnd\.ms-|text\/plain|text\/csv|application\/zip|application\/x-zip-compressed|application\/x-rar-compressed)/i;
+const ROOM_MEDIA_DOCUMENT_EXTENSIONS = /\.(pdf|doc|docx|ppt|pptx|xls|xlsx|csv|txt|rtf|zip|rar|7z)(\?|#|$)/i;
+const ROOM_MEDIA_ALLOWED_TYPES = /^(image\/|video\/|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument|application\/vnd\.ms-|text\/plain|text\/csv|application\/zip|application\/x-zip-compressed|application\/x-rar-compressed|application\/x-7z-compressed|application\/octet-stream)/i;
 
 function getStoredRoomImages() {
   try {
@@ -987,6 +987,7 @@ const jumpMessagesToBottomOnce = useCallback(() => {
     setSelectedMediaPreview('');
     setSelectedMediaPreviews([]);
     setSelectedMediaType('');
+    setUploadingMedia(false);
     setMediaUploadProgress(0);
     setMediaUploadLabel('');
   }
@@ -1013,11 +1014,16 @@ function appendRoomMessage(roomId, message) {
   });
 
   requestAnimationFrame(() => {
-    const el = messagesRef.current;
-    if (!el) return;
+    requestAnimationFrame(() => {
+      const el = messagesRef.current;
+      if (!el) return;
 
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distanceFromBottom < 360) scrollMessagesToBottom('smooth');
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+
+      if (distanceFromBottom < 500) {
+        scrollMessagesToBottom('smooth');
+      }
+    });
   });
 }
 
@@ -1036,6 +1042,9 @@ function markPendingRoomMessageFailed(clientId) {
   });
 
   pendingMessageIdsRef.current.delete(clientId);
+  setUploadingMedia(false);
+  setMediaUploadProgress(0);
+  setMediaUploadLabel('');
 }
 
   function getRoomMediaType(file) {
@@ -1043,10 +1052,11 @@ function markPendingRoomMessageFailed(clientId) {
     const lowerName = String(file?.name || '').toLowerCase();
     const isImage = fileType.startsWith('image/') || ROOM_MEDIA_IMAGE_EXTENSIONS.test(lowerName);
     const isVideo = fileType.startsWith('video/') || ROOM_MEDIA_VIDEO_EXTENSIONS.test(lowerName);
+    const isArchiveFile = /\.(zip|rar|7z)$/i.test(lowerName);
     const isFile =
       !isImage &&
       !isVideo &&
-      (ROOM_MEDIA_ALLOWED_TYPES.test(fileType) || ROOM_MEDIA_DOCUMENT_EXTENSIONS.test(lowerName));
+      (isArchiveFile || ROOM_MEDIA_ALLOWED_TYPES.test(fileType) || ROOM_MEDIA_DOCUMENT_EXTENSIONS.test(lowerName));
 
     return {
       isImage,
@@ -1100,9 +1110,9 @@ function markPendingRoomMessageFailed(clientId) {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
 
-    removeSelectedMedia();
-
     if (files.length === 0) return;
+
+    removeSelectedMedia();
 
     if (files.length > ROOM_MEDIA_MAX_FILES_PER_BATCH) {
       setStatus(`You can upload up to ${ROOM_MEDIA_MAX_FILES_PER_BATCH} files at once.`);
@@ -1123,7 +1133,7 @@ function markPendingRoomMessageFailed(clientId) {
       const { isImage, isVideo, isFile, mediaType } = getRoomMediaType(file);
 
       if (!isImage && !isVideo && !isFile) {
-        setStatus('Only images, videos, PDFs, documents, spreadsheets, text files, and zip files are allowed.');
+        setStatus('Only images, videos, PDFs, documents, spreadsheets, text files, ZIP, RAR, and 7z files are allowed.');
         previewItems.forEach((item) => {
           if (item.preview?.startsWith('blob:')) URL.revokeObjectURL(item.preview);
         });
@@ -1139,9 +1149,17 @@ function markPendingRoomMessageFailed(clientId) {
       }
 
       validFiles.push(file);
+      let previewUrl = '';
+
+      try {
+        previewUrl = URL.createObjectURL(file);
+      } catch {
+        previewUrl = '';
+      }
+
       previewItems.push({
         file,
-        preview: URL.createObjectURL(file),
+        preview: previewUrl,
         mediaType,
       });
     }
@@ -2634,9 +2652,12 @@ async function saveEditRoom(e) {
 
       syncRoomMessageCache(room.roomId, loadedRoomMessages);
       setMessages(initialVisibleMessages);
-      jumpMessagesToBottomOnce();
       setHasOlderMessages(loadedRoomMessages.length > ROOM_INITIAL_VISIBLE_MESSAGES);
       setMessagesLoading(false);
+
+      requestAnimationFrame(() => {
+        jumpMessagesToBottomOnce();
+      });
     } catch (err) {
       console.error(err);
 

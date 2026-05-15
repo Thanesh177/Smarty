@@ -771,29 +771,7 @@ export default function RoomMediaModal({
           <div className="room-media-viewer-card" onClick={(event) => event.stopPropagation()}>
             {mediaViewerCount > 1 && (
               <>
-                <button
-                  type="button"
-                  className="room-media-viewer-nav room-media-viewer-prev"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    moveMediaViewer(-1);
-                  }}
-                >
-                  ‹
-                </button>
 
-                <button
-                  type="button"
-                  className="room-media-viewer-nav room-media-viewer-next"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    moveMediaViewer(1);
-                  }}
-                >
-                  ›
-                </button>
               </>
             )}
 
