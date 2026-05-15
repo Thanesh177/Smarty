@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import { roomApi } from '../api/client';
 import RoomMediaPreview from './RoomMediaPreview';
@@ -10,6 +10,12 @@ const ROOM_MEDIA_GRID_LOAD_STEP = 18;
 const MAX_RENDERED_MEDIA_MESSAGES = 260;
 const MAX_MEDIA_SCAN_MESSAGES = 1200;
 const MAX_ROOM_MEDIA_GRID_ITEMS = 2000;
+const ROOM_MEDIA_FETCH_LIMIT = 80;
+const ROOM_MEDIA_INITIAL_FETCH_PAGES = 8;
+const ROOM_MEDIA_APPEND_FETCH_PAGES = 1;
+const ROOM_MEDIA_SCROLL_LOAD_THRESHOLD = 420;
+const ROOM_MEDIA_GRID_RELOAD_DELAY_MS = 0;
+const ROOM_MEDIA_GRID_SCROLL_UNLOCK_DELAY_MS = 160;
 
 const ROOM_MEDIA_IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
 const ROOM_MEDIA_VIDEO_EXTENSIONS = /\.(mp4|webm|mov|m4v)(\?|#|$)/i;
@@ -57,10 +63,10 @@ function extractRoomArray(data, keys = []) {
 
 function getRoomMessageTimeValue(message = {}) {
   const rawValue =
-    message.createdAtMs ||
-    message.createdAt ||
-    message.timestamp ||
-    message.sentAt ||
+    message.createdAtMs ??
+    message.createdAt ??
+    message.timestamp ??
+    message.sentAt ??
     0;
 
   if (typeof rawValue === 'number') return rawValue;
@@ -78,22 +84,22 @@ function sortRoomMessages(messages = []) {
 
 function normalizeRoomMessageMedia(message = {}) {
   const mediaUrl = String(
-    message.mediaUrl ||
-      message.fileUrl ||
-      message.url ||
-      message.attachmentUrl ||
-      message.downloadUrl ||
-      message.location ||
+    message.mediaUrl ??
+      message.fileUrl ??
+      message.url ??
+      message.attachmentUrl ??
+      message.downloadUrl ??
+      message.location ??
       ''
   ).trim();
 
-  const contentType = String(message.contentType || message.mimeType || message.type || '').trim();
+  const contentType = String(message.contentType ?? message.mimeType ?? message.type ?? '').trim();
 
   const fileName = String(
-    message.fileName ||
-      message.mediaName ||
-      message.name ||
-      (mediaUrl ? mediaUrl.split('/').filter(Boolean).pop()?.split('?')[0] : '') ||
+    message.fileName ??
+      message.mediaName ??
+      message.name ??
+      (mediaUrl ? mediaUrl.split('/').filter(Boolean).pop()?.split('?')[0] : '') ??
       ''
   ).trim();
 
@@ -128,8 +134,18 @@ function normalizeRoomMessageMedia(message = {}) {
     mediaType,
     contentType,
     fileName,
-    mediaName: message.mediaName || fileName,
+    mediaName: message.mediaName || fileName || 'Shared media',
   };
+}
+function isSafeExternalMediaUrl(url = '') {
+  if (!url) return false;
+
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    return ['http:', 'https:', 'blob:', 'data:'].includes(parsedUrl.protocol);
+  } catch {
+    return false;
+  }
 }
 
 function dedupeMessages(messages = []) {
@@ -273,6 +289,11 @@ export default function RoomMediaModal({
   const mediaFetchInFlightRef = useRef(false);
   const mediaFetchCursorRef = useRef('');
   const mediaFetchDoneRef = useRef(false);
+  const activeRoomIdRef = useRef(activeRoom?.roomId || '');
+
+  useEffect(() => {
+    activeRoomIdRef.current = activeRoom?.roomId || '';
+  }, [activeRoom?.roomId]);
 
   const renderedMediaMessages = useMemo(() => {
     const roomId = activeRoom?.roomId;
@@ -327,7 +348,7 @@ export default function RoomMediaModal({
     : null;
 
 
-  async function ensureRoomMediaGridHasContent(options = {}) {
+  const ensureRoomMediaGridHasContent = useCallback(async (options = {}) => {
     if (!activeRoom?.roomId || mediaFetchInFlightRef.current) return;
 
     const roomId = activeRoom.roomId;
@@ -356,8 +377,8 @@ export default function RoomMediaModal({
         ? mediaFetchCursorRef.current
         : getOldestMessageCursor(allMessages);
 
-      const fetchLimit = 80;
-      const maxPages = appendMode ? 1 : 8;
+      const fetchLimit = ROOM_MEDIA_FETCH_LIMIT;
+      const maxPages = appendMode ? ROOM_MEDIA_APPEND_FETCH_PAGES : ROOM_MEDIA_INITIAL_FETCH_PAGES;
 
       for (let page = 0; page < maxPages; page += 1) {
         const params = { limit: fetchLimit };
@@ -369,7 +390,7 @@ export default function RoomMediaModal({
         }
 
         const data = await roomApi.getRoomMessages(roomId, params);
-        if (!mountedRef.current || activeRoom?.roomId !== roomId) return;
+        if (!mountedRef.current || activeRoomIdRef.current !== roomId) return;
 
         const loadedMessages = getLoadedRoomMessages(data);
 
@@ -421,14 +442,25 @@ export default function RoomMediaModal({
       mediaFetchInFlightRef.current = false;
       if (mountedRef.current) setMessagesLoading(false);
     }
-  }
+  }, [
+    activeRoom?.roomId,
+    messages,
+    messagesStateRef,
+    mountedRef,
+    roomMediaCacheRef,
+    roomMessagesCacheRef,
+    setHasOlderMessages,
+    setMessages,
+    setMessagesLoading,
+    setStatus,
+  ]);
 
-  function closeMediaViewer() {
+  const closeMediaViewer = useCallback(() => {
     setMediaViewer(null);
-  }
+  }, []);
 
 
-  function seekViewerVideo(seconds = 0) {
+  const seekViewerVideo = useCallback((seconds = 0) => {
     const video = mediaViewerVideoRef.current;
     if (!video || !Number.isFinite(seconds)) return;
 
@@ -437,16 +469,18 @@ export default function RoomMediaModal({
     } catch {
       // Ignore seek failures.
     }
-  }
+  }, []);
 
-  function openMediaFromGrid(item) {
+  const openMediaFromGrid = useCallback((item) => {
     if (!item) return;
 
     const normalizedItem = normalizeRoomMessageMedia(item);
 
     if (normalizedItem.mediaType === 'file') {
       const fileUrl = normalizedItem.mediaUrl || normalizedItem.fileUrl;
-      if (fileUrl) window.open(fileUrl, '_blank', 'noopener,noreferrer');
+      if (fileUrl && isSafeExternalMediaUrl(fileUrl)) {
+        window.open(fileUrl, '_blank', 'noopener,noreferrer');
+      }
       return;
     }
 
@@ -471,7 +505,7 @@ export default function RoomMediaModal({
         openedAt: Date.now(),
       });
     }, 0);
-  }
+  }, [onClose, viewableMediaMessages]);
 
   useEffect(() => {
     if (typeof registerMediaViewerOpener !== 'function') return undefined;
@@ -483,9 +517,9 @@ export default function RoomMediaModal({
     return () => {
       registerMediaViewerOpener(null);
     };
-  }, [registerMediaViewerOpener, viewableMediaMessages]);
+  }, [openMediaFromGrid, registerMediaViewerOpener]);
 
-  function moveMediaViewer(direction) {
+  const moveMediaViewer = useCallback((direction) => {
     if (!viewableMediaMessages.length) return;
 
     setMediaViewer((current) => {
@@ -513,7 +547,7 @@ export default function RoomMediaModal({
         openedAt: Date.now(),
       };
     });
-  }
+  }, [viewableMediaMessages]);
 
   function handleRoomMediaGridScroll(event) {
     event.stopPropagation();
@@ -521,7 +555,7 @@ export default function RoomMediaModal({
     const element = event.currentTarget;
     const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
 
-    if (distanceFromBottom > 420) return;
+    if (distanceFromBottom > ROOM_MEDIA_SCROLL_LOAD_THRESHOLD) return;
 
     if (roomMediaGridVisibleCount < renderedMediaMessages.length) {
       setRoomMediaGridVisibleCount((current) =>
@@ -538,7 +572,7 @@ export default function RoomMediaModal({
       .finally(() => {
         window.setTimeout(() => {
           roomMediaGridLoadOlderRef.current = false;
-        }, 160);
+        }, ROOM_MEDIA_GRID_SCROLL_UNLOCK_DELAY_MS);
       });
   }
 
@@ -546,13 +580,13 @@ export default function RoomMediaModal({
     const normalizedMessage = normalizeRoomMessageMedia(message);
     const mediaUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl || '';
 
-    if (!mediaUrl) return;
+    if (!mediaUrl || !isSafeExternalMediaUrl(mediaUrl)) return;
 
     const fileName =
       normalizedMessage.fileName ||
       normalizedMessage.mediaName ||
       String(mediaUrl).split('/').filter(Boolean).pop()?.split('?')[0] ||
-      'smarty-room-media';
+      'smarty-room-media-file';
 
     const link = document.createElement('a');
     link.href = mediaUrl;
@@ -639,7 +673,7 @@ export default function RoomMediaModal({
     }
 
     if (Math.abs(deltaX) > 45 && Math.abs(deltaX) > Math.abs(deltaY)) {
-      moveMediaViewer(deltaX > 0 ? 1 : -1);
+      moveMediaViewer(deltaX > 0 ? -1 : 1);
       return;
     }
 
@@ -664,12 +698,21 @@ export default function RoomMediaModal({
   }
 
   useEffect(() => {
-    if (!show) return;
+    if (!show) return undefined;
+
     mediaFetchCursorRef.current = '';
     mediaFetchDoneRef.current = false;
     setRoomMediaGridVisibleCount(ROOM_MEDIA_GRID_INITIAL_ITEMS);
     ensureRoomMediaGridHasContent({ append: false });
-  }, [show, activeRoom?.roomId]);
+
+    return undefined;
+  }, [show, activeRoom?.roomId, ensureRoomMediaGridHasContent]);
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(mediaViewerTapTimeoutRef.current);
+      window.clearTimeout(mediaViewerLongPressTimeoutRef.current);
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -745,7 +788,7 @@ export default function RoomMediaModal({
               ) : (
                 visibleRoomMediaMessages.map((item) => (
                   <RoomMediaPreview
-                    key={item.messageId || item.clientId || item.mediaUrl || item.fileUrl}
+                    key={getStableRoomMessageKey(item)}
                     item={item}
                     variant="grid"
                     onOpen={openMediaFromGrid}
@@ -798,11 +841,11 @@ export default function RoomMediaModal({
                       );
 
                       onOpenGrid?.();
-                    }, 0);
+                    }, ROOM_MEDIA_GRID_RELOAD_DELAY_MS);
 
                     window.setTimeout(() => {
                       ensureRoomMediaGridHasContent({ append: false });
-                    }, 0);
+                    }, ROOM_MEDIA_GRID_RELOAD_DELAY_MS);
                   }}
                 >
                   Grid
@@ -837,6 +880,9 @@ export default function RoomMediaModal({
               <img
                 src={activeMediaViewerItem.mediaUrl || activeMediaViewerItem.fileUrl}
                 alt={activeMediaViewerItem.fileName || activeMediaViewerItem.mediaName || 'Shared media'}
+                loading="eager"
+                decoding="async"
+                draggable="false"
                 className="room-media-viewer-image"
               />
             )}
@@ -874,6 +920,14 @@ export default function RoomMediaModal({
           font-weight: 700;
           cursor: pointer;
           backdrop-filter: blur(12px);
+          transition: transform 0.18s ease, background 0.18s ease;
+        }
+
+        .room-media-viewer-grid-btn:hover,
+        .room-media-viewer-grid-btn:focus-visible {
+          background: rgba(255,255,255,0.2);
+          transform: translateY(-1px);
+          outline: none;
         }
 
         /* --- PATCHED CSS BELOW --- */
@@ -922,11 +976,24 @@ export default function RoomMediaModal({
           background: #050816;
         }
 
+        .standalone-media-tile:hover img,
+        .standalone-media-tile:hover video,
+        .standalone-media-tile:focus-visible img,
+        .standalone-media-tile:focus-visible video {
+          transform: scale(1.035);
+          filter: brightness(1.08);
+        }
+
+        .standalone-media-tile:focus-visible {
+          outline: 2px solid rgba(76, 223, 255, 0.8);
+          outline-offset: -2px;
+        }
+
         @media (max-width: 768px) {
           .room-lazy-media.grid {
             border-radius: 16px;
-            min-height: 120px;
-            height: 120px;
+            min-height: clamp(112px, 32vw, 160px);
+            height: clamp(112px, 32vw, 160px);
           }
         }
       `}</style>

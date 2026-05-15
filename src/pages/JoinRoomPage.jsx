@@ -82,19 +82,56 @@ export default function JoinRoomPage() {
 
       console.log('JOIN RESULT', result);
 
-      if (result?.joined) {
-        setStatus(result?.message || 'Joined room successfully.');
+      const joinedRoom = result?.room || result?.data?.room || result?.joinedRoom || invite || null;
+      const joinedRoomId =
+        result?.roomId ||
+        result?.data?.roomId ||
+        result?.joinedRoomId ||
+        joinedRoom?.roomId ||
+        joinedRoom?.id ||
+        invite?.roomId ||
+        invite?.id ||
+        '';
+      const joinedRoomName =
+        result?.roomName ||
+        result?.data?.roomName ||
+        result?.joinedRoomName ||
+        joinedRoom?.roomName ||
+        joinedRoom?.name ||
+        invite?.roomName ||
+        invite?.name ||
+        '';
 
-        const joinedRoomId = result?.roomId || invite?.roomId || '';
+      const resultMessage = String(result?.message || result?.status || '').toLowerCase();
+      const joinedSuccessfully =
+        result?.joined === true ||
+        result?.success === true ||
+        result?.alreadyJoined === true ||
+        result?.alreadyMember === true ||
+        result?.isMember === true ||
+        Boolean(result?.room) ||
+        Boolean(result?.data?.room) ||
+        Boolean(result?.joinedRoom) ||
+        Boolean(joinedRoomId && !result?.requested) ||
+        resultMessage.includes('joined') ||
+        resultMessage.includes('already a member') ||
+        resultMessage.includes('already joined');
+
+      if (joinedSuccessfully) {
+        setStatus(result?.message || 'Joined room successfully.');
 
         navigate('/rooms', {
           replace: true,
-          state: joinedRoomId
-            ? {
-                openRoomId: joinedRoomId,
-                openRoomName: result?.roomName || invite?.roomName || '',
-              }
-            : undefined,
+          state: {
+            openRoomId: joinedRoomId,
+            selectedRoomId: joinedRoomId,
+            activeRoomId: joinedRoomId,
+            roomId: joinedRoomId,
+            openRoomName: joinedRoomName,
+            joinedRoom,
+            openJoinedRoom: true,
+            refreshRooms: true,
+          },
         });
         return;
       }
@@ -104,7 +141,24 @@ export default function JoinRoomPage() {
         return;
       }
 
-      setStatus(result?.message || 'Invite processed.');
+      if (joinedRoomId || joinedRoomName) {
+        navigate('/rooms', {
+          replace: true,
+          state: {
+            openRoomId: joinedRoomId,
+            selectedRoomId: joinedRoomId,
+            activeRoomId: joinedRoomId,
+            roomId: joinedRoomId,
+            openRoomName: joinedRoomName,
+            joinedRoom,
+            openJoinedRoom: true,
+            refreshRooms: true,
+          },
+        });
+        return;
+      }
+
+      setStatus(result?.message || 'Invite processed, but the room could not be opened automatically.');
     } catch (err) {
       console.error('JOIN ROOM FROM INVITE ERROR:', err);
 

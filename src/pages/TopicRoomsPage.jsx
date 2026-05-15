@@ -3,6 +3,7 @@ import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
 import { Download, Trash2, X } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import './TopicRoomsPage.css';
 import RoomMediaModal from './RoomMediaModal';
 import RoomMediaPreview from './RoomMediaPreview';
@@ -29,7 +30,9 @@ const ROOM_IMAGE_RENDER_LIMIT = 10;
 const MAX_RENDERED_MEDIA_MESSAGES = 2600;
 const ROOM_MESSAGES_FETCH_LIMIT = 10;
 const ROOM_MESSAGES_REVEAL_STEP = 10;
+
 const ROOM_INITIAL_VISIBLE_MESSAGES = 10;
+const ROOM_OLDER_MESSAGES_SMOOTH_SCROLL_MS = 220;
 
 
 const ROOM_MEDIA_IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
@@ -144,6 +147,28 @@ function formatRoomMessageTime(message = {}) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+function smoothAdjustScrollTop(element, delta, duration = ROOM_OLDER_MESSAGES_SMOOTH_SCROLL_MS) {
+  if (!element || !Number.isFinite(delta) || Math.abs(delta) < 0.5) return;
+
+  const startTop = element.scrollTop;
+  const targetTop = startTop + delta;
+  const startTime = performance.now();
+
+  function animate(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / duration);
+    const easedProgress = 1 - Math.pow(1 - progress, 3);
+
+    element.scrollTop = startTop + (targetTop - startTop) * easedProgress;
+
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    }
+  }
+
+  requestAnimationFrame(animate);
 }
 
 
@@ -456,6 +481,18 @@ function getRoomInviteRoomId(invite) {
   );
 }
 
+function getNavigationRoomOpenId(locationState = {}) {
+  return String(
+    locationState?.openRoomId ||
+      locationState?.selectedRoomId ||
+      locationState?.activeRoomId ||
+      locationState?.roomId ||
+      locationState?.joinedRoom?.roomId ||
+      locationState?.joinedRoom?.id ||
+      ''
+  ).trim();
+}
+
 function renderMessageWithLinks(value = '') {
   const text = String(value || '');
   if (!text) return null;
@@ -493,6 +530,7 @@ function renderMessageWithLinks(value = '') {
 
 export default function TopicRoomsPage() {
   const { user } = useAuth();
+  const location = useLocation();
   const userId = user?.id || user?.userId || user?.sub;
 
   function getInviteUserId(userValue) {
@@ -595,6 +633,7 @@ export default function TopicRoomsPage() {
   const mountedRef = useRef(true);
   const loadingRoomRef = useRef(false);
   const roomOpenRequestIdRef = useRef(0);
+  const pendingNavigationOpenRoomIdRef = useRef('');
   const olderMessagesLoadingRef = useRef(false);
   const roomsLoadingRef = useRef(false);
   const roomsLoadInFlightKeyRef = useRef('');
@@ -725,7 +764,7 @@ const renderedMessages = useMemo(() => {
     const delta = nextTop - anchor.top;
 
     if (Math.abs(delta) > 0.5) {
-      container.scrollTop += delta;
+      smoothAdjustScrollTop(container, delta);
     }
 
     const restoreLateLayoutShift = () => {
@@ -751,7 +790,7 @@ const renderedMessages = useMemo(() => {
       const lateDelta = lateTop - lateAnchor.top;
 
       if (Math.abs(lateDelta) > 0.5) {
-        lateContainer.scrollTop += lateDelta;
+        smoothAdjustScrollTop(lateContainer, lateDelta, 140);
       }
     };
 
@@ -4506,3 +4545,76 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
   </main>
 );
 }
+  async function openRoomFromNavigationState(options = {}) {
+    const navigationState = location.state || {};
+    const requestedRoomId = getNavigationRoomOpenId(navigationState);
+
+    if (!userId || !requestedRoomId) return;
+    if (!options.force && pendingNavigationOpenRoomIdRef.current === requestedRoomId) return;
+
+    pendingNavigationOpenRoomIdRef.current = requestedRoomId;
+
+    try {
+      setStatus('');
+      setRoomPrivacyFilter('private');
+      setRoomSearch('');
+
+      roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
+      await loadRooms('', { force: true });
+
+      if (!mountedRef.current) return;
+
+      const latestRooms = Array.isArray(roomsCacheRef.current.rooms)
+        ? roomsCacheRef.current.rooms
+        : [];
+
+      const fallbackRoom = navigationState?.joinedRoom || null;
+      const roomToOpen =
+        latestRooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
+        rooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
+        (fallbackRoom
+          ? {
+              ...fallbackRoom,
+              roomId: fallbackRoom.roomId || fallbackRoom.id || requestedRoomId,
+              name:
+                fallbackRoom.name ||
+                fallbackRoom.roomName ||
+                navigationState?.openRoomName ||
+                'Joined group',
+              privacy: fallbackRoom.privacy || 'private',
+            }
+          : {
+              roomId: requestedRoomId,
+              name: navigationState?.openRoomName || 'Joined group',
+              privacy: 'private',
+              type: 'custom',
+            });
+
+      if (!roomToOpen?.roomId) return;
+
+      setRooms((prev) => {
+        if (prev.some((room) => room.roomId === roomToOpen.roomId)) return prev;
+        return [roomToOpen, ...prev];
+      });
+
+      await openRoom(roomToOpen);
+    } catch (err) {
+      console.error('OPEN JOINED ROOM FROM NAVIGATION ERROR:', err);
+      if (mountedRef.current) {
+        setStatus(err?.response?.data?.error || 'Joined, but could not open the group automatically.');
+      }
+    } finally {
+      window.setTimeout(() => {
+        if (pendingNavigationOpenRoomIdRef.current === requestedRoomId) {
+          pendingNavigationOpenRoomIdRef.current = '';
+        }
+      }, 1500);
+    }
+  }
+
+  useEffect(() => {
+    const requestedRoomId = getNavigationRoomOpenId(location.state || {});
+    if (!userId || !requestedRoomId) return;
+
+    openRoomFromNavigationState({ force: true });
+  }, [userId, location.state]);
