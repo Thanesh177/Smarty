@@ -24,6 +24,10 @@ function getSavedRedirectPath() {
   }
 }
 
+function isRoomInvitePath(pathname = '') {
+  return pathname.startsWith('/rooms/join/') || pathname.startsWith('/rooms/invite/');
+}
+
 export default function AuthRedirectHandler() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -33,7 +37,7 @@ export default function AuthRedirectHandler() {
 
     const hasOAuthCode = params.has('code') && params.has('state');
 
-    if (location.pathname.startsWith('/rooms/join/') && !hasOAuthCode) {
+    if (isRoomInvitePath(location.pathname) && !hasOAuthCode) {
       return;
     }
 
@@ -43,7 +47,7 @@ export default function AuthRedirectHandler() {
       try {
         await fetchAuthSession({ forceRefresh: true });
 
-        if (location.pathname.startsWith('/rooms/join/')) {
+        if (isRoomInvitePath(location.pathname)) {
           navigate(location.pathname, { replace: true });
           return;
         }

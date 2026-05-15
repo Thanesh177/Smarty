@@ -109,6 +109,26 @@ function getUserSocketId(user) {
   );
 }
 
+function isRoomInvitePath(pathname = '') {
+  return pathname.startsWith('/rooms/invite/') || pathname.startsWith('/rooms/join/');
+}
+
+function getPendingRoomInviteCode() {
+  try {
+    return String(
+      localStorage.getItem('smartyPendingRoomInvite') ||
+        localStorage.getItem('pendingRoomInvite') ||
+        localStorage.getItem('pendingInviteCode') ||
+        sessionStorage.getItem('smartyPendingRoomInvite') ||
+        sessionStorage.getItem('pendingRoomInvite') ||
+        sessionStorage.getItem('pendingInviteCode') ||
+        ''
+    ).trim();
+  } catch {
+    return '';
+  }
+}
+
 function getUnreadFromChatsPayload(payload) {
   const chats = Array.isArray(payload)
     ? payload
@@ -167,6 +187,22 @@ function Layout() {
     location.pathname === '/login' ||
     location.pathname === '/register' ||
     location.pathname === '/confirm';
+
+  useEffect(() => {
+    if (!user) return;
+    if (isRoomInvitePath(location.pathname)) return;
+
+    const pendingInviteCode = getPendingRoomInviteCode();
+    if (!pendingInviteCode) return;
+
+    navigate(`/rooms/invite/${encodeURIComponent(pendingInviteCode)}`, {
+      replace: true,
+      state: {
+        resumePendingInvite: true,
+        pendingInviteCode,
+      },
+    });
+  }, [user, location.pathname, navigate]);
 
 
   const goBack = useCallback(() => {
