@@ -1584,6 +1584,80 @@ async function approveJoinRequest(requestUserId) {
     }
   }
 
+  const openRoomFromNavigationState = useCallback(async (options = {}) => {
+    const navigationState = location.state || {};
+    const requestedRoomId = getNavigationRoomOpenId(navigationState);
+
+    if (!userId || !requestedRoomId) return;
+    if (!options.force && pendingNavigationOpenRoomIdRef.current === requestedRoomId) return;
+
+    pendingNavigationOpenRoomIdRef.current = requestedRoomId;
+
+    try {
+      setStatus('');
+      setRoomPrivacyFilter('private');
+      setRoomSearch('');
+
+      roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
+      await loadRooms('', { force: true });
+
+      if (!mountedRef.current) return;
+
+      const latestRooms = Array.isArray(roomsCacheRef.current.rooms)
+        ? roomsCacheRef.current.rooms
+        : [];
+
+      const fallbackRoom = navigationState?.joinedRoom || null;
+      const roomToOpen =
+        latestRooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
+        rooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
+        (fallbackRoom
+          ? {
+              ...fallbackRoom,
+              roomId: fallbackRoom.roomId || fallbackRoom.id || requestedRoomId,
+              name:
+                fallbackRoom.name ||
+                fallbackRoom.roomName ||
+                navigationState?.openRoomName ||
+                'Joined group',
+              privacy: fallbackRoom.privacy || 'private',
+            }
+          : {
+              roomId: requestedRoomId,
+              name: navigationState?.openRoomName || 'Joined group',
+              privacy: 'private',
+              type: 'custom',
+            });
+
+      if (!roomToOpen?.roomId) return;
+
+      setRooms((prev) => {
+        if (prev.some((room) => String(room.roomId || room.id || '') === String(roomToOpen.roomId))) return prev;
+        return [roomToOpen, ...prev];
+      });
+
+      await openRoom(roomToOpen);
+    } catch (err) {
+      console.error('OPEN JOINED ROOM FROM NAVIGATION ERROR:', err);
+      if (mountedRef.current) {
+        setStatus(err?.response?.data?.error || 'Joined, but could not open the group automatically.');
+      }
+    } finally {
+      window.setTimeout(() => {
+        if (pendingNavigationOpenRoomIdRef.current === requestedRoomId) {
+          pendingNavigationOpenRoomIdRef.current = '';
+        }
+      }, 1500);
+    }
+  }, [location.state, rooms, userId]);
+
+  useEffect(() => {
+    const requestedRoomId = getNavigationRoomOpenId(location.state || {});
+    if (!userId || !requestedRoomId) return;
+
+    openRoomFromNavigationState({ force: true });
+  }, [userId, location.state, openRoomFromNavigationState]);
+
   useEffect(() => {
     if (!userId) return;
     if (initialRoomsLoadedForUserRef.current === userId) return;
@@ -4612,9 +4686,3 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
     }
   }
 
-  useEffect(() => {
-    const requestedRoomId = getNavigationRoomOpenId(location.state || {});
-    if (!userId || !requestedRoomId) return;
-
-    openRoomFromNavigationState({ force: true });
-  }, [userId, location.state]);
