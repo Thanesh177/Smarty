@@ -293,7 +293,12 @@ function RoomMediaPreview({
       };
 
   return (
-    <div ref={rootRef} className={wrapperClassName} style={wrapperStyle}>
+    <div
+      ref={rootRef}
+      className={wrapperClassName}
+      style={wrapperStyle}
+      data-media-grid-key={isGrid ? mediaKey : undefined}
+    >
       <button
         type="button"
         className={buttonClassName}

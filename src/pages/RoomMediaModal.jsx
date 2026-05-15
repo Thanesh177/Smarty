@@ -278,6 +278,7 @@ export default function RoomMediaModal({
   const [roomMediaGridVisibleCount, setRoomMediaGridVisibleCount] = useState(ROOM_MEDIA_GRID_INITIAL_ITEMS);
 
   const roomMediaGridListRef = useRef(null);
+  const roomMediaGridScrollAnchorRef = useRef(null);
   const roomMediaGridLoadOlderRef = useRef(false);
   const mediaViewerTouchStartRef = useRef(null);
   const mediaViewerTapTimeoutRef = useRef(null);
@@ -549,6 +550,75 @@ export default function RoomMediaModal({
     });
   }, [viewableMediaMessages]);
 
+  function captureRoomMediaGridScrollAnchor() {
+    const container = roomMediaGridListRef.current;
+
+    if (!container) {
+      roomMediaGridScrollAnchorRef.current = null;
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const visibleTile = Array.from(container.querySelectorAll('[data-media-grid-key]')).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.bottom > containerRect.top + 12 && rect.top < containerRect.bottom - 12;
+    });
+
+    roomMediaGridScrollAnchorRef.current = {
+      key: visibleTile?.getAttribute('data-media-grid-key') || '',
+      top: visibleTile ? visibleTile.getBoundingClientRect().top - containerRect.top : 0,
+      scrollHeight: container.scrollHeight,
+      scrollTop: container.scrollTop,
+    };
+  }
+
+  function restoreRoomMediaGridScrollAnchor() {
+    const anchor = roomMediaGridScrollAnchorRef.current;
+    const container = roomMediaGridListRef.current;
+
+    if (!anchor || !container) return;
+
+    const previousScrollBehavior = container.style.scrollBehavior;
+    const previousOverflowAnchor = container.style.overflowAnchor;
+
+    container.style.scrollBehavior = 'auto';
+    container.style.overflowAnchor = 'none';
+
+    if (anchor.key) {
+      const anchoredElement = container.querySelector(`[data-media-grid-key="${CSS.escape(anchor.key)}"]`);
+
+      if (anchoredElement) {
+        const containerTop = container.getBoundingClientRect().top;
+        const nextTop = anchoredElement.getBoundingClientRect().top - containerTop;
+        const delta = nextTop - anchor.top;
+
+        if (Math.abs(delta) > 0.5) {
+          container.scrollTop = Math.max(0, container.scrollTop + delta);
+        }
+      } else if (Number.isFinite(anchor.scrollHeight) && Number.isFinite(anchor.scrollTop)) {
+        container.scrollTop = Math.max(0, anchor.scrollTop + (container.scrollHeight - anchor.scrollHeight));
+      }
+    } else if (Number.isFinite(anchor.scrollHeight) && Number.isFinite(anchor.scrollTop)) {
+      container.scrollTop = Math.max(0, anchor.scrollTop + (container.scrollHeight - anchor.scrollHeight));
+    }
+
+    window.requestAnimationFrame(() => {
+      container.style.scrollBehavior = previousScrollBehavior;
+      container.style.overflowAnchor = previousOverflowAnchor;
+    });
+  }
+
+  function restoreRoomMediaGridScrollAnchorLater() {
+    window.requestAnimationFrame(() => {
+      restoreRoomMediaGridScrollAnchor();
+      window.requestAnimationFrame(restoreRoomMediaGridScrollAnchor);
+    });
+
+    window.setTimeout(restoreRoomMediaGridScrollAnchor, 80);
+    window.setTimeout(restoreRoomMediaGridScrollAnchor, 180);
+    window.setTimeout(restoreRoomMediaGridScrollAnchor, 320);
+  }
+
   function handleRoomMediaGridScroll(event) {
     event.stopPropagation();
 
@@ -558,19 +628,28 @@ export default function RoomMediaModal({
     if (distanceFromBottom > ROOM_MEDIA_SCROLL_LOAD_THRESHOLD) return;
 
     if (roomMediaGridVisibleCount < renderedMediaMessages.length) {
+      captureRoomMediaGridScrollAnchor();
+
       setRoomMediaGridVisibleCount((current) =>
         Math.min(renderedMediaMessages.length, current + ROOM_MEDIA_GRID_LOAD_STEP)
       );
+
+      restoreRoomMediaGridScrollAnchorLater();
       return;
     }
 
     if (mediaFetchDoneRef.current || roomMediaGridLoadOlderRef.current) return;
 
     roomMediaGridLoadOlderRef.current = true;
+    captureRoomMediaGridScrollAnchor();
 
     Promise.resolve(ensureRoomMediaGridHasContent({ append: true }))
       .finally(() => {
+        restoreRoomMediaGridScrollAnchorLater();
+
         window.setTimeout(() => {
+          restoreRoomMediaGridScrollAnchor();
+          roomMediaGridScrollAnchorRef.current = null;
           roomMediaGridLoadOlderRef.current = false;
         }, ROOM_MEDIA_GRID_SCROLL_UNLOCK_DELAY_MS);
       });
@@ -904,6 +983,11 @@ export default function RoomMediaModal({
         </div>
       )}
       <style>{`
+        .standalone-media-grid {
+          overflow-anchor: none;
+          scroll-behavior: auto;
+        }
+
         .room-media-viewer-topbar-actions {
           display: flex;
           align-items: center;

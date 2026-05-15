@@ -32,7 +32,7 @@ const ROOM_MESSAGES_FETCH_LIMIT = 10;
 const ROOM_MESSAGES_REVEAL_STEP = 10;
 
 const ROOM_INITIAL_VISIBLE_MESSAGES = 10;
-const ROOM_OLDER_MESSAGES_SMOOTH_SCROLL_MS = 220;
+const ROOM_OLDER_MESSAGES_LAYOUT_STABILIZE_MS = 520;
 
 
 const ROOM_MEDIA_IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
@@ -149,27 +149,6 @@ function formatRoomMessageTime(message = {}) {
   }).format(new Date(value));
 }
 
-function smoothAdjustScrollTop(element, delta, duration = ROOM_OLDER_MESSAGES_SMOOTH_SCROLL_MS) {
-  if (!element || !Number.isFinite(delta) || Math.abs(delta) < 0.5) return;
-
-  const startTop = element.scrollTop;
-  const targetTop = startTop + delta;
-  const startTime = performance.now();
-
-  function animate(now) {
-    const elapsed = now - startTime;
-    const progress = Math.min(1, elapsed / duration);
-    const easedProgress = 1 - Math.pow(1 - progress, 3);
-
-    element.scrollTop = startTop + (targetTop - startTop) * easedProgress;
-
-    if (progress < 1) {
-      requestAnimationFrame(animate);
-    }
-  }
-
-  requestAnimationFrame(animate);
-}
 
 
 function extractRoomArray(data, keys = []) {
@@ -285,6 +264,22 @@ function getApproxBase64SizeBytes(base64Value) {
   const padding = cleanBase64.endsWith('==') ? 2 : cleanBase64.endsWith('=') ? 1 : 0;
 
   return Math.max(0, Math.floor((cleanBase64.length * 3) / 4) - padding);
+}
+
+function preserveScrollAnchor(element, delta) {
+  if (!element || !Number.isFinite(delta) || Math.abs(delta) < 0.5) return;
+
+  const previousScrollBehavior = element.style.scrollBehavior;
+  const previousOverflowAnchor = element.style.overflowAnchor;
+
+  element.style.scrollBehavior = 'auto';
+  element.style.overflowAnchor = 'none';
+  element.scrollTop = Math.max(0, element.scrollTop + delta);
+
+  window.requestAnimationFrame(() => {
+    element.style.scrollBehavior = previousScrollBehavior;
+    element.style.overflowAnchor = previousOverflowAnchor;
+  });
 }
 
 function validatePreparedRoomImagePayload(payload) {
@@ -769,7 +764,7 @@ const renderedMessages = useMemo(() => {
     const delta = nextTop - anchor.top;
 
     if (Math.abs(delta) > 0.5) {
-      smoothAdjustScrollTop(container, delta);
+      preserveScrollAnchor(container, delta);
     }
 
     const restoreLateLayoutShift = () => {
@@ -795,15 +790,38 @@ const renderedMessages = useMemo(() => {
       const lateDelta = lateTop - lateAnchor.top;
 
       if (Math.abs(lateDelta) > 0.5) {
-        smoothAdjustScrollTop(lateContainer, lateDelta, 140);
+        preserveScrollAnchor(lateContainer, lateDelta);
       }
+
+      olderScrollAnchorRef.current = {
+        ...lateAnchor,
+        top: lateElement.getBoundingClientRect().top - lateContainerTop,
+        scrollHeight: lateContainer.scrollHeight,
+        scrollTop: lateContainer.scrollTop,
+        clientHeight: lateContainer.clientHeight,
+      };
     };
 
-    window.setTimeout(restoreLateLayoutShift, 40);
-    window.setTimeout(() => {
+    const rafOne = window.requestAnimationFrame(restoreLateLayoutShift);
+    const rafTwo = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(restoreLateLayoutShift);
+    });
+    const timerOne = window.setTimeout(restoreLateLayoutShift, 80);
+    const timerTwo = window.setTimeout(restoreLateLayoutShift, 180);
+    const timerThree = window.setTimeout(restoreLateLayoutShift, 320);
+    const clearTimer = window.setTimeout(() => {
       restoreLateLayoutShift();
       olderScrollAnchorRef.current = null;
-    }, 140);
+    }, ROOM_OLDER_MESSAGES_LAYOUT_STABILIZE_MS);
+
+    return () => {
+      window.cancelAnimationFrame(rafOne);
+      window.cancelAnimationFrame(rafTwo);
+      window.clearTimeout(timerOne);
+      window.clearTimeout(timerTwo);
+      window.clearTimeout(timerThree);
+      window.clearTimeout(clearTimer);
+    };
   }, [renderedMessages.length]);
 
   useEffect(() => {
@@ -1003,19 +1021,32 @@ const jumpMessagesToBottomOnce = useCallback(() => {
     }
 
     const containerRect = container.getBoundingClientRect();
-    const firstVisible = Array.from(container.querySelectorAll('[data-message-key]')).find((element) => {
-      const rect = element.getBoundingClientRect();
-      return rect.bottom > containerRect.top + 8;
-    });
+    const visibleElements = Array.from(container.querySelectorAll('[data-message-key]'))
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          element,
+          rect,
+          distanceFromTop: Math.abs(rect.top - containerRect.top),
+        };
+      })
+      .filter(({ rect }) => rect.bottom > containerRect.top + 12 && rect.top < containerRect.bottom - 12);
 
-    if (!firstVisible) {
+    const firstStableVisible =
+      visibleElements.find(({ rect }) => rect.top >= containerRect.top + 12)?.element ||
+      visibleElements.sort((a, b) => a.distanceFromTop - b.distanceFromTop)[0]?.element;
+
+    if (!firstStableVisible) {
       olderScrollAnchorRef.current = null;
       return;
     }
 
     olderScrollAnchorRef.current = {
-      key: firstVisible.getAttribute('data-message-key') || '',
-      top: firstVisible.getBoundingClientRect().top - containerRect.top,
+      key: firstStableVisible.getAttribute('data-message-key') || '',
+      top: firstStableVisible.getBoundingClientRect().top - containerRect.top,
+      scrollHeight: container.scrollHeight,
+      scrollTop: container.scrollTop,
+      clientHeight: container.clientHeight,
     };
   }
 
@@ -2531,8 +2562,6 @@ function handleCropPointerDown(event) {
   window.addEventListener('pointermove', handlePointerMove);
   window.addEventListener('pointerup', handlePointerUp);
 }
-
-
 
 function handleEditRoomImageChange(event) {
   const file = event.target.files?.[0] || null;
