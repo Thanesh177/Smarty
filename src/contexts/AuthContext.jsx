@@ -227,8 +227,17 @@ export function AuthProvider({ children }) {
           console.error('Auth init failed:', err);
         }
 
-        clearAuthStorage();
-        setUser(null);
+        const cachedUser = localStorage.getItem('eduscroll_user');
+
+        if (cachedUser) {
+          try {
+            setUser(JSON.parse(cachedUser));
+          } catch {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
       } finally {
         setLoading(false);
       }
@@ -313,9 +322,12 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    await signOut();
-    clearAuthStorage();
-    setUser(null);
+    try {
+      await signOut();
+    } finally {
+      clearAuthStorage();
+      setUser(null);
+    }
   };
 
   const refreshToken = async () => {

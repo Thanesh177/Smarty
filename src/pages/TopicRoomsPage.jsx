@@ -433,17 +433,23 @@ function getRoomImagePatch(imageUrl) {
 async function persistRoomImageToTable(roomId, imageUrl) {
   if (!roomId || !imageUrl) return false;
 
-  if (typeof roomApi.updateRoomImage === 'function') {
-    await roomApi.updateRoomImage(roomId, imageUrl);
-    return true;
-  }
+  try {
+    if (typeof roomApi.updateRoomImage === 'function') {
+      await roomApi.updateRoomImage(roomId, imageUrl);
+      return true;
+    }
 
-  if (typeof roomApi.updateRoom === 'function') {
-    await roomApi.updateRoom(roomId, getRoomImagePatch(imageUrl));
-    return true;
-  }
+    if (typeof roomApi.updateRoom === 'function') {
+      await roomApi.updateRoom(roomId, getRoomImagePatch(imageUrl));
+      return true;
+    }
 
-  throw new Error('Room image table update API is missing in client.js');
+    console.warn('No dedicated room image update API found. Using local state only.');
+    return true;
+  } catch (err) {
+    console.error('Failed to persist room image:', err);
+    throw err;
+  }
 }
 
 function getRoomMessageId(message) {
@@ -2323,37 +2329,16 @@ async function approveJoinRequest(requestUserId) {
         await prepareRoomImageFile(file)
       );
 
-  const data = await roomApi.uploadRoomImage(room.roomId, optimizedImage);
-const imageUrl = getUploadedRoomImageUrl(data);
+      const data = await roomApi.uploadRoomImage(room.roomId, optimizedImage);
+      const imageUrl = getUploadedRoomImageUrl(data);
 
-if (!imageUrl) {
-  setStatus('Image uploaded, but no image URL was returned');
-  await loadRooms(roomSearch, { force: true });
-  return false;
-}
+      if (!imageUrl) {
+        setStatus('Image uploaded, but no image URL was returned');
+        await loadRooms(roomSearch, { force: true });
+        return false;
+      }
 
-try {
-  if (typeof roomApi.updateRoomImage === 'function') {
-    await roomApi.updateRoomImage(room.roomId, imageUrl);
-  }
-} catch (persistErr) {
-  console.error('Room image uploaded but could not be saved to room table:', persistErr);
-  setStatus('Image uploaded, but could not be saved permanently. Please try again.');
-  return false;
-}
-
-try {
-  await persistRoomImageToTable(room.roomId, imageUrl);
-} catch (persistErr) {
-  console.error('Room image uploaded but was not saved to the room table:', persistErr);
-  setStatus(
-    persistErr?.response?.data?.error ||
-      persistErr?.response?.data?.message ||
-      persistErr?.message ||
-      'Image uploaded, but could not be saved permanently. Please try again.'
-  );
-  return false;
-}
+      // Image persistence is already handled by the uploadRoomImage Lambda.
 
 persistStoredRoomImage(room.roomId, imageUrl);
 

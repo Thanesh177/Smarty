@@ -77,6 +77,12 @@ class RouteErrorBoundary extends Component {
     console.error('Route failed to render:', error, errorInfo);
   }
 
+  componentDidUpdate(prevProps) {
+    if (prevProps.children !== this.props.children && this.state.hasError) {
+      this.setState({ hasError: false });
+    }
+  }
+
   render() {
     if (this.state.hasError) {
       return (
@@ -94,7 +100,9 @@ function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) return null;
+  if (loading) {
+    return <PageLoader />;
+  }
 
   return user ? children : <Navigate to="/login" replace state={{ from: location }} />;
 }
@@ -158,6 +166,24 @@ function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleUnhandledError = (event) => {
+      console.error('Unhandled app error:', event.error || event.reason || event);
+    };
+
+    const handleUnhandledRejection = (event) => {
+      console.error('Unhandled promise rejection:', event.reason || event);
+    };
+
+    window.addEventListener('error', handleUnhandledError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleUnhandledError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   const [totalUnread, setTotalUnread] = useState(0);
   const [popupNotification, setPopupNotification] = useState(null);
@@ -224,9 +250,10 @@ function Layout() {
     window.dispatchEvent(new CustomEvent('smarty-global-refresh'));
 
     window.setTimeout(() => {
-      window.location.reload();
-    }, 180);
-  }, [globalRefreshing]);
+      resetGlobalPullRefresh();
+      setGlobalRefreshing(false);
+    }, 650);
+  }, [globalRefreshing, resetGlobalPullRefresh]);
 
   const handleGlobalPullStart = useCallback((event) => {
     if (globalRefreshing || event.touches.length !== 1) return;
@@ -292,6 +319,7 @@ function Layout() {
     resetGlobalPullRefresh();
   }, [globalRefreshing, isPageAtTop, resetGlobalPullRefresh, runGlobalPullRefresh]);
 
+  // Only handle swipe navigation, do not clear session or logout on back/navigation events
   useEffect(() => {
     const isMobileView = () => window.matchMedia('(max-width: 768px)').matches;
 
@@ -728,7 +756,9 @@ function Layout() {
           )}
 
           <RouteErrorBoundary key={location.pathname}>
-            <Suspense fallback={<PageLoader />}>
+            <Suspense
+              fallback={<PageLoader />}
+            >
               <Routes>
                 <Route
                   path="/"

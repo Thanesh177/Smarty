@@ -128,7 +128,17 @@ export default function SavedPage() {
         setPosts(savedPosts);
       } catch (err) {
         console.error('Saved reels error:', err);
-        if (mountedRef.current) setError('Failed to load saved content.');
+
+        const status = err?.response?.status;
+
+        if (!mountedRef.current) return;
+
+        if (status === 401 || status === 403) {
+          setError('Please log in again to view saved posts.');
+          return;
+        }
+
+        setError('Failed to load saved content.');
       } finally {
         if (mountedRef.current) setLoading(false);
       }
