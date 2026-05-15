@@ -122,6 +122,7 @@ export default function JoinRoomPage() {
 
       if (joinedSuccessfully) {
         setStatus(result?.message || 'Joined room successfully.');
+        storePendingRoomInvite('');
 
         navigate('/rooms', {
           replace: true,
@@ -147,6 +148,7 @@ export default function JoinRoomPage() {
       }
 
       if (joinedRoomId || joinedRoomName) {
+        storePendingRoomInvite('');
         navigate('/rooms', {
           replace: true,
           state: {
@@ -181,14 +183,14 @@ export default function JoinRoomPage() {
   }
 
   useEffect(() => {
-    if (!user || loading || joining || !cleanInviteCode || !invite) return;
+    if (!user || loading || joining || !cleanInviteCode) return;
 
     const autoJoinKey = `${user?.id || user?.userId || user?.sub || 'user'}:${cleanInviteCode}`;
     if (autoJoinAttemptedRef.current === autoJoinKey) return;
 
     autoJoinAttemptedRef.current = autoJoinKey;
     handleJoinRoom();
-  }, [user, loading, joining, cleanInviteCode, invite]);
+  }, [user, loading, joining, cleanInviteCode]);
 
   if (loading) {
     return (
@@ -200,7 +202,7 @@ export default function JoinRoomPage() {
     );
   }
 
-  if (error && !invite) {
+  if (error && !invite && !user) {
     return (
       <main className="room-invite-page">
         <section className="room-invite-card">

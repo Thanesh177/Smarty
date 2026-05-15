@@ -482,7 +482,8 @@ function getRoomInviteRoomId(invite) {
 }
 
 function getNavigationRoomOpenId(locationState = {}) {
-  if (!locationState?.openJoinedRoom) return '';
+  if (!locationState || typeof locationState !== 'object') return '';
+  if (locationState.openJoinedRoom !== true) return '';
 
   return String(
     locationState?.openRoomId ||
@@ -1589,14 +1590,14 @@ async function approveJoinRequest(requestUserId) {
   }
 
   const openRoomFromNavigationState = useCallback(async (options = {}) => {
-    const currentUserId = user?.id || user?.userId || user?.sub || '';
+    const currentUserId = userId || user?.id || user?.userId || user?.sub || '';
     const navigationState =
       location.state && typeof location.state === 'object' ? location.state : {};
 
     if (navigationState.openJoinedRoom !== true) return;
 
     const requestedRoomId = getNavigationRoomOpenId(navigationState);
-    const navigationOpenKey = `${requestedRoomId}:${navigationState?.joinedAt || navigationState?.inviteCode || 'join-link'}`;
+    const navigationOpenKey = `${currentUserId}:${requestedRoomId}:${navigationState?.joinedAt || navigationState?.inviteCode || 'join-link'}`;
 
     if (!currentUserId || !requestedRoomId) return;
     if (handledNavigationOpenKeyRef.current === navigationOpenKey) return;
@@ -1669,10 +1670,10 @@ async function approveJoinRequest(requestUserId) {
         }
       }, 1500);
     }
-  }, [location.state, navigate, rooms, user]);
+  }, [location.state, navigate, rooms, user, userId]);
 
   useEffect(() => {
-    const currentUserId = user?.id || user?.userId || user?.sub || '';
+    const currentUserId = userId || user?.id || user?.userId || user?.sub || '';
     const navigationState =
       location.state && typeof location.state === 'object' ? location.state : {};
 
@@ -1683,7 +1684,7 @@ async function approveJoinRequest(requestUserId) {
     if (!currentUserId || !requestedRoomId) return;
 
     openRoomFromNavigationState({ force: true });
-  }, [user, location.state, openRoomFromNavigationState]);
+  }, [user, userId, location.state, openRoomFromNavigationState]);
 
   useEffect(() => {
     if (!userId) return;

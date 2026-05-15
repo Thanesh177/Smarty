@@ -2,7 +2,7 @@ import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'reac
 import { useState, useEffect, useCallback, useRef, lazy, Suspense, Component } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import NavbarMenu from './components/NavbarMenu';
-import { notificationApi, chatApi } from './api/client';
+import { notificationApi, chatApi, getPendingRoomInvite } from './api/client';
 import {
   listenForForegroundMessages,
   setupAndroidPushTokenListener,
@@ -114,19 +114,8 @@ function isRoomInvitePath(pathname = '') {
 }
 
 function getPendingRoomInviteCode() {
-  try {
-    return String(
-      localStorage.getItem('smartyPendingRoomInvite') ||
-        localStorage.getItem('pendingRoomInvite') ||
-        localStorage.getItem('pendingInviteCode') ||
-        sessionStorage.getItem('smartyPendingRoomInvite') ||
-        sessionStorage.getItem('pendingRoomInvite') ||
-        sessionStorage.getItem('pendingInviteCode') ||
-        ''
-    ).trim();
-  } catch {
-    return '';
-  }
+  const pendingInvite = getPendingRoomInvite?.();
+  return String(pendingInvite?.inviteCode || '').trim();
 }
 
 function getUnreadFromChatsPayload(payload) {
