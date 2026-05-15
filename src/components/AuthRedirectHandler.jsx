@@ -31,17 +31,23 @@ export default function AuthRedirectHandler() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
 
-    if (location.pathname.startsWith('/rooms/join/')) {
+    const hasOAuthCode = params.has('code') && params.has('state');
+
+    if (location.pathname.startsWith('/rooms/join/') && !hasOAuthCode) {
       return;
     }
-
-    const hasOAuthCode = params.has('code') && params.has('state');
 
     if (!hasOAuthCode) return;
 
     const finishLogin = async () => {
       try {
         await fetchAuthSession({ forceRefresh: true });
+
+        if (location.pathname.startsWith('/rooms/join/')) {
+          navigate(location.pathname, { replace: true });
+          return;
+        }
+
         navigate(getSavedRedirectPath(), { replace: true });
       } catch (error) {
         console.error('OAuth redirect handling failed:', error);
