@@ -168,9 +168,6 @@ function Layout() {
     location.pathname === '/register' ||
     location.pathname === '/confirm';
 
-  const isInviteJoinPage =
-    location.pathname.startsWith('/rooms/invite/') ||
-    location.pathname.startsWith('/rooms/join/');
 
   const goBack = useCallback(() => {
     window.history.back();
@@ -559,7 +556,7 @@ function Layout() {
 
   return (
     <>
-      {!isInviteJoinPage && <AuthRedirectHandler />}
+      <AuthRedirectHandler />
 
       <ReminderPopup
         title={popupNotification?.title || 'Smarty'}
