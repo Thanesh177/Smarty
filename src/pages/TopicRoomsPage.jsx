@@ -1652,11 +1652,15 @@ async function approveJoinRequest(requestUserId) {
   }, [location.state, rooms, userId]);
 
   useEffect(() => {
-    const requestedRoomId = getNavigationRoomOpenId(location.state || {});
-    if (!userId || !requestedRoomId) return;
+  const currentUserId = user?.id || user?.userId || user?.sub || '';
+  const navigationState =
+    location.state && typeof location.state === 'object' ? location.state : {};
+  const requestedRoomId = getNavigationRoomOpenId(navigationState);
 
-    openRoomFromNavigationState({ force: true });
-  }, [userId, location.state, openRoomFromNavigationState]);
+  if (!currentUserId || !requestedRoomId) return;
+
+  openRoomFromNavigationState({ force: true });
+}, [user, location.state, openRoomFromNavigationState]);
 
   useEffect(() => {
     if (!userId) return;
@@ -4623,7 +4627,8 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
     const navigationState = location.state || {};
     const requestedRoomId = getNavigationRoomOpenId(navigationState);
 
-    if (!userId || !requestedRoomId) return;
+    const currentUserId = user?.id || user?.userId || user?.sub || '';
+    if (!currentUserId || !requestedRoomId) return;
     if (!options.force && pendingNavigationOpenRoomIdRef.current === requestedRoomId) return;
 
     pendingNavigationOpenRoomIdRef.current = requestedRoomId;
