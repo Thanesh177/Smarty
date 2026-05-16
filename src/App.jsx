@@ -200,7 +200,6 @@ function Layout() {
   const navigate = useNavigate();
 
   const hideNavPaths = [
-    '/chat',
     '/quiz',
     '/booksinfo',
     '/bookinfo',
@@ -208,7 +207,6 @@ function Layout() {
     '/read-books',
     '/preview-books',
     '/read-book',
-    '/rooms',
   ];
 
   const shouldHideAppNav =
@@ -862,9 +860,9 @@ function Layout() {
             touchAction: 'pan-y',
             pointerEvents: 'auto',
             paddingTop: 0,
-            paddingBottom: location.pathname.startsWith('/feed') || shouldHideAppNav ? 0 : '84px',
             scrollPaddingTop: 0,
-            scrollPaddingBottom: location.pathname.startsWith('/feed') || shouldHideAppNav ? 0 : '84px',
+            paddingBottom: 0,
+scrollPaddingBottom: 0,
           }}
         >
           {(globalPullDistance > 0 || globalRefreshing) && (
@@ -1222,29 +1220,31 @@ function ReminderPopupStyles() {
       }
 
       /* --- Compact/minimal topbar styles --- */
-      .topbar-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        width: 100%;
-        min-height: 64px;
-        background: transparent !important;
-      }
+.topbar-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+  width: auto;
+  min-height: 0;
+  background: transparent !important;
+}
 
-      .topbar {
-        position: fixed !important;
-        top: auto !important;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        z-index: 3000;
-        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-        background: transparent !important;
-        box-shadow: none !important;
-        border: 0 !important;
-        pointer-events: none;
-      }
+.topbar {
+  position: fixed !important;
+  top: auto !important;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  left: auto;
+  z-index: 3000;
+  width: auto;
+  padding: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  pointer-events: none;
+}
 
       .topbar-row,
       .brand-logo,
@@ -1258,9 +1258,9 @@ function ReminderPopupStyles() {
 
       .content {
         padding-top: 0 !important;
-        padding-bottom: 84px !important;
+        padding-bottom: 0px !important;
         scroll-padding-top: 0 !important;
-        scroll-padding-bottom: 84px;
+        scroll-padding-bottom:0px;
       }
 
       .glass-topbar {
@@ -1283,7 +1283,7 @@ function ReminderPopupStyles() {
       }
 
       .brand-logo {
-        display: flex;
+        display: none;
         align-items: center;
         gap: 10px;
         min-width: 0;
@@ -1305,15 +1305,23 @@ function ReminderPopupStyles() {
         opacity: 0.72;
       }
 
-      .brand-actions {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 8px;
-        flex-shrink: 0;
-        margin-left: auto;
-        color: rgba(248, 250, 252, 0.92);
-      }
+.brand-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: 0;
+  color: rgba(248, 250, 252, 0.92);
+  padding: 8px;
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.42);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
 
       .quick-icon-link,
       button.quick-icon-link,
@@ -1371,18 +1379,20 @@ function ReminderPopupStyles() {
 
       .content {
         padding-top: 0 !important;
-        padding-bottom: 84px !important;
+        padding-bottom: 0px !important;
         scroll-padding-top: 0 !important;
-        scroll-padding-bottom: 84px;
+        scroll-padding-bottom: 0px;
       }
 
       @media (max-width: 640px) {
         .topbar {
-          padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
-          background: transparent !important;
-          box-shadow: none !important;
-          border: 0 !important;
-        }
+  right: 10px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  padding: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
 
         .topbar-row {
           min-height: 58px;
@@ -1457,9 +1467,9 @@ body,
   min-height: 0;
   height: 100%;
   padding-top: 0 !important;
-  padding-bottom: 84px !important;
+  padding-bottom: 0px !important;
   scroll-padding-top: 0 !important;
-  scroll-padding-bottom: 84px;
+  scroll-padding-bottom: 0px;
   overflow-y: auto !important;
   overflow-x: hidden;
   overscroll-behavior-y: contain;

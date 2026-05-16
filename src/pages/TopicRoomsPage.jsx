@@ -1539,7 +1539,16 @@ async function approveJoinRequest(requestUserId) {
       setStatus('');
       setRoomsLoading(true);
 
-      const data = await roomApi.getRooms({ search: normalizedSearch });
+      if (!navigator.onLine) {
+        throw new Error('You are offline');
+      }
+
+      const data = await Promise.race([
+        roomApi.getRooms({ search: normalizedSearch }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Rooms load timeout')), 12000)
+        ),
+      ]);
 
       if (!mountedRef.current) return;
 
@@ -2921,10 +2930,14 @@ async function openRoom(room) {
       jumpMessagesToBottomOnce();
     });
 
-    const data = await roomApi.getRoomMessages(room.roomId, {
-      limit: ROOM_MESSAGES_FETCH_LIMIT,
-    });
-
+const data = await Promise.race([
+  roomApi.getRoomMessages(room.roomId, {
+    limit: ROOM_MESSAGES_FETCH_LIMIT,
+  }),
+  new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Room load timeout')), 12000)
+  ),
+]);
     if (!mountedRef.current) return;
 
     if (roomOpenRequestIdRef.current !== requestId) return;
@@ -2962,10 +2975,14 @@ async function openRoom(room) {
 
     if (roomOpenRequestIdRef.current !== requestId) return;
 
-    setStatus(
-      err?.response?.data?.error ||
-      'Could not open room'
-    );
+    console.error('OPEN ROOM ERROR:', err);
+
+setStatus(
+  err?.response?.data?.error ||
+  err?.response?.data?.message ||
+  err?.message ||
+  'Could not open room'
+);
   } finally {
     loadingRoomRef.current = false;
 
