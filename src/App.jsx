@@ -14,6 +14,7 @@ import {
   CircleUserRound,
   MessagesSquare,
   BrainCircuit,
+  House,
 } from 'lucide-react';
 
 import {
@@ -207,13 +208,32 @@ function Layout() {
     '/read-books',
     '/preview-books',
     '/read-book',
+        '/login',
+
   ];
 
+  const isSpecificChatRoute =
+    location.pathname.startsWith('/chat/') ||
+    location.pathname.includes('/messages/') ||
+    location.pathname.includes('/conversation/');
+
+  const isSpecificTopicRoomRoute =
+    location.pathname.includes('/topic-room/') ||
+    location.pathname.includes('/topicrooms/') ||
+    (
+      location.pathname.startsWith('/rooms/') &&
+      !location.pathname.startsWith('/rooms/invite/') &&
+      !location.pathname.startsWith('/rooms/join/')
+    );
+
   const shouldHideAppNav =
-    hideNavPaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`)) ||
-    location.pathname.includes('/chat') ||
-    location.pathname.includes('/topic-room') ||
-    location.pathname.includes('/topicrooms');
+    hideNavPaths.some(
+      (path) =>
+        location.pathname === path ||
+        location.pathname.startsWith(`${path}/`)
+    ) ||
+    isSpecificChatRoute ||
+    isSpecificTopicRoomRoute;
 
 
   useEffect(() => {
@@ -796,6 +816,15 @@ function Layout() {
             </NavLink>
 
             <div className="brand-actions">
+
+                            <NavLink
+                to="/feed"
+                className="quick-icon-link"
+                aria-label="Feed"
+                title="Feed"
+              >
+                <House size={20} strokeWidth={2.2} />
+              </NavLink>
               <button
                 type="button"
                 className="quick-icon-link"
@@ -815,6 +844,8 @@ function Layout() {
               >
                 <CircleUserRound size={21} strokeWidth={2.15} />
               </button>
+
+
 
               <button
                 type="button"
@@ -1012,6 +1043,13 @@ scrollPaddingBottom: 0,
 function ReminderPopupStyles() {
   return (
     <style>{`
+      body:has(.chat-page.mobile-chat-open) .topbar,
+      body:has(.rooms-page.mobile-chat-open) .topbar,
+      body:has(.chat-page.mobile-chat-open) .glass-topbar,
+      body:has(.rooms-page.mobile-chat-open) .glass-topbar {
+        display: none !important;
+        pointer-events: none !important;
+      }
       .app-page-loader {
         width: 100%;
         min-height: calc(100dvh - 96px);

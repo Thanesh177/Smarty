@@ -177,7 +177,6 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
                   onClick={handleLogout}
                 >
                   <LogOut size={17} strokeWidth={2.2} />
-                  <span>Logout</span>
                 </button>
               ) : (
                 <button

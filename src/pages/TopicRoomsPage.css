@@ -422,7 +422,7 @@ video {
   width: 100%;
   height: 100%;
   min-width: 0;
-  max-height: 88%;
+  max-height: 100%;
 
   display: flex;
   flex-direction: column;
@@ -624,26 +624,38 @@ video {
 
 .messages {
   flex: 1 1 auto;
-  max-height: 88%;
+  min-height: 0;
+  max-height: 100%;
 
   display: flex;
   flex-direction: column;
 
   gap: 10px;
 
-  padding: 10px 18px calc(126px + env(safe-area-inset-bottom));
+  padding:
+    12px
+    18px
+    calc(118px + env(safe-area-inset-bottom));
 
   overflow-y: auto;
   overflow-x: hidden;
 
-  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
 
   -webkit-overflow-scrolling: touch;
 
-  scroll-behavior: auto;
+  scroll-behavior: smooth;
 
-  overflow-anchor: none;
-  scroll-padding-bottom: calc(126px + env(safe-area-inset-bottom));
+  overflow-anchor: auto;
+
+  scroll-padding-top: 14px;
+  scroll-padding-bottom:
+    calc(118px + env(safe-area-inset-bottom));
+
+  contain: layout paint size;
+
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .messages::-webkit-scrollbar {
@@ -687,6 +699,9 @@ video {
   align-self: flex-start;
 
   word-break: break-word;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform;
 }
 
 .msg.mine {
@@ -844,20 +859,32 @@ video {
   align-items: center;
   gap: 8px;
 
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  padding:
+    10px
+    12px
+    calc(10px + env(safe-area-inset-bottom));
 
-  background: rgba(2, 6, 23, 0.98);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(2, 6, 23, 0.88),
+      rgba(2, 6, 23, 0.98)
+    );
 
-  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  border-top: 1px solid rgba(148, 163, 184, 0.08);
 
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
 
   z-index: 9000;
 
   overflow: visible !important;
+
   transform: translateZ(0);
   will-change: transform;
+
+  box-shadow:
+    0 -10px 40px rgba(0, 0, 0, 0.32);
 }
 
 .input input {
@@ -3011,6 +3038,22 @@ video {
 
   object-fit: cover;
 }
+.msg,
+.room-message-content,
+.room-media-preview,
+.room-media-preview img,
+.room-media-preview video {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  contain: layout paint style;
+  will-change: transform;
+}
+.messages-end-anchor {
+  width: 100%;
+  height: 1px;
+  min-height: 1px;
+  flex: 0 0 1px;
+}
 
 .active-room-info-media-tile > span {
   position: absolute;
@@ -3229,8 +3272,14 @@ video {
   .chat {
     width: 100vw;
     height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
 
     background: #020617;
+
+    overflow: hidden;
+
+    contain: layout paint size;
   }
 
   .chat-header {
@@ -3265,10 +3314,25 @@ video {
      MESSAGES
      ========================================= */
 
-  /* MESSAGES */
   .messages {
-    padding: 10px 10px calc(122px + env(safe-area-inset-bottom)) !important;
-    scroll-padding-bottom: calc(122px + env(safe-area-inset-bottom)) !important;
+    flex: 1 1 auto;
+    min-height: 0;
+
+    padding:
+      10px
+      10px
+      calc(114px + env(safe-area-inset-bottom)) !important;
+
+    scroll-padding-bottom:
+      calc(114px + env(safe-area-inset-bottom)) !important;
+
+    gap: 9px;
+
+    scroll-behavior: smooth !important;
+
+    overscroll-behavior-y: contain;
+
+    -webkit-overflow-scrolling: touch;
   }
 
   .msg {
@@ -3324,21 +3388,37 @@ video {
 
     width: 100vw;
     max-width: 100vw;
+
     z-index: 9000;
 
     display: flex;
     align-items: center;
     gap: 7px;
 
-    padding: 8px 10px calc(12px + env(safe-area-inset-bottom));
+    padding:
+      8px
+      10px
+      calc(12px + env(safe-area-inset-bottom));
 
-    background: rgba(2, 6, 23, 0.98);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(2, 6, 23, 0.84),
+        rgba(2, 6, 23, 0.98)
+      );
 
-    border-top: 1px solid rgba(148, 163, 184, 0.12);
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
 
     overflow: visible !important;
+
     transform: translateZ(0);
     will-change: transform;
+
+    box-shadow:
+      0 -12px 40px rgba(0, 0, 0, 0.34);
   }
 
   .input input {
@@ -3372,30 +3452,19 @@ video {
 
     min-width: 40px;
   }
-.room-media-picker-btn input[type='file'] {
-
-  position: absolute !important;
-
-  inset: 0 !important;
-
-  width: 100% !important;
-
-  height: 100% !important;
-
-  opacity: 0 !important;
-
-  cursor: pointer !important;
-
-  font-size: 0 !important;
-
-  color: transparent !important;
-
-}
+  .room-media-picker-btn input[type='file'] {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
+    font-size: 0 !important;
+    color: transparent !important;
+  }
   .input button[type="submit"] {
     min-width: 64px;
-
     height: 40px;
-
     padding: 0 14px;
   }
 
@@ -3757,7 +3826,7 @@ and (orientation: landscape) {
 
 /* Prevent scroll snapping bugs */
 .messages {
-  scroll-behavior: auto !important;
+  scroll-behavior: smooth !important;
 }
 
 /* Prevent iOS zoom */
@@ -4577,3 +4646,182 @@ body {
   }
 }
 
+
+
+.room-media-preview,
+.room-media-preview img,
+.room-media-preview video,
+.msg {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.room-media-preview video {
+  object-fit: cover;
+  contain: paint;
+}
+
+.messages {
+overscroll-behavior-y: contain;
+overflow-anchor: auto;
+-webkit-overflow-scrolling: touch;
+scroll-behavior: auto;
+}
+
+
+.selected-room-media-preview,
+.selected-room-media-preview-multiple {
+  position: absolute !important;
+  left: 10px !important;
+  right: 10px !important;
+  bottom: calc(64px + env(safe-area-inset-bottom)) !important;
+  z-index: 9001 !important;
+  max-height: 118px !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 8px !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+  background: rgba(2, 6, 23, 0.96) !important;
+  border: 1px solid rgba(148, 163, 184, 0.14) !important;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.36) !important;
+  backdrop-filter: blur(22px) saturate(170%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(170%) !important;
+}
+
+.selected-room-media-preview-list {
+  width: 100% !important;
+  max-height: 98px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  overscroll-behavior-x: contain !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.selected-room-media-preview-item {
+  position: relative !important;
+  flex: 0 0 86px !important;
+  width: 86px !important;
+  height: 86px !important;
+  min-width: 86px !important;
+  max-width: 86px !important;
+  max-height: 86px !important;
+  border-radius: 16px !important;
+  overflow: hidden !important;
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+}
+
+.selected-room-media-preview-item img,
+.selected-room-media-preview-item video,
+.selected-room-media-preview img,
+.selected-room-media-preview video,
+.selected-room-media-preview-multiple img,
+.selected-room-media-preview-multiple video {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 86px !important;
+  max-height: 86px !important;
+  object-fit: cover !important;
+  border-radius: 14px !important;
+}
+
+.selected-room-media-preview-item span {
+  display: grid !important;
+  place-items: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding: 8px !important;
+  color: rgba(226, 232, 240, 0.86) !important;
+  font-size: 0.7rem !important;
+  font-weight: 800 !important;
+  text-align: center !important;
+  overflow: hidden !important;
+}
+
+.remove-selected-room-media,
+.selected-room-media-remove-btn,
+.selected-room-media-preview-item button {
+  position: absolute !important;
+  top: 5px !important;
+  right: 5px !important;
+  z-index: 4 !important;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  display: grid !important;
+  place-items: center !important;
+  background: rgba(127, 29, 29, 0.9) !important;
+  color: #fff !important;
+  cursor: pointer !important;
+}
+
+.room-media-upload-progress {
+  position: absolute !important;
+  left: 10px !important;
+  right: 10px !important;
+  bottom: 6px !important;
+  height: 4px !important;
+  overflow: hidden !important;
+  border-radius: 999px !important;
+  background: rgba(148, 163, 184, 0.16) !important;
+}
+
+.room-media-upload-progress span {
+  display: block !important;
+  height: 100% !important;
+  border-radius: inherit !important;
+  background: linear-gradient(90deg, #67e8f9, #86efac) !important;
+}
+
+@media (min-width: 761px) {
+  .selected-room-media-preview,
+  .selected-room-media-preview-multiple {
+    left: calc(var(--rooms-sidebar-width, 340px) + 12px) !important;
+    right: 12px !important;
+    bottom: 68px !important;
+    max-height: 122px !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .selected-room-media-preview-item {
+    flex-basis: 78px !important;
+    width: 78px !important;
+    height: 78px !important;
+    min-width: 78px !important;
+    max-width: 78px !important;
+    max-height: 78px !important;
+  }
+
+  .selected-room-media-preview-item img,
+  .selected-room-media-preview-item video,
+  .selected-room-media-preview img,
+  .selected-room-media-preview video,
+  .selected-room-media-preview-multiple img,
+  .selected-room-media-preview-multiple video {
+    max-width: 78px !important;
+    max-height: 78px !important;
+  }
+}
+
+.room-message-media-stable {
+  contain: layout paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  min-height: 92px;
+}
+
+.room-message-media-stable img,
+.room-message-media-stable video {
+  display: block;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
