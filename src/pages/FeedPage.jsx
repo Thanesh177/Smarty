@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   Bookmark,
   MessageCircle,
-  Sparkles,
+  Bot,
   Loader2,
 } from 'lucide-react';
 import { postApi, creatorApi } from '../api/client';
@@ -243,10 +243,16 @@ const FeedPostCard = memo(function FeedPostCard({
           className="post-topic clickable-topic"
           onClick={(event) => {
             event.stopPropagation();
-            onTopicClick(post.topic);
+            onTopicClick(
+              post.topic ||
+              post.category ||
+              post.roomName ||
+              post.subject ||
+              'Smarty'
+            );
           }}
         >
-          {post.topic || 'Smarty'}
+          {post.topic || post.category || post.roomName || post.subject || 'Smarty'}
         </button>
 
         <div className="post-author">
@@ -293,11 +299,7 @@ const FeedPostCard = memo(function FeedPostCard({
             title={isSaved ? 'Saved' : 'Save'}
             aria-label={isSaved ? 'Saved' : 'Save'}
           >
-            <Bookmark
-              size={18}
-              strokeWidth={2.2}
-              fill={isSaved ? 'currentColor' : 'none'}
-            />
+            <Bookmark size={16} strokeWidth={2.25} fill={isSaved ? 'currentColor' : 'none'} />
           </button>
 
 
@@ -313,7 +315,7 @@ const FeedPostCard = memo(function FeedPostCard({
               onComments(postId);
             }}
           >
-            <MessageCircle size={18} strokeWidth={2.2} />
+           <MessageCircle size={16} strokeWidth={2.25} />
           </button>
 
           <button
@@ -328,9 +330,9 @@ const FeedPostCard = memo(function FeedPostCard({
             disabled={isExplaining}
           >
             {isExplaining ? (
-              <Loader2 size={18} strokeWidth={2.2} className="spin-icon" />
+             <Loader2 size={16} strokeWidth={2.25} className="spin-icon" />
             ) : (
-              <Sparkles size={18} strokeWidth={2.2} />
+              <Bot size={16} strokeWidth={2.25} />
             )}
           </button>
 
@@ -384,6 +386,10 @@ const FeedPostCard = memo(function FeedPostCard({
             <p>{explanation}</p>
           </div>
         )}
+
+        <div className="post-learn-more-hint">
+          Click to learn more about this
+        </div>
       </div>
     </article>
   );
@@ -567,18 +573,42 @@ export default function FeedPage() {
     );
   }, [visiblePosts, topic]);
 
-  const topics = useMemo(() => {
-    const list = routeFilteredPosts.map((post) => post.topic).filter(Boolean);
-    return ['All', ...new Set(list)];
-  }, [routeFilteredPosts]);
+const topics = useMemo(() => {
+  const topicMap = new Map();
 
-  const filteredPosts = useMemo(() => {
-    if (selectedTopic === 'All') return routeFilteredPosts;
+  routeFilteredPosts.forEach((post) => {
+    const topicValue = String(
+      post.topic ||
+      post.category ||
+      post.roomName ||
+      post.subject ||
+      'Smarty'
+    ).trim();
 
-    return routeFilteredPosts.filter(
-      (post) => normalizeTopic(post.topic) === normalizeTopic(selectedTopic)
+    const key = normalizeTopic(topicValue);
+    if (!topicMap.has(key)) topicMap.set(key, topicValue);
+  });
+
+  return ['All', ...Array.from(topicMap.values())];
+}, [routeFilteredPosts]);
+
+const filteredPosts = useMemo(() => {
+  if (selectedTopic === 'All') return routeFilteredPosts;
+
+  const selected = normalizeTopic(selectedTopic);
+
+  return routeFilteredPosts.filter((post) => {
+    const topicValue = normalizeTopic(
+      post.topic ||
+      post.category ||
+      post.roomName ||
+      post.subject ||
+      'Smarty'
     );
-  }, [routeFilteredPosts, selectedTopic]);
+
+    return topicValue === selected;
+  });
+}, [routeFilteredPosts, selectedTopic]);
 
   const renderedFeedPosts = useMemo(
     () => filteredPosts.slice(0, renderLimit),
@@ -874,16 +904,28 @@ export default function FeedPage() {
   }, [explaining, simpleExplanations, showToast]);
 
 
-  const handleTopicSelect = useCallback((item) => {
-    setSelectedTopic(item);
-  }, []);
+const handleTopicSelect = useCallback((item) => {
+  const nextTopic = item || 'All';
 
-  const handleTopicClick = useCallback(
-    (postTopic) => {
-      if (postTopic) navigate(`/feed/${normalizeTopic(postTopic)}`);
-    },
-    [navigate]
-  );
+  setSelectedTopic(nextTopic);
+  setRenderLimit(INITIAL_RENDER_LIMIT);
+  restoredFeedPositionRef.current = true;
+
+  requestAnimationFrame(() => {
+    feedRef.current?.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  });
+}, []);
+
+const handleTopicClick = useCallback(
+  (postTopic) => {
+    if (!postTopic) return;
+    handleTopicSelect(postTopic);
+  },
+  [handleTopicSelect]
+);
 
   // REMOVED handleAiDetails callback block
 
@@ -955,7 +997,7 @@ export default function FeedPage() {
       <TopicPill
         key={item}
         item={item}
-        active={selectedTopic === item}
+        active={normalizeTopic(selectedTopic) === normalizeTopic(item)}
         onSelect={handleTopicSelect}
       />
     )),
@@ -1033,9 +1075,11 @@ export default function FeedPage() {
 
       {toast && <div className="success-toast">{toast}</div>}
 
-      <aside className="topic-rail">
-        {renderedTopics}
-      </aside>
+      <section className="topic-rail mobile-feed-topic-rail" aria-label="Feed topics">
+        <div className="mobile-topic-scroll" role="tablist" aria-label="Select feed topic">
+          {renderedTopics}
+        </div>
+      </section>
 
       {loading && filteredPosts.length === 0 && <FeedSkeleton />}
 

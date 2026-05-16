@@ -22,6 +22,32 @@ const isLongDetailedExplanation = (text) => {
   );
 };
 
+const renderFormattedParagraphs = (value, className = 'post-ai-paragraphs') => {
+  const text = String(value || '').trim();
+
+  if (!text) return null;
+
+  const paragraphs = text
+    .split(/\n{2,}|(?<=\.\s)(?=(Simple explanation|Why it matters|How it works|Real-life example|Final takeaway)\b)/g)
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .filter((part) => !['Simple explanation', 'Why it matters', 'How it works', 'Real-life example', 'Final takeaway'].includes(part));
+
+  return (
+    <div className={className}>
+      {paragraphs.map((paragraph, index) => {
+        const isHeading = /^(Simple explanation|Why it matters|How it works|Real-life example|Final takeaway)$/i.test(paragraph);
+
+        return isHeading ? (
+          <h3 key={`${paragraph}-${index}`}>{paragraph}</h3>
+        ) : (
+          <p key={`${paragraph.slice(0, 24)}-${index}`}>{paragraph}</p>
+        );
+      })}
+    </div>
+  );
+};
+
 const getUsableDetailedExplanation = (value) => {
   const text = getDetailedExplanation(value);
   return isLongDetailedExplanation(text) ? text : '';
@@ -30,7 +56,7 @@ const getUsableDetailedExplanation = (value) => {
 const PostAiMessage = memo(function PostAiMessage({ message }) {
   return (
     <div className={message.role === 'user' ? 'post-ai-msg mine' : 'post-ai-msg'}>
-      {message.text}
+      {renderFormattedParagraphs(message.text, 'post-ai-message-paragraphs')}
     </div>
   );
 });
@@ -270,7 +296,7 @@ export default function PostAiPage() {
         {body && (
           <article className="post-ai-original">
             <strong>Original Post</strong>
-            <p>{String(body || '')}</p>
+            {renderFormattedParagraphs(body, 'post-ai-original-paragraphs')}
           </article>
         )}
 
@@ -286,7 +312,10 @@ export default function PostAiPage() {
               <p>AI is explaining this post in detail...</p>
             </div>
           ) : (
-            <p>{String(displayExplanation || status || 'No explanation available yet.')}</p>
+            renderFormattedParagraphs(
+              displayExplanation || status || 'No explanation available yet.',
+              'post-ai-explanation-paragraphs'
+            )
           )}
 
           {status && <div className="post-ai-status">{status}</div>}

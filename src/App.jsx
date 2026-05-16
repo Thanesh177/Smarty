@@ -817,11 +817,17 @@ function Layout() {
 
             <div className="brand-actions">
 
-                            <NavLink
+              <NavLink
                 to="/feed"
                 className="quick-icon-link"
                 aria-label="Feed"
                 title="Feed"
+                onClick={(event) => {
+                  if (window.location.pathname === '/feed') {
+                    event.preventDefault();
+                    window.location.reload();
+                  }
+                }}
               >
                 <House size={20} strokeWidth={2.2} />
               </NavLink>
@@ -845,18 +851,6 @@ function Layout() {
                 <CircleUserRound size={21} strokeWidth={2.15} />
               </button>
 
-
-
-              <button
-                type="button"
-                className="quick-icon-link topbar-create-btn"
-                onClick={() => navigate('/create')}
-                aria-label="Create"
-                title="Create"
-              >
-                +
-              </button>
-
               <NavLink
                 to="/chat"
                 className="quick-icon-link"
@@ -868,6 +862,18 @@ function Layout() {
                   <span className="nav-badge">{totalUnread}</span>
                 )}
               </NavLink>
+
+              <button
+                type="button"
+                className="quick-icon-link topbar-create-btn"
+                onClick={() => navigate('/create')}
+                aria-label="Create"
+                title="Create"
+              >
+                +
+              </button>
+
+
 
               <NavbarMenu
                 user={user}

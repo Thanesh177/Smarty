@@ -90,7 +90,40 @@
 .post-ai-card p,
 .post-ai-empty {
   color: rgba(226, 232, 240, 0.78);
-  line-height: 1.7;
+  line-height: 1.78;
+}
+
+.post-ai-original-paragraphs,
+.post-ai-explanation-paragraphs,
+.post-ai-message-paragraphs {
+  display: grid;
+  gap: 16px;
+}
+
+.post-ai-original-paragraphs p,
+.post-ai-explanation-paragraphs p,
+.post-ai-message-paragraphs p {
+  margin: 0;
+  padding: 0;
+}
+
+.post-ai-original-paragraphs h3,
+.post-ai-explanation-paragraphs h3,
+.post-ai-message-paragraphs h3 {
+  margin: 10px 0 -2px;
+  color: #f8fafc;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.post-ai-explanation-paragraphs {
+  gap: 18px;
+}
+
+.post-ai-message-paragraphs {
+  gap: 12px;
 }
 
 .post-ai-original strong {
@@ -225,6 +258,15 @@
 
   .post-ai-form button {
     width: 100%;
+  }
+
+  .post-ai-original-paragraphs,
+  .post-ai-explanation-paragraphs {
+    gap: 14px;
+  }
+
+  .post-ai-message-paragraphs {
+    gap: 10px;
   }
 }
 

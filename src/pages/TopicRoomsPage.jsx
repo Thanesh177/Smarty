@@ -355,6 +355,38 @@ function normalizeRoomMessageMedia(message = {}) {
   };
 }
 
+// Merge two room messages, preserving media fields from the existing message if incoming has no media
+function mergeRoomMessagePreservingMedia(existingMessage = {}, incomingMessage = {}) {
+  const normalizedExisting = normalizeRoomMessageMedia(existingMessage);
+  const normalizedIncoming = normalizeRoomMessageMedia(incomingMessage);
+
+  const incomingHasMedia = Boolean(
+    normalizedIncoming.mediaUrl ||
+    normalizedIncoming.fileUrl ||
+    normalizedIncoming.mediaKey ||
+    normalizedIncoming.mediaType ||
+    normalizedIncoming.fileName ||
+    normalizedIncoming.mediaName
+  );
+
+  const merged = {
+    ...normalizedExisting,
+    ...normalizedIncoming,
+  };
+
+  if (!incomingHasMedia) {
+    merged.mediaKey = normalizedExisting.mediaKey || merged.mediaKey || '';
+    merged.mediaUrl = normalizedExisting.mediaUrl || merged.mediaUrl || '';
+    merged.fileUrl = normalizedExisting.fileUrl || normalizedExisting.mediaUrl || merged.fileUrl || '';
+    merged.mediaType = normalizedExisting.mediaType || merged.mediaType || '';
+    merged.contentType = normalizedExisting.contentType || merged.contentType || '';
+    merged.fileName = normalizedExisting.fileName || merged.fileName || '';
+    merged.mediaName = normalizedExisting.mediaName || normalizedExisting.fileName || merged.mediaName || '';
+  }
+
+  return normalizeRoomMessageMedia(merged);
+}
+
 function getShortRoomFileName(name = '') {
   const cleanName = String(name || 'Attachment').trim() || 'Attachment';
   if (cleanName.length <= 34) return cleanName;
@@ -1363,7 +1395,7 @@ const appendRoomMessage = useCallback((roomId, message, options = {}) => {
     ? trimRoomMessagesForMemory(
         existing.map((item) =>
           getStableRoomMessageKey(item) === messageKey
-            ? normalizeRoomMessageMedia({ ...item, ...normalizedMessage })
+            ? mergeRoomMessagePreservingMedia(item, normalizedMessage)
             : item
         )
       )
@@ -1376,9 +1408,9 @@ const appendRoomMessage = useCallback((roomId, message, options = {}) => {
 
   if (!shouldUpdateVisibleRoom) return;
 
-if (!shouldFollowMessage) {
-  shouldAutoScrollToNewestRef.current = false;
-}
+  if (!shouldFollowMessage) {
+    shouldAutoScrollToNewestRef.current = false;
+  }
 
   setMessages((prev) => {
     const existsInVisible = prev.some(
@@ -1388,7 +1420,7 @@ if (!shouldFollowMessage) {
     const nextMessages = existsInVisible
       ? prev.map((item) =>
           getStableRoomMessageKey(item) === messageKey
-            ? normalizeRoomMessageMedia({ ...item, ...normalizedMessage })
+            ? mergeRoomMessagePreservingMedia(item, normalizedMessage)
             : item
         )
       : [...prev, normalizedMessage];
@@ -2255,16 +2287,8 @@ async function approveJoinRequest(requestUserId) {
               const copy = [...prev];
               const existingMessage = copy[index] || {};
 
-              copy[index] = normalizeRoomMessageMedia({
-                ...existingMessage,
+              copy[index] = mergeRoomMessagePreservingMedia(existingMessage, {
                 ...msg,
-                mediaKey: msg.mediaKey || existingMessage.mediaKey || '',
-                mediaUrl: msg.mediaUrl || existingMessage.mediaUrl || existingMessage.fileUrl || '',
-                fileUrl: msg.fileUrl || msg.mediaUrl || existingMessage.fileUrl || existingMessage.mediaUrl || '',
-                mediaType: msg.mediaType || existingMessage.mediaType || '',
-                contentType: msg.contentType || existingMessage.contentType || '',
-                fileName: msg.fileName || existingMessage.fileName || existingMessage.mediaName || '',
-                mediaName: msg.mediaName || msg.fileName || existingMessage.mediaName || existingMessage.fileName || '',
                 pending: false,
                 failed: false,
               });
