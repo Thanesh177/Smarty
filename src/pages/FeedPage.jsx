@@ -1029,13 +1029,7 @@ export default function FeedPage() {
       className="snap-feed-page"
       style={{ overscrollBehaviorY: 'auto' }}
     >
-      <button
-        type="button"
-        className="floating-create-btn"
-        onClick={() => navigate('/create')}
-      >
-        +
-      </button>
+
 
       {toast && <div className="success-toast">{toast}</div>}
 

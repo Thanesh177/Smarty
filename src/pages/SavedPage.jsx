@@ -114,6 +114,19 @@ export default function SavedPage() {
         setLoading(true);
         setError('');
 
+        const hasToken = Boolean(
+          localStorage.getItem('eduscroll_access_token') ||
+          localStorage.getItem('accessToken') ||
+          localStorage.getItem('idToken') ||
+          sessionStorage.getItem('eduscroll_access_token')
+        );
+
+        if (!hasToken) {
+          setError('Please log in to view saved posts.');
+          setLoading(false);
+          return;
+        }
+
         const data = await postApi.getSavedReels();
         if (!mountedRef.current) return;
 

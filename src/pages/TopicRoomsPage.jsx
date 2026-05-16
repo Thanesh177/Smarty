@@ -28,11 +28,12 @@ const MAX_RENDERED_ROOMS = 250;
 const ROOM_IMAGE_EAGER_LIMIT = 2;
 const ROOM_IMAGE_RENDER_LIMIT = 10;
 const MAX_RENDERED_MEDIA_MESSAGES = 2600;
-const ROOM_MESSAGES_FETCH_LIMIT = 10;
-const ROOM_MESSAGES_REVEAL_STEP = 10;
+const ROOM_MESSAGES_FETCH_LIMIT = 40;
+const ROOM_MESSAGES_REVEAL_STEP = 20;
 
 const ROOM_INITIAL_VISIBLE_MESSAGES = 10;
 const ROOM_OLDER_MESSAGES_LAYOUT_STABILIZE_MS = 520;
+const ROOM_PAGE_DEFERRED_LOAD_MS = 450;
 
 
 const ROOM_MEDIA_IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|webp|gif|avif)(\?|#|$)/i;
@@ -563,6 +564,7 @@ export default function TopicRoomsPage() {
   const [hiddenRooms, setHiddenRooms] = useState([]);
   const [showHidden, setShowHidden] = useState(false);
   const [roomsLoading, setRoomsLoading] = useState(false);
+  const [initialRoomsReady, setInitialRoomsReady] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
   const [hasOlderMessages, setHasOlderMessages] = useState(true);
@@ -709,13 +711,7 @@ export default function TopicRoomsPage() {
       .slice(0, MAX_RENDERED_ROOMS);
   }, [rooms, roomPrivacyFilter, roomSearch]);
 
-const renderedMessages = useMemo(() => {
-  if (!Array.isArray(messages) || messages.length === 0) return [];
-
-  return sortRoomMessages(
-    dedupeMessages(messages.map(normalizeRoomMessageMedia))
-  );
-}, [messages]);
+const renderedMessages = messages;
 
   const activeRoomImageUrl = useMemo(
     () => getRoomImageUrl(activeRoom),
@@ -757,7 +753,14 @@ const renderedMessages = useMemo(() => {
       return;
     }
 
-    const selector = `[data-message-key="${CSS.escape(anchor.key)}"]`;
+    const safeMessageKey = String(anchor.key || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"');
+
+    const selector = `[data-message-key="${safeMessageKey}"]`;
+
+
+    
     const anchoredElement = container.querySelector(selector);
 
     if (!anchoredElement) {
@@ -783,7 +786,11 @@ const renderedMessages = useMemo(() => {
         return;
       }
 
-      const lateSelector = `[data-message-key="${CSS.escape(lateAnchor.key)}"]`;
+      const lateSafeMessageKey = String(lateAnchor.key || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"');
+
+      const lateSelector = `[data-message-key="${lateSafeMessageKey}"]`;
       const lateElement = lateContainer.querySelector(lateSelector);
 
       if (!lateElement) {
@@ -809,24 +816,15 @@ const renderedMessages = useMemo(() => {
     };
 
     const rafOne = window.requestAnimationFrame(restoreLateLayoutShift);
-    const rafTwo = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(restoreLateLayoutShift);
-    });
-    const timerOne = window.setTimeout(restoreLateLayoutShift, 80);
-    const timerTwo = window.setTimeout(restoreLateLayoutShift, 180);
-    const timerThree = window.setTimeout(restoreLateLayoutShift, 320);
-    const clearTimer = window.setTimeout(() => {
+
+    const timerOne = window.setTimeout(() => {
       restoreLateLayoutShift();
       olderScrollAnchorRef.current = null;
-    }, ROOM_OLDER_MESSAGES_LAYOUT_STABILIZE_MS);
+    }, 120);
 
     return () => {
       window.cancelAnimationFrame(rafOne);
-      window.cancelAnimationFrame(rafTwo);
       window.clearTimeout(timerOne);
-      window.clearTimeout(timerTwo);
-      window.clearTimeout(timerThree);
-      window.clearTimeout(clearTimer);
     };
   }, [renderedMessages.length]);
 
@@ -1520,7 +1518,10 @@ async function approveJoinRequest(requestUserId) {
       cached.rooms.length > 0 &&
       now - cached.timestamp < ROOM_LIST_CACHE_MS
     ) {
-      if (mountedRef.current) setRooms(cached.rooms);
+      if (mountedRef.current) {
+        setRooms(cached.rooms);
+        setInitialRoomsReady(true);
+      }
       return;
     }
 
@@ -1606,10 +1607,49 @@ async function approveJoinRequest(requestUserId) {
         rooms: visibleRooms,
       };
 
+      requestIdleCallback?.(async () => {
+  try {
+    const preloadRooms = visibleRooms.slice(0, 20);
+
+    await Promise.allSettled(
+      preloadRooms.map(async (room) => {
+        if (!room?.roomId) return;
+
+        if (roomMessagesCacheRef.current[room.roomId]?.length > 0) {
+          return;
+        }
+
+        try {
+          const data = await roomApi.getRoomMessages(room.roomId, {
+            limit: 5,
+          });
+
+          const messages = trimRoomMessagesForMemory(
+            getLoadedRoomMessages(data)
+          );
+
+          syncRoomMessageCache(room.roomId, messages);
+        } catch (err) {
+          console.error(
+            `PRELOAD ROOM MESSAGES ERROR (${room.roomId}):`,
+            err
+          );
+        }
+      })
+    );
+  } catch (err) {
+    console.error('ROOM MESSAGE PRELOAD ERROR:', err);
+  }
+});
+
       setRooms((prev) => (areRoomListsEqual(prev, visibleRooms) ? prev : visibleRooms));
+      setInitialRoomsReady(true);
     } catch (err) {
       console.error(err);
-      if (mountedRef.current) setStatus('Failed to load rooms');
+      if (mountedRef.current) {
+        setInitialRoomsReady(true);
+        setStatus('Failed to load rooms');
+      }
     } finally {
       roomsLoadingRef.current = false;
       roomsLoadInFlightKeyRef.current = '';
@@ -1725,21 +1765,50 @@ async function approveJoinRequest(requestUserId) {
 
   useEffect(() => {
     if (!userId) return;
-    if (initialRoomsLoadedForUserRef.current === userId) return;
 
-    initialRoomsLoadedForUserRef.current = userId;
-    loadRooms('', { force: true });
+    setInitialRoomsReady(false);
+    setRoomsLoading(true);
+
+    const cachedRooms = roomsCacheRef.current?.rooms || [];
+
+    if (Array.isArray(cachedRooms) && cachedRooms.length > 0) {
+      setRooms(cachedRooms);
+      setInitialRoomsReady(true);
+      setRoomsLoading(false);
+    }
+
+    const timerId = window.setTimeout(async () => {
+      if (!mountedRef.current) return;
+
+      try {
+        await loadRooms('', { force: true });
+        initialRoomsLoadedForUserRef.current = userId;
+      } catch (err) {
+        console.error('INITIAL ROOM LOAD ERROR:', err);
+        setInitialRoomsReady(true);
+      } finally {
+        if (mountedRef.current) {
+          setRoomsLoading(false);
+        }
+      }
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
   }, [userId]);
 
   useEffect(() => {
-    if (!userId) return undefined;
+    if (!userId || !initialRoomsReady) return undefined;
 
     const loadInitialInvites = () => loadRoomInvites(false);
+    let idleCallbackId = null;
+    let inviteTimerId = null;
 
     if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(loadInitialInvites, { timeout: 2500 });
+      idleCallbackId = window.requestIdleCallback(loadInitialInvites, { timeout: 3500 });
     } else {
-      window.setTimeout(loadInitialInvites, 800);
+      inviteTimerId = window.setTimeout(loadInitialInvites, ROOM_PAGE_DEFERRED_LOAD_MS);
     }
 
     const intervalId = window.setInterval(() => {
@@ -1757,135 +1826,148 @@ async function approveJoinRequest(requestUserId) {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      if (idleCallbackId && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+
+      if (inviteTimerId) {
+        window.clearTimeout(inviteTimerId);
+      }
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [userId]);
+  }, [userId, initialRoomsReady]);
 
   useEffect(() => {
-    if (!userId) return undefined;
+    if (!userId || !initialRoomsReady) return undefined;
 
-    const unsubscribe = connectChatSocket(userId, (data) => {
+    let unsubscribe = null;
+    const socketTimerId = window.setTimeout(() => {
       if (!mountedRef.current) return;
 
-      const msg = data?.message ? normalizeRoomMessageMedia(data.message) : null;
-      const current = activeRoomRef.current;
+      unsubscribe = connectChatSocket(userId, (data) => {
+        if (!mountedRef.current) return;
 
-      if (data.type === 'roomInvite' && data.invite) {
-        const invite = data.invite;
-        const inviteRoomId = getRoomInviteRoomId(invite);
+        const msg = data?.message ? normalizeRoomMessageMedia(data.message) : null;
+        const current = activeRoomRef.current;
 
-        if (inviteRoomId) {
-          setRoomInvites((prev) => {
-            if (prev.some((item) => getRoomInviteRoomId(item) === inviteRoomId)) {
-              return prev;
-            }
+        if (data.type === 'roomInvite' && data.invite) {
+          const invite = data.invite;
+          const inviteRoomId = getRoomInviteRoomId(invite);
 
-            return [invite, ...prev];
-          });
+          if (inviteRoomId) {
+            setRoomInvites((prev) => {
+              if (prev.some((item) => getRoomInviteRoomId(item) === inviteRoomId)) {
+                return prev;
+              }
+
+              return [invite, ...prev];
+            });
+          }
+
+          return;
         }
 
-        return;
-      }
+        if (!msg) return;
 
-      if (!msg) return;
+        if (data.type === 'messageAck') {
+          if (!msg.clientId) return;
 
-      if (data.type === 'messageAck') {
-        if (!msg.clientId) return;
-
-        setMessages((prev) => {
-          const index = prev.findIndex(
-            (m) =>
-              m.clientId === msg.clientId ||
-              m.messageId === msg.clientId ||
-              (msg.messageId && m.messageId === msg.messageId)
-          );
-
-          let nextMessages = prev;
-
-          if (index === -1) {
-            const alreadyExists = prev.some(
+          setMessages((prev) => {
+            const index = prev.findIndex(
               (m) =>
-                (msg.messageId && m.messageId === msg.messageId) ||
-                (msg.clientId && m.clientId === msg.clientId)
+                m.clientId === msg.clientId ||
+                m.messageId === msg.clientId ||
+                (msg.messageId && m.messageId === msg.messageId)
             );
 
-            nextMessages = alreadyExists
-              ? prev
-              : trimRoomMessagesForMemory([
-                  ...prev,
-                  normalizeRoomMessageMedia({ ...msg, pending: false, failed: false }),
-                ]);
-          } else {
-            const copy = [...prev];
-            const existingMessage = copy[index] || {};
+            let nextMessages = prev;
 
-            copy[index] = normalizeRoomMessageMedia({
-              ...existingMessage,
-              ...msg,
-              mediaKey: msg.mediaKey || existingMessage.mediaKey || '',
-              mediaUrl: msg.mediaUrl || existingMessage.mediaUrl || existingMessage.fileUrl || '',
-              fileUrl: msg.fileUrl || msg.mediaUrl || existingMessage.fileUrl || existingMessage.mediaUrl || '',
-              mediaType: msg.mediaType || existingMessage.mediaType || '',
-              contentType: msg.contentType || existingMessage.contentType || '',
-              fileName: msg.fileName || existingMessage.fileName || existingMessage.mediaName || '',
-              mediaName: msg.mediaName || msg.fileName || existingMessage.mediaName || existingMessage.fileName || '',
-              pending: false,
-              failed: false,
-            });
+            if (index === -1) {
+              const alreadyExists = prev.some(
+                (m) =>
+                  (msg.messageId && m.messageId === msg.messageId) ||
+                  (msg.clientId && m.clientId === msg.clientId)
+              );
 
-            nextMessages = trimRoomMessagesForMemory(copy);
+              nextMessages = alreadyExists
+                ? prev
+                : trimRoomMessagesForMemory([
+                    ...prev,
+                    normalizeRoomMessageMedia({ ...msg, pending: false, failed: false }),
+                  ]);
+            } else {
+              const copy = [...prev];
+              const existingMessage = copy[index] || {};
+
+              copy[index] = normalizeRoomMessageMedia({
+                ...existingMessage,
+                ...msg,
+                mediaKey: msg.mediaKey || existingMessage.mediaKey || '',
+                mediaUrl: msg.mediaUrl || existingMessage.mediaUrl || existingMessage.fileUrl || '',
+                fileUrl: msg.fileUrl || msg.mediaUrl || existingMessage.fileUrl || existingMessage.mediaUrl || '',
+                mediaType: msg.mediaType || existingMessage.mediaType || '',
+                contentType: msg.contentType || existingMessage.contentType || '',
+                fileName: msg.fileName || existingMessage.fileName || existingMessage.mediaName || '',
+                mediaName: msg.mediaName || msg.fileName || existingMessage.mediaName || existingMessage.fileName || '',
+                pending: false,
+                failed: false,
+              });
+
+              nextMessages = trimRoomMessagesForMemory(copy);
+            }
+
+            if (current?.roomId) {
+              syncRoomMessageCache(current.roomId, nextMessages);
+            }
+
+            return nextMessages;
+          });
+
+          return;
+        }
+
+        if (data.type !== 'roomMessage') return;
+        if (msg.senderId === userId && msg.clientId) return;
+
+        if (!current || msg.roomId !== current.roomId) {
+          if (msg.senderId !== userId && msg.roomId) {
+            setRoomUnreadCounts((prev) => ({
+              ...prev,
+              [msg.roomId]: Number(prev[msg.roomId] || 0) + 1,
+            }));
           }
 
-          if (current?.roomId) {
-            syncRoomMessageCache(current.roomId, nextMessages);
+          return;
+        }
+
+        setMessages((prev) => {
+          const key = msg.messageId || msg.clientId;
+          if (!key) return prev;
+
+          if (
+            prev.some(
+              (m) =>
+                m.messageId === msg.messageId ||
+                m.clientId === msg.clientId ||
+                (m.messageId || m.clientId) === key
+            )
+          ) {
+            return prev;
           }
 
+          const nextMessages = trimRoomMessagesForMemory([...prev, normalizeRoomMessageMedia(msg)]);
+          syncRoomMessageCache(msg.roomId, nextMessages);
           return nextMessages;
         });
-
-        return;
-      }
-
-      if (data.type !== 'roomMessage') return;
-      if (msg.senderId === userId && msg.clientId) return;
-
-      if (!current || msg.roomId !== current.roomId) {
-        if (msg.senderId !== userId && msg.roomId) {
-          setRoomUnreadCounts((prev) => ({
-            ...prev,
-            [msg.roomId]: Number(prev[msg.roomId] || 0) + 1,
-          }));
-        }
-
-        return;
-      }
-
-      setMessages((prev) => {
-        const key = msg.messageId || msg.clientId;
-        if (!key) return prev;
-
-        if (
-          prev.some(
-            (m) =>
-              m.messageId === msg.messageId ||
-              m.clientId === msg.clientId ||
-              (m.messageId || m.clientId) === key
-          )
-        ) {
-          return prev;
-        }
-
-        const nextMessages = trimRoomMessagesForMemory([...prev, normalizeRoomMessageMedia(msg)]);
-        syncRoomMessageCache(msg.roomId, nextMessages);
-        return nextMessages;
       });
-    });
+    }, ROOM_PAGE_DEFERRED_LOAD_MS);
 
     return () => {
+      window.clearTimeout(socketTimerId);
       if (typeof unsubscribe === 'function') unsubscribe();
     };
-  }, [userId]);
+  }, [initialRoomsReady, userId]);
 
   async function createRoom(e) {
     e.preventDefault();
@@ -2017,8 +2099,25 @@ async function approveJoinRequest(requestUserId) {
         const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId, { limit: ROOM_MESSAGES_FETCH_LIMIT });
 
         if (mountedRef.current) {
-          setMessages(getLoadedRoomMessages(messageData));
-        }
+  const loadedMessages = trimRoomMessagesForMemory(
+    getLoadedRoomMessages(messageData)
+  );
+
+syncRoomMessageCache(finalCreatedRoom.roomId, loadedMessages);
+
+  const visibleMessages = loadedMessages.slice(
+    -Math.max(ROOM_INITIAL_VISIBLE_MESSAGES, ROOM_MESSAGES_FETCH_LIMIT)
+  );
+
+  setMessages(visibleMessages);
+  setHasOlderMessages(loadedMessages.length > visibleMessages.length);
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      scrollMessagesToBottom('auto');
+    });
+  });
+}
       } catch (messageErr) {
         console.error('Could not load new room messages:', messageErr);
       } finally {
@@ -2760,74 +2859,121 @@ async function saveEditRoom(e) {
     setNewRoomImagePreview('');
   }
 
-  async function openRoom(room) {
-    if (!room?.roomId || loadingRoomRef.current) return;
+async function openRoom(room) {
+  if (!room?.roomId) return;
 
-    if (activeRoomRef.current?.roomId === room.roomId) {
-      setMobileChatOpen(true);
-      return;
-    }
+  const requestId = Date.now();
+  roomOpenRequestIdRef.current = requestId;
 
-    loadingRoomRef.current = true;
+  if (activeRoomRef.current?.roomId === room.roomId) {
+    setMobileChatOpen(true);
 
-    try {
-      setStatus('');
-      setOpenRoomActionMenuId('');
-      setShowActiveRoomMenu(false);
-      setShowActiveRoomInfo(false);
-      setActiveInfoSection('');
-      setShowRoomMediaGrid(false);
-      const cachedMessages = (roomMessagesCacheRef.current[room.roomId] || []).slice(-ROOM_INITIAL_VISIBLE_MESSAGES);
-
-      setMobileChatOpen(true);
-      setActiveRoom(room);
-      activeRoomRef.current = room;
-      initialRoomScrollDoneRef.current = room.roomId;
-      setMessages(cachedMessages);
+    requestAnimationFrame(() => {
       jumpMessagesToBottomOnce();
-      setMessagesLoading(cachedMessages.length === 0);
+    });
 
-      setHasOlderMessages(true);
-      setOlderMessagesLoading(false);
-      olderMessagesLoadingRef.current = false;
+    return;
+  }
 
-      setRoomUnreadCounts((prev) => ({
-        ...prev,
-        [room.roomId]: 0,
-      }));
+  loadingRoomRef.current = true;
 
-      const data = await roomApi.getRoomMessages(room.roomId, { limit: ROOM_MESSAGES_FETCH_LIMIT });
+  try {
+    setStatus('');
+    setOpenRoomActionMenuId('');
+    setShowActiveRoomMenu(false);
+    setShowActiveRoomInfo(false);
+    setActiveInfoSection('');
+    setShowRoomMediaGrid(false);
 
-      if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) return;
+    const cachedMessages =
+      roomMessagesCacheRef.current[room.roomId] || [];
 
-      const loadedRoomMessages = getLoadedRoomMessages(data);
-      const initialVisibleMessages = loadedRoomMessages.slice(
-        -Math.max(ROOM_INITIAL_VISIBLE_MESSAGES, ROOM_MESSAGES_FETCH_LIMIT)
-      );
+    const visibleCachedMessages = cachedMessages.slice(
+      -Math.max(
+        ROOM_INITIAL_VISIBLE_MESSAGES,
+        ROOM_MESSAGES_FETCH_LIMIT
+      )
+    );
 
-      syncRoomMessageCache(room.roomId, loadedRoomMessages);
-      setMessages(initialVisibleMessages);
-      setHasOlderMessages(loadedRoomMessages.length > ROOM_INITIAL_VISIBLE_MESSAGES);
-      setMessagesLoading(false);
+    setMobileChatOpen(true);
+    setActiveRoom(room);
+    activeRoomRef.current = room;
 
+    initialRoomScrollDoneRef.current = room.roomId;
+
+    setMessages(visibleCachedMessages);
+
+    setHasOlderMessages(
+      cachedMessages.length > visibleCachedMessages.length
+    );
+
+    setOlderMessagesLoading(false);
+    olderMessagesLoadingRef.current = false;
+
+    setMessagesLoading(visibleCachedMessages.length === 0);
+
+    setRoomUnreadCounts((prev) => ({
+      ...prev,
+      [room.roomId]: 0,
+    }));
+
+    requestAnimationFrame(() => {
+      jumpMessagesToBottomOnce();
+    });
+
+    const data = await roomApi.getRoomMessages(room.roomId, {
+      limit: ROOM_MESSAGES_FETCH_LIMIT,
+    });
+
+    if (!mountedRef.current) return;
+
+    if (roomOpenRequestIdRef.current !== requestId) return;
+
+    if (activeRoomRef.current?.roomId !== room.roomId) return;
+
+    const loadedMessages = trimRoomMessagesForMemory(
+      getLoadedRoomMessages(data)
+    );
+
+    syncRoomMessageCache(room.roomId, loadedMessages);
+
+    const visibleMessages = loadedMessages.slice(
+      -Math.max(
+        ROOM_INITIAL_VISIBLE_MESSAGES,
+        ROOM_MESSAGES_FETCH_LIMIT
+      )
+    );
+
+    setMessages(visibleMessages);
+
+    setHasOlderMessages(
+      loadedMessages.length > visibleMessages.length
+    );
+
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        jumpMessagesToBottomOnce();
+        scrollMessagesToBottom('auto');
       });
-    } catch (err) {
-      console.error(err);
+    });
+  } catch (err) {
+    console.error(err);
 
-      if (mountedRef.current) {
-        setActiveRoom(null);
-        activeRoomRef.current = null;
-        setMessages([]);
-        setMobileChatOpen(false);
-        setStatus(err?.response?.data?.error || 'Could not open room');
-      }
-    } finally {
-      loadingRoomRef.current = false;
-      if (mountedRef.current) setMessagesLoading(false);
+    if (!mountedRef.current) return;
+
+    if (roomOpenRequestIdRef.current !== requestId) return;
+
+    setStatus(
+      err?.response?.data?.error ||
+      'Could not open room'
+    );
+  } finally {
+    loadingRoomRef.current = false;
+
+    if (mountedRef.current) {
+      setMessagesLoading(false);
     }
   }
+}
 
   async function openMembers(room) {
     if (!room?.roomId) return;
@@ -3883,11 +4029,15 @@ onScroll={(event) => {
   setShowScrollToBottom(distanceFromBottom > 220);
 }}
 >
-  {olderMessagesLoading && (
-    <p className="older-messages-loading">Loading older messages...</p>
-  )}
-           {messagesLoading && renderedMessages.length === 0 ? (
-  <div className="room-loading-shell">
+{olderMessagesLoading && (
+  <div className="older-messages-loading">
+    <span className="older-messages-loading-dot" />
+    <span>Loading earlier messages</span>
+  </div>
+)}
+
+{messagesLoading && renderedMessages.length === 0 ? (
+  <div className="room-loading-shell" aria-label="Loading messages">
     <div className="room-loading-bubble" />
     <div className="room-loading-bubble mine" />
     <div className="room-loading-bubble short" />
@@ -4014,10 +4164,11 @@ className={msg.senderId === userId ? 'msg mine' : 'msg'}
                         <img src={item.preview} alt="Preview" />
                       ) : item.mediaType === 'video' ? (
                         <video
+                          preload="metadata"
+                          playsInline
                           src={item.preview}
                           muted
                           playsInline
-                          preload="metadata"
                           controls={false}
                         />
                       ) : (

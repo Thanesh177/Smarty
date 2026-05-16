@@ -1,6 +1,7 @@
 import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef, lazy, Suspense, Component } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { signInWithRedirect } from 'aws-amplify/auth';
 import NavbarMenu from './components/NavbarMenu';
 import { notificationApi, chatApi, getPendingRoomInvite } from './api/client';
 import {
@@ -48,6 +49,28 @@ const BookReaderPage = lazy(() => import('./pages/BookReaderPage'));
 const PostAiPage = lazy(() => import('./pages/PostAiPage'));
 
 const GLOBAL_PULL_REFRESH_RATIO = 0.4;
+
+function hasStoredAuthToken() {
+  return Boolean(
+    localStorage.getItem('eduscroll_access_token') ||
+    localStorage.getItem('accessToken') ||
+    localStorage.getItem('idToken') ||
+    sessionStorage.getItem('eduscroll_access_token')
+  );
+}
+
+async function startGoogleProfileSignIn() {
+  try {
+    sessionStorage.setItem('smarty-post-login-redirect', '/profile');
+    localStorage.setItem('smarty-post-login-redirect', '/profile');
+
+    await signInWithRedirect({
+      provider: 'Google',
+    });
+  } catch (error) {
+    console.error('Google sign-in failed:', error);
+  }
+}
 
 function PageLoader() {
   return (
@@ -99,12 +122,21 @@ class RouteErrorBoundary extends Component {
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
+  const shouldGoogleSignIn = location.pathname === '/profile' || location.pathname.startsWith('/profile/');
+  const hasToken = hasStoredAuthToken();
+  const isReallyAuthenticated = Boolean(user && hasToken);
 
-  if (loading) {
+  useEffect(() => {
+    if (loading || isReallyAuthenticated || !shouldGoogleSignIn) return;
+
+    startGoogleProfileSignIn();
+  }, [loading, isReallyAuthenticated, shouldGoogleSignIn]);
+
+  if (loading || (!isReallyAuthenticated && shouldGoogleSignIn)) {
     return <PageLoader />;
   }
 
-  return user ? children : <Navigate to="/login" replace state={{ from: location }} />;
+  return isReallyAuthenticated ? children : <Navigate to="/login" replace state={{ from: location }} />;
 }
 
 function getUserSocketId(user) {
@@ -167,6 +199,25 @@ function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const hideNavPaths = [
+    '/chat',
+    '/quiz',
+    '/booksinfo',
+    '/bookinfo',
+    '/news',
+    '/read-books',
+    '/preview-books',
+    '/read-book',
+    '/rooms',
+  ];
+
+  const shouldHideAppNav =
+    hideNavPaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`)) ||
+    location.pathname.includes('/chat') ||
+    location.pathname.includes('/topic-room') ||
+    location.pathname.includes('/topicrooms');
+
+
   useEffect(() => {
     const handleUnhandledError = (event) => {
       console.error('Unhandled app error:', event.error || event.reason || event);
@@ -197,6 +248,7 @@ function Layout() {
   const globalPullDistanceRef = useRef(0);
   const globalPullAtTopRef = useRef(false);
   const globalPullTriggeredRef = useRef(false);
+  const routeReadyTimerRef = useRef(null);
 
   const isAuthPage =
     location.pathname === '/login' ||
@@ -350,6 +402,54 @@ function Layout() {
       window.removeEventListener('touchend', handleTouchEnd);
     };
   }, [goBack]);
+
+  useEffect(() => {
+    const contentElement = document.querySelector('.content');
+    const appShell = document.querySelector('.app-shell');
+
+    if (contentElement) {
+      contentElement.style.overflowY = 'auto';
+      contentElement.style.overflowX = 'hidden';
+      contentElement.style.webkitOverflowScrolling = 'touch';
+      contentElement.style.touchAction = 'pan-y';
+      contentElement.style.pointerEvents = 'auto';
+      contentElement.style.height = '100%';
+      contentElement.style.minHeight = '0';
+      contentElement.scrollTop = contentElement.scrollTop;
+    }
+
+    if (appShell) {
+      appShell.style.overflow = 'hidden';
+      appShell.style.minHeight = '0';
+    }
+
+    if (routeReadyTimerRef.current) {
+      window.clearTimeout(routeReadyTimerRef.current);
+    }
+
+    routeReadyTimerRef.current = window.setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+      document.body.classList.remove('route-loading-lock');
+
+      const refreshedContent = document.querySelector('.content');
+
+      if (refreshedContent) {
+        refreshedContent.style.overflowY = 'auto';
+        refreshedContent.style.overflowX = 'hidden';
+        refreshedContent.style.webkitOverflowScrolling = 'touch';
+        refreshedContent.style.pointerEvents = 'auto';
+        refreshedContent.style.touchAction = 'pan-y';
+        refreshedContent.style.height = '100%';
+        refreshedContent.style.minHeight = '0';
+      }
+    }, 120);
+
+    return () => {
+      if (routeReadyTimerRef.current) {
+        window.clearTimeout(routeReadyTimerRef.current);
+      }
+    };
+  }, [location.pathname]);
 
   // Global chat badge: works even when user is not on Chat page
   useEffect(() => {
@@ -627,7 +727,8 @@ function Layout() {
       {!isAuthPage && <InstallPrompt />}
 
       <div className="app-shell">
-        <header className="topbar glass-topbar">
+        {!shouldHideAppNav && (
+          <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
               to="/feed"
@@ -644,15 +745,14 @@ function Layout() {
                 aria-hidden="true"
                 style={{
                   position: 'relative',
-                  width: '46px',
-                  height: '46px',
-                  borderRadius: '12px',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '11px',
                   display: 'grid',
                   placeItems: 'center',
                   overflow: 'hidden',
                   background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(241,245,249,0.94))',
-                  border: '1px solid rgba(255,255,255,0.95)',
-                  boxShadow: '5px 5px 5px rgba(255, 255, 255, 0.54), 0 4px 10px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.9)',
+
                   backdropFilter: 'blur(12px)',
                   WebkitBackdropFilter: 'blur(12px)',
                 }}
@@ -670,7 +770,6 @@ function Layout() {
                     position: 'absolute',
                     inset: '1px',
                     borderRadius: '17px',
-                    background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95))',
                   }}
                 />
 
@@ -678,17 +777,16 @@ function Layout() {
                   style={{
                     position: 'relative',
                     zIndex: 2,
-                    width: '38px',
-                    height: '38px',
-                    borderRadius: '14px',
+                    width: '34px',
+                    height: '34px',
+                    borderRadius: '12px',
                     display: 'grid',
                     placeItems: 'center',
-                    background: 'linear-gradient(145deg, rgba(240,249,255,0.95), rgba(255,255,255,0.92))',
-                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95)',
+                    background: 'transparent',
                   }}
                 >
                   <BrainCircuit
-                    size={22}
+                    size={19}
                     strokeWidth={2.5}
                     color="#0f172a"
                     style={{
@@ -697,22 +795,38 @@ function Layout() {
                   />
                 </div>
               </div>
-
-              <div>
-                <h1>Smarty</h1>
-                <p>Learn while you scroll</p>
-              </div>
             </NavLink>
 
             <div className="brand-actions">
-              <NavLink
-                to="/profile"
+              <button
+                type="button"
                 className="quick-icon-link"
-                aria-label="Profile"
-                title="Profile"
+                aria-label={user ? 'Profile' : 'Sign in with Google'}
+                title={user ? 'Profile' : 'Sign in with Google'}
+                onClick={async (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+
+                  if (user && hasStoredAuthToken()) {
+                    navigate('/profile');
+                    return;
+                  }
+
+                  await startGoogleProfileSignIn();
+                }}
               >
                 <CircleUserRound size={21} strokeWidth={2.15} />
-              </NavLink>
+              </button>
+
+              <button
+                type="button"
+                className="quick-icon-link topbar-create-btn"
+                onClick={() => navigate('/create')}
+                aria-label="Create"
+                title="Create"
+              >
+                +
+              </button>
 
               <NavLink
                 to="/chat"
@@ -733,14 +847,25 @@ function Layout() {
               />
             </div>
           </div>
-        </header>
+          </header>
+        )}
 
         <main
-          className="content"
+          className={`content ${shouldHideAppNav ? 'nav-hidden-page' : ''}`}
           onTouchStart={handleGlobalPullStart}
           onTouchMove={handleGlobalPullMove}
           onTouchEnd={handleGlobalPullEnd}
           onTouchCancel={resetGlobalPullRefresh}
+          style={{
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-y',
+            pointerEvents: 'auto',
+            paddingTop: 0,
+            paddingBottom: location.pathname.startsWith('/feed') || shouldHideAppNav ? 0 : '84px',
+            scrollPaddingTop: 0,
+            scrollPaddingBottom: location.pathname.startsWith('/feed') || shouldHideAppNav ? 0 : '84px',
+          }}
         >
           {(globalPullDistance > 0 || globalRefreshing) && (
             <div
@@ -1095,6 +1220,275 @@ function ReminderPopupStyles() {
           width: 100%;
         }
       }
+
+      /* --- Compact/minimal topbar styles --- */
+      .topbar-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        width: 100%;
+        min-height: 64px;
+        background: transparent !important;
+      }
+
+      .topbar {
+        position: fixed !important;
+        top: auto !important;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 3000;
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+        background: transparent !important;
+        box-shadow: none !important;
+        border: 0 !important;
+        pointer-events: none;
+      }
+
+      .topbar-row,
+      .brand-logo,
+      .brand-actions,
+      .quick-icon-link,
+      .navbar-menu,
+      .hamburger-btn {
+        pointer-events: auto;
+        
+      }
+
+      .content {
+        padding-top: 0 !important;
+        padding-bottom: 84px !important;
+        scroll-padding-top: 0 !important;
+        scroll-padding-bottom: 84px;
+      }
+
+      .glass-topbar {
+        background: transparent !important;
+        border-bottom: 0 !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+
+      .topbar::before,
+      .topbar::after,
+      .glass-topbar::before,
+      .glass-topbar::after {
+        display: none !important;
+        content: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        border: 0 !important;
+      }
+
+      .brand-logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        text-decoration: none;
+      }
+
+      .brand-logo h1 {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.05;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+      }
+
+      .brand-logo p {
+        margin: 2px 0 0;
+        font-size: 0.68rem;
+        line-height: 1.1;
+        opacity: 0.72;
+      }
+
+      .brand-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-shrink: 0;
+        margin-left: auto;
+        color: rgba(248, 250, 252, 0.92);
+      }
+
+      .quick-icon-link,
+      button.quick-icon-link,
+      a.quick-icon-link {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        border-radius: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(2, 6, 23, 0.9) !important;
+        border: 1px solid rgba(15, 23, 42, 0.95) !important;
+        box-shadow: 0 12px 26px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+        color: rgba(248, 250, 252, 0.96) !important;
+        padding: 0;
+        cursor: pointer;
+        text-decoration: none;
+        position: relative;
+        flex-shrink: 0;
+        transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+      }
+
+      .quick-icon-link:hover,
+      button.quick-icon-link:hover,
+      a.quick-icon-link:hover {
+        background: rgba(15, 23, 42, 0.98) !important;
+        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+        transform: translateY(-1px);
+      }
+
+      .quick-icon-link svg {
+        color: rgba(248, 250, 252, 0.96);
+        stroke: currentColor;
+      }
+
+      .topbar-create-btn {
+        font-size: 1.45rem;
+        font-weight: 700;
+        line-height: 1;
+        color: rgba(248, 250, 252, 0.96);
+      }
+
+
+      .nav-badge {
+        top: -2px;
+        right: -1px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .content {
+        padding-top: 0 !important;
+        padding-bottom: 84px !important;
+        scroll-padding-top: 0 !important;
+        scroll-padding-bottom: 84px;
+      }
+
+      @media (max-width: 640px) {
+        .topbar {
+          padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+          background: transparent !important;
+          box-shadow: none !important;
+          border: 0 !important;
+        }
+
+        .topbar-row {
+          min-height: 58px;
+          gap: 8px;
+        }
+
+        .brand-logo {
+          gap: 8px;
+        }
+
+        .brand-logo h1 {
+          font-size: 0.96rem;
+        }
+
+        .brand-logo p {
+          font-size: 0.64rem;
+        }
+
+        .quick-icon-link,
+        button.quick-icon-link,
+        a.quick-icon-link {
+          width: 38px;
+          height: 38px;
+          min-width: 38px;
+          border-radius: 12px;
+          background: rgba(2, 6, 23, 0.92) !important;
+          border: 1px solid rgba(15, 23, 42, 0.95) !important;
+          box-shadow: 0 12px 26px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+          color: rgba(248, 250, 252, 0.96) !important;
+        }
+
+        .brand-actions {
+          gap: 8px;
+        }
+
+        .topbar-create-btn {
+          font-size: 1.45rem;
+        }
+      }
+
+      html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior-y: none;
+  touch-action: pan-y;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+      body.route-loading-lock {
+        overflow: auto !important;
+      }
+
+      .content {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  padding-top: 0 !important;
+  padding-bottom: 84px !important;
+  scroll-padding-top: 0 !important;
+  scroll-padding-bottom: 84px;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  position: relative;
+  display: block;
+}
+
+      .content:has(.snap-feed-page) {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        scroll-padding-top: 0 !important;
+        scroll-padding-bottom: 0 !important;
+      }
+
+      .content:has(.snap-feed-page) .snap-feed-page {
+        min-height: 100dvh;
+        height: 100dvh;
+      }
+        
+      main.content.nav-hidden-page,
+.app-shell main.content.nav-hidden-page,
+.content.nav-hidden-page {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  scroll-padding-top: 0 !important;
+  scroll-padding-bottom: 0 !important;
+}
     `}</style>
   );
 }

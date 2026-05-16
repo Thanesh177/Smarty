@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,8 +15,37 @@ export default function LoginPage() {
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get('google') !== '1') {
+      return;
+    }
+
+    const startGoogleRedirect = async () => {
+      try {
+        const redirectTarget = from === '/login' ? '/profile' : from;
+        sessionStorage.setItem('smarty-post-login-redirect', redirectTarget);
+        localStorage.setItem('smarty-post-login-redirect', redirectTarget);
+
+        if (isAndroidCognitoLogin()) {
+          startAndroidGoogleLogin();
+          return;
+        }
+
+        await signInWithRedirect({
+          provider: 'Google',
+        });
+      } catch (error) {
+        console.error('Automatic Google login failed:', error);
+      }
+    };
+
+    startGoogleRedirect();
+  }, [from]);
+
   if (loading) return <p className="status">Loading...</p>;
-  if (user) return <Navigate to={from} replace />;
+  if (user) return <Navigate to={from === '/login' ? '/profile' : from} replace />;
 
   const handleGoogleLogin = async () => {
     setError('');
@@ -25,8 +54,9 @@ export default function LoginPage() {
     setSubmitting(true);
 
     try {
-      sessionStorage.setItem('smarty-post-login-redirect', from);
-      localStorage.setItem('smarty-post-login-redirect', from);
+      const redirectTarget = from === '/login' ? '/profile' : from;
+      sessionStorage.setItem('smarty-post-login-redirect', redirectTarget);
+      localStorage.setItem('smarty-post-login-redirect', redirectTarget);
 
       if (isAndroidCognitoLogin()) {
         startAndroidGoogleLogin();
@@ -157,6 +187,7 @@ export default function LoginPage() {
           <button
             type="button"
             className="google-login-btn"
+            data-google-login-button
             disabled={submitting}
             onClick={handleGoogleLogin}
           >
