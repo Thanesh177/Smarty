@@ -207,15 +207,52 @@
             root.innerText &&
             root.innerText.includes('Loading your feed')
           ) {
-            root.innerHTML =
-              '<div style="min-height:100vh;display:grid;place-items:center;background:#020617;color:white;font-family:Inter,system-ui;padding:24px;text-align:center;">' +
-              '<div style="max-width:320px">' +
-              '<div style="width:54px;height:54px;border-radius:999px;margin:0 auto 18px;background:radial-gradient(circle,#67e8f9,#0f172a 72%);box-shadow:0 0 40px rgba(34,211,238,.35)"></div>' +
-              '<h2 style="margin:0 0 10px;font-size:1.1rem;letter-spacing:-0.04em">Smarty could not fully open</h2>' +
-              '<p style="margin:0 0 18px;color:rgba(226,232,240,.7);line-height:1.6">This browser may be blocking modern app features. Try reloading or opening in Chrome/Safari.</p>' +
-              '<button onclick="window.location.reload()" style="border:0;background:#22d3ee;color:#020617;padding:12px 18px;border-radius:999px;font-weight:800;cursor:pointer">Reload Smarty</button>' +
-              '</div>' +
-              '</div>';
+            window.__SMARTY_SHOW_BOOT_ERROR__ = function () {
+              var currentUrl = window.location.href;
+              var openExternal = function () {
+                try {
+                  if (/Android/i.test(navigator.userAgent)) {
+                    window.location.href = 'intent://' + currentUrl.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
+                    return;
+                  }
+
+                  window.open(currentUrl, '_blank', 'noopener,noreferrer');
+                } catch (e) {
+                  window.location.href = currentUrl;
+                }
+              };
+
+              root.innerHTML =
+                '<div style="min-height:100vh;display:grid;place-items:center;background:#020617;color:white;font-family:Inter,system-ui;padding:24px;text-align:center;">' +
+                '<div style="max-width:340px;padding:26px 20px;border-radius:28px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));box-shadow:0 20px 70px rgba(0,0,0,.45)">' +
+                '<div style="width:52px;height:52px;border-radius:999px;margin:0 auto 18px;background:conic-gradient(from 0deg,transparent 0 58%,#22d3ee 72%,transparent 86% 100%);box-shadow:0 0 38px rgba(34,211,238,.32)"></div>' +
+                '<h2 style="margin:0 0 10px;font-size:1.1rem;letter-spacing:-0.04em">Smarty could not fully open</h2>' +
+                '<p style="margin:0 0 18px;color:rgba(226,232,240,.72);line-height:1.6;font-size:.9rem">This in-app browser may be blocking modern app features.</p>' +
+                '<div style="display:grid;gap:10px">' +
+                '<button id="smarty-reload-btn" style="width:100%;border:0;background:#22d3ee;color:#020617;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Reload Smarty</button>' +
+                '<button id="smarty-open-browser-btn" style="width:100%;border:1px solid rgba(103,232,249,.18);background:rgba(255,255,255,.04);color:#cffafe;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Open in browser</button>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
+
+              setTimeout(function () {
+                var reloadButton = document.getElementById('smarty-reload-btn');
+                var browserButton = document.getElementById('smarty-open-browser-btn');
+
+                if (reloadButton) {
+                  reloadButton.onclick = function () {
+                    window.location.reload();
+                  };
+                }
+
+                if (browserButton) {
+                  browserButton.onclick = function () {
+                    openExternal();
+                  };
+                }
+              }, 0);
+            };
+            window.__SMARTY_SHOW_BOOT_ERROR__();
           }
         }, 7000);
       })();
