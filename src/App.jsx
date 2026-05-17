@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useState, useEffect, useCallback, useRef, Component } from 'react';
+import { useState, useEffect, useCallback, useRef, Component, useMemo } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import NavbarMenu from './components/NavbarMenu';
@@ -231,6 +231,17 @@ function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const routeCacheRef = useRef(new Map());
+  const lastRefreshRef = useRef(0);
+
+  const cachedUnread = useMemo(() => {
+    try {
+      return Number(localStorage.getItem('smartyChatUnreadCount') || 0);
+    } catch {
+      return 0;
+    }
+  }, []);
+
   const hideNavPaths = [
     '/quiz',
     '/booksinfo',
@@ -287,7 +298,7 @@ function Layout() {
     };
   }, []);
 
-  const [totalUnread, setTotalUnread] = useState(0);
+  const [totalUnread, setTotalUnread] = useState(cachedUnread);
   const [popupNotification, setPopupNotification] = useState(null);
   const [globalPullDistance, setGlobalPullDistance] = useState(0);
   const [globalRefreshing, setGlobalRefreshing] = useState(false);
@@ -479,14 +490,22 @@ function Layout() {
       contentElement.style.webkitOverflowScrolling = 'touch';
       contentElement.style.touchAction = 'pan-y';
       contentElement.style.pointerEvents = 'auto';
-      contentElement.style.height = '100%';
+      contentElement.style.height = '100dvh';
+      contentElement.style.maxHeight = '100dvh';
       contentElement.style.minHeight = '0';
+      contentElement.style.contain = 'layout paint size style';
+      contentElement.style.transform = 'translateZ(0)';
+      contentElement.style.backfaceVisibility = 'hidden';
+      contentElement.style.perspective = '1000px';
       contentElement.scrollTop = contentElement.scrollTop;
     }
 
     if (appShell) {
       appShell.style.overflow = 'hidden';
       appShell.style.minHeight = '0';
+      appShell.style.height = '100dvh';
+      appShell.style.contain = 'layout paint style';
+      appShell.style.transform = 'translateZ(0)';
     }
 
     if (routeReadyTimerRef.current) {
@@ -505,8 +524,13 @@ function Layout() {
         refreshedContent.style.webkitOverflowScrolling = 'touch';
         refreshedContent.style.pointerEvents = 'auto';
         refreshedContent.style.touchAction = 'pan-y';
-        refreshedContent.style.height = '100%';
+        refreshedContent.style.height = '100dvh';
+        refreshedContent.style.maxHeight = '100dvh';
         refreshedContent.style.minHeight = '0';
+        refreshedContent.style.contain = 'layout paint size style';
+        refreshedContent.style.transform = 'translateZ(0)';
+        refreshedContent.style.backfaceVisibility = 'hidden';
+        refreshedContent.style.perspective = '1000px';
       }
     }, 120);
 
@@ -555,13 +579,32 @@ function Layout() {
         return;
       }
 
+      const now = Date.now();
+      const cached = routeCacheRef.current.get('chatUnread');
+
+      if (
+        !force &&
+        cached &&
+        now - cached.timestamp < 15000
+      ) {
+        applyUnread(cached.value);
+        return;
+      }
+
       unreadRefreshInFlightRef.current = true;
 
       try {
         const chatsPayload = await chatApi.getChats();
         if (cancelled) return;
 
-        applyUnread(getUnreadFromChatsPayload(chatsPayload));
+        const unreadValue = getUnreadFromChatsPayload(chatsPayload);
+
+        routeCacheRef.current.set('chatUnread', {
+          value: unreadValue,
+          timestamp: now,
+        });
+
+        applyUnread(unreadValue);
       } catch (error) {
         console.error('Failed to refresh chat unread count:', error);
       } finally {
@@ -634,12 +677,19 @@ function Layout() {
     };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refreshChatUnread({ force: true });
+      if (document.visibilityState !== 'visible') return;
+
+      const now = Date.now();
+
+      if (now - lastRefreshRef.current < 4000) {
+        return;
       }
+
+      lastRefreshRef.current = now;
+      refreshChatUnread({ force: true });
     };
 
-    window.addEventListener('focus', handleRefresh);
+    window.addEventListener('focus', handleVisibilityChange);
     window.addEventListener('storage', handleStorage);
     window.addEventListener('chat-unread-refresh', handleRefresh);
     window.addEventListener('chat-unread-refresh-request', handleRefresh);
@@ -656,7 +706,7 @@ function Layout() {
       window.clearInterval(intervalId);
       unsubscribeSocket?.();
 
-      window.removeEventListener('focus', handleRefresh);
+      window.removeEventListener('focus', handleVisibilityChange);
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('chat-unread-refresh', handleRefresh);
       window.removeEventListener('chat-unread-refresh-request', handleRefresh);
@@ -1309,7 +1359,7 @@ function ReminderPopupStyles() {
   background: transparent !important;
 }
 
-.topbar {
+      .topbar {
   position: fixed !important;
   top: auto !important;
   right: 12px;
@@ -1322,6 +1372,9 @@ function ReminderPopupStyles() {
   box-shadow: none !important;
   border: 0 !important;
   pointer-events: none;
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
       .topbar-row,
@@ -1399,6 +1452,9 @@ function ReminderPopupStyles() {
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  contain: layout paint style;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
       .quick-icon-link,
@@ -1421,6 +1477,11 @@ function ReminderPopupStyles() {
         position: relative;
         flex-shrink: 0;
         transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+        contain: layout paint style;
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
       }
 
       .quick-icon-link:hover,

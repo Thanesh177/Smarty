@@ -37,6 +37,10 @@ const ROOM_INITIAL_VISIBLE_MESSAGES = 20;
 const ROOM_OLDER_MESSAGES_LAYOUT_STABILIZE_MS = 260;
 const ROOM_PAGE_DEFERRED_LOAD_MS = 450;
 const ROOM_MEDIA_UPLOAD_TIMEOUT_MS = 45000;
+const ROOM_SOCKET_RECONNECT_DELAY_MS = 1800;
+const ROOM_SCROLL_THROTTLE_MS = 120;
+const ROOM_MEDIA_CACHE_LIMIT = 120;
+const ROOM_MAX_STATUS_LENGTH = 180;
 const ROOM_MAX_CACHED_MESSAGE_ROOMS = 25;
 const ROOM_MESSAGE_BATCH_RENDER_SIZE = 40;
 const ROOM_SCROLL_BOTTOM_DEBOUNCE_MS = 80;
@@ -642,7 +646,7 @@ function getNavigationRoomOpenId(locationState = {}) {
 }
 
 function renderMessageWithLinks(value = '') {
-  const text = String(value || '');
+  const text = String(value || '').slice(0, 12000);
   if (!text) return null;
 
   const urlRegex = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
@@ -728,18 +732,20 @@ export default function TopicRoomsPage() {
   }
 
   function requireLoggedInAction(actionLabel = 'do this') {
-  if (!isGuestUser) return false;
+    if (!isGuestUser) return false;
 
-  setStatus(`Only logged-in users can ${actionLabel}. Please log in first.`);
-  setShowCreateModal(false);
-  setShowInvite(false);
-  setInviteLinkModalOpen(false);
-  setShowRoomMenu(false);
-  setShowActiveRoomMenu(false);
-  setOpenRoomActionMenuId('');
+    setStatus(
+      `Only logged-in users can ${String(actionLabel || 'continue').slice(0, ROOM_MAX_STATUS_LENGTH)}. Please log in first.`
+    );
+    setShowCreateModal(false);
+    setShowInvite(false);
+    setInviteLinkModalOpen(false);
+    setShowRoomMenu(false);
+    setShowActiveRoomMenu(false);
+    setOpenRoomActionMenuId('');
 
-  return true;
-}
+    return true;
+  }
 
   function getInviteUserId(userValue) {
     if (typeof userValue === 'string') return userValue;
@@ -861,6 +867,12 @@ export default function TopicRoomsPage() {
   const sendingMessageRef = useRef(false);
   const [showRoomMediaGrid, setShowRoomMediaGrid] = useState(false);
 
+  const roomCacheRef = useRef(new Map());
+  const messageCacheRef = useRef(new Map());
+  const fetchInFlightRef = useRef(new Set());
+  const inviteMessageLoadTimersRef = useRef([]);
+  const lastRoomFetchRef = useRef(0);
+  const lastMessageFetchRef = useRef(0);
 
   const roomMenuRef = useRef(null);
   const olderScrollAnchorRef = useRef(null);
@@ -892,7 +904,15 @@ const scrollMessagesToBottom = useCallback((options = {}) => {
     if (!latestContainer) return;
 
     latestContainer.style.scrollBehavior = behavior;
-    latestContainer.scrollTop = latestContainer.scrollHeight;
+    if (
+      Math.abs(
+        latestContainer.scrollHeight -
+          latestContainer.scrollTop -
+          latestContainer.clientHeight
+      ) > ROOM_SCROLL_THROTTLE_MS
+    ) {
+      latestContainer.scrollTop = latestContainer.scrollHeight;
+    }
   };
 
   jumpToBottom();
@@ -1141,6 +1161,19 @@ const MessageRow = useCallback((msg) => {
 
 useEffect(() => {
   messagesStateRef.current = messages;
+
+  const roomId = activeRoomRef.current?.roomId;
+
+  if (roomId && Array.isArray(messages)) {
+    messageCacheRef.current.set(roomId, {
+      data: messages,
+      timestamp: Date.now(),
+    });
+  }
+
+  if (messages.length > MAX_RENDERED_MEDIA_MESSAGES + 120) {
+    setMessages((prev) => prev.slice(-MAX_RENDERED_MEDIA_MESSAGES));
+  }
 }, [messages]);
 
 useEffect(() => {
@@ -1149,6 +1182,11 @@ useEffect(() => {
       window.clearTimeout(scrollBottomTimeoutRef.current);
       scrollBottomTimeoutRef.current = null;
     }
+    inviteMessageLoadTimersRef.current.forEach((timerId) => {
+      window.clearTimeout(timerId);
+    });
+    inviteMessageLoadTimersRef.current = [];
+    fetchInFlightRef.current.clear();
   };
 }, []);
 
@@ -1573,6 +1611,31 @@ function syncRoomMessageCache(roomId, nextMessages) {
   );
 
   roomMessagesCacheRef.current[roomId] = normalizedMessages;
+  messageCacheRef.current.set(roomId, {
+    data: normalizedMessages,
+    timestamp: Date.now(),
+  });
+
+  const mediaEntries = normalizedMessages.filter(
+    (message) => message?.mediaUrl || message?.fileUrl
+  );
+
+  if (mediaEntries.length > ROOM_MEDIA_CACHE_LIMIT) {
+    const trimmedMedia = mediaEntries.slice(-ROOM_MEDIA_CACHE_LIMIT);
+    const allowedKeys = new Set(
+      trimmedMedia.map((item) => getStableRoomMessageKey(item))
+    );
+
+    roomMessagesCacheRef.current[roomId] = normalizedMessages.filter((item) => {
+      if (!item?.mediaUrl && !item?.fileUrl) return true;
+      return allowedKeys.has(getStableRoomMessageKey(item));
+    });
+
+    messageCacheRef.current.set(roomId, {
+      data: roomMessagesCacheRef.current[roomId],
+      timestamp: Date.now(),
+    });
+  }
 
   const cachedRoomIds = Object.keys(roomMessagesCacheRef.current || {});
 
@@ -1602,6 +1665,14 @@ async function loadInviteRoomMessagesDirect(room, source = 'invite-direct') {
   const roomId = String(room?.roomId || room?.id || '').trim();
 
   if (!roomId) return [];
+
+  const cacheKey = `invite-messages-${roomId}`;
+
+  if (fetchInFlightRef.current.has(cacheKey)) {
+    return messageCacheRef.current.get(roomId)?.data || roomMessagesCacheRef.current[roomId] || [];
+  }
+
+  fetchInFlightRef.current.add(cacheKey);
 
   try {
     setMessagesLoading(true);
@@ -1650,6 +1721,7 @@ async function loadInviteRoomMessagesDirect(room, source = 'invite-direct') {
     console.error(`INVITE DIRECT MESSAGE LOAD ERROR (${source}):`, err);
     return [];
   } finally {
+    fetchInFlightRef.current.delete(cacheKey);
     if (mountedRef.current && activeRoomRef.current?.roomId === roomId) {
       setMessagesLoading(false);
     }
@@ -1814,6 +1886,11 @@ function markPendingRoomMessageFailed(clientId) {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
 
+    if (!navigator.onLine) {
+      setStatus('You appear to be offline. Please reconnect and try again.');
+      return;
+    }
+
     if (files.length === 0) return;
 
     removeSelectedMedia();
@@ -1852,6 +1929,13 @@ function markPendingRoomMessageFailed(clientId) {
         return;
       }
 
+      if (!file.name || file.name.length > 180) {
+        setStatus('File name is too long.');
+        previewItems.forEach((item) => {
+          if (item.preview?.startsWith('blob:')) URL.revokeObjectURL(item.preview);
+        });
+        return;
+      }
       validFiles.push(file);
       let previewUrl = '';
 
@@ -2346,8 +2430,8 @@ const visibleRooms = allRooms.filter((room) => {
 
       const preloadRoomMessages = async () => {
         try {
-          const preloadRooms = mergedVisibleRooms.slice(0, 8);
-          const chunkSize = 4;
+          const preloadRooms = mergedVisibleRooms.slice(0, 6);
+          const chunkSize = 2;
 
           for (let index = 0; index < preloadRooms.length; index += chunkSize) {
             const batch = preloadRooms.slice(index, index + chunkSize);
@@ -2400,7 +2484,18 @@ const visibleRooms = allRooms.filter((room) => {
         window.setTimeout(preloadRoomMessages, 600);
       }
 
-      setRooms((prev) => (areRoomListsEqual(prev, mergedVisibleRooms) ? prev : mergedVisibleRooms));
+      roomCacheRef.current.set('rooms', {
+        data: mergedVisibleRooms,
+        timestamp: Date.now(),
+      });
+
+      setRooms((prev) => {
+        if (areRoomListsEqual(prev, mergedVisibleRooms)) {
+          return prev;
+        }
+
+        return mergedVisibleRooms.slice(0, MAX_RENDERED_ROOMS);
+      });
       setInitialRoomsReady(true);
     } catch (err) {
   console.error('LOAD ROOMS ERROR:', err);
@@ -2412,14 +2507,16 @@ const visibleRooms = allRooms.filter((room) => {
 
     if (Array.isArray(fallbackRooms) && fallbackRooms.length > 0) {
       setRooms(fallbackRooms);
-      setStatus('Connection is slow. Showing cached rooms.');
+      setStatus('Network is slow. Showing cached groups while reconnecting.');
     } else {
-      setStatus(
+      const safeErrorMessage = String(
         err?.response?.data?.error ||
         err?.response?.data?.message ||
         err?.message ||
         'Failed to load rooms'
-      );
+      ).slice(0, ROOM_MAX_STATUS_LENGTH);
+
+      setStatus(safeErrorMessage);
     }
   }
 } finally {
@@ -2555,14 +2652,29 @@ const visibleRooms = allRooms.filter((room) => {
 
       setMessagesLoading(true);
 
+      const cachedInviteMessages =
+        messageCacheRef.current.get(hydratedRoom.roomId)?.data ||
+        roomMessagesCacheRef.current[hydratedRoom.roomId] ||
+        [];
+
+      if (cachedInviteMessages.length > 0) {
+        messagesStateRef.current = cachedInviteMessages;
+        setMessages(cachedInviteMessages);
+      }
+
       window.requestAnimationFrame(async () => {
         if (!mountedRef.current) return;
 
+        inviteMessageLoadTimersRef.current.forEach((timerId) => {
+          window.clearTimeout(timerId);
+        });
+        inviteMessageLoadTimersRef.current = [];
+
         const attempts = [
           { source: 'invite-direct-1', delay: 0 },
-          { source: 'invite-direct-2', delay: 650 },
-          { source: 'invite-direct-3', delay: 1400 },
-          { source: 'invite-direct-4', delay: 2600 },
+          { source: 'invite-direct-2', delay: 750 },
+          { source: 'invite-direct-3', delay: 1800 },
+          { source: 'invite-direct-4', delay: 3600 },
         ];
 
         for (const attempt of attempts) {
