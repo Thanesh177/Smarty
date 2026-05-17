@@ -111,7 +111,10 @@ class RouteErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div className="status" role="alert">
-          Something went wrong loading this page. Please refresh or try again.
+          <p>Something went wrong loading this page.</p>
+          <button type="button" onClick={() => window.location.reload()}>
+            Reload Smarty
+          </button>
         </div>
       );
     }
@@ -208,7 +211,9 @@ function Layout() {
     '/read-books',
     '/preview-books',
     '/read-book',
-        '/login',
+    '/login',
+    '/JoinRoomPage',
+ 
 
   ];
 

@@ -2,17 +2,125 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0ea5e9" />
+
+    <!-- Mobile / WebView -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#050816" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Apple -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Smarty" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>Smarty</title>
+
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+        background: #050816;
+        color: #ffffff;
+        overflow-x: hidden;
+      }
+
+      body {
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      #root {
+        min-height: 100vh;
+        min-height: 100dvh;
+        background:
+          radial-gradient(
+            circle at top,
+            rgba(34, 211, 238, 0.12),
+            transparent 34%
+          ),
+          linear-gradient(180deg, #050816, #020617);
+      }
+
+      .boot-loader {
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+      }
+
+      .boot-loader-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        text-align: center;
+      }
+
+      .boot-loader-orb {
+        width: 38px;
+        height: 38px;
+        border-radius: 999px;
+        background: radial-gradient(circle, #67e8f9, #0f172a 72%);
+        box-shadow: 0 0 30px rgba(34, 211, 238, 0.45);
+        animation: bootPulse 1.2s ease-in-out infinite;
+      }
+
+      .boot-loader-card strong {
+        font-size: 1rem;
+        letter-spacing: -0.04em;
+        font-weight: 700;
+      }
+
+      .boot-loader-card span {
+        font-size: 0.82rem;
+        color: rgba(226, 232, 240, 0.72);
+      }
+
+      @keyframes bootPulse {
+        0%,
+        100% {
+          transform: scale(0.94);
+          opacity: 0.72;
+        }
+
+        50% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+    </style>
   </head>
+
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-loader">
+        <div class="boot-loader-card">
+          <div class="boot-loader-orb"></div>
+          <strong>Smarty</strong>
+          <span>Loading your feed...</span>
+        </div>
+      </div>
+    </div>
+
+    <noscript>
+      <div
+        style="
+          padding: 24px;
+          color: white;
+          background: #050816;
+          font-family: system-ui;
+        "
+      >
+        Smarty requires JavaScript to run.
+      </div>
+    </noscript>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

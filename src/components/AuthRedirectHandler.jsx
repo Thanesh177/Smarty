@@ -14,7 +14,12 @@ function getSavedRedirectPath() {
     sessionStorage.removeItem('smarty-post-login-redirect');
     localStorage.removeItem('smarty-post-login-redirect');
 
-    if (!savedPath || savedPath === '/login' || savedPath === '/register') {
+    if (
+      !savedPath ||
+      savedPath === '/login' ||
+      savedPath === '/register' ||
+      !savedPath.startsWith('/')
+    ) {
       return fallback;
     }
 
