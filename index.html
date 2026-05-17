@@ -3,7 +3,6 @@
   <head>
     <meta charset="UTF-8" />
 
-    <link rel="manifest" href="/manifest.json" />
 
     <!-- Mobile / WebView -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -88,25 +87,34 @@
 
       .boot-loader-orb {
         position: relative;
-        width: 52px;
-        height: 52px;
+        width: 58px;
+        height: 58px;
         border-radius: 999px;
         background:
-          radial-gradient(circle at 35% 35%, #67e8f9 0%, #22d3ee 18%, #0f172a 72%);
-        box-shadow:
-          0 0 44px rgba(34, 211, 238, 0.42),
-          inset 0 0 22px rgba(255,255,255,0.12);
-        animation: bootPulse 1.35s ease-in-out infinite;
+          radial-gradient(circle at center, rgba(103, 232, 249, 0.92) 0 7%, transparent 8%),
+          conic-gradient(from 0deg, transparent 0 55%, rgba(34, 211, 238, 0.98) 72%, transparent 88% 100%);
+        box-shadow: 0 0 42px rgba(34, 211, 238, 0.30);
+        animation: bootSpin 1.05s linear infinite;
       }
 
       .boot-loader-orb::after {
         content: '';
         position: absolute;
-        inset: -7px;
+        inset: 10px;
         border-radius: inherit;
-        border: 1px solid rgba(103, 232, 249, 0.24);
-        opacity: 0.9;
-        animation: bootRing 2s linear infinite;
+        background: #020617;
+        box-shadow:
+          inset 0 0 20px rgba(34, 211, 238, 0.08),
+          0 0 0 1px rgba(103, 232, 249, 0.12);
+      }
+
+      .boot-loader-orb::before {
+        content: '';
+        position: absolute;
+        inset: -9px;
+        border-radius: inherit;
+        border: 1px solid rgba(103, 232, 249, 0.16);
+        animation: bootSignal 1.8s ease-in-out infinite;
       }
 
       .boot-loader-card strong {
@@ -122,26 +130,22 @@
         color: rgba(226, 232, 240, 0.66);
       }
 
-      @keyframes bootPulse {
-        0%,
-        100% {
-          transform: scale(0.94);
-          opacity: 0.78;
-        }
-
-        50% {
-          transform: scale(1);
-          opacity: 1;
+      @keyframes bootSpin {
+        to {
+          transform: rotate(360deg);
         }
       }
 
-      @keyframes bootRing {
-        from {
-          transform: rotate(0deg);
+      @keyframes bootSignal {
+        0%,
+        100% {
+          transform: scale(0.92);
+          opacity: 0.32;
         }
 
-        to {
-          transform: rotate(360deg);
+        50% {
+          transform: scale(1.08);
+          opacity: 0.9;
         }
       }
     </style>
@@ -176,6 +180,8 @@
         var isInAppBrowser = /LinkedInApp|Telegram|FBAN|FBAV|Instagram/i.test(
           navigator.userAgent || ''
         );
+        window.__SMARTY_APP_MOUNTED__ = false;
+        window.__SMARTY_BOOT_STARTED__ = Date.now();
 
         if ('serviceWorker' in navigator && isInAppBrowser) {
           navigator.serviceWorker
@@ -199,64 +205,71 @@
           }
         });
 
-        setTimeout(function () {
+        window.__SMARTY_SHOW_BOOT_ERROR__ = function () {
           var root = document.getElementById('root');
+          var currentUrl = window.location.href;
 
-          if (
-            root &&
-            root.innerText &&
-            root.innerText.includes('Loading your feed')
-          ) {
-            window.__SMARTY_SHOW_BOOT_ERROR__ = function () {
-              var currentUrl = window.location.href;
-              var openExternal = function () {
-                try {
-                  if (/Android/i.test(navigator.userAgent)) {
-                    window.location.href = 'intent://' + currentUrl.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end';
-                    return;
-                  }
+          if (!root || !root.innerText || !root.innerText.includes('Loading')) {
+            return;
+          }
 
-                  window.open(currentUrl, '_blank', 'noopener,noreferrer');
-                } catch (e) {
-                  window.location.href = currentUrl;
+          var encodedUrl = currentUrl.replace(/"/g, '&quot;');
+
+          root.innerHTML =
+            '<div style="min-height:100vh;display:grid;place-items:center;background:#020617;color:white;font-family:Inter,system-ui;padding:24px;text-align:center;">' +
+            '<div style="max-width:360px;width:100%;padding:26px 20px;border-radius:28px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));box-shadow:0 20px 70px rgba(0,0,0,.45)">' +
+            '<div style="width:54px;height:54px;border-radius:999px;margin:0 auto 18px;background:conic-gradient(from 0deg,transparent 0 55%,#22d3ee 72%,transparent 88% 100%);box-shadow:0 0 38px rgba(34,211,238,.32)"></div>' +
+            '<h2 style="margin:0 0 10px;font-size:1.1rem;letter-spacing:-0.04em">Smarty could not fully open</h2>' +
+            '<p style="margin:0 0 16px;color:rgba(226,232,240,.72);line-height:1.6;font-size:.9rem">This in-app browser may be blocking the app bundle. Copy the link or reload once.</p>' +
+            '<div style="display:grid;gap:10px">' +
+            '<button id="smarty-reload-btn" style="width:100%;border:0;background:#22d3ee;color:#020617;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Reload Smarty</button>' +
+            '<a href="' + encodedUrl + '" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;border:1px solid rgba(103,232,249,.18);background:rgba(255,255,255,.04);color:#cffafe;padding:12px 18px;border-radius:999px;font-weight:850">Open in browser</a>' +
+            '<button id="smarty-copy-link-btn" style="width:100%;border:1px solid rgba(148,163,184,.16);background:rgba(15,23,42,.72);color:rgba(226,232,240,.9);padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Copy link</button>' +
+            '<p style="margin:2px 0 0;color:rgba(148,163,184,.72);font-size:.76rem;line-height:1.45;word-break:break-all">' + encodedUrl + '</p>' +
+            '</div>' +
+            '</div>' +
+            '</div>';
+
+          setTimeout(function () {
+            var reloadButton = document.getElementById('smarty-reload-btn');
+            var copyButton = document.getElementById('smarty-copy-link-btn');
+
+            if (reloadButton) {
+              reloadButton.onclick = function () {
+                window.location.reload();
+              };
+            }
+
+            if (copyButton) {
+              copyButton.onclick = function () {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(currentUrl).then(function () {
+                    copyButton.innerText = 'Link copied';
+                  }).catch(function () {
+                    copyButton.innerText = 'Copy manually below';
+                  });
+                } else {
+                  copyButton.innerText = 'Copy manually below';
                 }
               };
+            }
+          }, 0);
+        };
 
-              root.innerHTML =
-                '<div style="min-height:100vh;display:grid;place-items:center;background:#020617;color:white;font-family:Inter,system-ui;padding:24px;text-align:center;">' +
-                '<div style="max-width:340px;padding:26px 20px;border-radius:28px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));box-shadow:0 20px 70px rgba(0,0,0,.45)">' +
-                '<div style="width:52px;height:52px;border-radius:999px;margin:0 auto 18px;background:conic-gradient(from 0deg,transparent 0 58%,#22d3ee 72%,transparent 86% 100%);box-shadow:0 0 38px rgba(34,211,238,.32)"></div>' +
-                '<h2 style="margin:0 0 10px;font-size:1.1rem;letter-spacing:-0.04em">Smarty could not fully open</h2>' +
-                '<p style="margin:0 0 18px;color:rgba(226,232,240,.72);line-height:1.6;font-size:.9rem">This in-app browser may be blocking modern app features.</p>' +
-                '<div style="display:grid;gap:10px">' +
-                '<button id="smarty-reload-btn" style="width:100%;border:0;background:#22d3ee;color:#020617;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Reload Smarty</button>' +
-                '<button id="smarty-open-browser-btn" style="width:100%;border:1px solid rgba(103,232,249,.18);background:rgba(255,255,255,.04);color:#cffafe;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Open in browser</button>' +
-                '</div>' +
-                '</div>' +
-                '</div>';
-
-              setTimeout(function () {
-                var reloadButton = document.getElementById('smarty-reload-btn');
-                var browserButton = document.getElementById('smarty-open-browser-btn');
-
-                if (reloadButton) {
-                  reloadButton.onclick = function () {
-                    window.location.reload();
-                  };
-                }
-
-                if (browserButton) {
-                  browserButton.onclick = function () {
-                    openExternal();
-                  };
-                }
-              }, 0);
-            };
+        setTimeout(function () {
+          if (!window.__SMARTY_APP_MOUNTED__) {
             window.__SMARTY_SHOW_BOOT_ERROR__();
           }
-        }, 7000);
+        }, 5500);
       })();
     </script>
-    <script type="module" src="/src/main.jsx"></script>
+    <script
+      id="smarty-main-module"
+      type="module"
+      crossorigin
+      src="/src/main.jsx"
+      onload="window.__SMARTY_APP_MOUNTED__ = true"
+      onerror="window.__SMARTY_SHOW_BOOT_ERROR__ && window.__SMARTY_SHOW_BOOT_ERROR__()"
+    ></script>
   </body>
 </html>

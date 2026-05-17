@@ -701,34 +701,7 @@ function Layout() {
     };
   }, []);
 
-  useEffect(() => {
-    const preloadCommonPages = () => {
-      if (document.visibilityState === 'hidden' || !navigator.onLine) return;
 
-      const preloadTasks = [
-        () => import('./pages/FeedPage'),
-        () => import('./pages/ProfilePage'),
-        () => import('./pages/ChatPage'),
-        () => import('./pages/SavedPage'),
-      ];
-
-      preloadTasks.forEach((preloadTask, index) => {
-        window.setTimeout(() => {
-          preloadTask().catch((error) => {
-            console.warn('Page preload failed:', error);
-          });
-        }, index * 700);
-      });
-    };
-
-    if ('requestIdleCallback' in window) {
-      const idleId = window.requestIdleCallback(preloadCommonPages, { timeout: 5000 });
-      return () => window.cancelIdleCallback?.(idleId);
-    }
-
-    const timeoutId = window.setTimeout(preloadCommonPages, 2500);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
 
   return (
     <>

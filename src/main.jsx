@@ -46,19 +46,8 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-// Service Worker (disable in problematic in-app browsers)
-if (
-  'serviceWorker' in navigator &&
-  import.meta.env.PROD &&
-  !isInAppBrowser
-) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then(() => console.log('✅ Service Worker registered'))
-      .catch((err) => console.error('❌ SW error', err));
-  });
-} else if ('serviceWorker' in navigator && isInAppBrowser) {
+// Remove old service workers completely. This helps clear stale PWA caches from older builds.
+if ('serviceWorker' in navigator) {
   navigator.serviceWorker
     .getRegistrations()
     .then((registrations) => {
@@ -71,23 +60,11 @@ if (
 
 const rootElement = document.getElementById('root');
 
-if (rootElement && !rootElement.innerHTML.trim()) {
-  rootElement.innerHTML = `
-    <div style="
-      height:100vh;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background:#050816;
-      color:white;
-      font-family:Inter,sans-serif;
-      font-size:14px;
-      letter-spacing:-0.02em;
-    ">
-      Loading Smarty...
-    </div>
-  `;
+if (!rootElement) {
+  throw new Error('Root element not found');
 }
+
+window.__SMARTY_APP_MOUNTED__ = true;
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
