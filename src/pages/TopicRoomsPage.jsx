@@ -656,6 +656,48 @@ export default function TopicRoomsPage() {
   const userId = authUserId || guestUserId;
   const isGuestUser = !authUserId;
 
+  // --- Patch: getRoomsForCurrentSession ---
+  async function getRoomsForCurrentSession(params = {}) {
+    if (!isGuestUser) {
+      return roomApi.getRooms(params);
+    }
+
+    const query = new URLSearchParams();
+
+    Object.entries(params || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        query.set(key, String(value));
+      }
+    });
+
+    const requestUrl = `${API_ORIGIN}/rooms/public${query.toString() ? `?${query.toString()}` : ''}`;
+    const response = await fetch(requestUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    let payload = null;
+
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+
+    if (!response.ok) {
+      const error = new Error(payload?.error || payload?.message || `Failed to load rooms (${response.status})`);
+      error.response = {
+        status: response.status,
+        data: payload || {},
+      };
+      throw error;
+    }
+
+    return payload || {};
+  }
+
   function getInviteUserId(userValue) {
     if (typeof userValue === 'string') return userValue;
 
@@ -1970,7 +2012,7 @@ async function approveJoinRequest(requestUserId) {
       }
 
       const data = await Promise.race([
-        roomApi.getRooms({
+        getRoomsForCurrentSession({
           search: normalizedSearch,
           guestId: getStableGuestId(),
           clientGuestId: getStableGuestId(),
@@ -2626,16 +2668,16 @@ async function approveJoinRequest(requestUserId) {
       activeRoomRef.current = finalCreatedRoom;
       setMessages([]);
       setMobileChatOpen(true);
+      setShowActiveRoomMenu(false);
+      setShowRoomMenu(false);
+      setOpenRoomActionMenuId('');
 
       if (finalCreatedRoom.privacy === 'private') {
-        setModalTitle(`Invite users to ${finalCreatedRoom.name}`);
-        setModalMode('members');
+        setShowInvite(false);
+        setShowMembers(false);
+        setShowActiveRoomInfo(true);
+        setActiveInfoSection('invite');
         setModalRoom(finalCreatedRoom);
-        setMembers([]);
-        setInviteSearch('');
-        setInviteResults([]);
-        setShowInvite(true);
-        setShowMembers(true);
       }
 
       setRoomUnreadCounts((prev) => ({

@@ -200,7 +200,10 @@ const getAuthToken = async () => {
   pendingAuthTokenPromise = (async () => {
     try {
       const session = await fetchAuthSession();
-      const token = session?.tokens?.idToken?.toString() || getStoredToken();
+      const token =
+        session?.tokens?.accessToken?.toString() ||
+        session?.tokens?.idToken?.toString() ||
+        getStoredToken();
 
       if (token) {
         cachedAuthToken = token;
@@ -224,6 +227,18 @@ const getAuthToken = async () => {
   })();
 
   return pendingAuthTokenPromise;
+};
+
+const hasLiveAuthSession = async () => {
+  try {
+    const session = await fetchAuthSession();
+    return Boolean(
+      session?.tokens?.accessToken?.toString() ||
+      session?.tokens?.idToken?.toString()
+    );
+  } catch {
+    return false;
+  }
 };
 
 export const newsApi = {
@@ -254,10 +269,40 @@ const attachAuthHeader = async (config) => {
 };
 
 api.interceptors.request.use(async (config) => {
-  const authedConfig = await attachAuthHeader(config);
-  const url = String(authedConfig?.url || '');
+  const url = String(config?.url || '');
+  const method = String(config?.method || 'get').toLowerCase();
 
-  if (url === '/rooms' || url.startsWith('/rooms/')) {
+  const isPublicRoomMessagesRoute =
+    method === 'get' &&
+    url.startsWith('/rooms/') &&
+    url.endsWith('/messages');
+
+  if (isPublicRoomMessagesRoute) {
+    const publicConfig = {
+      ...config,
+      headers: {
+        ...(config.headers || {}),
+      },
+    };
+
+    delete publicConfig.headers.Authorization;
+    delete publicConfig.headers.authorization;
+
+    return attachGuestIdentity(publicConfig);
+  }
+
+  const authedConfig = await attachAuthHeader(config);
+  const authedUrl = String(authedConfig?.url || '');
+  const authedMethod = String(authedConfig?.method || 'get').toLowerCase();
+
+  const isGuestReadableRoute =
+    authedMethod === 'get' &&
+    (
+      authedUrl === '/rooms/public' ||
+      authedUrl.startsWith('/rooms/invite/')
+    );
+
+  if (isGuestReadableRoute) {
     return attachGuestIdentity(authedConfig);
   }
 
@@ -501,15 +546,20 @@ export const authApi = {
 
 export const roomApi = {
   async getRooms(params = {}) {
+    const isLoggedIn = await hasLiveAuthSession();
     const guestId = getOrCreateGuestId();
+    const endpoint = isLoggedIn ? '/rooms' : '/rooms/public';
 
-    const { data } = await api.get('/rooms', {
-      params: {
-        ...params,
-        guestId,
-        clientGuestId: guestId,
-      },
+    const { data } = await api.get(endpoint, {
+      params: isLoggedIn
+        ? { ...params }
+        : {
+            ...params,
+            guestId,
+            clientGuestId: guestId,
+          },
     });
+
     return normalizeList(data);
   },
 
@@ -924,8 +974,6 @@ async getRoomMembers(roomId, params = {}) {
         ...params,
         roomId: cleanRoomId,
         groupId: cleanRoomId,
-        guestId: getOrCreateGuestId(),
-        clientGuestId: getOrCreateGuestId(),
       },
     }
   );
@@ -1006,13 +1054,9 @@ async getRoomMembers(roomId, params = {}) {
   },
 
   async getRoomJoinRequests(roomId, params = {}) {
-    const guestId = getOrCreateGuestId();
-
     const { data } = await api.get(`/rooms/${encodePathSegment(roomId)}/requests`, {
       params: {
         ...params,
-        guestId,
-        clientGuestId: guestId,
       },
     });
 
@@ -1020,13 +1064,9 @@ async getRoomMembers(roomId, params = {}) {
   },
 
   async getHiddenRooms(params = {}) {
-    const guestId = getOrCreateGuestId();
-
     const { data } = await api.get('/rooms/hidden', {
       params: {
         ...params,
-        guestId,
-        clientGuestId: guestId,
       },
     });
 
