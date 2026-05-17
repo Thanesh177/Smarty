@@ -1041,14 +1041,7 @@ scrollPaddingBottom: 0,
                   }
                 />
 
-                <Route
-                  path="/rooms"
-                  element={
-                    <ProtectedRoute>
-                      <TopicRoomsPage />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/rooms" element={<TopicRoomsPage />} />
 
                 <Route path="*" element={<Navigate to="/feed" replace />} />
               </Routes>

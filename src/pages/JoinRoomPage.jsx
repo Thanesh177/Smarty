@@ -60,20 +60,6 @@ export default function JoinRoomPage() {
   async function handleJoinRoom() {
     if (!cleanInviteCode || joining) return;
 
-    if (!user) {
-      storePendingRoomInvite(cleanInviteCode);
-
-      navigate('/login', {
-        replace: false,
-        state: {
-          redirectTo: location.pathname || `/rooms/invite/${encodeURIComponent(cleanInviteCode)}`,
-          pendingInviteCode: cleanInviteCode,
-        },
-      });
-
-      return;
-    }
-
     try {
       setJoining(true);
       setStatus('');
@@ -183,9 +169,9 @@ export default function JoinRoomPage() {
   }
 
   useEffect(() => {
-    if (!user || loading || joining || !cleanInviteCode) return;
+    if (loading || joining || !cleanInviteCode) return;
 
-    const autoJoinKey = `${user?.id || user?.userId || user?.sub || 'user'}:${cleanInviteCode}`;
+    const autoJoinKey = `${user?.id || user?.userId || user?.sub || 'guest'}:${cleanInviteCode}`;
     if (autoJoinAttemptedRef.current === autoJoinKey) return;
 
     autoJoinAttemptedRef.current = autoJoinKey;
@@ -287,11 +273,9 @@ export default function JoinRoomPage() {
         >
           {joining
             ? 'Joining...'
-            : user
-              ? invite?.requiresApproval
-                ? 'Request to Join'
-                : 'Join Room'
-              : 'Log in to Join'}
+            : invite?.requiresApproval
+              ? 'Request to Join'
+              : 'Join Room'}
         </button>
 
         <button
