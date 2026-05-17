@@ -299,34 +299,29 @@ api.interceptors.request.use(async (config) => {
     );
 
   const token = await getAuthToken();
+  const guestId = getOrCreateGuestId();
 
-  // LOGGED IN
+  // LOGGED IN USERS
+  // Always attach BOTH auth token + guest identity.
+  // Guest identity is needed for invite/private-room persistence.
   if (token) {
-    const authedConfig = {
+    return {
       ...config,
       headers: {
         ...(config.headers || {}),
         Authorization: `Bearer ${token}`,
+        'x-guest-id': guestId,
       },
-    };
-
-    const shouldAttachGuestIdentityWhileLoggedIn =
-      guestCompatibleRoute && !url.endsWith('/media-upload-url');
-
-    if (shouldAttachGuestIdentityWhileLoggedIn) {
-      const guestId = getOrCreateGuestId();
-      authedConfig.headers['x-guest-id'] = guestId;
-      authedConfig.params = {
-        ...(authedConfig.params || {}),
+      params: {
+        ...(config.params || {}),
         guestId,
         clientGuestId: guestId,
-      };
-    }
-
-    return authedConfig;
+      },
+    };
   }
 
-  // GUEST
+  // GUEST USERS
+  // Allow public/private invite room access without login.
   if (guestCompatibleRoute) {
     const publicConfig = {
       ...config,
