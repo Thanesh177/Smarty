@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  base: '/',
   plugins: [
     react(),
   ],
@@ -19,9 +20,11 @@ export default defineConfig({
 
     chunkSizeWarningLimit: 1200,
 
+    minify: 'esbuild',
+
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        manualChunks: () => 'everything.js',
       },
     },
   },

@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useState, useEffect, useCallback, useRef, lazy, Suspense, Component } from 'react';
+import { useState, useEffect, useCallback, useRef, Component } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import NavbarMenu from './components/NavbarMenu';
@@ -22,32 +22,31 @@ import {
   subscribeChatSocket,
 } from './api/chatSocket';
 
-const Booksinfo = lazy(() => import('./pages/Booksinfo'));
-const QuizPage = lazy(() => import('./pages/QuizPage'));
-const ProgressPage = lazy(() => import('./pages/progress/ProgressPage'));
-const GameProfile = lazy(() => import('./pages/profile/GameProfile'));
-
-const CommentsPage = lazy(() => import('./pages/CommentsPage'));
-const EditPostPage = lazy(() => import('./pages/EditPostPage'));
-const FeedPage = lazy(() => import('./pages/FeedPage'));
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const RegisterPage = lazy(() => import('./pages/RegisterPage'));
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const SavedPage = lazy(() => import('./pages/SavedPage'));
-const CreatePostPage = lazy(() => import('./pages/CreatePostPage'));
-const TopicsPage = lazy(() => import('./pages/TopicsPage'));
-const ConfirmPage = lazy(() => import('./pages/ConfirmPage'));
-const ChatPage = lazy(() => import('./pages/ChatPage'));
-const CreatorProfilePage = lazy(() => import('./pages/CreatorProfilePage'));
-const CreatorDashboardPage = lazy(() => import('./pages/CreatorDashboardPage'));
-const FollowRequestsPage = lazy(() => import('./pages/FollowRequestsPage'));
-const TopicRoomsPage = lazy(() => import('./pages/TopicRoomsPage'));
 import JoinRoomPage from './pages/JoinRoomPage';
-const ReelDetailPage = lazy(() => import('./pages/ReelDetailPage'));
-const NewsPage = lazy(() => import('./pages/NewsPage'));
-const ReadBookPage = lazy(() => import('./pages/ReadBookPage'));
-const BookReaderPage = lazy(() => import('./pages/BookReaderPage'));
-const PostAiPage = lazy(() => import('./pages/PostAiPage'));
+import Booksinfo from './pages/Booksinfo';
+import QuizPage from './pages/QuizPage';
+import ProgressPage from './pages/progress/ProgressPage';
+import GameProfile from './pages/profile/GameProfile';
+import CommentsPage from './pages/CommentsPage';
+import EditPostPage from './pages/EditPostPage';
+import FeedPage from './pages/FeedPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ProfilePage from './pages/ProfilePage';
+import SavedPage from './pages/SavedPage';
+import CreatePostPage from './pages/CreatePostPage';
+import TopicsPage from './pages/TopicsPage';
+import ConfirmPage from './pages/ConfirmPage';
+import ChatPage from './pages/ChatPage';
+import CreatorProfilePage from './pages/CreatorProfilePage';
+import CreatorDashboardPage from './pages/CreatorDashboardPage';
+import FollowRequestsPage from './pages/FollowRequestsPage';
+import TopicRoomsPage from './pages/TopicRoomsPage';
+import ReelDetailPage from './pages/ReelDetailPage';
+import NewsPage from './pages/NewsPage';
+import ReadBookPage from './pages/ReadBookPage';
+import BookReaderPage from './pages/BookReaderPage';
+import PostAiPage from './pages/PostAiPage';
 
 const GLOBAL_PULL_REFRESH_RATIO = 0.4;
 
@@ -894,10 +893,7 @@ scrollPaddingBottom: 0,
           )}
 
           <RouteErrorBoundary key={location.pathname}>
-            <Suspense
-              fallback={<PageLoader />}
-            >
-              <Routes>
+            <Routes>
                 <Route
                   path="/"
                   element={
@@ -1016,7 +1012,6 @@ scrollPaddingBottom: 0,
 
                 <Route path="*" element={<Navigate to="/feed" replace />} />
               </Routes>
-            </Suspense>
           </RouteErrorBoundary>
         </main>
       </div>

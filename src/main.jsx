@@ -20,9 +20,21 @@ if ('clearAppBadge' in navigator) {
   navigator.clearAppBadge().catch(() => {});
 }
 // In-app browser + chunk-load recovery
-const isInAppBrowser = /LinkedInApp|Telegram|FBAN|FBAV|Instagram/i.test(
-  navigator.userAgent
-);
+const SMARTY_CHUNK_RELOAD_KEY = 'smarty-chunk-reload-attempted';
+
+const reloadOnceForChunkFailure = () => {
+  try {
+    if (sessionStorage.getItem(SMARTY_CHUNK_RELOAD_KEY) === '1') {
+      return;
+    }
+
+    sessionStorage.setItem(SMARTY_CHUNK_RELOAD_KEY, '1');
+  } catch {
+    // Ignore storage failures in strict WebViews.
+  }
+
+  window.location.reload();
+};
 
 window.addEventListener('error', (event) => {
   const message = event?.message || '';
@@ -31,7 +43,7 @@ window.addEventListener('error', (event) => {
     message.includes('Failed to fetch dynamically imported module') ||
     message.includes('Importing a module script failed')
   ) {
-    window.location.reload();
+    reloadOnceForChunkFailure();
   }
 });
 
@@ -42,7 +54,7 @@ window.addEventListener('unhandledrejection', (event) => {
     reason.includes('Failed to fetch dynamically imported module') ||
     reason.includes('Importing a module script failed')
   ) {
-    window.location.reload();
+    reloadOnceForChunkFailure();
   }
 });
 
@@ -58,15 +70,33 @@ if ('serviceWorker' in navigator) {
     .catch(() => {});
 }
 
+// Keep reload protection active during startup to avoid infinite WebView reload loops.
+setTimeout(() => {
+  try {
+    sessionStorage.removeItem(SMARTY_CHUNK_RELOAD_KEY);
+  } catch {
+    // Ignore storage failures in strict WebViews.
+  }
+}, 15000);
+
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
   throw new Error('Root element not found');
 }
 
+const root = ReactDOM.createRoot(rootElement);
+
+// Signal that React has started mounting.
 window.__SMARTY_APP_MOUNTED__ = true;
 
-ReactDOM.createRoot(rootElement).render(
+// Remove boot-loader marker after React startup begins.
+requestAnimationFrame(() => {
+  delete rootElement.dataset.bootLoading;
+});
+
+
+root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
