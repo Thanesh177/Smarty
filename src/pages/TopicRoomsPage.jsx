@@ -2450,46 +2450,77 @@ const visibleRooms = allRooms.filter((room) => {
         return [roomToOpen, ...prev];
       });
 
-const normalizedRoomToOpen = {
-  ...roomToOpen,
-  roomId: roomToOpen.roomId || roomToOpen.id || requestedRoomId,
-  id: roomToOpen.id || roomToOpen.roomId || requestedRoomId,
-  privacy: normalizeRoomPrivacy({
-    ...roomToOpen,
-    privacy: roomToOpen.privacy || roomToOpen.visibility || 'private',
-  }),
-  isPrivate:
-    normalizeRoomPrivacy({
-      ...roomToOpen,
-      privacy: roomToOpen.privacy || roomToOpen.visibility || 'private',
-    }) === 'private',
-  joinedViaInvite: true,
-  guestId: roomToOpen.guestId || navigationState?.guestId || getStableGuestId(),
-};
+      const normalizedRoomToOpen = {
+        ...roomToOpen,
+        roomId: roomToOpen.roomId || roomToOpen.id || requestedRoomId,
+        id: roomToOpen.id || roomToOpen.roomId || requestedRoomId,
+        privacy: normalizeRoomPrivacy({
+          ...roomToOpen,
+          privacy: roomToOpen.privacy || roomToOpen.visibility || 'private',
+        }),
+        isPrivate:
+          normalizeRoomPrivacy({
+            ...roomToOpen,
+            privacy: roomToOpen.privacy || roomToOpen.visibility || 'private',
+          }) === 'private',
+        joinedViaInvite: true,
+        guestId: roomToOpen.guestId || navigationState?.guestId || getStableGuestId(),
+      };
 
-persistJoinedInviteRoom(normalizedRoomToOpen);
-activeRoomRef.current = normalizedRoomToOpen;
-setActiveRoom(normalizedRoomToOpen);
-setMessages([]);
-setMessagesLoading(true);
-setHasOlderMessages(true);
+      persistJoinedInviteRoom(normalizedRoomToOpen);
 
-await openRoom(normalizedRoomToOpen);
+      const hydratedRoom = {
+        ...normalizedRoomToOpen,
+        joinedViaInvite: true,
+      };
 
-window.setTimeout(() => {
-  if (
-    mountedRef.current &&
-    activeRoomRef.current?.roomId === normalizedRoomToOpen.roomId &&
-    messagesStateRef.current.length === 0
-  ) {
-    openRoom(normalizedRoomToOpen);
-  }
-}, 450);
+      activeRoomRef.current = hydratedRoom;
 
-navigate('/rooms', {
-  replace: true,
-  state: null,
-});
+      shouldAutoScrollToNewestRef.current = true;
+      loadingRoomRef.current = false;
+      roomOpenRequestIdRef.current += 1;
+
+      setMessages([]);
+      messagesStateRef.current = [];
+
+      setMessagesLoading(true);
+      setOlderMessagesLoading(false);
+      olderMessagesLoadingRef.current = false;
+      setHasOlderMessages(true);
+
+      setActiveRoom(hydratedRoom);
+      setMobileChatOpen(true);
+
+      window.requestAnimationFrame(() => {
+        if (!mountedRef.current) return;
+
+        openRoom(hydratedRoom, {
+          forceRefresh: true,
+          skipCache: true,
+          source: 'invite-link',
+        });
+
+        window.setTimeout(() => {
+          if (
+            mountedRef.current &&
+            activeRoomRef.current?.roomId === hydratedRoom.roomId &&
+            messagesStateRef.current.length === 0
+          ) {
+            loadingRoomRef.current = false;
+
+            openRoom(hydratedRoom, {
+              forceRefresh: true,
+              skipCache: true,
+              source: 'invite-link-retry',
+            });
+          }
+        }, 900);
+      });
+
+      navigate('/rooms', {
+        replace: true,
+        state: null,
+      });
     } catch (err) {
       console.error('OPEN JOINED ROOM FROM NAVIGATION ERROR:', err);
       handledNavigationOpenKeyRef.current = '';
@@ -2517,7 +2548,27 @@ navigate('/rooms', {
 
     if (!currentUserId || !requestedRoomId) return;
 
-    openRoomFromNavigationState({ force: true });
+    const run = async () => {
+      await openRoomFromNavigationState({ force: true });
+
+      window.setTimeout(() => {
+        if (
+          mountedRef.current &&
+          activeRoomRef.current?.roomId === requestedRoomId &&
+          messagesStateRef.current.length === 0
+        ) {
+          loadingRoomRef.current = false;
+
+          openRoom(activeRoomRef.current, {
+            forceRefresh: true,
+            skipCache: true,
+            source: 'post-navigation-recovery',
+          });
+        }
+      }, 1200);
+    };
+
+    run();
   }, [user, userId, location.state, openRoomFromNavigationState]);
 
   useEffect(() => {

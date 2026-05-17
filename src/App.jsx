@@ -87,14 +87,7 @@ function PageLoader() {
 }
 
 function TopicRoomsRouteWrapper() {
-  const location = useLocation();
-  const { roomId = '' } = useParams();
-
-  return (
-    <TopicRoomsPage
-      key={`${roomId}-${location.pathname}-${location.search}`}
-    />
-  );
+  return <TopicRoomsPage />;
 }
 
 class RouteErrorBoundary extends Component {
@@ -1053,12 +1046,30 @@ scrollPaddingBottom: 0,
                 />
 
                 <Route path="/rooms" element={<TopicRoomsRouteWrapper />} />
-                <Route path="/rooms/:roomId" element={<TopicRoomsRouteWrapper />} />
-                <Route path="/rooms/:roomId/*" element={<TopicRoomsRouteWrapper />} />
-                <Route path="/topic-room/:roomId" element={<TopicRoomsRouteWrapper />} />
-                <Route path="/topic-room/:roomId/*" element={<TopicRoomsRouteWrapper />} />
-                <Route path="/topicrooms/:roomId" element={<TopicRoomsRouteWrapper />} />
-                <Route path="/topicrooms/:roomId/*" element={<TopicRoomsRouteWrapper />} />
+                <Route
+                  path="/rooms/:roomId"
+                  element={<TopicRoomsPage />}
+                />
+                <Route
+                  path="/rooms/:roomId/*"
+                  element={<TopicRoomsPage />}
+                />
+                <Route
+                  path="/topic-room/:roomId"
+                  element={<TopicRoomsPage />}
+                />
+                <Route
+                  path="/topic-room/:roomId/*"
+                  element={<TopicRoomsPage />}
+                />
+                <Route
+                  path="/topicrooms/:roomId"
+                  element={<TopicRoomsPage />}
+                />
+                <Route
+                  path="/topicrooms/:roomId/*"
+                  element={<TopicRoomsPage />}
+                />
 
                 <Route path="*" element={<Navigate to="/feed" replace />} />
               </Routes>
