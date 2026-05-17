@@ -267,8 +267,22 @@ api.interceptors.request.use(async (config) => {
 roomInviteApi.interceptors.request.use(async (config) => {
   const authedConfig = await attachAuthHeader(config);
   const url = String(authedConfig?.url || '');
+  const method = String(authedConfig?.method || 'get').toLowerCase();
 
   if (url.startsWith('/room-invites/') || url.startsWith('/rooms/')) {
+    const guestId = getOrCreateGuestId();
+
+    if (method === 'get') {
+      return {
+        ...authedConfig,
+        params: {
+          ...(authedConfig.params || {}),
+          guestId,
+          clientGuestId: guestId,
+        },
+      };
+    }
+
     return attachGuestIdentity(authedConfig);
   }
 
@@ -722,6 +736,7 @@ export const roomApi = {
           guestId,
           clientGuestId: guestId,
         },
+        headers: {},
       }
     );
     const parsed = parseApiBody(data);

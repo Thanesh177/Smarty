@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { roomApi } from '../api/client';
+import { getStableGuestId, roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
 import { Download, Trash2, X } from 'lucide-react';
@@ -10,6 +10,7 @@ import RoomMediaPreview from './RoomMediaPreview';
 import RoomInfoPage from './RoomInfoPage';
 
 const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
+const JOINED_INVITE_ROOMS_CACHE_KEY = 'smarty_joined_invite_rooms_v1';
 const API_ORIGIN = 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com';
 const APP_ORIGIN = import.meta.env.PROD
   ? 'https://main.d3qiuefonbp8n9.amplifyapp.com'
@@ -80,6 +81,82 @@ function removeStoredRoomImage(roomId) {
   } catch {
     // Ignore storage errors.
   }
+}
+
+// --- Joined Invite Rooms Fallback Cache ---
+function getStoredJoinedInviteRooms() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(JOINED_INVITE_ROOMS_CACHE_KEY) || '[]');
+    return Array.isArray(stored) ? stored.filter((room) => room?.roomId || room?.id) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistJoinedInviteRoom(room) {
+  const roomId = String(room?.roomId || room?.id || '').trim();
+  if (!roomId) return;
+
+  try {
+    const current = getStoredJoinedInviteRooms();
+    const normalizedRoom = {
+      ...room,
+      roomId,
+      id: roomId,
+      name: room?.name || room?.roomName || 'Joined group',
+      roomName: room?.roomName || room?.name || 'Joined group',
+      privacy: room?.privacy || 'private',
+      type: room?.type || 'custom',
+      joinedViaInvite: true,
+      joinedAt: room?.joinedAt || Date.now(),
+    };
+
+    const next = [
+      normalizedRoom,
+      ...current.filter((item) => String(item?.roomId || item?.id || '') !== roomId),
+    ].slice(0, 50);
+
+    localStorage.setItem(JOINED_INVITE_ROOMS_CACHE_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function mergeJoinedInviteRooms(rooms = [], extraRoom = null) {
+  const joinedRooms = getStoredJoinedInviteRooms();
+  const candidates = extraRoom ? [extraRoom, ...joinedRooms] : joinedRooms;
+  const nextRooms = Array.isArray(rooms) ? [...rooms] : [];
+
+  candidates.forEach((room) => {
+    const roomId = String(room?.roomId || room?.id || '').trim();
+    if (!roomId) return;
+
+    const normalizedRoom = {
+      ...room,
+      roomId,
+      id: roomId,
+      name: room?.name || room?.roomName || 'Joined group',
+      roomName: room?.roomName || room?.name || 'Joined group',
+      privacy: room?.privacy || 'private',
+      type: room?.type || 'custom',
+      joinedViaInvite: true,
+    };
+
+    const existingIndex = nextRooms.findIndex(
+      (item) => String(item?.roomId || item?.id || '') === roomId
+    );
+
+    if (existingIndex >= 0) {
+      nextRooms[existingIndex] = {
+        ...normalizedRoom,
+        ...nextRooms[existingIndex],
+      };
+    } else {
+      nextRooms.unshift(normalizedRoom);
+    }
+  });
+
+  return nextRooms;
 }
 
 function normalizeRoomImageUrl(imageUrl) {
@@ -574,7 +651,10 @@ export default function TopicRoomsPage() {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const userId = user?.id || user?.userId || user?.sub;
+  const authUserId = user?.id || user?.userId || user?.sub || '';
+  const guestUserId = getStableGuestId();
+  const userId = authUserId || guestUserId;
+  const isGuestUser = !authUserId;
 
   function getInviteUserId(userValue) {
     if (typeof userValue === 'string') return userValue;
@@ -1164,6 +1244,8 @@ useLayoutEffect(() => {
 
     try {
       const data = await roomApi.getRoomMessages(room.roomId, {
+        guestId: getStableGuestId(),
+        clientGuestId: getStableGuestId(),
         before: oldestCursor,
         beforeMessageId: oldestCursor,
         cursor: oldestCursor,
@@ -1650,7 +1732,10 @@ async function toggleActiveInfoSection(section) {
     setActiveInfoRequests([]);
 
     try {
-      const data = await roomApi.getRoomJoinRequests(room.roomId);
+      const data = await roomApi.getRoomJoinRequests(room.roomId, {
+        guestId: getStableGuestId(),
+        clientGuestId: getStableGuestId(),
+      });
       const nextRequests = extractRoomArray(data, ['requests']);
       setActiveInfoRequests(nextRequests);
     } catch (err) {
@@ -1693,7 +1778,10 @@ async function loadActiveRoomInfoMembers(room = activeRoomRef.current || activeR
   setActiveInfoLoading(true);
 
   try {
-    const data = await roomApi.getRoomMembers(room.roomId);
+    const data = await roomApi.getRoomMembers(room.roomId, {
+      guestId: getStableGuestId(),
+      clientGuestId: getStableGuestId(),
+    });
     if (!mountedRef.current) return;
 
     const nextMembers = getRoomMembersFromResponse(data).filter(Boolean);
@@ -1882,7 +1970,11 @@ async function approveJoinRequest(requestUserId) {
       }
 
       const data = await Promise.race([
-        roomApi.getRooms({ search: normalizedSearch }),
+        roomApi.getRooms({
+          search: normalizedSearch,
+          guestId: getStableGuestId(),
+          clientGuestId: getStableGuestId(),
+        }),
         new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error('Rooms load timeout')),
@@ -1957,39 +2049,46 @@ async function approveJoinRequest(requestUserId) {
           : {};
 
       const joinedRoomId = getNavigationRoomOpenId(navigationState);
+      let navigationJoinedRoom = null;
 
-      if (
-        joinedRoomId &&
-        !visibleRooms.some(
-          (room) => String(room.roomId || room.id || '') === String(joinedRoomId)
-        )
-      ) {
-        const fallbackJoinedRoom = navigationState?.joinedRoom || {
+      if (joinedRoomId) {
+        navigationJoinedRoom = navigationState?.joinedRoom || {
           roomId: joinedRoomId,
           id: joinedRoomId,
           name: navigationState?.openRoomName || 'Joined group',
+          roomName: navigationState?.openRoomName || 'Joined group',
           privacy: 'private',
           type: 'custom',
+          guestId: navigationState?.guestId || getStableGuestId(),
+          joinedAt: navigationState?.joinedAt || Date.now(),
         };
 
-        visibleRooms.unshift({
-          ...fallbackJoinedRoom,
-          roomId:
-            fallbackJoinedRoom.roomId ||
-            fallbackJoinedRoom.id ||
-            joinedRoomId,
-        });
+        navigationJoinedRoom = {
+          ...navigationJoinedRoom,
+          roomId: navigationJoinedRoom.roomId || navigationJoinedRoom.id || joinedRoomId,
+          id: navigationJoinedRoom.id || navigationJoinedRoom.roomId || joinedRoomId,
+          name: navigationJoinedRoom.name || navigationJoinedRoom.roomName || navigationState?.openRoomName || 'Joined group',
+          roomName: navigationJoinedRoom.roomName || navigationJoinedRoom.name || navigationState?.openRoomName || 'Joined group',
+          privacy: navigationJoinedRoom.privacy || 'private',
+          type: navigationJoinedRoom.type || 'custom',
+          guestId: navigationJoinedRoom.guestId || navigationState?.guestId || getStableGuestId(),
+          joinedAt: navigationJoinedRoom.joinedAt || navigationState?.joinedAt || Date.now(),
+        };
+
+        persistJoinedInviteRoom(navigationJoinedRoom);
       }
+
+      const mergedVisibleRooms = mergeJoinedInviteRooms(visibleRooms, navigationJoinedRoom);
 
       roomsCacheRef.current = {
         key: cacheKey,
         timestamp: Date.now(),
-        rooms: visibleRooms,
+        rooms: mergedVisibleRooms,
       };
 
       const preloadRoomMessages = async () => {
         try {
-          const preloadRooms = visibleRooms.slice(0, 8);
+          const preloadRooms = mergedVisibleRooms.slice(0, 8);
           const chunkSize = 4;
 
           for (let index = 0; index < preloadRooms.length; index += chunkSize) {
@@ -2006,6 +2105,8 @@ async function approveJoinRequest(requestUserId) {
                 try {
                   const data = await Promise.race([
                     roomApi.getRoomMessages(room.roomId, {
+                      guestId: getStableGuestId(),
+                      clientGuestId: getStableGuestId(),
                       limit: ROOM_MESSAGES_FETCH_LIMIT,
                     }),
                     new Promise((_, reject) =>
@@ -2041,7 +2142,7 @@ async function approveJoinRequest(requestUserId) {
         window.setTimeout(preloadRoomMessages, 600);
       }
 
-      setRooms((prev) => (areRoomListsEqual(prev, visibleRooms) ? prev : visibleRooms));
+      setRooms((prev) => (areRoomListsEqual(prev, mergedVisibleRooms) ? prev : mergedVisibleRooms));
       setInitialRoomsReady(true);
     } catch (err) {
   console.error('LOAD ROOMS ERROR:', err);
@@ -2080,7 +2181,7 @@ async function approveJoinRequest(requestUserId) {
   }
 
   const openRoomFromNavigationState = useCallback(async (options = {}) => {
-    const currentUserId = userId || user?.id || user?.userId || user?.sub || '';
+    const currentUserId = userId || getStableGuestId();
     const navigationState =
       location.state && typeof location.state === 'object' ? location.state : {};
 
@@ -2182,7 +2283,7 @@ async function approveJoinRequest(requestUserId) {
   }, [location.state, navigate, rooms, user, userId]);
 
   useEffect(() => {
-    const currentUserId = userId || user?.id || user?.userId || user?.sub || '';
+    const currentUserId = userId || getStableGuestId();
     const navigationState =
       location.state && typeof location.state === 'object' ? location.state : {};
 
@@ -2196,7 +2297,8 @@ async function approveJoinRequest(requestUserId) {
   }, [user, userId, location.state, openRoomFromNavigationState]);
 
   useEffect(() => {
-    if (!userId) return;
+    const effectiveUserId = userId || getStableGuestId();
+    if (!effectiveUserId) return;
 
     setInitialRoomsReady(false);
     setRoomsLoading(true);
@@ -2214,7 +2316,7 @@ async function approveJoinRequest(requestUserId) {
 
       try {
         await loadRooms('', { force: true });
-        initialRoomsLoadedForUserRef.current = userId;
+        initialRoomsLoadedForUserRef.current = effectiveUserId;
       } catch (err) {
         console.error('INITIAL ROOM LOAD ERROR:', err);
         setInitialRoomsReady(true);
@@ -2231,7 +2333,7 @@ async function approveJoinRequest(requestUserId) {
   }, [userId]);
 
   useEffect(() => {
-    if (!userId || !initialRoomsReady) return undefined;
+    if (isGuestUser || !userId || !initialRoomsReady) return undefined;
 
     const loadInitialInvites = () => loadRoomInvites(false);
     let idleCallbackId = null;
@@ -2268,10 +2370,10 @@ async function approveJoinRequest(requestUserId) {
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [userId, initialRoomsReady]);
+  }, [userId, isGuestUser, initialRoomsReady]);
 
   useEffect(() => {
-    if (!userId || !initialRoomsReady) return undefined;
+    if (isGuestUser || !userId || !initialRoomsReady) return undefined;
 
     let unsubscribe = null;
     const socketTimerId = window.setTimeout(() => {
@@ -2412,6 +2514,7 @@ async function approveJoinRequest(requestUserId) {
     initialRoomsReady,
     isMessagesNearBottom,
     scrollMessagesToBottom,
+    isGuestUser,
     userId,
   ]);
 
@@ -2542,7 +2645,11 @@ async function approveJoinRequest(requestUserId) {
 
       try {
         setMessagesLoading(true);
-        const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId, { limit: ROOM_MESSAGES_FETCH_LIMIT });
+        const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId, {
+          guestId: getStableGuestId(),
+          clientGuestId: getStableGuestId(),
+          limit: ROOM_MESSAGES_FETCH_LIMIT,
+        });
 
         if (mountedRef.current) {
   const loadedMessages = trimRoomMessagesForMemory(
@@ -2590,7 +2697,10 @@ syncRoomMessageCache(finalCreatedRoom.roomId, loadedMessages);
   async function openHiddenRooms() {
     try {
       setShowRoomMenu(false);
-      const data = await roomApi.getHiddenRooms();
+      const data = await roomApi.getHiddenRooms({
+        guestId: getStableGuestId(),
+        clientGuestId: getStableGuestId(),
+      });
 
       if (!mountedRef.current) return;
 
@@ -2607,7 +2717,10 @@ syncRoomMessageCache(finalCreatedRoom.roomId, loadedMessages);
 
     try {
       setStatus('');
-      await roomApi.unhideRoom(room.roomId);
+      await roomApi.unhideRoom(room.roomId, {
+        guestId: getStableGuestId(),
+        clientGuestId: getStableGuestId(),
+      });
 
       setHiddenRooms((prev) => prev.filter((item) => item.roomId !== room.roomId));
       roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
