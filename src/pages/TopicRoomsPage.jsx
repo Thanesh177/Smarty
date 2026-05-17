@@ -1562,7 +1562,13 @@ function syncRoomMessageCache(roomId, nextMessages) {
   if (!roomId) return [];
 
   const normalizedMessages = trimRoomMessagesForMemory(
-    Array.isArray(nextMessages) ? nextMessages : []
+    sortRoomMessages(
+      dedupeMessages(
+        (Array.isArray(nextMessages) ? nextMessages : []).map(
+          normalizeRoomMessageMedia
+        )
+      )
+    )
   );
 
   roomMessagesCacheRef.current[roomId] = normalizedMessages;
@@ -2480,42 +2486,45 @@ const visibleRooms = allRooms.filter((room) => {
       loadingRoomRef.current = false;
       roomOpenRequestIdRef.current += 1;
 
-      setMessages([]);
-      messagesStateRef.current = [];
-
-      setMessagesLoading(true);
       setOlderMessagesLoading(false);
-      olderMessagesLoadingRef.current = false;
-      setHasOlderMessages(true);
+olderMessagesLoadingRef.current = false;
+setHasOlderMessages(true);
 
-      setActiveRoom(hydratedRoom);
-      setMobileChatOpen(true);
+setActiveRoom(hydratedRoom);
+setMobileChatOpen(true);
 
-      window.requestAnimationFrame(() => {
-        if (!mountedRef.current) return;
+window.requestAnimationFrame(async () => {
+  if (!mountedRef.current) return;
 
-        openRoom(hydratedRoom, {
-          forceRefresh: true,
-          skipCache: true,
-          source: 'invite-link',
-        });
+  try {
+    await openRoom(hydratedRoom, {
+      forceRefresh: true,
+      skipCache: true,
+      source: 'invite-link',
+    });
 
-        window.setTimeout(() => {
-          if (
-            mountedRef.current &&
-            activeRoomRef.current?.roomId === hydratedRoom.roomId &&
-            messagesStateRef.current.length === 0
-          ) {
-            loadingRoomRef.current = false;
+    const loadedMessages =
+      roomMessagesCacheRef.current[hydratedRoom.roomId] || [];
 
-            openRoom(hydratedRoom, {
-              forceRefresh: true,
-              skipCache: true,
-              source: 'invite-link-retry',
-            });
-          }
-        }, 900);
+    if (
+      mountedRef.current &&
+      activeRoomRef.current?.roomId === hydratedRoom.roomId &&
+      loadedMessages.length === 0
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      loadingRoomRef.current = false;
+
+      await openRoom(hydratedRoom, {
+        forceRefresh: true,
+        skipCache: true,
+        source: 'invite-link-retry',
       });
+    }
+  } catch (err) {
+    console.error('INVITE ROOM AUTO OPEN ERROR:', err);
+  }
+});
 
       navigate('/rooms', {
         replace: true,
@@ -2536,40 +2545,59 @@ const visibleRooms = allRooms.filter((room) => {
       }, 1500);
     }
   }, [location.state, navigate, rooms, user, userId]);
+useEffect(() => {
+  const currentUserId = userId || getStableGuestId();
 
-  useEffect(() => {
-    const currentUserId = userId || getStableGuestId();
-    const navigationState =
-      location.state && typeof location.state === 'object' ? location.state : {};
+  const navigationState =
+    location.state && typeof location.state === 'object'
+      ? location.state
+      : {};
 
-    if (navigationState.openJoinedRoom !== true) return;
+  if (navigationState.openJoinedRoom !== true) return;
 
-    const requestedRoomId = getNavigationRoomOpenId(navigationState);
+  const requestedRoomId =
+    getNavigationRoomOpenId(navigationState);
 
-    if (!currentUserId || !requestedRoomId) return;
+  if (!currentUserId || !requestedRoomId) return;
 
-    const run = async () => {
-      await openRoomFromNavigationState({ force: true });
+  let cancelled = false;
 
-      window.setTimeout(() => {
-        if (
-          mountedRef.current &&
-          activeRoomRef.current?.roomId === requestedRoomId &&
-          messagesStateRef.current.length === 0
-        ) {
-          loadingRoomRef.current = false;
+  const ensureMessagesLoaded = () => {
+    if (cancelled || !mountedRef.current) return;
 
-          openRoom(activeRoomRef.current, {
-            forceRefresh: true,
-            skipCache: true,
-            source: 'post-navigation-recovery',
-          });
-        }
-      }, 1200);
-    };
+    const room = activeRoomRef.current;
 
-    run();
-  }, [user, userId, location.state, openRoomFromNavigationState]);
+    if (!room?.roomId) return;
+
+    if (room.roomId !== requestedRoomId) return;
+
+    if (messagesStateRef.current.length > 0) return;
+
+    loadingRoomRef.current = false;
+
+    openRoom(room, {
+      forceRefresh: true,
+      skipCache: true,
+      source: 'post-navigation-recovery',
+    });
+  };
+
+  const run = async () => {
+    await openRoomFromNavigationState({
+      force: true,
+    });
+
+    window.setTimeout(ensureMessagesLoaded, 800);
+    window.setTimeout(ensureMessagesLoaded, 1800);
+    window.setTimeout(ensureMessagesLoaded, 3200);
+  };
+
+  run();
+
+  return () => {
+    cancelled = true;
+  };
+}, [user, userId, location.state, openRoomFromNavigationState]);
 
   useEffect(() => {
     const effectiveUserId = userId || getStableGuestId();
