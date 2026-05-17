@@ -161,6 +161,31 @@ function getPendingRoomInviteCode() {
   return String(pendingInvite?.inviteCode || '').trim();
 }
 
+function clearPendingRoomInvite() {
+  try {
+    sessionStorage.removeItem('pendingRoomInvite');
+    sessionStorage.removeItem('pendingRoomInviteCode');
+    sessionStorage.removeItem('pendingRoomInviteTimestamp');
+    localStorage.removeItem('pendingRoomInvite');
+    localStorage.removeItem('pendingRoomInviteCode');
+    localStorage.removeItem('pendingRoomInviteTimestamp');
+  } catch {
+    // Ignore storage failures in strict in-app browsers.
+  }
+}
+
+function getPendingRoomInviteTimestamp() {
+  try {
+    return Number(
+      sessionStorage.getItem('pendingRoomInviteTimestamp') ||
+      localStorage.getItem('pendingRoomInviteTimestamp') ||
+      0
+    );
+  } catch {
+    return 0;
+  }
+}
+
 function getUnreadFromChatsPayload(payload) {
   const chats = Array.isArray(payload)
     ? payload
@@ -279,10 +304,25 @@ function Layout() {
 
   useEffect(() => {
     if (!user) return;
-    if (isRoomInvitePath(location.pathname)) return;
+
+    if (isRoomInvitePath(location.pathname)) {
+      clearPendingRoomInvite();
+      return;
+    }
 
     const pendingInviteCode = getPendingRoomInviteCode();
     if (!pendingInviteCode) return;
+
+    const inviteTimestamp = getPendingRoomInviteTimestamp();
+    const isFreshInvite = Boolean(
+      inviteTimestamp &&
+      Date.now() - inviteTimestamp < 1000 * 60 * 5
+    );
+
+    if (!isFreshInvite) {
+      clearPendingRoomInvite();
+      return;
+    }
 
     navigate(`/rooms/invite/${encodeURIComponent(pendingInviteCode)}`, {
       replace: true,
