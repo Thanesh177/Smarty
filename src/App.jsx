@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef, Component } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { signInWithRedirect } from 'aws-amplify/auth';
@@ -83,6 +83,17 @@ function PageLoader() {
         </div>
       </div>
     </div>
+  );
+}
+
+function TopicRoomsRouteWrapper() {
+  const location = useLocation();
+  const { roomId = '' } = useParams();
+
+  return (
+    <TopicRoomsPage
+      key={`${roomId}-${location.pathname}-${location.search}`}
+    />
   );
 }
 
@@ -1041,13 +1052,13 @@ scrollPaddingBottom: 0,
                   }
                 />
 
-                <Route path="/rooms" element={<TopicRoomsPage />} />
-                <Route path="/rooms/:roomId" element={<TopicRoomsPage />} />
-                <Route path="/rooms/:roomId/*" element={<TopicRoomsPage />} />
-                <Route path="/topic-room/:roomId" element={<TopicRoomsPage />} />
-                <Route path="/topic-room/:roomId/*" element={<TopicRoomsPage />} />
-                <Route path="/topicrooms/:roomId" element={<TopicRoomsPage />} />
-                <Route path="/topicrooms/:roomId/*" element={<TopicRoomsPage />} />
+                <Route path="/rooms" element={<TopicRoomsRouteWrapper />} />
+                <Route path="/rooms/:roomId" element={<TopicRoomsRouteWrapper />} />
+                <Route path="/rooms/:roomId/*" element={<TopicRoomsRouteWrapper />} />
+                <Route path="/topic-room/:roomId" element={<TopicRoomsRouteWrapper />} />
+                <Route path="/topic-room/:roomId/*" element={<TopicRoomsRouteWrapper />} />
+                <Route path="/topicrooms/:roomId" element={<TopicRoomsRouteWrapper />} />
+                <Route path="/topicrooms/:roomId/*" element={<TopicRoomsRouteWrapper />} />
 
                 <Route path="*" element={<Navigate to="/feed" replace />} />
               </Routes>

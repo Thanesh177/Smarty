@@ -152,6 +152,11 @@ export default function JoinRoomPage() {
             inviteCode: cleanInviteCode,
             guestId: stableGuestId,
             joinedAt: Date.now(),
+            autoOpenRoom: true,
+            forceOpenRoom: true,
+            loadMessagesImmediately: true,
+            preloadMessages: true,
+            skipRoomCache: true,
           },
         });
         return;
@@ -179,6 +184,11 @@ export default function JoinRoomPage() {
             inviteCode: cleanInviteCode,
             guestId: stableGuestId,
             joinedAt: Date.now(),
+            autoOpenRoom: true,
+            forceOpenRoom: true,
+            loadMessagesImmediately: true,
+            preloadMessages: true,
+            skipRoomCache: true,
           },
         });
         return;
