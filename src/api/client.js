@@ -272,12 +272,38 @@ api.interceptors.request.use(async (config) => {
   const url = String(config?.url || '');
   const method = String(config?.method || 'get').toLowerCase();
 
-  const isPublicRoomMessagesRoute =
-    method === 'get' &&
-    url.startsWith('/rooms/') &&
-    url.endsWith('/messages');
+  const guestCompatibleRoute =
+    (
+      method === 'get' &&
+      (
+        url === '/rooms/public' ||
+        url.startsWith('/rooms/invite/') ||
+        (url.startsWith('/rooms/') && url.endsWith('/messages')) ||
+        (url.startsWith('/rooms/') && url.endsWith('/members'))
+      )
+    ) ||
+    (
+      method === 'post' &&
+      (
+        (url.startsWith('/rooms/') && url.endsWith('/messages')) ||
+        (url.startsWith('/rooms/') && url.endsWith('/media-upload-url'))
+      )
+    );
 
-  if (isPublicRoomMessagesRoute) {
+  const token = await getAuthToken();
+
+  // LOGGED IN
+  if (token) {
+    config.headers = {
+      ...(config.headers || {}),
+      Authorization: `Bearer ${token}`,
+    };
+
+    return config;
+  }
+
+  // GUEST
+  if (guestCompatibleRoute) {
     const publicConfig = {
       ...config,
       headers: {
@@ -291,22 +317,7 @@ api.interceptors.request.use(async (config) => {
     return attachGuestIdentity(publicConfig);
   }
 
-  const authedConfig = await attachAuthHeader(config);
-  const authedUrl = String(authedConfig?.url || '');
-  const authedMethod = String(authedConfig?.method || 'get').toLowerCase();
-
-  const isGuestReadableRoute =
-    authedMethod === 'get' &&
-    (
-      authedUrl === '/rooms/public' ||
-      authedUrl.startsWith('/rooms/invite/')
-    );
-
-  if (isGuestReadableRoute) {
-    return attachGuestIdentity(authedConfig);
-  }
-
-  return authedConfig;
+  return config;
 });
 
 roomInviteApi.interceptors.request.use(async (config) => {
@@ -653,11 +664,21 @@ export const roomApi = {
       throw new Error(isVideo ? 'Video must be 50 MB or smaller.' : 'Image must be 8 MB or smaller.');
     }
 
+    const isLoggedIn = await hasLiveAuthSession();
+    const guestId = getOrCreateGuestId();
+
     const { data } = await api.post(`/rooms/${encodePathSegment(cleanRoomId)}/media-upload-url`, {
       roomId: cleanRoomId,
       fileName,
       fileSize,
       contentType,
+      ...(isLoggedIn
+        ? {}
+        : {
+            guestId,
+            clientGuestId: guestId,
+            isGuest: true,
+          }),
     });
 
     const parsed = parseApiBody(data);
@@ -959,6 +980,30 @@ joinRoomFromInvite: async (inviteCode) => {
 
     return parsed;
   },
+
+sendGuestRoomMessage: async (roomId, payload = {}) => {
+  const cleanRoomId = String(roomId || '').trim();
+  const guestId = getOrCreateGuestId();
+
+  if (!cleanRoomId) {
+    throw new Error('Room ID is required to send a guest message.');
+  }
+
+  const { data } = await api.post(
+    `/rooms/${encodePathSegment(cleanRoomId)}/messages`,
+    {
+      ...payload,
+      guestId: payload.guestId || guestId,
+      clientGuestId: payload.clientGuestId || guestId,
+      isGuest: true,
+      senderId: payload.senderId || guestId,
+      senderName: payload.senderName || 'Guest',
+      senderEmail: payload.senderEmail || '',
+    }
+  );
+
+  return parseApiBody(data);
+},
 
 async getRoomMembers(roomId, params = {}) {
   const cleanRoomId = String(roomId || '').trim();

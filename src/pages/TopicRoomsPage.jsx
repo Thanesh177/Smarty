@@ -698,6 +698,20 @@ export default function TopicRoomsPage() {
     return payload || {};
   }
 
+  function requireLoggedInAction(actionLabel = 'do this') {
+  if (!isGuestUser) return false;
+
+  setStatus(`Only logged-in users can ${actionLabel}. Please log in first.`);
+  setShowCreateModal(false);
+  setShowInvite(false);
+  setInviteLinkModalOpen(false);
+  setShowRoomMenu(false);
+  setShowActiveRoomMenu(false);
+  setOpenRoomActionMenuId('');
+
+  return true;
+}
+
   function getInviteUserId(userValue) {
     if (typeof userValue === 'string') return userValue;
 
@@ -2415,7 +2429,7 @@ async function approveJoinRequest(requestUserId) {
   }, [userId, isGuestUser, initialRoomsReady]);
 
   useEffect(() => {
-    if (isGuestUser || !userId || !initialRoomsReady) return undefined;
+    if (!userId || !initialRoomsReady) return undefined;
 
     let unsubscribe = null;
     const socketTimerId = window.setTimeout(() => {
@@ -2556,12 +2570,12 @@ async function approveJoinRequest(requestUserId) {
     initialRoomsReady,
     isMessagesNearBottom,
     scrollMessagesToBottom,
-    isGuestUser,
     userId,
   ]);
 
   async function createRoom(e) {
     e.preventDefault();
+    if (requireLoggedInAction('create a group')) return false;
 
     if (creatingRoom) return false;
     setCreatingRoom(true);
@@ -4130,12 +4144,18 @@ async function sendMessage(e) {
         ? [selectedMediaFile]
         : [];
 
-  if ((!cleanText && filesToSend.length === 0) || !room || sendingMessageRef.current) {
+  if (
+    (!cleanText && filesToSend.length === 0) ||
+    !room ||
+    sendingMessageRef.current
+  ) {
     return;
   }
 
   if (filesToSend.length > ROOM_MEDIA_MAX_FILES_PER_BATCH) {
-    setStatus(`You can upload up to ${ROOM_MEDIA_MAX_FILES_PER_BATCH} files at once.`);
+    setStatus(
+      `You can upload up to ${ROOM_MEDIA_MAX_FILES_PER_BATCH} files at once.`
+    );
     return;
   }
 
@@ -4152,17 +4172,29 @@ async function sendMessage(e) {
   sendingMessageRef.current = true;
 
   try {
+    setStatus('');
     setText('');
 
-    if (filesToSend.length === 0) {
-      const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const isGuest = !authUserId;
+    const senderGuestId = getStableGuestId();
 
-      const tempMessage = normalizeRoomMessageMedia({
+    // -------------------------
+    // TEXT ONLY MESSAGE
+    // -------------------------
+    if (filesToSend.length === 0) {
+      const clientId = `temp-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}`;
+
+      const optimisticMessage = normalizeRoomMessageMedia({
         messageId: clientId,
         clientId,
         roomId: room.roomId,
         senderId: userId,
-        senderName: user?.name || user?.email || 'You',
+        senderName:
+          user?.name ||
+          user?.email ||
+          (isGuest ? 'Guest' : 'You'),
         text: cleanText,
         message: cleanText,
         createdAt: String(Date.now()),
@@ -4170,8 +4202,32 @@ async function sendMessage(e) {
         pending: true,
       });
 
-     setMessages((prev) => trimRoomMessagesForMemory([...prev, tempMessage]));
+      appendRoomMessage(room.roomId, optimisticMessage, {
+        forceScroll: true,
+      });
 
+      pendingMessageIdsRef.current.add(clientId);
+
+      // GUEST USERS
+      if (isGuest) {
+        try {
+          await roomApi.sendGuestRoomMessage(room.roomId, {
+            text: cleanText,
+            message: cleanText,
+            guestId: senderGuestId,
+            clientGuestId: senderGuestId,
+            clientId,
+          });
+        } catch (err) {
+          markPendingRoomMessageFailed(clientId);
+          throw err;
+        }
+
+        removeSelectedMedia();
+        return;
+      }
+
+      // LOGGED IN USERS
       sendRoomMessage({
         action: 'sendRoomMessage',
         roomId: room.roomId,
@@ -4184,14 +4240,20 @@ async function sendMessage(e) {
       return;
     }
 
+    // -------------------------
+    // MEDIA MESSAGES
+    // -------------------------
     setUploadingMedia(true);
     setMediaUploadProgress(0);
 
     for (let index = 0; index < filesToSend.length; index += 1) {
       const file = filesToSend[index];
+
       const { mediaType } = getRoomMediaType(file);
 
-      setMediaUploadLabel(`Uploading ${index + 1}/${filesToSend.length}`);
+      setMediaUploadLabel(
+        `Uploading ${index + 1}/${filesToSend.length}`
+      );
 
       const uploadedMedia = await roomApi.uploadRoomMediaFile(
         room.roomId,
@@ -4203,7 +4265,10 @@ async function sendMessage(e) {
           );
 
           const totalProgress = Math.round(
-            ((index + safeProgress / 100) / filesToSend.length) * 100
+            (
+              (index + safeProgress / 100) /
+              filesToSend.length
+            ) * 100
           );
 
           setMediaUploadProgress(totalProgress);
@@ -4216,50 +4281,112 @@ async function sendMessage(e) {
 
       const messageText = index === 0 ? cleanText : '';
 
-      const tempMessage = normalizeRoomMessageMedia({
+      const optimisticMessage = normalizeRoomMessageMedia({
         messageId: clientId,
         clientId,
         roomId: room.roomId,
         senderId: userId,
-        senderName: user?.name || user?.email || 'You',
+        senderName:
+          user?.name ||
+          user?.email ||
+          (isGuest ? 'Guest' : 'You'),
         text: messageText,
         message: messageText,
         createdAt: String(Date.now() + index),
         createdAtMs: Date.now() + index,
         pending: true,
         mediaKey: uploadedMedia?.mediaKey || '',
-        mediaUrl: uploadedMedia?.mediaUrl || uploadedMedia?.fileUrl || '',
-        fileUrl: uploadedMedia?.fileUrl || uploadedMedia?.mediaUrl || '',
-        mediaType: uploadedMedia?.mediaType || mediaType || '',
-        contentType: uploadedMedia?.contentType || file?.type || '',
-        fileName: uploadedMedia?.fileName || file?.name || '',
-        mediaName: uploadedMedia?.fileName || file?.name || '',
+        mediaUrl:
+          uploadedMedia?.mediaUrl ||
+          uploadedMedia?.fileUrl ||
+          '',
+        fileUrl:
+          uploadedMedia?.fileUrl ||
+          uploadedMedia?.mediaUrl ||
+          '',
+        mediaType:
+          uploadedMedia?.mediaType ||
+          mediaType ||
+          '',
+        contentType:
+          uploadedMedia?.contentType ||
+          file?.type ||
+          '',
+        fileName:
+          uploadedMedia?.fileName ||
+          file?.name ||
+          '',
+        mediaName:
+          uploadedMedia?.fileName ||
+          file?.name ||
+          '',
       });
 
-      setMessages((prev) => trimRoomMessagesForMemory([...prev, tempMessage]));
+      appendRoomMessage(room.roomId, optimisticMessage, {
+        forceScroll: true,
+      });
 
+      pendingMessageIdsRef.current.add(clientId);
+
+      // -------------------------
+      // GUEST USERS
+      // -------------------------
+      if (isGuest) {
+        try {
+          await roomApi.sendGuestRoomMessage(room.roomId, {
+            text: messageText,
+            message: messageText,
+            mediaKey: optimisticMessage.mediaKey,
+            mediaUrl: optimisticMessage.mediaUrl,
+            fileUrl: optimisticMessage.fileUrl,
+            mediaType: optimisticMessage.mediaType,
+            contentType: optimisticMessage.contentType,
+            fileName: optimisticMessage.fileName,
+            mediaName: optimisticMessage.mediaName,
+            guestId: senderGuestId,
+            clientGuestId: senderGuestId,
+            clientId,
+          });
+        } catch (err) {
+          markPendingRoomMessageFailed(clientId);
+          throw err;
+        }
+
+        continue;
+      }
+
+      // -------------------------
+      // LOGGED IN USERS
+      // -------------------------
       sendRoomMessage({
         action: 'sendRoomMessage',
         roomId: room.roomId,
         text: messageText,
         message: messageText,
-        mediaKey: tempMessage.mediaKey,
-        mediaUrl: tempMessage.mediaUrl,
-        fileUrl: tempMessage.fileUrl,
-        mediaType: tempMessage.mediaType,
-        contentType: tempMessage.contentType,
-        fileName: tempMessage.fileName,
-        mediaName: tempMessage.mediaName,
+        mediaKey: optimisticMessage.mediaKey,
+        mediaUrl: optimisticMessage.mediaUrl,
+        fileUrl: optimisticMessage.fileUrl,
+        mediaType: optimisticMessage.mediaType,
+        contentType: optimisticMessage.contentType,
+        fileName: optimisticMessage.fileName,
+        mediaName: optimisticMessage.mediaName,
         clientId,
       });
     }
 
     removeSelectedMedia();
-    setStatus(filesToSend.length > 1 ? 'Files uploaded' : 'File uploaded');
+
+    setStatus(
+      filesToSend.length > 1
+        ? 'Files uploaded'
+        : 'File uploaded'
+    );
   } catch (err) {
     console.error(err);
+
     setStatus(
       err?.response?.data?.error ||
+      err?.response?.data?.message ||
       err?.message ||
       'Failed to send message'
     );
