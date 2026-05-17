@@ -2932,6 +2932,18 @@ const visibleRooms = allRooms.filter((room) => {
 
       try {
         setMessagesLoading(true);
+        setMessages((prev) => {
+  if (Array.isArray(prev) && prev.length > 0) {
+    return prev;
+  }
+
+  const cachedMessages =
+    roomMessagesCacheRef.current[room.roomId] || [];
+
+  return cachedMessages.length > 0
+    ? cachedMessages
+    : prev;
+});
         const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId, {
           guestId: getStableGuestId(),
           clientGuestId: getStableGuestId(),

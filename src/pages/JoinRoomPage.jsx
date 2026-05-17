@@ -157,6 +157,12 @@ export default function JoinRoomPage() {
             loadMessagesImmediately: true,
             preloadMessages: true,
             skipRoomCache: true,
+            guestAutoJoined: true,
+            forceGuestRoomHydration: true,
+            immediateMessageFetch: true,
+            bypassInitialRoomLoad: true,
+            openDirectlyAfterJoin: true,
+            inviteNavigationVersion: Date.now(),
           },
         });
         return;
@@ -189,6 +195,12 @@ export default function JoinRoomPage() {
             loadMessagesImmediately: true,
             preloadMessages: true,
             skipRoomCache: true,
+            guestAutoJoined: true,
+            forceGuestRoomHydration: true,
+            immediateMessageFetch: true,
+            bypassInitialRoomLoad: true,
+            openDirectlyAfterJoin: true,
+            inviteNavigationVersion: Date.now(),
           },
         });
         return;
@@ -216,7 +228,9 @@ export default function JoinRoomPage() {
     if (autoJoinAttemptedRef.current === autoJoinKey) return;
 
     autoJoinAttemptedRef.current = autoJoinKey;
-    handleJoinRoom();
+    window.requestAnimationFrame(() => {
+      handleJoinRoom();
+    });
   }, [user, loading, joining, cleanInviteCode]);
 
   if (loading) {
