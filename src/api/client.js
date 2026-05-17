@@ -14,16 +14,59 @@ const ROOM_INVITE_API_BASE_URL =
 
 const PENDING_ROOM_INVITE_CODE_KEY = 'smarty_pending_room_invite_code';
 const PENDING_ROOM_INVITE_PATH_KEY = 'smarty_pending_room_invite_path';
+const PENDING_ROOM_INVITE_TIMESTAMP_KEY = 'smarty_pending_room_invite_timestamp';
+
+const LEGACY_PENDING_ROOM_INVITE_KEYS = [
+  'pendingRoomInvite',
+  'pendingRoomInviteCode',
+  'pendingRoomInviteTimestamp',
+];
+
+const SMARTY_GUEST_ID_KEY = 'smarty_guest_id';
+
+const getOrCreateGuestId = () => {
+  try {
+    const existingGuestId =
+      localStorage.getItem(SMARTY_GUEST_ID_KEY) ||
+      sessionStorage.getItem(SMARTY_GUEST_ID_KEY) ||
+      '';
+
+    if (existingGuestId) return existingGuestId;
+
+    const generatedGuestId = `guest-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+    localStorage.setItem(SMARTY_GUEST_ID_KEY, generatedGuestId);
+    sessionStorage.setItem(SMARTY_GUEST_ID_KEY, generatedGuestId);
+
+    return generatedGuestId;
+  } catch {
+    return `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+};
 
 export const storePendingRoomInvite = (inviteCode) => {
   const cleanCode = String(inviteCode || '').trim();
   if (!cleanCode) return;
 
+  const now = String(Date.now());
+  const path = `/rooms/invite/${encodeURIComponent(cleanCode)}`;
+
   try {
     sessionStorage.setItem(PENDING_ROOM_INVITE_CODE_KEY, cleanCode);
-    sessionStorage.setItem(PENDING_ROOM_INVITE_PATH_KEY, `/rooms/invite/${encodeURIComponent(cleanCode)}`);
+    sessionStorage.setItem(PENDING_ROOM_INVITE_PATH_KEY, path);
+    sessionStorage.setItem(PENDING_ROOM_INVITE_TIMESTAMP_KEY, now);
+
     localStorage.setItem(PENDING_ROOM_INVITE_CODE_KEY, cleanCode);
-    localStorage.setItem(PENDING_ROOM_INVITE_PATH_KEY, `/rooms/invite/${encodeURIComponent(cleanCode)}`);
+    localStorage.setItem(PENDING_ROOM_INVITE_PATH_KEY, path);
+    localStorage.setItem(PENDING_ROOM_INVITE_TIMESTAMP_KEY, now);
+
+    // Keep legacy names briefly so older deployed code can still recover once.
+    sessionStorage.setItem('pendingRoomInviteCode', cleanCode);
+    sessionStorage.setItem('pendingRoomInviteTimestamp', now);
+    localStorage.setItem('pendingRoomInviteCode', cleanCode);
+    localStorage.setItem('pendingRoomInviteTimestamp', now);
   } catch {
     // Ignore storage errors.
   }
@@ -34,12 +77,23 @@ export const getPendingRoomInvite = () => {
     const inviteCode =
       sessionStorage.getItem(PENDING_ROOM_INVITE_CODE_KEY) ||
       localStorage.getItem(PENDING_ROOM_INVITE_CODE_KEY) ||
+      sessionStorage.getItem('pendingRoomInviteCode') ||
+      localStorage.getItem('pendingRoomInviteCode') ||
       '';
 
     if (!inviteCode) return null;
 
+    const timestamp = Number(
+      sessionStorage.getItem(PENDING_ROOM_INVITE_TIMESTAMP_KEY) ||
+      localStorage.getItem(PENDING_ROOM_INVITE_TIMESTAMP_KEY) ||
+      sessionStorage.getItem('pendingRoomInviteTimestamp') ||
+      localStorage.getItem('pendingRoomInviteTimestamp') ||
+      0
+    );
+
     return {
       inviteCode,
+      timestamp,
       path: `/rooms/invite/${encodeURIComponent(inviteCode)}`,
     };
   } catch {
@@ -51,8 +105,16 @@ export const clearPendingRoomInvite = () => {
   try {
     sessionStorage.removeItem(PENDING_ROOM_INVITE_CODE_KEY);
     sessionStorage.removeItem(PENDING_ROOM_INVITE_PATH_KEY);
+    sessionStorage.removeItem(PENDING_ROOM_INVITE_TIMESTAMP_KEY);
+
     localStorage.removeItem(PENDING_ROOM_INVITE_CODE_KEY);
     localStorage.removeItem(PENDING_ROOM_INVITE_PATH_KEY);
+    localStorage.removeItem(PENDING_ROOM_INVITE_TIMESTAMP_KEY);
+
+    LEGACY_PENDING_ROOM_INVITE_KEYS.forEach((key) => {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    });
   } catch {
     // Ignore storage errors.
   }
@@ -596,8 +658,16 @@ export const roomApi = {
 
     storePendingRoomInvite(cleanCode);
 
+    const guestId = getOrCreateGuestId();
+
     const { data } = await roomInviteApi.get(
-      `/room-invites/${encodePathSegment(cleanCode)}`
+      `/room-invites/${encodePathSegment(cleanCode)}`,
+      {
+        params: {
+          guestId,
+          clientGuestId: guestId,
+        },
+      }
     );
     const parsed = parseApiBody(data);
     const invite = parsed?.invite || parsed || {};
@@ -669,17 +739,39 @@ joinRoomFromInvite: async (inviteCode) => {
 
   storePendingRoomInvite(cleanCode);
 
-  const { data } = await roomInviteApi.post(
-    `/room-invites/${encodePathSegment(cleanCode)}/join`
-  );
+  const guestId = getOrCreateGuestId();
 
-  const parsed = parseApiBody(data);
+  try {
+    const { data } = await roomInviteApi.post(
+      `/room-invites/${encodePathSegment(cleanCode)}/join`,
+      {
+        guestId,
+        clientGuestId: guestId,
+        joinAsGuest: true,
+      }
+    );
 
-  if (parsed?.joined || parsed?.requested) {
-    clearPendingRoomInvite();
+    const parsed = parseApiBody(data);
+
+    if (parsed?.joined || parsed?.requested) {
+      clearPendingRoomInvite();
+    }
+
+    return parsed;
+  } catch (error) {
+    const status = error?.response?.status;
+    const backendData = parseApiBody(error?.response?.data);
+
+    if (status === 401 || status === 403) {
+      throw new Error(
+        backendData?.message ||
+        backendData?.error ||
+        'This private room requires login before joining. The invite page is public, but the backend is still protecting the join endpoint.'
+      );
+    }
+
+    throw error;
   }
-
-  return parsed;
 },
 
   async joinRoom(roomId, joinCode = '') {
