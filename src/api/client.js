@@ -186,6 +186,14 @@ const setStoredToken = (token) => {
   }
 };
 
+const clearStoredToken = () => {
+  try {
+    localStorage.removeItem('eduscroll_token');
+  } catch {
+    // Ignore private browsing/storage failures.
+  }
+};
+
 const getAuthToken = async () => {
   const now = Date.now();
 
@@ -201,26 +209,26 @@ const getAuthToken = async () => {
     try {
       const session = await fetchAuthSession();
       const token =
-        session?.tokens?.accessToken?.toString() ||
         session?.tokens?.idToken?.toString() ||
-        getStoredToken();
+        session?.tokens?.accessToken?.toString() ||
+        '';
 
       if (token) {
         cachedAuthToken = token;
         cachedAuthTokenAt = Date.now();
         setStoredToken(token);
+        return token;
       }
 
-      return token;
+      cachedAuthToken = '';
+      cachedAuthTokenAt = 0;
+      clearStoredToken();
+      return '';
     } catch {
-      const token = getStoredToken();
-
-      if (token) {
-        cachedAuthToken = token;
-        cachedAuthTokenAt = Date.now();
-      }
-
-      return token;
+      cachedAuthToken = '';
+      cachedAuthTokenAt = 0;
+      clearStoredToken();
+      return '';
     } finally {
       pendingAuthTokenPromise = null;
     }
@@ -294,12 +302,25 @@ api.interceptors.request.use(async (config) => {
 
   // LOGGED IN
   if (token) {
-    config.headers = {
-      ...(config.headers || {}),
-      Authorization: `Bearer ${token}`,
+    const authedConfig = {
+      ...config,
+      headers: {
+        ...(config.headers || {}),
+        Authorization: `Bearer ${token}`,
+      },
     };
 
-    return config;
+    if (guestCompatibleRoute) {
+      const guestId = getOrCreateGuestId();
+      authedConfig.headers['x-guest-id'] = guestId;
+      authedConfig.params = {
+        ...(authedConfig.params || {}),
+        guestId,
+        clientGuestId: guestId,
+      };
+    }
+
+    return authedConfig;
   }
 
   // GUEST
