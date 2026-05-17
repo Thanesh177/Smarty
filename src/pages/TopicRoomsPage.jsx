@@ -36,6 +36,10 @@ const ROOM_MESSAGES_REVEAL_STEP = 20;
 const ROOM_INITIAL_VISIBLE_MESSAGES = 20;
 const ROOM_OLDER_MESSAGES_LAYOUT_STABILIZE_MS = 260;
 const ROOM_PAGE_DEFERRED_LOAD_MS = 450;
+const ROOM_MEDIA_UPLOAD_TIMEOUT_MS = 45000;
+const ROOM_MAX_CACHED_MESSAGE_ROOMS = 25;
+const ROOM_MESSAGE_BATCH_RENDER_SIZE = 40;
+const ROOM_SCROLL_BOTTOM_DEBOUNCE_MS = 80;
 
 const ROOM_LOAD_TIMEOUT_MS = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
   ? 30000
@@ -869,6 +873,7 @@ export default function TopicRoomsPage() {
   const selectedMediaPreviewsRef = useRef([]);
   const pendingMessageIdsRef = useRef(new Set());
 
+const scrollBottomTimeoutRef = useRef(null);
 
 const scrollMessagesToBottom = useCallback((options = {}) => {
   const {
@@ -903,11 +908,18 @@ const scrollMessagesToBottom = useCallback((options = {}) => {
     });
   }
 
-  setTimeout(() => {
+  if (scrollBottomTimeoutRef.current) {
+    window.clearTimeout(scrollBottomTimeoutRef.current);
+  }
+
+  scrollBottomTimeoutRef.current = window.setTimeout(() => {
     const latestContainer = messagesRef.current;
+
     if (latestContainer) {
       latestContainer.style.scrollBehavior = previousBehavior;
     }
+
+    scrollBottomTimeoutRef.current = null;
   }, restoreDelay);
 }, []);
 
@@ -976,7 +988,15 @@ const isMessagesNearBottom = useCallback((threshold = 320) => {
       .slice(0, MAX_RENDERED_ROOMS);
   }, [rooms, roomPrivacyFilter, roomSearch]);
 
-const renderedMessages = messages;
+const renderedMessages = useMemo(() => {
+  if (!Array.isArray(messages)) return [];
+
+  if (messages.length <= MAX_RENDERED_MEDIA_MESSAGES) {
+    return messages;
+  }
+
+  return messages.slice(-MAX_RENDERED_MEDIA_MESSAGES);
+}, [messages]);
 
 const MessageRow = useCallback((msg) => {
   const messageKey = getStableRoomMessageKey(msg);
@@ -985,11 +1005,7 @@ const MessageRow = useCallback((msg) => {
     (item) => getStableRoomMessageKey(item) === messageKey
   );
 
-  const preloadMedia =
-    messageIndex >= Math.max(
-      0,
-      renderedMessages.length - ROOM_PRELOADED_VISIBLE_MEDIA
-    );
+  // Removed unused preloadMedia block
 
   return (
     <div
@@ -1123,9 +1139,18 @@ const MessageRow = useCallback((msg) => {
     setShowScrollToBottom(false);
   }, [activeRoom?.roomId]);
 
-  useEffect(() => {
-    messagesStateRef.current = messages;
-  }, [messages]);
+useEffect(() => {
+  messagesStateRef.current = messages;
+}, [messages]);
+
+useEffect(() => {
+  return () => {
+    if (scrollBottomTimeoutRef.current) {
+      window.clearTimeout(scrollBottomTimeoutRef.current);
+      scrollBottomTimeoutRef.current = null;
+    }
+  };
+}, []);
 
 
   useLayoutEffect(() => {
@@ -1523,9 +1548,14 @@ const setMessagesContainerRef = useCallback((node) => {
     setSelectedMediaPreview('');
     setSelectedMediaPreviews([]);
     setSelectedMediaType('');
-    setUploadingMedia(false);
-    setMediaUploadProgress(0);
-    setMediaUploadLabel('');
+    if (!sendingMessageRef.current) {
+      setUploadingMedia(false);
+      setMediaUploadProgress(0);
+      setMediaUploadLabel('');
+    }
+    if (sendingMessageRef.current) {
+      sendingMessageRef.current = false;
+    }
   }
 
 function syncRoomMessageCache(roomId, nextMessages) {
@@ -1537,6 +1567,26 @@ function syncRoomMessageCache(roomId, nextMessages) {
 
   roomMessagesCacheRef.current[roomId] = normalizedMessages;
 
+  const cachedRoomIds = Object.keys(roomMessagesCacheRef.current || {});
+
+  if (cachedRoomIds.length > ROOM_MAX_CACHED_MESSAGE_ROOMS) {
+    const removableRooms = cachedRoomIds.filter(
+      (id) => id !== activeRoomRef.current?.roomId
+    );
+
+    while (
+      removableRooms.length > 0 &&
+      Object.keys(roomMessagesCacheRef.current).length >
+        ROOM_MAX_CACHED_MESSAGE_ROOMS
+    ) {
+      const roomToDelete = removableRooms.shift();
+
+      if (roomToDelete) {
+        delete roomMessagesCacheRef.current[roomToDelete];
+      }
+    }
+  }
+
   return normalizedMessages;
 }
 
@@ -1544,6 +1594,10 @@ const appendRoomMessage = useCallback((roomId, message, options = {}) => {
   if (!roomId || !message) return;
 
   const normalizedMessage = normalizeRoomMessageMedia(message);
+
+  if (!normalizedMessage?.roomId && roomId) {
+    normalizedMessage.roomId = roomId;
+  }
   const activeRoomId = activeRoomRef.current?.roomId;
   const shouldUpdateVisibleRoom = activeRoomId === roomId;
 
@@ -2004,6 +2058,18 @@ async function approveJoinRequest(requestUserId) {
     roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
 
     setStatus('Join request approved');
+        setRooms((prev) =>
+      prev.map((room) => {
+        if (String(room?.roomId || '') !== String(targetRoom.roomId || '')) {
+          return room;
+        }
+
+        return {
+          ...room,
+          memberCount: Number(room?.memberCount || 0) + 1,
+        };
+      })
+    );
 
     await loadRooms(roomSearch, { force: true });
     await loadActiveRoomInfoMembers(targetRoom, { force: true });
@@ -2384,14 +2450,46 @@ const visibleRooms = allRooms.filter((room) => {
         return [roomToOpen, ...prev];
       });
 
-      setActiveRoom(roomToOpen);
-      activeRoomRef.current = roomToOpen;
-      await openRoom(roomToOpen);
+const normalizedRoomToOpen = {
+  ...roomToOpen,
+  roomId: roomToOpen.roomId || roomToOpen.id || requestedRoomId,
+  id: roomToOpen.id || roomToOpen.roomId || requestedRoomId,
+  privacy: normalizeRoomPrivacy({
+    ...roomToOpen,
+    privacy: roomToOpen.privacy || roomToOpen.visibility || 'private',
+  }),
+  isPrivate:
+    normalizeRoomPrivacy({
+      ...roomToOpen,
+      privacy: roomToOpen.privacy || roomToOpen.visibility || 'private',
+    }) === 'private',
+  joinedViaInvite: true,
+  guestId: roomToOpen.guestId || navigationState?.guestId || getStableGuestId(),
+};
 
-      navigate('/rooms', {
-        replace: true,
-        state: null,
-      });
+persistJoinedInviteRoom(normalizedRoomToOpen);
+activeRoomRef.current = normalizedRoomToOpen;
+setActiveRoom(normalizedRoomToOpen);
+setMessages([]);
+setMessagesLoading(true);
+setHasOlderMessages(true);
+
+await openRoom(normalizedRoomToOpen);
+
+window.setTimeout(() => {
+  if (
+    mountedRef.current &&
+    activeRoomRef.current?.roomId === normalizedRoomToOpen.roomId &&
+    messagesStateRef.current.length === 0
+  ) {
+    openRoom(normalizedRoomToOpen);
+  }
+}, 450);
+
+navigate('/rooms', {
+  replace: true,
+  state: null,
+});
     } catch (err) {
       console.error('OPEN JOINED ROOM FROM NAVIGATION ERROR:', err);
       handledNavigationOpenKeyRef.current = '';
@@ -2580,8 +2678,14 @@ const visibleRooms = allRooms.filter((room) => {
             return nextMessages;
           });
 
-          pendingMessageIdsRef.current.delete(msg.clientId);
-          if (msg.messageId) pendingMessageIdsRef.current.delete(msg.messageId);
+          if (msg.clientId) {
+            pendingMessageIdsRef.current.delete(msg.clientId);
+          }
+
+          if (msg.messageId) {
+            pendingMessageIdsRef.current.delete(msg.messageId);
+          }
+
           sendingMessageRef.current = false;
           setUploadingMedia(false);
           setMediaUploadProgress(0);
@@ -2603,7 +2707,13 @@ const visibleRooms = allRooms.filter((room) => {
         }
 
         if (data.type !== 'roomMessage') return;
-        if (msg.senderId === userId && msg.clientId) return;
+    if (
+  msg.senderId === userId &&
+  msg.clientId &&
+  pendingMessageIdsRef.current.has(msg.clientId)
+) {
+  return;
+}
 
         if (!current || msg.roomId !== current.roomId) {
           if (msg.roomId) {
