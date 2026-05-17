@@ -1951,6 +1951,36 @@ async function approveJoinRequest(requestUserId) {
         return Number(b.createdAt || 0) - Number(a.createdAt || 0);
       });
 
+      const navigationState =
+        location.state && typeof location.state === 'object'
+          ? location.state
+          : {};
+
+      const joinedRoomId = getNavigationRoomOpenId(navigationState);
+
+      if (
+        joinedRoomId &&
+        !visibleRooms.some(
+          (room) => String(room.roomId || room.id || '') === String(joinedRoomId)
+        )
+      ) {
+        const fallbackJoinedRoom = navigationState?.joinedRoom || {
+          roomId: joinedRoomId,
+          id: joinedRoomId,
+          name: navigationState?.openRoomName || 'Joined group',
+          privacy: 'private',
+          type: 'custom',
+        };
+
+        visibleRooms.unshift({
+          ...fallbackJoinedRoom,
+          roomId:
+            fallbackJoinedRoom.roomId ||
+            fallbackJoinedRoom.id ||
+            joinedRoomId,
+        });
+      }
+
       roomsCacheRef.current = {
         key: cacheKey,
         timestamp: Date.now(),
@@ -2106,10 +2136,29 @@ async function approveJoinRequest(requestUserId) {
       handledNavigationOpenKeyRef.current = navigationOpenKey;
 
       setRooms((prev) => {
-        if (prev.some((room) => String(room.roomId || room.id || '') === String(roomToOpen.roomId))) return prev;
+        const alreadyExists = prev.some(
+          (room) =>
+            String(room.roomId || room.id || '') ===
+            String(roomToOpen.roomId)
+        );
+
+        if (alreadyExists) {
+          return prev.map((room) =>
+            String(room.roomId || room.id || '') ===
+            String(roomToOpen.roomId)
+              ? {
+                  ...room,
+                  ...roomToOpen,
+                }
+              : room
+          );
+        }
+
         return [roomToOpen, ...prev];
       });
 
+      setActiveRoom(roomToOpen);
+      activeRoomRef.current = roomToOpen;
       await openRoom(roomToOpen);
 
       navigate('/rooms', {

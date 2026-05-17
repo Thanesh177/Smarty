@@ -46,6 +46,25 @@ const getOrCreateGuestId = () => {
   }
 };
 
+export const getStableGuestId = () => getOrCreateGuestId();
+
+const attachGuestIdentity = (config = {}) => {
+  const guestId = getOrCreateGuestId();
+
+  return {
+    ...config,
+    headers: {
+      ...(config.headers || {}),
+      'x-guest-id': guestId,
+    },
+    params: {
+      ...(config.params || {}),
+      guestId,
+      clientGuestId: guestId,
+    },
+  };
+};
+
 export const storePendingRoomInvite = (inviteCode) => {
   const cleanCode = String(inviteCode || '').trim();
   if (!cleanCode) return;
@@ -234,8 +253,27 @@ const attachAuthHeader = async (config) => {
   return config;
 };
 
-api.interceptors.request.use(attachAuthHeader);
-roomInviteApi.interceptors.request.use(attachAuthHeader);
+api.interceptors.request.use(async (config) => {
+  const authedConfig = await attachAuthHeader(config);
+  const url = String(authedConfig?.url || '');
+
+  if (url === '/rooms' || url.startsWith('/rooms/')) {
+    return attachGuestIdentity(authedConfig);
+  }
+
+  return authedConfig;
+});
+
+roomInviteApi.interceptors.request.use(async (config) => {
+  const authedConfig = await attachAuthHeader(config);
+  const url = String(authedConfig?.url || '');
+
+  if (url.startsWith('/room-invites/') || url.startsWith('/rooms/')) {
+    return attachGuestIdentity(authedConfig);
+  }
+
+  return authedConfig;
+});
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -449,7 +487,15 @@ export const authApi = {
 
 export const roomApi = {
   async getRooms(params = {}) {
-    const { data } = await api.get('/rooms', { params });
+    const guestId = getOrCreateGuestId();
+
+    const { data } = await api.get('/rooms', {
+      params: {
+        ...params,
+        guestId,
+        clientGuestId: guestId,
+      },
+    });
     return normalizeList(data);
   },
 
@@ -596,7 +642,16 @@ export const roomApi = {
   },
 
   acceptRoomInvite: async (roomId) => {
-    const { data } = await api.post(`/rooms/${encodePathSegment(roomId)}/invites/accept`);
+    const guestId = getOrCreateGuestId();
+
+    const { data } = await api.post(
+      `/rooms/${encodePathSegment(roomId)}/invites/accept`,
+      {
+        guestId,
+        clientGuestId: guestId,
+      }
+    );
+
     return parseApiBody(data);
   },
 
@@ -796,9 +851,17 @@ joinRoomFromInvite: async (inviteCode) => {
   api.delete(`/rooms/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(messageId)}`),
 
   async getRoomMessages(roomId, params = {}) {
+    const guestId = getOrCreateGuestId();
+
     const { data } = await api.get(
       `/rooms/${encodePathSegment(roomId)}/messages`,
-      { params }
+      {
+        params: {
+          ...params,
+          guestId,
+          clientGuestId: guestId,
+        },
+      }
     );
 
     const parsed = parseApiBody(data);
@@ -832,7 +895,7 @@ joinRoomFromInvite: async (inviteCode) => {
     return parsed;
   },
 
-async getRoomMembers(roomId) {
+async getRoomMembers(roomId, params = {}) {
   const cleanRoomId = String(roomId || '').trim();
 
   if (!cleanRoomId) {
@@ -843,8 +906,11 @@ async getRoomMembers(roomId) {
     `/rooms/${encodePathSegment(cleanRoomId)}/members`,
     {
       params: {
+        ...params,
         roomId: cleanRoomId,
         groupId: cleanRoomId,
+        guestId: getOrCreateGuestId(),
+        clientGuestId: getOrCreateGuestId(),
       },
     }
   );
@@ -924,19 +990,43 @@ async getRoomMembers(roomId) {
     return parseApiBody(data);
   },
 
-  async getRoomJoinRequests(roomId) {
-    const { data } = await api.get(`/rooms/${encodePathSegment(roomId)}/requests`);
+  async getRoomJoinRequests(roomId, params = {}) {
+    const guestId = getOrCreateGuestId();
+
+    const { data } = await api.get(`/rooms/${encodePathSegment(roomId)}/requests`, {
+      params: {
+        ...params,
+        guestId,
+        clientGuestId: guestId,
+      },
+    });
+
     return normalizeList(data);
   },
 
-  async getHiddenRooms() {
-    const { data } = await api.get('/rooms/hidden');
+  async getHiddenRooms(params = {}) {
+    const guestId = getOrCreateGuestId();
+
+    const { data } = await api.get('/rooms/hidden', {
+      params: {
+        ...params,
+        guestId,
+        clientGuestId: guestId,
+      },
+    });
+
     return normalizeList(data);
   },
 
   async unhideRoom(roomId) {
+    const guestId = getOrCreateGuestId();
+
     const { data } = await api.post(
-      `/rooms/${encodePathSegment(roomId)}/unhide`
+      `/rooms/${encodePathSegment(roomId)}/unhide`,
+      {
+        guestId,
+        clientGuestId: guestId,
+      }
     );
     return parseApiBody(data);
   },
