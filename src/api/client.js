@@ -310,7 +310,10 @@ api.interceptors.request.use(async (config) => {
       },
     };
 
-    if (guestCompatibleRoute) {
+    const shouldAttachGuestIdentityWhileLoggedIn =
+      guestCompatibleRoute && !url.endsWith('/media-upload-url');
+
+    if (shouldAttachGuestIdentityWhileLoggedIn) {
       const guestId = getOrCreateGuestId();
       authedConfig.headers['x-guest-id'] = guestId;
       authedConfig.params = {

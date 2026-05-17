@@ -105,8 +105,9 @@ function persistJoinedInviteRoom(room) {
       id: roomId,
       name: room?.name || room?.roomName || 'Joined group',
       roomName: room?.roomName || room?.name || 'Joined group',
-      privacy: room?.privacy || 'private',
+      privacy: normalizeRoomPrivacy({ ...room, privacy: room?.privacy || room?.visibility || 'private' }),
       type: room?.type || 'custom',
+      isPrivate: normalizeRoomPrivacy({ ...room, privacy: room?.privacy || room?.visibility || 'private' }) === 'private',
       joinedViaInvite: true,
       joinedAt: room?.joinedAt || Date.now(),
     };
@@ -137,8 +138,9 @@ function mergeJoinedInviteRooms(rooms = [], extraRoom = null) {
       id: roomId,
       name: room?.name || room?.roomName || 'Joined group',
       roomName: room?.roomName || room?.name || 'Joined group',
-      privacy: room?.privacy || 'private',
+      privacy: normalizeRoomPrivacy({ ...room, privacy: room?.privacy || room?.visibility || 'private' }),
       type: room?.type || 'custom',
+      isPrivate: normalizeRoomPrivacy({ ...room, privacy: room?.privacy || room?.visibility || 'private' }) === 'private',
       joinedViaInvite: true,
     };
 
@@ -175,6 +177,29 @@ function normalizeRoomImageUrl(imageUrl) {
   }
 
   return cleanUrl;
+}
+
+function normalizeRoomPrivacy(room = {}) {
+  const privacy = String(room?.privacy || '').trim().toLowerCase();
+  const visibility = String(room?.visibility || '').trim().toLowerCase();
+
+  if (privacy === 'private' || privacy === 'public') {
+    return privacy;
+  }
+
+  if (visibility === 'private' || visibility === 'public') {
+    return visibility;
+  }
+
+  if (room?.isPrivate === true) {
+    return 'private';
+  }
+
+  if (room?.isPrivate === false) {
+    return 'public';
+  }
+
+  return 'public';
 }
 
 function parseApiPayload(payload) {
@@ -651,7 +676,7 @@ export default function TopicRoomsPage() {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const authUserId = user?.id || user?.userId || user?.sub || '';
+  const authUserId = user?.sub || user?.userId || user?.id || '';
   const guestUserId = getStableGuestId();
   const userId = authUserId || guestUserId;
   const isGuestUser = !authUserId;
@@ -935,11 +960,15 @@ const isMessagesNearBottom = useCallback((threshold = 320) => {
     const normalizedSearch = roomSearch.trim().toLowerCase();
 
     return rooms
-      .filter((room) =>
-        roomPrivacyFilter === 'private'
-          ? room.privacy === 'private'
-          : room.privacy !== 'private'
-      )
+     .filter((room) => {
+  const privacy = normalizeRoomPrivacy(room);
+
+  if (roomPrivacyFilter === 'private') {
+    return privacy === 'private';
+  }
+
+  return privacy !== 'private';
+})
       .filter((room) => {
         if (!normalizedSearch) return true;
         return String(room.name || '').toLowerCase().includes(normalizedSearch);
@@ -2025,12 +2054,18 @@ async function approveJoinRequest(requestUserId) {
         throw new Error('You are offline');
       }
 
+      const roomLoadParams = {
+        search: normalizedSearch,
+      };
+
+      if (isGuestUser) {
+        const stableGuestId = getStableGuestId();
+        roomLoadParams.guestId = stableGuestId;
+        roomLoadParams.clientGuestId = stableGuestId;
+      }
+
       const data = await Promise.race([
-        getRoomsForCurrentSession({
-          search: normalizedSearch,
-          guestId: getStableGuestId(),
-          clientGuestId: getStableGuestId(),
-        }),
+        getRoomsForCurrentSession(roomLoadParams),
         new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error('Rooms load timeout')),
@@ -2059,35 +2094,57 @@ async function approveJoinRequest(requestUserId) {
 
       const allRoomsRaw = Array.isArray(data?.rooms) ? data.rooms : Array.isArray(data) ? data : [];
 
-      const allRooms = allRoomsRaw.map((room) => {
-        const cachedImageUrl = cachedRoomImages[room.roomId];
+const allRooms = allRoomsRaw.map((room) => {
+  const normalizedPrivacy = normalizeRoomPrivacy(room);
+  const cachedImageUrl = cachedRoomImages[room.roomId];
 
-        const imageUrl = normalizeRoomImageUrl(
-          room.imageUrl ||
-            room.roomImageUrl ||
-            room.avatarUrl ||
-            room.coverImageUrl ||
-            room.coverUrl ||
-            cachedImageUrl ||
-            ''
-        );
+  const imageUrl = normalizeRoomImageUrl(
+    room.imageUrl ||
+      room.roomImageUrl ||
+      room.avatarUrl ||
+      room.coverImageUrl ||
+      room.coverUrl ||
+      cachedImageUrl ||
+      ''
+  );
 
-        return {
-          ...room,
-          imageUrl,
-          roomImageUrl: room.roomImageUrl || imageUrl,
-          coverImageUrl: room.coverImageUrl || imageUrl,
-        };
-      });
+  return {
+    ...room,
+    privacy: normalizedPrivacy,
+    isPrivate: normalizedPrivacy === 'private',
+    imageUrl,
+    roomImageUrl: room.roomImageUrl || imageUrl,
+    coverImageUrl: room.coverImageUrl || imageUrl,
+  };
+});
 
-      const visibleRooms = allRooms.filter((room) => {
-        const isOwner = isRoomOwner(room, userId);
+const joinedInviteRooms = getStoredJoinedInviteRooms();
+const joinedInviteRoomIds = new Set(
+  joinedInviteRooms.map((room) => String(room?.roomId || room?.id || '').trim())
+);
 
-        if (isOwner) return true;
-        if (!normalizedSearch) return true;
+const visibleRooms = allRooms.filter((room) => {
+  const normalizedPrivacy = normalizeRoomPrivacy(room);
+  const isPrivateRoom = normalizedPrivacy === 'private';
+  const roomId = String(room?.roomId || room?.id || '').trim();
+  const isJoinedInviteRoom = joinedInviteRoomIds.has(roomId);
 
-        return String(room.name || '').toLowerCase().includes(normalizedSearch);
-      });
+  // Guests cannot see private rooms unless joined through invite link
+  if (isGuestUser && isPrivateRoom && !isJoinedInviteRoom) {
+    return false;
+  }
+
+  // Preserve joined private rooms after refresh
+  if (!normalizedSearch) {
+    return true;
+  }
+
+  const roomName = String(
+    room.name || room.roomName || ''
+  ).toLowerCase();
+
+  return roomName.includes(normalizedSearch);
+});
 
       visibleRooms.sort((a, b) => {
         const aOwner = isRoomOwner(a, userId);
@@ -2135,6 +2192,19 @@ async function approveJoinRequest(requestUserId) {
       }
 
       const mergedVisibleRooms = mergeJoinedInviteRooms(visibleRooms, navigationJoinedRoom);
+
+      // Ensure joined invite rooms survive hard refreshes even if backend membership sync is delayed
+      mergedVisibleRooms.forEach((room) => {
+        const roomId = String(room?.roomId || room?.id || '').trim();
+
+        if (!roomId) return;
+
+        const privacy = normalizeRoomPrivacy(room);
+
+        if (privacy === 'private') {
+          persistJoinedInviteRoom(room);
+        }
+      });
 
       roomsCacheRef.current = {
         key: cacheKey,
@@ -4109,7 +4179,7 @@ async function deleteRoomMessage(message) {
 
   if (!room?.roomId || !messageId || deletingMessageId) return;
 
-  if (!(room.type === 'custom' && room.privacy === 'private' && isRoomOwner(room, userId))) {
+  if (!(room.type === 'custom' && String(room.privacy || '').toLowerCase() === 'private' && isRoomOwner(room, userId))) {
     setStatus('Only the private group creator can delete messages.');
     return;
   }
@@ -4510,9 +4580,9 @@ return (
         ) : (
           sortedVisibleRooms.map((room, roomIndex) => {
             const isOwner = isRoomOwner(room, userId);
-            const isPrivateCustom = room.type === 'custom' && room.privacy === 'private';
+            const isPrivateCustom = room.type === 'custom' && String(room.privacy || '').toLowerCase() === 'private';
             const canLeave = isPrivateCustom && !isOwner;
-            const canDelete = room.type === 'custom' && room.privacy === 'private' && isOwner;
+            const canDelete = room.type === 'custom' && String(room.privacy || '').toLowerCase() === 'private' && isOwner;
             const unreadCount = roomUnreadCounts[room.roomId] || room.unreadCount || 0;
             const roomImageUrl = roomIndex < ROOM_IMAGE_RENDER_LIMIT ? getRoomImageUrl(room) : '';
             const shouldEagerLoadRoomImage = roomIndex < ROOM_IMAGE_EAGER_LIMIT;
@@ -4598,7 +4668,7 @@ return (
                         )}
                       </div>
 
-                      <span>{room.privacy === 'private' ? ' Private' : ' Public'}</span>
+                      <span>{String(room.privacy || '').toLowerCase() === 'private' ? ' Private' : ' Public'}</span>
                     </div>
                   </div>
                 </div>
