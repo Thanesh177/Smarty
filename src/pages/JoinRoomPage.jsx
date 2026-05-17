@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { roomApi, storePendingRoomInvite } from '../api/client';
+import { getStableGuestId, roomApi, storePendingRoomInvite } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import './JoinRoomPage.css';
 
@@ -68,6 +68,7 @@ export default function JoinRoomPage() {
       console.log('JOIN BUTTON CLICKED', cleanInviteCode);
 
       const result = await roomApi.joinRoomFromInvite(cleanInviteCode);
+      const stableGuestId = getStableGuestId();
 
       console.log('JOIN RESULT', result);
 
@@ -90,6 +91,32 @@ export default function JoinRoomPage() {
         invite?.roomName ||
         invite?.name ||
         '';
+
+      const normalizedJoinedRoom = {
+        ...(joinedRoom || {}),
+        roomId: joinedRoomId,
+        id: joinedRoomId,
+        name: joinedRoomName || joinedRoom?.name || joinedRoom?.roomName || 'Joined group',
+        roomName: joinedRoomName || joinedRoom?.roomName || joinedRoom?.name || 'Joined group',
+        privacy:
+          result?.privacy ||
+          result?.data?.privacy ||
+          joinedRoom?.privacy ||
+          invite?.privacy ||
+          'private',
+        type:
+          result?.type ||
+          result?.data?.type ||
+          joinedRoom?.type ||
+          invite?.type ||
+          'custom',
+        memberType:
+          result?.memberType ||
+          result?.data?.memberType ||
+          joinedRoom?.memberType ||
+          'guest',
+        guestId: stableGuestId,
+      };
 
       const resultMessage = String(result?.message || result?.status || '').toLowerCase();
       const joinedSuccessfully =
@@ -117,11 +144,13 @@ export default function JoinRoomPage() {
             selectedRoomId: joinedRoomId,
             activeRoomId: joinedRoomId,
             roomId: joinedRoomId,
-            openRoomName: joinedRoomName,
-            joinedRoom,
+            openRoomName: normalizedJoinedRoom.name,
+            joinedRoom: normalizedJoinedRoom,
             openJoinedRoom: true,
             refreshRooms: true,
+            forceRoomRefresh: true,
             inviteCode: cleanInviteCode,
+            guestId: stableGuestId,
             joinedAt: Date.now(),
           },
         });
@@ -142,11 +171,13 @@ export default function JoinRoomPage() {
             selectedRoomId: joinedRoomId,
             activeRoomId: joinedRoomId,
             roomId: joinedRoomId,
-            openRoomName: joinedRoomName,
-            joinedRoom,
+            openRoomName: normalizedJoinedRoom.name,
+            joinedRoom: normalizedJoinedRoom,
             openJoinedRoom: true,
             refreshRooms: true,
+            forceRoomRefresh: true,
             inviteCode: cleanInviteCode,
+            guestId: stableGuestId,
             joinedAt: Date.now(),
           },
         });
