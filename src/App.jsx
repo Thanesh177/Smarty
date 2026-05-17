@@ -1042,6 +1042,12 @@ scrollPaddingBottom: 0,
                 />
 
                 <Route path="/rooms" element={<TopicRoomsPage />} />
+                <Route path="/rooms/:roomId" element={<TopicRoomsPage />} />
+                <Route path="/rooms/:roomId/*" element={<TopicRoomsPage />} />
+                <Route path="/topic-room/:roomId" element={<TopicRoomsPage />} />
+                <Route path="/topic-room/:roomId/*" element={<TopicRoomsPage />} />
+                <Route path="/topicrooms/:roomId" element={<TopicRoomsPage />} />
+                <Route path="/topicrooms/:roomId/*" element={<TopicRoomsPage />} />
 
                 <Route path="*" element={<Navigate to="/feed" replace />} />
               </Routes>
