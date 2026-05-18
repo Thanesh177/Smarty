@@ -130,8 +130,7 @@ function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   const shouldGoogleSignIn = location.pathname === '/profile' || location.pathname.startsWith('/profile/');
-  const hasToken = hasStoredAuthToken();
-  const isReallyAuthenticated = Boolean(user && hasToken);
+  const isReallyAuthenticated = Boolean(user);
 
   useEffect(() => {
     if (loading || isReallyAuthenticated || !shouldGoogleSignIn) return;
@@ -903,7 +902,7 @@ function Layout() {
                   event.preventDefault();
                   event.stopPropagation();
 
-                  if (user && hasStoredAuthToken()) {
+                  if (user) {
                     navigate('/profile');
                     return;
                   }
