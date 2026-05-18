@@ -16,6 +16,21 @@ export default function JoinRoomPage() {
     [inviteCode]
   );
 
+  const loggedInUserId = useMemo(
+    () => String(user?.id || user?.userId || user?.sub || user?.email || '').trim(),
+    [user]
+  );
+
+  const normalizeRoomId = (value = '') => {
+    const normalized = String(value || '').trim();
+
+    if (!normalized) return '';
+
+    return normalized.startsWith('group#')
+      ? normalized
+      : `group#${normalized}`;
+  };
+
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -60,6 +75,18 @@ export default function JoinRoomPage() {
   async function handleJoinRoom() {
     if (!cleanInviteCode || joining) return;
 
+    if (!loggedInUserId) {
+      storePendingRoomInvite(cleanInviteCode);
+      navigate('/login', {
+        replace: true,
+        state: {
+          from: location,
+          pendingRoomInvite: cleanInviteCode,
+        },
+      });
+      return;
+    }
+
     try {
       setJoining(true);
       setStatus('');
@@ -72,15 +99,16 @@ export default function JoinRoomPage() {
       console.log('JOIN RESULT', result);
 
       const joinedRoom = result?.room || result?.data?.room || result?.joinedRoom || invite || null;
-      const joinedRoomId =
+      const joinedRoomId = normalizeRoomId(
         result?.roomId ||
-        result?.data?.roomId ||
-        result?.joinedRoomId ||
-        joinedRoom?.roomId ||
-        joinedRoom?.id ||
-        invite?.roomId ||
-        invite?.id ||
-        '';
+          result?.data?.roomId ||
+          result?.joinedRoomId ||
+          joinedRoom?.roomId ||
+          joinedRoom?.id ||
+          invite?.roomId ||
+          invite?.id ||
+          ''
+      );
       const joinedRoomName =
         result?.roomName ||
         result?.data?.roomName ||
@@ -145,18 +173,11 @@ export default function JoinRoomPage() {
             openRoomName: normalizedJoinedRoom.name,
             joinedRoom: normalizedJoinedRoom,
             openJoinedRoom: true,
+            source: 'roomInviteJoin',
             refreshRooms: true,
             forceRoomRefresh: true,
             inviteCode: cleanInviteCode,
             joinedAt: Date.now(),
-            autoOpenRoom: true,
-            forceOpenRoom: true,
-            loadMessagesImmediately: true,
-            preloadMessages: true,
-            skipRoomCache: true,
-            immediateMessageFetch: true,
-            bypassInitialRoomLoad: true,
-            openDirectlyAfterJoin: true,
             inviteNavigationVersion: Date.now(),
           },
         });
@@ -180,18 +201,11 @@ export default function JoinRoomPage() {
             openRoomName: normalizedJoinedRoom.name,
             joinedRoom: normalizedJoinedRoom,
             openJoinedRoom: true,
+            source: 'roomInviteJoin',
             refreshRooms: true,
             forceRoomRefresh: true,
             inviteCode: cleanInviteCode,
             joinedAt: Date.now(),
-            autoOpenRoom: true,
-            forceOpenRoom: true,
-            loadMessagesImmediately: true,
-            preloadMessages: true,
-            skipRoomCache: true,
-            immediateMessageFetch: true,
-            bypassInitialRoomLoad: true,
-            openDirectlyAfterJoin: true,
             inviteNavigationVersion: Date.now(),
           },
         });
@@ -201,6 +215,21 @@ export default function JoinRoomPage() {
       setStatus(result?.message || 'Invite processed, but the room could not be opened automatically.');
     } catch (err) {
       console.error('JOIN ROOM FROM INVITE ERROR:', err);
+
+      const statusCode = err?.response?.status;
+
+      if (statusCode === 401 || statusCode === 403) {
+        storePendingRoomInvite(cleanInviteCode);
+        navigate('/login', {
+          replace: true,
+          state: {
+            from: location,
+            pendingRoomInvite: cleanInviteCode,
+            reason: 'authRequiredForRoomInvite',
+          },
+        });
+        return;
+      }
 
       setError(
         err?.response?.data?.error ||
@@ -214,16 +243,16 @@ export default function JoinRoomPage() {
   }
 
   useEffect(() => {
-    if (loading || joining || !cleanInviteCode) return;
+    if (loading || joining || !cleanInviteCode || !loggedInUserId) return;
 
-    const autoJoinKey = `${user?.id || user?.userId || user?.sub || user?.email || 'user'}:${cleanInviteCode}`;
+    const autoJoinKey = `${loggedInUserId}:${cleanInviteCode}`;
     if (autoJoinAttemptedRef.current === autoJoinKey) return;
 
     autoJoinAttemptedRef.current = autoJoinKey;
     window.requestAnimationFrame(() => {
       handleJoinRoom();
     });
-  }, [user, loading, joining, cleanInviteCode]);
+  }, [loggedInUserId, loading, joining, cleanInviteCode]);
 
   if (loading) {
     return (
