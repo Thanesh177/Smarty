@@ -93,6 +93,7 @@ export default function JoinRoomPage() {
       setError('');
 
       const result = await roomApi.joinRoomFromInvite(cleanInviteCode);
+      console.log('ROOM INVITE JOIN RESULT:', result);
 
       const joinedRoom = result?.room || result?.data?.room || result?.joinedRoom || invite || null;
       const joinedRoomId = normalizeRoomId(
@@ -147,13 +148,15 @@ export default function JoinRoomPage() {
         result?.alreadyJoined === true ||
         result?.alreadyMember === true ||
         result?.isMember === true ||
+        result?.requested !== true ||
         Boolean(result?.room) ||
         Boolean(result?.data?.room) ||
         Boolean(result?.joinedRoom) ||
-        Boolean(joinedRoomId && !result?.requested) ||
+        Boolean(joinedRoomId) ||
         resultMessage.includes('joined') ||
         resultMessage.includes('already a member') ||
-        resultMessage.includes('already joined');
+        resultMessage.includes('already joined') ||
+        resultMessage.includes('joined room successfully');
 
       if (result?.requested) {
         setStatus(result?.message || 'Join request sent.');
@@ -168,11 +171,17 @@ export default function JoinRoomPage() {
           replace: true,
           state: {
             openRoomId: joinedRoomId,
+            autoOpenRoomId: joinedRoomId,
+            initialRoomId: joinedRoomId,
+            focusRoomId: joinedRoomId,
             selectedRoomId: joinedRoomId,
             activeRoomId: joinedRoomId,
             roomId: joinedRoomId,
             openRoomName: normalizedJoinedRoom.name,
             joinedRoom: normalizedJoinedRoom,
+            room: normalizedJoinedRoom,
+            selectedRoom: normalizedJoinedRoom,
+            autoOpenRoom: normalizedJoinedRoom,
             openJoinedRoom: true,
             source: 'roomInviteJoin',
             refreshRooms: true,
@@ -180,6 +189,25 @@ export default function JoinRoomPage() {
             inviteCode: cleanInviteCode,
             joinedAt: Date.now(),
             inviteNavigationVersion: Date.now(),
+          },
+        });
+        return;
+      }
+
+      if (joinedRoomId) {
+        navigate(`/rooms?room=${encodeURIComponent(joinedRoomId)}`, {
+          replace: true,
+          state: {
+            openRoomId: joinedRoomId,
+            autoOpenRoomId: joinedRoomId,
+            selectedRoomId: joinedRoomId,
+            activeRoomId: joinedRoomId,
+            roomId: joinedRoomId,
+            joinedRoom: normalizedJoinedRoom,
+            room: normalizedJoinedRoom,
+            source: 'roomInviteFallbackJoin',
+            refreshRooms: true,
+            forceRoomRefresh: true,
           },
         });
         return;

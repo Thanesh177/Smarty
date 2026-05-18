@@ -87,7 +87,28 @@ function PageLoader() {
 }
 
 function TopicRoomsRouteWrapper() {
-  return <TopicRoomsPage />;
+  const location = useLocation();
+
+  const roomStateKey = [
+    location.pathname,
+    location.search,
+    location.state?.openRoomId,
+    location.state?.autoOpenRoomId,
+    location.state?.selectedRoomId,
+    location.state?.activeRoomId,
+    location.state?.roomId,
+    location.state?.inviteNavigationVersion,
+    location.state?.joinedAt,
+  ]
+    .filter(Boolean)
+    .join(':');
+
+  return (
+    <TopicRoomsPage
+      key={roomStateKey || 'rooms'}
+      navigationState={location.state || {}}
+    />
+  );
 }
 
 class RouteErrorBoundary extends Component {
