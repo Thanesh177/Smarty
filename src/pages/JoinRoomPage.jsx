@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { getStableGuestId, roomApi, storePendingRoomInvite } from '../api/client';
+import { roomApi, storePendingRoomInvite } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import './JoinRoomPage.css';
 
@@ -68,7 +68,6 @@ export default function JoinRoomPage() {
       console.log('JOIN BUTTON CLICKED', cleanInviteCode);
 
       const result = await roomApi.joinRoomFromInvite(cleanInviteCode);
-      const stableGuestId = getStableGuestId();
 
       console.log('JOIN RESULT', result);
 
@@ -114,8 +113,7 @@ export default function JoinRoomPage() {
           result?.memberType ||
           result?.data?.memberType ||
           joinedRoom?.memberType ||
-          'guest',
-        guestId: stableGuestId,
+          'member',
       };
 
       const resultMessage = String(result?.message || result?.status || '').toLowerCase();
@@ -150,15 +148,12 @@ export default function JoinRoomPage() {
             refreshRooms: true,
             forceRoomRefresh: true,
             inviteCode: cleanInviteCode,
-            guestId: stableGuestId,
             joinedAt: Date.now(),
             autoOpenRoom: true,
             forceOpenRoom: true,
             loadMessagesImmediately: true,
             preloadMessages: true,
             skipRoomCache: true,
-            guestAutoJoined: true,
-            forceGuestRoomHydration: true,
             immediateMessageFetch: true,
             bypassInitialRoomLoad: true,
             openDirectlyAfterJoin: true,
@@ -188,15 +183,12 @@ export default function JoinRoomPage() {
             refreshRooms: true,
             forceRoomRefresh: true,
             inviteCode: cleanInviteCode,
-            guestId: stableGuestId,
             joinedAt: Date.now(),
             autoOpenRoom: true,
             forceOpenRoom: true,
             loadMessagesImmediately: true,
             preloadMessages: true,
             skipRoomCache: true,
-            guestAutoJoined: true,
-            forceGuestRoomHydration: true,
             immediateMessageFetch: true,
             bypassInitialRoomLoad: true,
             openDirectlyAfterJoin: true,
@@ -224,7 +216,7 @@ export default function JoinRoomPage() {
   useEffect(() => {
     if (loading || joining || !cleanInviteCode) return;
 
-    const autoJoinKey = `${user?.id || user?.userId || user?.sub || 'guest'}:${cleanInviteCode}`;
+    const autoJoinKey = `${user?.id || user?.userId || user?.sub || user?.email || 'user'}:${cleanInviteCode}`;
     if (autoJoinAttemptedRef.current === autoJoinKey) return;
 
     autoJoinAttemptedRef.current = autoJoinKey;

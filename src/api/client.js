@@ -22,48 +22,6 @@ const LEGACY_PENDING_ROOM_INVITE_KEYS = [
   'pendingRoomInviteTimestamp',
 ];
 
-const SMARTY_GUEST_ID_KEY = 'smarty_guest_id';
-
-const getOrCreateGuestId = () => {
-  try {
-    const existingGuestId =
-      localStorage.getItem(SMARTY_GUEST_ID_KEY) ||
-      sessionStorage.getItem(SMARTY_GUEST_ID_KEY) ||
-      '';
-
-    if (existingGuestId) return existingGuestId;
-
-    const generatedGuestId = `guest-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 10)}`;
-
-    localStorage.setItem(SMARTY_GUEST_ID_KEY, generatedGuestId);
-    sessionStorage.setItem(SMARTY_GUEST_ID_KEY, generatedGuestId);
-
-    return generatedGuestId;
-  } catch {
-    return `guest-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-  }
-};
-
-export const getStableGuestId = () => getOrCreateGuestId();
-
-const attachGuestIdentity = (config = {}) => {
-  const guestId = getOrCreateGuestId();
-
-  return {
-    ...config,
-    headers: {
-      ...(config.headers || {}),
-      'x-guest-id': guestId,
-    },
-    params: {
-      ...(config.params || {}),
-      guestId,
-      clientGuestId: guestId,
-    },
-  };
-};
 
 export const storePendingRoomInvite = (inviteCode) => {
   const cleanCode = String(inviteCode || '').trim();
@@ -277,91 +235,11 @@ const attachAuthHeader = async (config) => {
 };
 
 api.interceptors.request.use(async (config) => {
-  const url = String(config?.url || '');
-  const method = String(config?.method || 'get').toLowerCase();
-
-  const guestCompatibleRoute =
-    (
-      method === 'get' &&
-      (
-        url === '/rooms/public' ||
-        url.startsWith('/rooms/invite/') ||
-        (url.startsWith('/rooms/') && url.endsWith('/messages')) ||
-        (url.startsWith('/rooms/') && url.endsWith('/members'))
-      )
-    ) ||
-    (
-      method === 'post' &&
-      (
-        (url.startsWith('/rooms/') && url.endsWith('/messages')) ||
-        (url.startsWith('/rooms/') && url.endsWith('/media-upload-url'))
-      )
-    );
-
-  const token = await getAuthToken();
-  const guestId = getOrCreateGuestId();
-
-  // LOGGED IN USERS
-  // Always attach BOTH auth token + guest identity.
-  // Guest identity is needed for invite/private-room persistence.
-  if (token) {
-    return {
-      ...config,
-      headers: {
-        ...(config.headers || {}),
-        Authorization: `Bearer ${token}`,
-        'x-guest-id': guestId,
-      },
-      params: {
-        ...(config.params || {}),
-        guestId,
-        clientGuestId: guestId,
-      },
-    };
-  }
-
-  // GUEST USERS
-  // Allow public/private invite room access without login.
-  if (guestCompatibleRoute) {
-    const publicConfig = {
-      ...config,
-      headers: {
-        ...(config.headers || {}),
-      },
-    };
-
-    delete publicConfig.headers.Authorization;
-    delete publicConfig.headers.authorization;
-
-    return attachGuestIdentity(publicConfig);
-  }
-
-  return config;
+  return attachAuthHeader(config);
 });
 
 roomInviteApi.interceptors.request.use(async (config) => {
-  const authedConfig = await attachAuthHeader(config);
-  const url = String(authedConfig?.url || '');
-  const method = String(authedConfig?.method || 'get').toLowerCase();
-
-  if (url.startsWith('/room-invites/') || url.startsWith('/rooms/')) {
-    const guestId = getOrCreateGuestId();
-
-    if (method === 'get') {
-      return {
-        ...authedConfig,
-        params: {
-          ...(authedConfig.params || {}),
-          guestId,
-          clientGuestId: guestId,
-        },
-      };
-    }
-
-    return attachGuestIdentity(authedConfig);
-  }
-
-  return authedConfig;
+  return attachAuthHeader(config);
 });
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -576,18 +454,10 @@ export const authApi = {
 
 export const roomApi = {
   async getRooms(params = {}) {
-    const isLoggedIn = await hasLiveAuthSession();
-    const guestId = getOrCreateGuestId();
-    const endpoint = isLoggedIn ? '/rooms' : '/rooms/public';
-
-    const { data } = await api.get(endpoint, {
-      params: isLoggedIn
-        ? { ...params }
-        : {
-            ...params,
-            guestId,
-            clientGuestId: guestId,
-          },
+    const { data } = await api.get('/rooms', {
+      params: {
+        ...params,
+      },
     });
 
     return normalizeList(data);
@@ -683,21 +553,11 @@ export const roomApi = {
       throw new Error(isVideo ? 'Video must be 50 MB or smaller.' : 'Image must be 8 MB or smaller.');
     }
 
-    const isLoggedIn = await hasLiveAuthSession();
-    const guestId = getOrCreateGuestId();
-
     const { data } = await api.post(`/rooms/${encodePathSegment(cleanRoomId)}/media-upload-url`, {
       roomId: cleanRoomId,
       fileName,
       fileSize,
       contentType,
-      ...(isLoggedIn
-        ? {}
-        : {
-            guestId,
-            clientGuestId: guestId,
-            isGuest: true,
-          }),
     });
 
     const parsed = parseApiBody(data);
@@ -746,16 +606,7 @@ export const roomApi = {
   },
 
   acceptRoomInvite: async (roomId) => {
-    const guestId = getOrCreateGuestId();
-
-    const { data } = await api.post(
-      `/rooms/${encodePathSegment(roomId)}/invites/accept`,
-      {
-        guestId,
-        clientGuestId: guestId,
-      }
-    );
-
+    const { data } = await api.post(`/rooms/${encodePathSegment(roomId)}/invites/accept`);
     return parseApiBody(data);
   },
 
@@ -817,17 +668,8 @@ export const roomApi = {
 
     storePendingRoomInvite(cleanCode);
 
-    const guestId = getOrCreateGuestId();
-
     const { data } = await roomInviteApi.get(
-      `/room-invites/${encodePathSegment(cleanCode)}`,
-      {
-        params: {
-          guestId,
-          clientGuestId: guestId,
-        },
-        headers: {},
-      }
+      `/room-invites/${encodePathSegment(cleanCode)}`
     );
     const parsed = parseApiBody(data);
     const invite = parsed?.invite || parsed || {};
@@ -899,16 +741,9 @@ joinRoomFromInvite: async (inviteCode) => {
 
   storePendingRoomInvite(cleanCode);
 
-  const guestId = getOrCreateGuestId();
-
   try {
     const { data } = await roomInviteApi.post(
-      `/room-invites/${encodePathSegment(cleanCode)}/join`,
-      {
-        guestId,
-        clientGuestId: guestId,
-        joinAsGuest: true,
-      }
+      `/room-invites/${encodePathSegment(cleanCode)}/join`
     );
 
     const parsed = parseApiBody(data);
@@ -926,7 +761,7 @@ joinRoomFromInvite: async (inviteCode) => {
       throw new Error(
         backendData?.message ||
         backendData?.error ||
-        'This private room requires login before joining. The invite page is public, but the backend is still protecting the join endpoint.'
+        'Please log in before joining this private room.'
       );
     }
 
@@ -956,8 +791,6 @@ joinRoomFromInvite: async (inviteCode) => {
   api.delete(`/rooms/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(messageId)}`),
 
   async getRoomMessages(roomId, params = {}) {
-    const guestId = getOrCreateGuestId();
-
     const cleanRoomId = String(roomId || '').trim();
 
     const normalizedRoomId = cleanRoomId.startsWith('group#')
@@ -969,8 +802,6 @@ joinRoomFromInvite: async (inviteCode) => {
       {
         params: {
           ...params,
-          guestId,
-          clientGuestId: guestId,
         },
       }
     );
@@ -1006,29 +837,6 @@ joinRoomFromInvite: async (inviteCode) => {
     return parsed;
   },
 
-sendGuestRoomMessage: async (roomId, payload = {}) => {
-  const cleanRoomId = String(roomId || '').trim();
-  const guestId = getOrCreateGuestId();
-
-  if (!cleanRoomId) {
-    throw new Error('Room ID is required to send a guest message.');
-  }
-
-  const { data } = await api.post(
-    `/rooms/${encodePathSegment(cleanRoomId)}/messages`,
-    {
-      ...payload,
-      guestId: payload.guestId || guestId,
-      clientGuestId: payload.clientGuestId || guestId,
-      isGuest: true,
-      senderId: payload.senderId || guestId,
-      senderName: payload.senderName || 'Guest',
-      senderEmail: payload.senderEmail || '',
-    }
-  );
-
-  return parseApiBody(data);
-},
 
 async getRoomMembers(roomId, params = {}) {
   const cleanRoomId = String(roomId || '').trim();
@@ -1144,14 +952,8 @@ async getRoomMembers(roomId, params = {}) {
   },
 
   async unhideRoom(roomId) {
-    const guestId = getOrCreateGuestId();
-
     const { data } = await api.post(
-      `/rooms/${encodePathSegment(roomId)}/unhide`,
-      {
-        guestId,
-        clientGuestId: guestId,
-      }
+      `/rooms/${encodePathSegment(roomId)}/unhide`
     );
     return parseApiBody(data);
   },
@@ -1167,34 +969,49 @@ async getRoomMembers(roomId, params = {}) {
     return parseApiBody(data);
   },
 
-async deleteRoom(roomId) {
+async deleteRoom(roomId, params = {}) {
   const cleanRoomId = String(roomId || '').trim();
 
   if (!cleanRoomId) {
     throw new Error('Room ID is required to delete a room.');
   }
 
-  const finalRoomId = cleanRoomId.startsWith('group#')
-    ? cleanRoomId
-    : `group#${cleanRoomId}`;
+  const candidateRoomIds = cleanRoomId.startsWith('group#')
+    ? [cleanRoomId]
+    : [`group#${cleanRoomId}`];
 
-  try {
-    const { data } = await api.delete(
-      `/rooms/${encodePathSegment(finalRoomId)}`
-    );
+  let lastError = null;
 
-    return parseApiBody(data);
-  } catch (error) {
-    if (error?.response?.status === 404) {
-      return {
-        deleted: true,
-        alreadyDeleted: true,
-        roomId: finalRoomId,
-      };
+  for (const candidateRoomId of candidateRoomIds) {
+    try {
+      const { data } = await api.delete(
+        `/rooms/${encodePathSegment(candidateRoomId)}`,
+        {
+          params: {
+            ...params,
+          },
+        }
+      );
+
+      return parseApiBody(data);
+    } catch (error) {
+      lastError = error;
+
+      const status = error?.response?.status;
+
+      if (status === 404) {
+        return {
+          deleted: true,
+          alreadyDeleted: true,
+          roomId: cleanRoomId,
+        };
+      }
+
+      throw error;
     }
-
-    throw error;
   }
+
+  throw lastError;
 },
 };
 

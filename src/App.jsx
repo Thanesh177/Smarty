@@ -1028,8 +1028,23 @@ function Layout() {
                   }
                 />
 
-                <Route path="/rooms/invite/:inviteCode" element={<JoinRoomPage />} />
-                <Route path="/rooms/join/:inviteCode" element={<JoinRoomPage />} />
+                <Route
+                  path="/rooms/invite/:inviteCode"
+                  element={
+                    <ProtectedRoute>
+                      <JoinRoomPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/rooms/join/:inviteCode"
+                  element={
+                    <ProtectedRoute>
+                      <JoinRoomPage />
+                    </ProtectedRoute>
+                  }
+                />
 
                 <Route
                   path="/chat"
@@ -1087,30 +1102,61 @@ function Layout() {
                   }
                 />
 
-                <Route path="/rooms" element={<TopicRoomsRouteWrapper />} />
+                <Route
+                  path="/rooms"
+                  element={
+                    <ProtectedRoute>
+                      <TopicRoomsRouteWrapper />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/rooms/:roomId"
-                  element={<TopicRoomsPage />}
+                  element={
+                    <ProtectedRoute>
+                      <TopicRoomsPage />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route
                   path="/rooms/:roomId/*"
-                  element={<TopicRoomsPage />}
+                  element={
+                    <ProtectedRoute>
+                      <TopicRoomsPage />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route
                   path="/topic-room/:roomId"
-                  element={<TopicRoomsPage />}
+                  element={
+                    <ProtectedRoute>
+                      <TopicRoomsPage />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route
                   path="/topic-room/:roomId/*"
-                  element={<TopicRoomsPage />}
+                  element={
+                    <ProtectedRoute>
+                      <TopicRoomsPage />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route
                   path="/topicrooms/:roomId"
-                  element={<TopicRoomsPage />}
+                  element={
+                    <ProtectedRoute>
+                      <TopicRoomsPage />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route
                   path="/topicrooms/:roomId/*"
-                  element={<TopicRoomsPage />}
+                  element={
+                    <ProtectedRoute>
+                      <TopicRoomsPage />
+                    </ProtectedRoute>
+                  }
                 />
 
                 <Route path="*" element={<Navigate to="/feed" replace />} />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { getStableGuestId, roomApi } from '../api/client';
+import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
 import { Download, Trash2, X } from 'lucide-react';
@@ -10,7 +10,6 @@ import RoomMediaPreview from './RoomMediaPreview';
 import RoomInfoPage from './RoomInfoPage';
 
 const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
-const JOINED_INVITE_ROOMS_CACHE_KEY = 'smarty_joined_invite_rooms_v1';
 const API_ORIGIN = 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com';
 const APP_ORIGIN = import.meta.env.PROD
   ? 'https://main.d3qiuefonbp8n9.amplifyapp.com'
@@ -36,14 +35,6 @@ const ROOM_MESSAGES_REVEAL_STEP = 20;
 const ROOM_INITIAL_VISIBLE_MESSAGES = 20;
 const ROOM_OLDER_MESSAGES_LAYOUT_STABILIZE_MS = 260;
 const ROOM_PAGE_DEFERRED_LOAD_MS = 450;
-const ROOM_MEDIA_UPLOAD_TIMEOUT_MS = 45000;
-const ROOM_SOCKET_RECONNECT_DELAY_MS = 1800;
-const ROOM_SCROLL_THROTTLE_MS = 120;
-const ROOM_MEDIA_CACHE_LIMIT = 120;
-const ROOM_MAX_STATUS_LENGTH = 180;
-const ROOM_MAX_CACHED_MESSAGE_ROOMS = 25;
-const ROOM_MESSAGE_BATCH_RENDER_SIZE = 40;
-const ROOM_SCROLL_BOTTOM_DEBOUNCE_MS = 80;
 
 const ROOM_LOAD_TIMEOUT_MS = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
   ? 30000
@@ -91,84 +82,6 @@ function removeStoredRoomImage(roomId) {
   }
 }
 
-// --- Joined Invite Rooms Fallback Cache ---
-function getStoredJoinedInviteRooms() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(JOINED_INVITE_ROOMS_CACHE_KEY) || '[]');
-    return Array.isArray(stored) ? stored.filter((room) => room?.roomId || room?.id) : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistJoinedInviteRoom(room) {
-  const roomId = String(room?.roomId || room?.id || '').trim();
-  if (!roomId) return;
-
-  try {
-    const current = getStoredJoinedInviteRooms();
-    const normalizedRoom = {
-      ...room,
-      roomId,
-      id: roomId,
-      name: room?.name || room?.roomName || 'Joined group',
-      roomName: room?.roomName || room?.name || 'Joined group',
-      privacy: normalizeRoomPrivacy({ ...room, privacy: room?.privacy || room?.visibility || 'private' }),
-      type: room?.type || 'custom',
-      isPrivate: normalizeRoomPrivacy({ ...room, privacy: room?.privacy || room?.visibility || 'private' }) === 'private',
-      joinedViaInvite: true,
-      joinedAt: room?.joinedAt || Date.now(),
-    };
-
-    const next = [
-      normalizedRoom,
-      ...current.filter((item) => String(item?.roomId || item?.id || '') !== roomId),
-    ].slice(0, 50);
-
-    localStorage.setItem(JOINED_INVITE_ROOMS_CACHE_KEY, JSON.stringify(next));
-  } catch {
-    // Ignore storage errors.
-  }
-}
-
-function mergeJoinedInviteRooms(rooms = [], extraRoom = null) {
-  const joinedRooms = getStoredJoinedInviteRooms();
-  const candidates = extraRoom ? [extraRoom, ...joinedRooms] : joinedRooms;
-  const nextRooms = Array.isArray(rooms) ? [...rooms] : [];
-
-  candidates.forEach((room) => {
-    const roomId = String(room?.roomId || room?.id || '').trim();
-    if (!roomId) return;
-
-    const normalizedRoom = {
-      ...room,
-      roomId,
-      id: roomId,
-      name: room?.name || room?.roomName || 'Joined group',
-      roomName: room?.roomName || room?.name || 'Joined group',
-      privacy: normalizeRoomPrivacy({ ...room, privacy: room?.privacy || room?.visibility || 'private' }),
-      type: room?.type || 'custom',
-      isPrivate: normalizeRoomPrivacy({ ...room, privacy: room?.privacy || room?.visibility || 'private' }) === 'private',
-      joinedViaInvite: true,
-    };
-
-    const existingIndex = nextRooms.findIndex(
-      (item) => String(item?.roomId || item?.id || '') === roomId
-    );
-
-    if (existingIndex >= 0) {
-      nextRooms[existingIndex] = {
-        ...normalizedRoom,
-        ...nextRooms[existingIndex],
-      };
-    } else {
-      nextRooms.unshift(normalizedRoom);
-    }
-  });
-
-  return nextRooms;
-}
-
 function normalizeRoomImageUrl(imageUrl) {
   const cleanUrl = String(imageUrl || '').trim();
   if (!cleanUrl) return '';
@@ -185,29 +98,6 @@ function normalizeRoomImageUrl(imageUrl) {
   }
 
   return cleanUrl;
-}
-
-function normalizeRoomPrivacy(room = {}) {
-  const privacy = String(room?.privacy || '').trim().toLowerCase();
-  const visibility = String(room?.visibility || '').trim().toLowerCase();
-
-  if (privacy === 'private' || privacy === 'public') {
-    return privacy;
-  }
-
-  if (visibility === 'private' || visibility === 'public') {
-    return visibility;
-  }
-
-  if (room?.isPrivate === true) {
-    return 'private';
-  }
-
-  if (room?.isPrivate === false) {
-    return 'public';
-  }
-
-  return 'public';
 }
 
 function parseApiPayload(payload) {
@@ -646,7 +536,7 @@ function getNavigationRoomOpenId(locationState = {}) {
 }
 
 function renderMessageWithLinks(value = '') {
-  const text = String(value || '').slice(0, 12000);
+  const text = String(value || '');
   if (!text) return null;
 
   const urlRegex = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
@@ -684,68 +574,7 @@ export default function TopicRoomsPage() {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const authUserId = user?.sub || user?.userId || user?.id || '';
-  const guestUserId = getStableGuestId();
-  const userId = authUserId || guestUserId;
-  const isGuestUser = !authUserId;
-
-  // --- Patch: getRoomsForCurrentSession ---
-  async function getRoomsForCurrentSession(params = {}) {
-    if (!isGuestUser) {
-      return roomApi.getRooms(params);
-    }
-
-    const query = new URLSearchParams();
-
-    Object.entries(params || {}).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '') {
-        query.set(key, String(value));
-      }
-    });
-
-    const requestUrl = `${API_ORIGIN}/rooms/public${query.toString() ? `?${query.toString()}` : ''}`;
-    const response = await fetch(requestUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-      },
-    });
-
-    let payload = null;
-
-    try {
-      payload = await response.json();
-    } catch {
-      payload = null;
-    }
-
-    if (!response.ok) {
-      const error = new Error(payload?.error || payload?.message || `Failed to load rooms (${response.status})`);
-      error.response = {
-        status: response.status,
-        data: payload || {},
-      };
-      throw error;
-    }
-
-    return payload || {};
-  }
-
-  function requireLoggedInAction(actionLabel = 'do this') {
-    if (!isGuestUser) return false;
-
-    setStatus(
-      `Only logged-in users can ${String(actionLabel || 'continue').slice(0, ROOM_MAX_STATUS_LENGTH)}. Please log in first.`
-    );
-    setShowCreateModal(false);
-    setShowInvite(false);
-    setInviteLinkModalOpen(false);
-    setShowRoomMenu(false);
-    setShowActiveRoomMenu(false);
-    setOpenRoomActionMenuId('');
-
-    return true;
-  }
+  const userId = user?.id || user?.userId || user?.sub;
 
   function getInviteUserId(userValue) {
     if (typeof userValue === 'string') return userValue;
@@ -867,12 +696,6 @@ export default function TopicRoomsPage() {
   const sendingMessageRef = useRef(false);
   const [showRoomMediaGrid, setShowRoomMediaGrid] = useState(false);
 
-  const roomCacheRef = useRef(new Map());
-  const messageCacheRef = useRef(new Map());
-  const fetchInFlightRef = useRef(new Set());
-  const inviteMessageLoadTimersRef = useRef([]);
-  const lastRoomFetchRef = useRef(0);
-  const lastMessageFetchRef = useRef(0);
 
   const roomMenuRef = useRef(null);
   const olderScrollAnchorRef = useRef(null);
@@ -885,7 +708,6 @@ export default function TopicRoomsPage() {
   const selectedMediaPreviewsRef = useRef([]);
   const pendingMessageIdsRef = useRef(new Set());
 
-const scrollBottomTimeoutRef = useRef(null);
 
 const scrollMessagesToBottom = useCallback((options = {}) => {
   const {
@@ -904,15 +726,7 @@ const scrollMessagesToBottom = useCallback((options = {}) => {
     if (!latestContainer) return;
 
     latestContainer.style.scrollBehavior = behavior;
-    if (
-      Math.abs(
-        latestContainer.scrollHeight -
-          latestContainer.scrollTop -
-          latestContainer.clientHeight
-      ) > ROOM_SCROLL_THROTTLE_MS
-    ) {
-      latestContainer.scrollTop = latestContainer.scrollHeight;
-    }
+    latestContainer.scrollTop = latestContainer.scrollHeight;
   };
 
   jumpToBottom();
@@ -928,18 +742,11 @@ const scrollMessagesToBottom = useCallback((options = {}) => {
     });
   }
 
-  if (scrollBottomTimeoutRef.current) {
-    window.clearTimeout(scrollBottomTimeoutRef.current);
-  }
-
-  scrollBottomTimeoutRef.current = window.setTimeout(() => {
+  setTimeout(() => {
     const latestContainer = messagesRef.current;
-
     if (latestContainer) {
       latestContainer.style.scrollBehavior = previousBehavior;
     }
-
-    scrollBottomTimeoutRef.current = null;
   }, restoreDelay);
 }, []);
 
@@ -992,15 +799,11 @@ const isMessagesNearBottom = useCallback((threshold = 320) => {
     const normalizedSearch = roomSearch.trim().toLowerCase();
 
     return rooms
-     .filter((room) => {
-  const privacy = normalizeRoomPrivacy(room);
-
-  if (roomPrivacyFilter === 'private') {
-    return privacy === 'private';
-  }
-
-  return privacy !== 'private';
-})
+      .filter((room) =>
+        roomPrivacyFilter === 'private'
+          ? room.privacy === 'private'
+          : room.privacy !== 'private'
+      )
       .filter((room) => {
         if (!normalizedSearch) return true;
         return String(room.name || '').toLowerCase().includes(normalizedSearch);
@@ -1008,15 +811,7 @@ const isMessagesNearBottom = useCallback((threshold = 320) => {
       .slice(0, MAX_RENDERED_ROOMS);
   }, [rooms, roomPrivacyFilter, roomSearch]);
 
-const renderedMessages = useMemo(() => {
-  if (!Array.isArray(messages)) return [];
-
-  if (messages.length <= MAX_RENDERED_MEDIA_MESSAGES) {
-    return messages;
-  }
-
-  return messages.slice(-MAX_RENDERED_MEDIA_MESSAGES);
-}, [messages]);
+const renderedMessages = messages;
 
 const MessageRow = useCallback((msg) => {
   const messageKey = getStableRoomMessageKey(msg);
@@ -1025,7 +820,11 @@ const MessageRow = useCallback((msg) => {
     (item) => getStableRoomMessageKey(item) === messageKey
   );
 
-  // Removed unused preloadMedia block
+  const preloadMedia =
+    messageIndex >= Math.max(
+      0,
+      renderedMessages.length - ROOM_PRELOADED_VISIBLE_MEDIA
+    );
 
   return (
     <div
@@ -1159,36 +958,9 @@ const MessageRow = useCallback((msg) => {
     setShowScrollToBottom(false);
   }, [activeRoom?.roomId]);
 
-useEffect(() => {
-  messagesStateRef.current = messages;
-
-  const roomId = activeRoomRef.current?.roomId;
-
-  if (roomId && Array.isArray(messages)) {
-    messageCacheRef.current.set(roomId, {
-      data: messages,
-      timestamp: Date.now(),
-    });
-  }
-
-  if (messages.length > MAX_RENDERED_MEDIA_MESSAGES + 120) {
-    setMessages((prev) => prev.slice(-MAX_RENDERED_MEDIA_MESSAGES));
-  }
-}, [messages]);
-
-useEffect(() => {
-  return () => {
-    if (scrollBottomTimeoutRef.current) {
-      window.clearTimeout(scrollBottomTimeoutRef.current);
-      scrollBottomTimeoutRef.current = null;
-    }
-    inviteMessageLoadTimersRef.current.forEach((timerId) => {
-      window.clearTimeout(timerId);
-    });
-    inviteMessageLoadTimersRef.current = [];
-    fetchInFlightRef.current.clear();
-  };
-}, []);
+  useEffect(() => {
+    messagesStateRef.current = messages;
+  }, [messages]);
 
 
   useLayoutEffect(() => {
@@ -1392,8 +1164,6 @@ useLayoutEffect(() => {
 
     try {
       const data = await roomApi.getRoomMessages(room.roomId, {
-        guestId: getStableGuestId(),
-        clientGuestId: getStableGuestId(),
         before: oldestCursor,
         beforeMessageId: oldestCursor,
         cursor: oldestCursor,
@@ -1586,156 +1356,27 @@ const setMessagesContainerRef = useCallback((node) => {
     setSelectedMediaPreview('');
     setSelectedMediaPreviews([]);
     setSelectedMediaType('');
-    if (!sendingMessageRef.current) {
-      setUploadingMedia(false);
-      setMediaUploadProgress(0);
-      setMediaUploadLabel('');
-    }
-    if (sendingMessageRef.current) {
-      sendingMessageRef.current = false;
-    }
+    setUploadingMedia(false);
+    setMediaUploadProgress(0);
+    setMediaUploadLabel('');
   }
-
 
 function syncRoomMessageCache(roomId, nextMessages) {
   if (!roomId) return [];
 
   const normalizedMessages = trimRoomMessagesForMemory(
-    sortRoomMessages(
-      dedupeMessages(
-        (Array.isArray(nextMessages) ? nextMessages : []).map(
-          normalizeRoomMessageMedia
-        )
-      )
-    )
+    Array.isArray(nextMessages) ? nextMessages : []
   );
 
   roomMessagesCacheRef.current[roomId] = normalizedMessages;
-  messageCacheRef.current.set(roomId, {
-    data: normalizedMessages,
-    timestamp: Date.now(),
-  });
-
-  const mediaEntries = normalizedMessages.filter(
-    (message) => message?.mediaUrl || message?.fileUrl
-  );
-
-  if (mediaEntries.length > ROOM_MEDIA_CACHE_LIMIT) {
-    const trimmedMedia = mediaEntries.slice(-ROOM_MEDIA_CACHE_LIMIT);
-    const allowedKeys = new Set(
-      trimmedMedia.map((item) => getStableRoomMessageKey(item))
-    );
-
-    roomMessagesCacheRef.current[roomId] = normalizedMessages.filter((item) => {
-      if (!item?.mediaUrl && !item?.fileUrl) return true;
-      return allowedKeys.has(getStableRoomMessageKey(item));
-    });
-
-    messageCacheRef.current.set(roomId, {
-      data: roomMessagesCacheRef.current[roomId],
-      timestamp: Date.now(),
-    });
-  }
-
-  const cachedRoomIds = Object.keys(roomMessagesCacheRef.current || {});
-
-  if (cachedRoomIds.length > ROOM_MAX_CACHED_MESSAGE_ROOMS) {
-    const removableRooms = cachedRoomIds.filter(
-      (id) => id !== activeRoomRef.current?.roomId
-    );
-
-    while (
-      removableRooms.length > 0 &&
-      Object.keys(roomMessagesCacheRef.current).length >
-        ROOM_MAX_CACHED_MESSAGE_ROOMS
-    ) {
-      const roomToDelete = removableRooms.shift();
-
-      if (roomToDelete) {
-        delete roomMessagesCacheRef.current[roomToDelete];
-      }
-    }
-  }
 
   return normalizedMessages;
-}
-
-// --- Helper: Load invite room messages directly with retries ---
-async function loadInviteRoomMessagesDirect(room, source = 'invite-direct') {
-  const roomId = String(room?.roomId || room?.id || '').trim();
-
-  if (!roomId) return [];
-
-  const cacheKey = `invite-messages-${roomId}`;
-
-  if (fetchInFlightRef.current.has(cacheKey)) {
-    return messageCacheRef.current.get(roomId)?.data || roomMessagesCacheRef.current[roomId] || [];
-  }
-
-  fetchInFlightRef.current.add(cacheKey);
-
-  try {
-    setMessagesLoading(true);
-    loadingRoomRef.current = false;
-
-    const stableGuestId = room?.guestId || getStableGuestId();
-
-    const data = await roomApi.getRoomMessages(roomId, {
-      guestId: stableGuestId,
-      clientGuestId: stableGuestId,
-      limit: ROOM_MESSAGES_FETCH_LIMIT,
-      source,
-      force: '1',
-      ts: Date.now(),
-    });
-
-    if (!mountedRef.current) return [];
-
-    if (activeRoomRef.current?.roomId !== roomId) {
-      return [];
-    }
-
-    const loadedMessages = syncRoomMessageCache(
-      roomId,
-      getLoadedRoomMessages(data)
-    );
-
-    messagesStateRef.current = loadedMessages;
-    setMessages(loadedMessages);
-    setHasOlderMessages(loadedMessages.length >= ROOM_MESSAGES_FETCH_LIMIT);
-
-    if (loadedMessages.length > 0) {
-      shouldAutoScrollToNewestRef.current = true;
-
-      window.requestAnimationFrame(() => {
-        scrollMessagesToBottom({
-          behavior: 'auto',
-          settle: true,
-          restoreDelay: 320,
-        });
-      });
-    }
-
-    return loadedMessages;
-  } catch (err) {
-    console.error(`INVITE DIRECT MESSAGE LOAD ERROR (${source}):`, err);
-    return [];
-  } finally {
-    fetchInFlightRef.current.delete(cacheKey);
-    if (mountedRef.current && activeRoomRef.current?.roomId === roomId) {
-      setMessagesLoading(false);
-    }
-  }
 }
 
 const appendRoomMessage = useCallback((roomId, message, options = {}) => {
   if (!roomId || !message) return;
 
   const normalizedMessage = normalizeRoomMessageMedia(message);
-
-  if (!normalizedMessage?.roomId && roomId) {
-    normalizedMessage.roomId = roomId;
-  }
   const activeRoomId = activeRoomRef.current?.roomId;
   const shouldUpdateVisibleRoom = activeRoomId === roomId;
 
@@ -1886,11 +1527,6 @@ function markPendingRoomMessageFailed(clientId) {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
 
-    if (!navigator.onLine) {
-      setStatus('You appear to be offline. Please reconnect and try again.');
-      return;
-    }
-
     if (files.length === 0) return;
 
     removeSelectedMedia();
@@ -1929,13 +1565,6 @@ function markPendingRoomMessageFailed(clientId) {
         return;
       }
 
-      if (!file.name || file.name.length > 180) {
-        setStatus('File name is too long.');
-        previewItems.forEach((item) => {
-          if (item.preview?.startsWith('blob:')) URL.revokeObjectURL(item.preview);
-        });
-        return;
-      }
       validFiles.push(file);
       let previewUrl = '';
 
@@ -2021,10 +1650,7 @@ async function toggleActiveInfoSection(section) {
     setActiveInfoRequests([]);
 
     try {
-      const data = await roomApi.getRoomJoinRequests(room.roomId, {
-        guestId: getStableGuestId(),
-        clientGuestId: getStableGuestId(),
-      });
+      const data = await roomApi.getRoomJoinRequests(room.roomId);
       const nextRequests = extractRoomArray(data, ['requests']);
       setActiveInfoRequests(nextRequests);
     } catch (err) {
@@ -2067,10 +1693,7 @@ async function loadActiveRoomInfoMembers(room = activeRoomRef.current || activeR
   setActiveInfoLoading(true);
 
   try {
-    const data = await roomApi.getRoomMembers(room.roomId, {
-      guestId: getStableGuestId(),
-      clientGuestId: getStableGuestId(),
-    });
+    const data = await roomApi.getRoomMembers(room.roomId);
     if (!mountedRef.current) return;
 
     const nextMembers = getRoomMembersFromResponse(data).filter(Boolean);
@@ -2208,18 +1831,6 @@ async function approveJoinRequest(requestUserId) {
     roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
 
     setStatus('Join request approved');
-        setRooms((prev) =>
-      prev.map((room) => {
-        if (String(room?.roomId || '') !== String(targetRoom.roomId || '')) {
-          return room;
-        }
-
-        return {
-          ...room,
-          memberCount: Number(room?.memberCount || 0) + 1,
-        };
-      })
-    );
 
     await loadRooms(roomSearch, { force: true });
     await loadActiveRoomInfoMembers(targetRoom, { force: true });
@@ -2270,18 +1881,8 @@ async function approveJoinRequest(requestUserId) {
         throw new Error('You are offline');
       }
 
-      const roomLoadParams = {
-        search: normalizedSearch,
-      };
-
-      if (isGuestUser) {
-        const stableGuestId = getStableGuestId();
-        roomLoadParams.guestId = stableGuestId;
-        roomLoadParams.clientGuestId = stableGuestId;
-      }
-
       const data = await Promise.race([
-        getRoomsForCurrentSession(roomLoadParams),
+        roomApi.getRooms({ search: normalizedSearch }),
         new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error('Rooms load timeout')),
@@ -2310,57 +1911,35 @@ async function approveJoinRequest(requestUserId) {
 
       const allRoomsRaw = Array.isArray(data?.rooms) ? data.rooms : Array.isArray(data) ? data : [];
 
-const allRooms = allRoomsRaw.map((room) => {
-  const normalizedPrivacy = normalizeRoomPrivacy(room);
-  const cachedImageUrl = cachedRoomImages[room.roomId];
+      const allRooms = allRoomsRaw.map((room) => {
+        const cachedImageUrl = cachedRoomImages[room.roomId];
 
-  const imageUrl = normalizeRoomImageUrl(
-    room.imageUrl ||
-      room.roomImageUrl ||
-      room.avatarUrl ||
-      room.coverImageUrl ||
-      room.coverUrl ||
-      cachedImageUrl ||
-      ''
-  );
+        const imageUrl = normalizeRoomImageUrl(
+          room.imageUrl ||
+            room.roomImageUrl ||
+            room.avatarUrl ||
+            room.coverImageUrl ||
+            room.coverUrl ||
+            cachedImageUrl ||
+            ''
+        );
 
-  return {
-    ...room,
-    privacy: normalizedPrivacy,
-    isPrivate: normalizedPrivacy === 'private',
-    imageUrl,
-    roomImageUrl: room.roomImageUrl || imageUrl,
-    coverImageUrl: room.coverImageUrl || imageUrl,
-  };
-});
+        return {
+          ...room,
+          imageUrl,
+          roomImageUrl: room.roomImageUrl || imageUrl,
+          coverImageUrl: room.coverImageUrl || imageUrl,
+        };
+      });
 
-const joinedInviteRooms = getStoredJoinedInviteRooms();
-const joinedInviteRoomIds = new Set(
-  joinedInviteRooms.map((room) => String(room?.roomId || room?.id || '').trim())
-);
+      const visibleRooms = allRooms.filter((room) => {
+        const isOwner = isRoomOwner(room, userId);
 
-const visibleRooms = allRooms.filter((room) => {
-  const normalizedPrivacy = normalizeRoomPrivacy(room);
-  const isPrivateRoom = normalizedPrivacy === 'private';
-  const roomId = String(room?.roomId || room?.id || '').trim();
-  const isJoinedInviteRoom = joinedInviteRoomIds.has(roomId);
+        if (isOwner) return true;
+        if (!normalizedSearch) return true;
 
-  // Guests cannot see private rooms unless joined through invite link
-  if (isGuestUser && isPrivateRoom && !isJoinedInviteRoom) {
-    return false;
-  }
-
-  // Preserve joined private rooms after refresh
-  if (!normalizedSearch) {
-    return true;
-  }
-
-  const roomName = String(
-    room.name || room.roomName || ''
-  ).toLowerCase();
-
-  return roomName.includes(normalizedSearch);
-});
+        return String(room.name || '').toLowerCase().includes(normalizedSearch);
+      });
 
       visibleRooms.sort((a, b) => {
         const aOwner = isRoomOwner(a, userId);
@@ -2372,85 +1951,32 @@ const visibleRooms = allRooms.filter((room) => {
         return Number(b.createdAt || 0) - Number(a.createdAt || 0);
       });
 
-      const navigationState =
-        location.state && typeof location.state === 'object'
-          ? location.state
-          : {};
-
-      const joinedRoomId = getNavigationRoomOpenId(navigationState);
-      let navigationJoinedRoom = null;
-
-      if (joinedRoomId) {
-        navigationJoinedRoom = navigationState?.joinedRoom || {
-          roomId: joinedRoomId,
-          id: joinedRoomId,
-          name: navigationState?.openRoomName || 'Joined group',
-          roomName: navigationState?.openRoomName || 'Joined group',
-          privacy: 'private',
-          type: 'custom',
-          guestId: navigationState?.guestId || getStableGuestId(),
-          joinedAt: navigationState?.joinedAt || Date.now(),
-        };
-
-        navigationJoinedRoom = {
-          ...navigationJoinedRoom,
-          roomId: navigationJoinedRoom.roomId || navigationJoinedRoom.id || joinedRoomId,
-          id: navigationJoinedRoom.id || navigationJoinedRoom.roomId || joinedRoomId,
-          name: navigationJoinedRoom.name || navigationJoinedRoom.roomName || navigationState?.openRoomName || 'Joined group',
-          roomName: navigationJoinedRoom.roomName || navigationJoinedRoom.name || navigationState?.openRoomName || 'Joined group',
-          privacy: navigationJoinedRoom.privacy || 'private',
-          type: navigationJoinedRoom.type || 'custom',
-          guestId: navigationJoinedRoom.guestId || navigationState?.guestId || getStableGuestId(),
-          joinedAt: navigationJoinedRoom.joinedAt || navigationState?.joinedAt || Date.now(),
-        };
-
-        persistJoinedInviteRoom(navigationJoinedRoom);
-      }
-
-      const mergedVisibleRooms = mergeJoinedInviteRooms(visibleRooms, navigationJoinedRoom);
-
-      // Ensure joined invite rooms survive hard refreshes even if backend membership sync is delayed
-      mergedVisibleRooms.forEach((room) => {
-        const roomId = String(room?.roomId || room?.id || '').trim();
-
-        if (!roomId) return;
-
-        const privacy = normalizeRoomPrivacy(room);
-
-        if (privacy === 'private') {
-          persistJoinedInviteRoom(room);
-        }
-      });
 
       roomsCacheRef.current = {
         key: cacheKey,
         timestamp: Date.now(),
-        rooms: mergedVisibleRooms,
+        rooms: visibleRooms,
       };
 
       const preloadRoomMessages = async () => {
         try {
-          const preloadRooms = mergedVisibleRooms.slice(0, 6);
-          const chunkSize = 2;
+          const preloadRooms = visibleRooms.slice(0, 8);
+          const chunkSize = 4;
 
           for (let index = 0; index < preloadRooms.length; index += chunkSize) {
             const batch = preloadRooms.slice(index, index + chunkSize);
 
             await Promise.allSettled(
               batch.map(async (room) => {
-                const currentRoomId = String(room?.roomId || room?.id || '').trim();
+                if (!room?.roomId) return;
 
-                if (!currentRoomId) return;
-
-                if (roomMessagesCacheRef.current[currentRoomId]?.length > 0) {
+                if (roomMessagesCacheRef.current[room.roomId]?.length > 0) {
                   return;
                 }
 
                 try {
                   const data = await Promise.race([
-                    roomApi.getRoomMessages(currentRoomId, {
-                      guestId: getStableGuestId(),
-                      clientGuestId: getStableGuestId(),
+                    roomApi.getRoomMessages(room.roomId, {
                       limit: ROOM_MESSAGES_FETCH_LIMIT,
                     }),
                     new Promise((_, reject) =>
@@ -2465,16 +1991,12 @@ const visibleRooms = allRooms.filter((room) => {
                     getLoadedRoomMessages(data)
                   );
 
-                  syncRoomMessageCache(currentRoomId, messages);
+                  syncRoomMessageCache(room.roomId, messages);
                 } catch (err) {
-                  const preloadStatus = err?.response?.status;
-
-                  if (preloadStatus !== 404 && preloadStatus !== 403) {
-                    console.error(
-                      `PRELOAD ROOM MESSAGES ERROR (${currentRoomId}):`,
-                      err
-                    );
-                  }
+                  console.error(
+                    `PRELOAD ROOM MESSAGES ERROR (${room.roomId}):`,
+                    err
+                  );
                 }
               })
             );
@@ -2490,18 +2012,7 @@ const visibleRooms = allRooms.filter((room) => {
         window.setTimeout(preloadRoomMessages, 600);
       }
 
-      roomCacheRef.current.set('rooms', {
-        data: mergedVisibleRooms,
-        timestamp: Date.now(),
-      });
-
-      setRooms((prev) => {
-        if (areRoomListsEqual(prev, mergedVisibleRooms)) {
-          return prev;
-        }
-
-        return mergedVisibleRooms.slice(0, MAX_RENDERED_ROOMS);
-      });
+      setRooms((prev) => (areRoomListsEqual(prev, visibleRooms) ? prev : visibleRooms));
       setInitialRoomsReady(true);
     } catch (err) {
   console.error('LOAD ROOMS ERROR:', err);
@@ -2513,16 +2024,14 @@ const visibleRooms = allRooms.filter((room) => {
 
     if (Array.isArray(fallbackRooms) && fallbackRooms.length > 0) {
       setRooms(fallbackRooms);
-      setStatus('Network is slow. Showing cached groups while reconnecting.');
+      setStatus('Connection is slow. Showing cached rooms.');
     } else {
-      const safeErrorMessage = String(
+      setStatus(
         err?.response?.data?.error ||
         err?.response?.data?.message ||
         err?.message ||
         'Failed to load rooms'
-      ).slice(0, ROOM_MAX_STATUS_LENGTH);
-
-      setStatus(safeErrorMessage);
+      );
     }
   }
 } finally {
@@ -2542,7 +2051,7 @@ const visibleRooms = allRooms.filter((room) => {
   }
 
   const openRoomFromNavigationState = useCallback(async (options = {}) => {
-    const currentUserId = userId || getStableGuestId();
+    const currentUserId = userId || user?.id || user?.userId || user?.sub || '';
     const navigationState =
       location.state && typeof location.state === 'object' ? location.state : {};
 
@@ -2571,29 +2080,16 @@ const visibleRooms = allRooms.filter((room) => {
         ? roomsCacheRef.current.rooms
         : [];
 
-      const fallbackRoom = navigationState?.joinedRoom || null;
       const roomToOpen =
         latestRooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
         rooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
-        (fallbackRoom
-          ? {
-              ...fallbackRoom,
-              roomId: fallbackRoom.roomId || fallbackRoom.id || requestedRoomId,
-              name:
-                fallbackRoom.name ||
-                fallbackRoom.roomName ||
-                navigationState?.openRoomName ||
-                'Joined group',
-              privacy: fallbackRoom.privacy || 'private',
-            }
-          : {
-              roomId: requestedRoomId,
-              name: navigationState?.openRoomName || 'Joined group',
-              privacy: 'private',
-              type: 'custom',
-            });
+        null;
 
       if (!roomToOpen?.roomId) return;
+
+      if (!latestRooms.some((room) => String(room.roomId || room.id || '') === requestedRoomId)) {
+        return;
+      }
 
       handledNavigationOpenKeyRef.current = navigationOpenKey;
 
@@ -2619,112 +2115,14 @@ const visibleRooms = allRooms.filter((room) => {
         return [roomToOpen, ...prev];
       });
 
-      const normalizedRoomToOpen = {
-        ...roomToOpen,
-        roomId: roomToOpen.roomId || roomToOpen.id || requestedRoomId,
-        id: roomToOpen.id || roomToOpen.roomId || requestedRoomId,
-        privacy: normalizeRoomPrivacy({
-          ...roomToOpen,
-          privacy: roomToOpen.privacy || roomToOpen.visibility || 'private',
-        }),
-        isPrivate:
-          normalizeRoomPrivacy({
-            ...roomToOpen,
-            privacy: roomToOpen.privacy || roomToOpen.visibility || 'private',
-          }) === 'private',
-        joinedViaInvite: true,
-        guestId: roomToOpen.guestId || navigationState?.guestId || getStableGuestId(),
-      };
+      setActiveRoom(roomToOpen);
+      activeRoomRef.current = roomToOpen;
+      await openRoom(roomToOpen);
 
-      persistJoinedInviteRoom(normalizedRoomToOpen);
-
-      const hydratedRoom = {
-        ...normalizedRoomToOpen,
-        joinedViaInvite: true,
-      };
-
-      activeRoomRef.current = hydratedRoom;
-
-      shouldAutoScrollToNewestRef.current = true;
-      loadingRoomRef.current = false;
-      roomOpenRequestIdRef.current += 1;
-
-      setOlderMessagesLoading(false);
-      olderMessagesLoadingRef.current = false;
-      setHasOlderMessages(true);
-
-      setActiveRoom(hydratedRoom);
-      setMobileChatOpen(true);
-
-      setMessagesLoading(true);
-
-const hydratedRoomId = String(hydratedRoom?.roomId || hydratedRoom?.id || '').trim();
-
-const cachedInviteMessages =
-  messageCacheRef.current.get(hydratedRoomId)?.data ||
-  roomMessagesCacheRef.current[hydratedRoomId] ||
-  [];
-
-      if (cachedInviteMessages.length > 0) {
-        messagesStateRef.current = cachedInviteMessages;
-        setMessages(cachedInviteMessages);
-      }
-
-      window.requestAnimationFrame(async () => {
-        if (!mountedRef.current) return;
-
-        inviteMessageLoadTimersRef.current.forEach((timerId) => {
-          window.clearTimeout(timerId);
-        });
-        inviteMessageLoadTimersRef.current = [];
-
-        const roomId = String(hydratedRoom?.roomId || hydratedRoom?.id || '').trim();
-const room = hydratedRoom;
-        
-
-if (!roomId) {
-  setMessagesLoading(false);
-  return;
-}
-
-        const attempts = [
-          { source: 'invite-direct-1', delay: 0 },
-          { source: 'invite-direct-2', delay: 750 },
-          { source: 'invite-direct-3', delay: 1800 },
-          { source: 'invite-direct-4', delay: 3600 },
-        ];
-
-        for (const attempt of attempts) {
-          if (!mountedRef.current) return;
-          if (activeRoomRef.current?.roomId !== hydratedRoom.roomId) return;
-
-          if (attempt.delay > 0) {
-            await new Promise((resolve) => window.setTimeout(resolve, attempt.delay));
-          }
-
-          const loadedMessages = await loadInviteRoomMessagesDirect(
-            hydratedRoom,
-            attempt.source
-          );
-
-          if (loadedMessages.length > 0) {
-            return;
-          }
-        }
-
-        if (mountedRef.current && activeRoomRef.current?.roomId === hydratedRoom.roomId) {
-          setMessagesLoading(false);
-        }
+      navigate('/rooms', {
+        replace: true,
+        state: null,
       });
-
-      window.setTimeout(() => {
-        if (mountedRef.current) {
-          navigate('/rooms', {
-            replace: true,
-            state: null,
-          });
-        }
-      }, 100);
     } catch (err) {
       console.error('OPEN JOINED ROOM FROM NAVIGATION ERROR:', err);
       handledNavigationOpenKeyRef.current = '';
@@ -2740,86 +2138,23 @@ if (!roomId) {
       }, 1500);
     }
   }, [location.state, navigate, rooms, user, userId]);
-useEffect(() => {
-  const currentUserId = userId || getStableGuestId();
-
-  const navigationState =
-    location.state && typeof location.state === 'object'
-      ? location.state
-      : {};
-
-  if (navigationState.openJoinedRoom !== true) return;
-
-  const requestedRoomId =
-    getNavigationRoomOpenId(navigationState);
-
-  if (!currentUserId || !requestedRoomId) return;
-
-  let cancelled = false;
-
-  const ensureMessagesLoaded = () => {
-    if (cancelled || !mountedRef.current) return;
-
-    const room = activeRoomRef.current;
-
-    if (!room?.roomId) return;
-
-    if (room.roomId !== requestedRoomId) return;
-
-    const cachedMessages =
-      roomMessagesCacheRef.current[requestedRoomId] || [];
-
-    if (messagesStateRef.current.length > 0) return;
-
-    if (cachedMessages.length > 0) {
-      setMessages(cachedMessages);
-      shouldAutoScrollToNewestRef.current = true;
-
-      window.requestAnimationFrame(() => {
-        scrollMessagesToBottom({
-          behavior: 'auto',
-          settle: true,
-        });
-      });
-
-      return;
-    }
-
-    loadingRoomRef.current = false;
-
-    setMessagesLoading(true);
-
-    openRoom(room, {
-      forceRefresh: true,
-      skipCache: true,
-      source: 'post-navigation-recovery',
-    }).finally(() => {
-      if (mountedRef.current) {
-        setMessagesLoading(false);
-      }
-    });
-  };
-
-  const run = async () => {
-    await openRoomFromNavigationState({
-      force: true,
-    });
-
-    window.setTimeout(ensureMessagesLoaded, 800);
-    window.setTimeout(ensureMessagesLoaded, 1800);
-    window.setTimeout(ensureMessagesLoaded, 3200);
-  };
-
-  run();
-
-  return () => {
-    cancelled = true;
-  };
-}, [user, userId, location.state, openRoomFromNavigationState]);
 
   useEffect(() => {
-    const effectiveUserId = userId || getStableGuestId();
-    if (!effectiveUserId) return;
+    const currentUserId = userId || user?.id || user?.userId || user?.sub || '';
+    const navigationState =
+      location.state && typeof location.state === 'object' ? location.state : {};
+
+    if (navigationState.openJoinedRoom !== true) return;
+
+    const requestedRoomId = getNavigationRoomOpenId(navigationState);
+
+    if (!currentUserId || !requestedRoomId) return;
+
+    openRoomFromNavigationState({ force: true });
+  }, [user, userId, location.state, openRoomFromNavigationState]);
+
+  useEffect(() => {
+    if (!userId) return;
 
     setInitialRoomsReady(false);
     setRoomsLoading(true);
@@ -2837,7 +2172,7 @@ useEffect(() => {
 
       try {
         await loadRooms('', { force: true });
-        initialRoomsLoadedForUserRef.current = effectiveUserId;
+        initialRoomsLoadedForUserRef.current = userId;
       } catch (err) {
         console.error('INITIAL ROOM LOAD ERROR:', err);
         setInitialRoomsReady(true);
@@ -2854,7 +2189,7 @@ useEffect(() => {
   }, [userId]);
 
   useEffect(() => {
-    if (isGuestUser || !userId || !initialRoomsReady) return undefined;
+    if (!userId || !initialRoomsReady) return undefined;
 
     const loadInitialInvites = () => loadRoomInvites(false);
     let idleCallbackId = null;
@@ -2891,7 +2226,7 @@ useEffect(() => {
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [userId, isGuestUser, initialRoomsReady]);
+  }, [userId, initialRoomsReady]);
 
   useEffect(() => {
     if (!userId || !initialRoomsReady) return undefined;
@@ -2975,14 +2310,8 @@ useEffect(() => {
             return nextMessages;
           });
 
-          if (msg.clientId) {
-            pendingMessageIdsRef.current.delete(msg.clientId);
-          }
-
-          if (msg.messageId) {
-            pendingMessageIdsRef.current.delete(msg.messageId);
-          }
-
+          pendingMessageIdsRef.current.delete(msg.clientId);
+          if (msg.messageId) pendingMessageIdsRef.current.delete(msg.messageId);
           sendingMessageRef.current = false;
           setUploadingMedia(false);
           setMediaUploadProgress(0);
@@ -3004,13 +2333,7 @@ useEffect(() => {
         }
 
         if (data.type !== 'roomMessage') return;
-    if (
-  msg.senderId === userId &&
-  msg.clientId &&
-  pendingMessageIdsRef.current.has(msg.clientId)
-) {
-  return;
-}
+        if (msg.senderId === userId && msg.clientId) return;
 
         if (!current || msg.roomId !== current.roomId) {
           if (msg.roomId) {
@@ -3052,7 +2375,6 @@ useEffect(() => {
 
   async function createRoom(e) {
     e.preventDefault();
-    if (requireLoggedInAction('create a group')) return false;
 
     if (creatingRoom) return false;
     setCreatingRoom(true);
@@ -3159,16 +2481,16 @@ useEffect(() => {
       activeRoomRef.current = finalCreatedRoom;
       setMessages([]);
       setMobileChatOpen(true);
-      setShowActiveRoomMenu(false);
-      setShowRoomMenu(false);
-      setOpenRoomActionMenuId('');
 
       if (finalCreatedRoom.privacy === 'private') {
-        setShowInvite(false);
-        setShowMembers(false);
-        setShowActiveRoomInfo(true);
-        setActiveInfoSection('invite');
+        setModalTitle(`Invite users to ${finalCreatedRoom.name}`);
+        setModalMode('members');
         setModalRoom(finalCreatedRoom);
+        setMembers([]);
+        setInviteSearch('');
+        setInviteResults([]);
+        setShowInvite(true);
+        setShowMembers(true);
       }
 
       setRoomUnreadCounts((prev) => ({
@@ -3178,29 +2500,7 @@ useEffect(() => {
 
       try {
         setMessagesLoading(true);
-setMessages((prev) => {
-  if (Array.isArray(prev) && prev.length > 0) {
-    return prev;
-  }
-
-  const createdRoomId = String(finalCreatedRoom?.roomId || '').trim();
-
-  if (!createdRoomId) {
-    return prev;
-  }
-
-  const cachedMessages =
-    messageCacheRef.current.get(createdRoomId)?.data ||
-    roomMessagesCacheRef.current[createdRoomId] ||
-    [];
-
-  return cachedMessages.length > 0 ? cachedMessages : prev;
-});
-        const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId, {
-          guestId: getStableGuestId(),
-          clientGuestId: getStableGuestId(),
-          limit: ROOM_MESSAGES_FETCH_LIMIT,
-        });
+        const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId, { limit: ROOM_MESSAGES_FETCH_LIMIT });
 
         if (mountedRef.current) {
   const loadedMessages = trimRoomMessagesForMemory(
@@ -3248,10 +2548,7 @@ syncRoomMessageCache(finalCreatedRoom.roomId, loadedMessages);
   async function openHiddenRooms() {
     try {
       setShowRoomMenu(false);
-      const data = await roomApi.getHiddenRooms({
-        guestId: getStableGuestId(),
-        clientGuestId: getStableGuestId(),
-      });
+      const data = await roomApi.getHiddenRooms();
 
       if (!mountedRef.current) return;
 
@@ -3268,10 +2565,7 @@ syncRoomMessageCache(finalCreatedRoom.roomId, loadedMessages);
 
     try {
       setStatus('');
-      await roomApi.unhideRoom(room.roomId, {
-        guestId: getStableGuestId(),
-        clientGuestId: getStableGuestId(),
-      });
+      await roomApi.unhideRoom(room.roomId);
 
       setHiddenRooms((prev) => prev.filter((item) => item.roomId !== room.roomId));
       roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
@@ -4604,7 +3898,7 @@ async function deleteRoomMessage(message) {
 
   if (!room?.roomId || !messageId || deletingMessageId) return;
 
-  if (!(room.type === 'custom' && String(room.privacy || '').toLowerCase() === 'private' && isRoomOwner(room, userId))) {
+  if (!(room.type === 'custom' && room.privacy === 'private' && isRoomOwner(room, userId))) {
     setStatus('Only the private group creator can delete messages.');
     return;
   }
@@ -4639,18 +3933,12 @@ async function sendMessage(e) {
         ? [selectedMediaFile]
         : [];
 
-  if (
-    (!cleanText && filesToSend.length === 0) ||
-    !room ||
-    sendingMessageRef.current
-  ) {
+  if ((!cleanText && filesToSend.length === 0) || !room || sendingMessageRef.current) {
     return;
   }
 
   if (filesToSend.length > ROOM_MEDIA_MAX_FILES_PER_BATCH) {
-    setStatus(
-      `You can upload up to ${ROOM_MEDIA_MAX_FILES_PER_BATCH} files at once.`
-    );
+    setStatus(`You can upload up to ${ROOM_MEDIA_MAX_FILES_PER_BATCH} files at once.`);
     return;
   }
 
@@ -4667,29 +3955,17 @@ async function sendMessage(e) {
   sendingMessageRef.current = true;
 
   try {
-    setStatus('');
     setText('');
 
-    const isGuest = !authUserId;
-    const senderGuestId = getStableGuestId();
-
-    // -------------------------
-    // TEXT ONLY MESSAGE
-    // -------------------------
     if (filesToSend.length === 0) {
-      const clientId = `temp-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}`;
+      const clientId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-      const optimisticMessage = normalizeRoomMessageMedia({
+      const tempMessage = normalizeRoomMessageMedia({
         messageId: clientId,
         clientId,
         roomId: room.roomId,
         senderId: userId,
-        senderName:
-          user?.name ||
-          user?.email ||
-          (isGuest ? 'Guest' : 'You'),
+        senderName: user?.name || user?.email || 'You',
         text: cleanText,
         message: cleanText,
         createdAt: String(Date.now()),
@@ -4697,32 +3973,8 @@ async function sendMessage(e) {
         pending: true,
       });
 
-      appendRoomMessage(room.roomId, optimisticMessage, {
-        forceScroll: true,
-      });
+     setMessages((prev) => trimRoomMessagesForMemory([...prev, tempMessage]));
 
-      pendingMessageIdsRef.current.add(clientId);
-
-      // GUEST USERS
-      if (isGuest) {
-        try {
-          await roomApi.sendGuestRoomMessage(room.roomId, {
-            text: cleanText,
-            message: cleanText,
-            guestId: senderGuestId,
-            clientGuestId: senderGuestId,
-            clientId,
-          });
-        } catch (err) {
-          markPendingRoomMessageFailed(clientId);
-          throw err;
-        }
-
-        removeSelectedMedia();
-        return;
-      }
-
-      // LOGGED IN USERS
       sendRoomMessage({
         action: 'sendRoomMessage',
         roomId: room.roomId,
@@ -4735,20 +3987,14 @@ async function sendMessage(e) {
       return;
     }
 
-    // -------------------------
-    // MEDIA MESSAGES
-    // -------------------------
     setUploadingMedia(true);
     setMediaUploadProgress(0);
 
     for (let index = 0; index < filesToSend.length; index += 1) {
       const file = filesToSend[index];
-
       const { mediaType } = getRoomMediaType(file);
 
-      setMediaUploadLabel(
-        `Uploading ${index + 1}/${filesToSend.length}`
-      );
+      setMediaUploadLabel(`Uploading ${index + 1}/${filesToSend.length}`);
 
       const uploadedMedia = await roomApi.uploadRoomMediaFile(
         room.roomId,
@@ -4760,10 +4006,7 @@ async function sendMessage(e) {
           );
 
           const totalProgress = Math.round(
-            (
-              (index + safeProgress / 100) /
-              filesToSend.length
-            ) * 100
+            ((index + safeProgress / 100) / filesToSend.length) * 100
           );
 
           setMediaUploadProgress(totalProgress);
@@ -4776,112 +4019,50 @@ async function sendMessage(e) {
 
       const messageText = index === 0 ? cleanText : '';
 
-      const optimisticMessage = normalizeRoomMessageMedia({
+      const tempMessage = normalizeRoomMessageMedia({
         messageId: clientId,
         clientId,
         roomId: room.roomId,
         senderId: userId,
-        senderName:
-          user?.name ||
-          user?.email ||
-          (isGuest ? 'Guest' : 'You'),
+        senderName: user?.name || user?.email || 'You',
         text: messageText,
         message: messageText,
         createdAt: String(Date.now() + index),
         createdAtMs: Date.now() + index,
         pending: true,
         mediaKey: uploadedMedia?.mediaKey || '',
-        mediaUrl:
-          uploadedMedia?.mediaUrl ||
-          uploadedMedia?.fileUrl ||
-          '',
-        fileUrl:
-          uploadedMedia?.fileUrl ||
-          uploadedMedia?.mediaUrl ||
-          '',
-        mediaType:
-          uploadedMedia?.mediaType ||
-          mediaType ||
-          '',
-        contentType:
-          uploadedMedia?.contentType ||
-          file?.type ||
-          '',
-        fileName:
-          uploadedMedia?.fileName ||
-          file?.name ||
-          '',
-        mediaName:
-          uploadedMedia?.fileName ||
-          file?.name ||
-          '',
+        mediaUrl: uploadedMedia?.mediaUrl || uploadedMedia?.fileUrl || '',
+        fileUrl: uploadedMedia?.fileUrl || uploadedMedia?.mediaUrl || '',
+        mediaType: uploadedMedia?.mediaType || mediaType || '',
+        contentType: uploadedMedia?.contentType || file?.type || '',
+        fileName: uploadedMedia?.fileName || file?.name || '',
+        mediaName: uploadedMedia?.fileName || file?.name || '',
       });
 
-      appendRoomMessage(room.roomId, optimisticMessage, {
-        forceScroll: true,
-      });
+      setMessages((prev) => trimRoomMessagesForMemory([...prev, tempMessage]));
 
-      pendingMessageIdsRef.current.add(clientId);
-
-      // -------------------------
-      // GUEST USERS
-      // -------------------------
-      if (isGuest) {
-        try {
-          await roomApi.sendGuestRoomMessage(room.roomId, {
-            text: messageText,
-            message: messageText,
-            mediaKey: optimisticMessage.mediaKey,
-            mediaUrl: optimisticMessage.mediaUrl,
-            fileUrl: optimisticMessage.fileUrl,
-            mediaType: optimisticMessage.mediaType,
-            contentType: optimisticMessage.contentType,
-            fileName: optimisticMessage.fileName,
-            mediaName: optimisticMessage.mediaName,
-            guestId: senderGuestId,
-            clientGuestId: senderGuestId,
-            clientId,
-          });
-        } catch (err) {
-          markPendingRoomMessageFailed(clientId);
-          throw err;
-        }
-
-        continue;
-      }
-
-      // -------------------------
-      // LOGGED IN USERS
-      // -------------------------
       sendRoomMessage({
         action: 'sendRoomMessage',
         roomId: room.roomId,
         text: messageText,
         message: messageText,
-        mediaKey: optimisticMessage.mediaKey,
-        mediaUrl: optimisticMessage.mediaUrl,
-        fileUrl: optimisticMessage.fileUrl,
-        mediaType: optimisticMessage.mediaType,
-        contentType: optimisticMessage.contentType,
-        fileName: optimisticMessage.fileName,
-        mediaName: optimisticMessage.mediaName,
+        mediaKey: tempMessage.mediaKey,
+        mediaUrl: tempMessage.mediaUrl,
+        fileUrl: tempMessage.fileUrl,
+        mediaType: tempMessage.mediaType,
+        contentType: tempMessage.contentType,
+        fileName: tempMessage.fileName,
+        mediaName: tempMessage.mediaName,
         clientId,
       });
     }
 
     removeSelectedMedia();
-
-    setStatus(
-      filesToSend.length > 1
-        ? 'Files uploaded'
-        : 'File uploaded'
-    );
+    setStatus(filesToSend.length > 1 ? 'Files uploaded' : 'File uploaded');
   } catch (err) {
     console.error(err);
-
     setStatus(
       err?.response?.data?.error ||
-      err?.response?.data?.message ||
       err?.message ||
       'Failed to send message'
     );
@@ -5005,9 +4186,9 @@ return (
         ) : (
           sortedVisibleRooms.map((room, roomIndex) => {
             const isOwner = isRoomOwner(room, userId);
-            const isPrivateCustom = room.type === 'custom' && String(room.privacy || '').toLowerCase() === 'private';
+            const isPrivateCustom = room.type === 'custom' && room.privacy === 'private';
             const canLeave = isPrivateCustom && !isOwner;
-            const canDelete = room.type === 'custom' && String(room.privacy || '').toLowerCase() === 'private' && isOwner;
+            const canDelete = room.type === 'custom' && room.privacy === 'private' && isOwner;
             const unreadCount = roomUnreadCounts[room.roomId] || room.unreadCount || 0;
             const roomImageUrl = roomIndex < ROOM_IMAGE_RENDER_LIMIT ? getRoomImageUrl(room) : '';
             const shouldEagerLoadRoomImage = roomIndex < ROOM_IMAGE_EAGER_LIMIT;
@@ -5093,7 +4274,7 @@ return (
                         )}
                       </div>
 
-                      <span>{String(room.privacy || '').toLowerCase() === 'private' ? ' Private' : ' Public'}</span>
+                      <span>{room.privacy === 'private' ? ' Private' : ' Public'}</span>
                     </div>
                   </div>
                 </div>
