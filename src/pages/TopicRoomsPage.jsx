@@ -535,6 +535,17 @@ function getNavigationRoomOpenId(locationState = {}) {
   ).trim();
 }
 
+// Helper to normalize roomId to always have "group#" prefix
+function normalizeRoomId(value = '') {
+  const normalized = String(value || '').trim();
+
+  if (!normalized) return '';
+
+  return normalized.startsWith('group#')
+    ? normalized
+    : `group#${normalized}`;
+}
+
 function renderMessageWithLinks(value = '') {
   const text = String(value || '');
   if (!text) return null;
@@ -2057,7 +2068,10 @@ async function approveJoinRequest(requestUserId) {
 
     if (navigationState.openJoinedRoom !== true) return;
 
-    const requestedRoomId = getNavigationRoomOpenId(navigationState);
+    const requestedRoomId = normalizeRoomId(
+      getNavigationRoomOpenId(navigationState)
+    );
+
     const navigationOpenKey = `${currentUserId}:${requestedRoomId}:${navigationState?.joinedAt || navigationState?.inviteCode || 'join-link'}`;
 
     if (!currentUserId || !requestedRoomId) return;
@@ -2081,13 +2095,24 @@ async function approveJoinRequest(requestUserId) {
         : [];
 
       const roomToOpen =
-        latestRooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
-        rooms.find((room) => String(room.roomId || room.id || '') === requestedRoomId) ||
+        latestRooms.find(
+          (room) =>
+            normalizeRoomId(room.roomId || room.id || '') === requestedRoomId
+        ) ||
+        rooms.find(
+          (room) =>
+            normalizeRoomId(room.roomId || room.id || '') === requestedRoomId
+        ) ||
         null;
 
       if (!roomToOpen?.roomId) return;
 
-      if (!latestRooms.some((room) => String(room.roomId || room.id || '') === requestedRoomId)) {
+      if (
+        !latestRooms.some(
+          (room) =>
+            normalizeRoomId(room.roomId || room.id || '') === requestedRoomId
+        )
+      ) {
         return;
       }
 
@@ -2096,14 +2121,14 @@ async function approveJoinRequest(requestUserId) {
       setRooms((prev) => {
         const alreadyExists = prev.some(
           (room) =>
-            String(room.roomId || room.id || '') ===
-            String(roomToOpen.roomId)
+            normalizeRoomId(room.roomId || room.id || '') ===
+            normalizeRoomId(roomToOpen.roomId)
         );
 
         if (alreadyExists) {
           return prev.map((room) =>
-            String(room.roomId || room.id || '') ===
-            String(roomToOpen.roomId)
+            normalizeRoomId(room.roomId || room.id || '') ===
+            normalizeRoomId(roomToOpen.roomId)
               ? {
                   ...room,
                   ...roomToOpen,
@@ -2115,6 +2140,7 @@ async function approveJoinRequest(requestUserId) {
         return [roomToOpen, ...prev];
       });
 
+      setMobileChatOpen(true);
       setActiveRoom(roomToOpen);
       activeRoomRef.current = roomToOpen;
       await openRoom(roomToOpen);
@@ -2650,15 +2676,26 @@ syncRoomMessageCache(finalCreatedRoom.roomId, loadedMessages);
 
       await loadRooms(roomSearch, { force: true });
 
+      const normalizedJoinedRoomId = normalizeRoomId(roomId);
+
       const joinedRoom =
-        roomsCacheRef.current.rooms.find((room) => room.roomId === roomId) ||
-        rooms.find((room) => room.roomId === roomId) ||
+        roomsCacheRef.current.rooms.find(
+          (room) =>
+            normalizeRoomId(room.roomId || room.id || '') === normalizedJoinedRoomId
+        ) ||
+        rooms.find(
+          (room) =>
+            normalizeRoomId(room.roomId || room.id || '') === normalizedJoinedRoomId
+        ) ||
         invite?.room ||
         null;
 
       setShowRoomInvites(false);
 
       if (joinedRoom?.roomId) {
+        setMobileChatOpen(true);
+        setActiveRoom(joinedRoom);
+        activeRoomRef.current = joinedRoom;
         await openRoom(joinedRoom);
       }
     } catch (err) {
