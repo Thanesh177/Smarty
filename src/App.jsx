@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef, Component, useMemo } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { signInWithRedirect } from 'aws-amplify/auth';
@@ -493,10 +493,6 @@ function Layout() {
       contentElement.style.height = '100dvh';
       contentElement.style.maxHeight = '100dvh';
       contentElement.style.minHeight = '0';
-      contentElement.style.contain = 'layout paint size style';
-      contentElement.style.transform = 'translateZ(0)';
-      contentElement.style.backfaceVisibility = 'hidden';
-      contentElement.style.perspective = '1000px';
       contentElement.scrollTop = contentElement.scrollTop;
     }
 
@@ -504,8 +500,7 @@ function Layout() {
       appShell.style.overflow = 'hidden';
       appShell.style.minHeight = '0';
       appShell.style.height = '100dvh';
-      appShell.style.contain = 'layout paint style';
-      appShell.style.transform = 'translateZ(0)';
+
     }
 
     if (routeReadyTimerRef.current) {
@@ -527,10 +522,7 @@ function Layout() {
         refreshedContent.style.height = '100dvh';
         refreshedContent.style.maxHeight = '100dvh';
         refreshedContent.style.minHeight = '0';
-        refreshedContent.style.contain = 'layout paint size style';
-        refreshedContent.style.transform = 'translateZ(0)';
-        refreshedContent.style.backfaceVisibility = 'hidden';
-        refreshedContent.style.perspective = '1000px';
+
       }
     }, 120);
 
@@ -970,7 +962,7 @@ function Layout() {
             paddingTop: 0,
             scrollPaddingTop: 0,
             paddingBottom: 0,
-scrollPaddingBottom: 0,
+            scrollPaddingBottom: 0,
           }}
         >
           {(globalPullDistance > 0 || globalRefreshing) && (
@@ -1359,7 +1351,7 @@ function ReminderPopupStyles() {
   background: transparent !important;
 }
 
-      .topbar {
+.topbar {
   position: fixed !important;
   top: auto !important;
   right: 12px;
@@ -1372,9 +1364,35 @@ function ReminderPopupStyles() {
   box-shadow: none !important;
   border: 0 !important;
   pointer-events: none;
-  transform: translateZ(0);
-  will-change: transform;
-  backface-visibility: hidden;
+  overflow: visible !important;
+}
+
+.navbar-menu {
+  position: relative;
+  z-index: 3002;
+}
+
+.menu-panel {
+  position: absolute !important;
+  right: calc(100% + 12px) !important;
+  bottom: 0 !important;
+  top: auto !important;
+  z-index: 3003 !important;
+
+  overflow-y: auto;
+  max-height: 82dvh;
+
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+
+  pointer-events: auto !important;
+}
+
+.menu-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 3001 !important;
+  background: transparent;
 }
 
       .topbar-row,
@@ -1452,9 +1470,11 @@ function ReminderPopupStyles() {
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  contain: layout paint style;
-  transform: translateZ(0);
-  will-change: transform;
+
+  position: relative;
+  z-index: 3001;
+  overflow: visible;
+  pointer-events: auto;
 }
 
       .quick-icon-link,
@@ -1477,9 +1497,6 @@ function ReminderPopupStyles() {
         position: relative;
         flex-shrink: 0;
         transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-        contain: layout paint style;
-        transform: translateZ(0);
-        backface-visibility: hidden;
         -webkit-tap-highlight-color: transparent;
         user-select: none;
       }

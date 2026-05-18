@@ -94,7 +94,11 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
       <button
         type="button"
         className={`hamburger-btn ${open ? 'is-open' : ''}`}
-        onClick={toggleMenu}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          toggleMenu();
+        }}
         aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -108,16 +112,17 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
         <div
           className="menu-overlay"
           role="presentation"
-          onClick={closeMenu}
-          onPointerDown={closeMenu}
-          onTouchStart={closeMenu}
+          onClick={(event) => {
+            event.stopPropagation();
+            closeMenu();
+          }}
         >
           <nav
             className="menu-panel"
             aria-label="Main navigation"
-            onClick={stopMenuPropagation}
-            onPointerDown={stopMenuPropagation}
-            onTouchStart={stopMenuPropagation}
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
           >
             <div className="menu-header">
               <div className="menu-brand-mark" aria-hidden="true">

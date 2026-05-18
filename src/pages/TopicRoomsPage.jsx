@@ -2438,15 +2438,17 @@ const visibleRooms = allRooms.filter((room) => {
 
             await Promise.allSettled(
               batch.map(async (room) => {
-                if (!room?.roomId) return;
+                const currentRoomId = String(room?.roomId || room?.id || '').trim();
 
-                if (roomMessagesCacheRef.current[room.roomId]?.length > 0) {
+                if (!currentRoomId) return;
+
+                if (roomMessagesCacheRef.current[currentRoomId]?.length > 0) {
                   return;
                 }
 
                 try {
                   const data = await Promise.race([
-                    roomApi.getRoomMessages(room.roomId, {
+                    roomApi.getRoomMessages(currentRoomId, {
                       guestId: getStableGuestId(),
                       clientGuestId: getStableGuestId(),
                       limit: ROOM_MESSAGES_FETCH_LIMIT,
@@ -2463,12 +2465,16 @@ const visibleRooms = allRooms.filter((room) => {
                     getLoadedRoomMessages(data)
                   );
 
-                  syncRoomMessageCache(room.roomId, messages);
+                  syncRoomMessageCache(currentRoomId, messages);
                 } catch (err) {
-                  console.error(
-                    `PRELOAD ROOM MESSAGES ERROR (${room.roomId}):`,
-                    err
-                  );
+                  const preloadStatus = err?.response?.status;
+
+                  if (preloadStatus !== 404 && preloadStatus !== 403) {
+                    console.error(
+                      `PRELOAD ROOM MESSAGES ERROR (${currentRoomId}):`,
+                      err
+                    );
+                  }
                 }
               })
             );
@@ -2652,10 +2658,12 @@ const visibleRooms = allRooms.filter((room) => {
 
       setMessagesLoading(true);
 
-      const cachedInviteMessages =
-        messageCacheRef.current.get(hydratedRoom.roomId)?.data ||
-        roomMessagesCacheRef.current[hydratedRoom.roomId] ||
-        [];
+const hydratedRoomId = String(hydratedRoom?.roomId || hydratedRoom?.id || '').trim();
+
+const cachedInviteMessages =
+  messageCacheRef.current.get(hydratedRoomId)?.data ||
+  roomMessagesCacheRef.current[hydratedRoomId] ||
+  [];
 
       if (cachedInviteMessages.length > 0) {
         messagesStateRef.current = cachedInviteMessages;
@@ -2669,6 +2677,15 @@ const visibleRooms = allRooms.filter((room) => {
           window.clearTimeout(timerId);
         });
         inviteMessageLoadTimersRef.current = [];
+
+        const roomId = String(hydratedRoom?.roomId || hydratedRoom?.id || '').trim();
+const room = hydratedRoom;
+        
+
+if (!roomId) {
+  setMessagesLoading(false);
+  return;
+}
 
         const attempts = [
           { source: 'invite-direct-1', delay: 0 },
@@ -3161,17 +3178,23 @@ useEffect(() => {
 
       try {
         setMessagesLoading(true);
-        setMessages((prev) => {
+setMessages((prev) => {
   if (Array.isArray(prev) && prev.length > 0) {
     return prev;
   }
 
-  const cachedMessages =
-    roomMessagesCacheRef.current[room.roomId] || [];
+  const createdRoomId = String(finalCreatedRoom?.roomId || '').trim();
 
-  return cachedMessages.length > 0
-    ? cachedMessages
-    : prev;
+  if (!createdRoomId) {
+    return prev;
+  }
+
+  const cachedMessages =
+    messageCacheRef.current.get(createdRoomId)?.data ||
+    roomMessagesCacheRef.current[createdRoomId] ||
+    [];
+
+  return cachedMessages.length > 0 ? cachedMessages : prev;
 });
         const messageData = await roomApi.getRoomMessages(finalCreatedRoom.roomId, {
           guestId: getStableGuestId(),

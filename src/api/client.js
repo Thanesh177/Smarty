@@ -958,8 +958,14 @@ joinRoomFromInvite: async (inviteCode) => {
   async getRoomMessages(roomId, params = {}) {
     const guestId = getOrCreateGuestId();
 
+    const cleanRoomId = String(roomId || '').trim();
+
+    const normalizedRoomId = cleanRoomId.startsWith('group#')
+      ? cleanRoomId
+      : `group#${cleanRoomId}`;
+
     const { data } = await api.get(
-      `/rooms/${encodePathSegment(roomId)}/messages`,
+      `/rooms/${encodePathSegment(normalizedRoomId)}/messages`,
       {
         params: {
           ...params,
@@ -1161,12 +1167,35 @@ async getRoomMembers(roomId, params = {}) {
     return parseApiBody(data);
   },
 
-  async deleteRoom(roomId) {
+async deleteRoom(roomId) {
+  const cleanRoomId = String(roomId || '').trim();
+
+  if (!cleanRoomId) {
+    throw new Error('Room ID is required to delete a room.');
+  }
+
+  const finalRoomId = cleanRoomId.startsWith('group#')
+    ? cleanRoomId
+    : `group#${cleanRoomId}`;
+
+  try {
     const { data } = await api.delete(
-      `/rooms/${encodePathSegment(roomId)}`
+      `/rooms/${encodePathSegment(finalRoomId)}`
     );
+
     return parseApiBody(data);
-  },
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      return {
+        deleted: true,
+        alreadyDeleted: true,
+        roomId: finalRoomId,
+      };
+    }
+
+    throw error;
+  }
+},
 };
 
 export const creatorApi = {
