@@ -155,7 +155,12 @@ export default function JoinRoomPage() {
         resultMessage.includes('already a member') ||
         resultMessage.includes('already joined');
 
-      if (joinedSuccessfully || joinedRoomId || joinedRoomName) {
+      if (result?.requested) {
+        setStatus(result?.message || 'Join request sent.');
+        return;
+      }
+
+      if (joinedSuccessfully) {
         setStatus(result?.message || 'Joined room successfully.');
         storePendingRoomInvite('');
 
@@ -177,11 +182,6 @@ export default function JoinRoomPage() {
             inviteNavigationVersion: Date.now(),
           },
         });
-        return;
-      }
-
-      if (result?.requested) {
-        setStatus(result?.message || 'Join request sent.');
         return;
       }
 

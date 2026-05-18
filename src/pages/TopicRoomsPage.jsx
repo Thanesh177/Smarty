@@ -1631,13 +1631,21 @@ async function openActiveRoomInfo(event) {
   setOpenRoomActionMenuId('');
   setShowRoomMediaGrid(false);
 
-  setShowActiveRoomInfo(true);
-  setActiveInfoSection('members');
-  setActiveInfoMembers([]);
-  setActiveInfoRequests([]);
-  setActiveInfoLoading(true);
+const shouldOpenInviteLink =
+  room.privacy === 'private' && isRoomOwner(room, userId);
 
-  await loadActiveRoomInfoMembers(room, { force: true });
+setShowActiveRoomInfo(true);
+setActiveInfoSection(shouldOpenInviteLink ? 'invite' : 'members');
+setActiveInfoMembers([]);
+setActiveInfoRequests([]);
+setActiveInfoLoading(!shouldOpenInviteLink);
+
+if (shouldOpenInviteLink) {
+  setInviteLinkModalOpen(false);
+  return;
+}
+
+await loadActiveRoomInfoMembers(room, { force: true });
 }
 
 async function toggleActiveInfoSection(section) {
@@ -1764,9 +1772,11 @@ async function generatePrivateRoomInviteLink(room = activeRoom) {
     setInviteLinkLoading(true);
     setShowActiveRoomMenu(false);
 
+    const shouldAutoAccept = Boolean(inviteLinkAutoAccept);
+
     const data = await roomApi.createRoomInviteLink(room.roomId, {
-      requiresApproval: !inviteLinkAutoAccept,
-      autoAccept: inviteLinkAutoAccept,
+      requiresApproval: !shouldAutoAccept,
+      autoAccept: shouldAutoAccept,
       maxUses: 100,
     });
 
@@ -2508,16 +2518,20 @@ async function approveJoinRequest(requestUserId) {
       setMessages([]);
       setMobileChatOpen(true);
 
-      if (finalCreatedRoom.privacy === 'private') {
-        setModalTitle(`Invite users to ${finalCreatedRoom.name}`);
-        setModalMode('members');
-        setModalRoom(finalCreatedRoom);
-        setMembers([]);
-        setInviteSearch('');
-        setInviteResults([]);
-        setShowInvite(true);
-        setShowMembers(true);
-      }
+if (finalCreatedRoom.privacy === 'private') {
+  setShowInvite(false);
+  setShowMembers(false);
+  setModalRoom(null);
+  setMembers([]);
+  setInviteSearch('');
+  setInviteResults([]);
+  setShowActiveRoomInfo(true);
+  setActiveInfoSection('invite');
+  setActiveInfoMembers([]);
+  setActiveInfoRequests([]);
+  setActiveInfoLoading(false);
+  setInviteLinkModalOpen(false);
+}
 
       setRoomUnreadCounts((prev) => ({
         ...prev,
