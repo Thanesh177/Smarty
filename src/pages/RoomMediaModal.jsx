@@ -4,14 +4,14 @@ import { roomApi } from '../api/client';
 import RoomMediaPreview from './RoomMediaPreview';
 
 const ROOM_MESSAGES_FETCH_LIMIT = 10;
-const ROOM_INITIAL_VISIBLE_MESSAGES = 10;
-const ROOM_MEDIA_GRID_INITIAL_ITEMS = 24;
-const ROOM_MEDIA_GRID_LOAD_STEP = 18;
-const MAX_RENDERED_MEDIA_MESSAGES = 260;
-const MAX_MEDIA_SCAN_MESSAGES = 1200;
-const MAX_ROOM_MEDIA_GRID_ITEMS = 2000;
-const ROOM_MEDIA_FETCH_LIMIT = 80;
-const ROOM_MEDIA_INITIAL_FETCH_PAGES = 8;
+const ROOM_INITIAL_VISIBLE_MESSAGES = 1;
+const ROOM_MEDIA_GRID_INITIAL_ITEMS = 12;
+const ROOM_MEDIA_GRID_LOAD_STEP = 12;
+const MAX_RENDERED_MEDIA_MESSAGES = 120;
+const MAX_MEDIA_SCAN_MESSAGES = 260;
+const MAX_ROOM_MEDIA_GRID_ITEMS = 500;
+const ROOM_MEDIA_FETCH_LIMIT = 30;
+const ROOM_MEDIA_INITIAL_FETCH_PAGES = 1;
 const ROOM_MEDIA_APPEND_FETCH_PAGES = 1;
 const ROOM_MEDIA_SCROLL_LOAD_THRESHOLD = 420;
 const ROOM_MEDIA_GRID_RELOAD_DELAY_MS = 0;
@@ -425,7 +425,17 @@ export default function RoomMediaModal({
 
       roomMediaCacheRef.current[roomId] = mergedMedia;
 
-      setMessages(trimRoomMessagesForMemory(allMessages).slice(-80));
+      if (!appendMode) {
+        setMessages((currentMessages) => {
+          const currentVisibleMessages = Array.isArray(currentMessages) ? currentMessages : [];
+
+          if (currentVisibleMessages.length > 0) {
+            return currentVisibleMessages;
+          }
+
+          return trimRoomMessagesForMemory(allMessages).slice(-ROOM_INITIAL_VISIBLE_MESSAGES);
+        });
+      }
       setRoomMediaGridVisibleCount((current) =>
         appendMode
           ? Math.min(mergedMedia.length, current + ROOM_MEDIA_GRID_LOAD_STEP)
@@ -959,7 +969,7 @@ export default function RoomMediaModal({
               <img
                 src={activeMediaViewerItem.mediaUrl || activeMediaViewerItem.fileUrl}
                 alt={activeMediaViewerItem.fileName || activeMediaViewerItem.mediaName || 'Shared media'}
-                loading="eager"
+                loading="lazy"
                 decoding="async"
                 draggable="false"
                 className="room-media-viewer-image"

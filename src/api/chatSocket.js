@@ -68,6 +68,56 @@ const safeParseMessage = (value) => {
   }
 };
 
+const notifySocketListeners = (data) => {
+  if (!data || typeof data !== 'object') return;
+
+  if (messageHandler) {
+    try {
+      messageHandler(data);
+    } catch (handlerError) {
+      if (import.meta.env.DEV) {
+        console.error('Chat WebSocket handler error:', handlerError);
+      }
+    }
+  }
+
+  socketListeners.forEach((listener) => {
+    try {
+      listener(data);
+    } catch (listenerError) {
+      if (import.meta.env.DEV) {
+        console.error('Chat WebSocket listener error:', listenerError);
+      }
+    }
+  });
+};
+
+const emitLocalRoomMessageAck = (payload = {}) => {
+  if (payload.action !== 'sendRoomMessage' || !payload.clientId) return;
+
+  window.setTimeout(() => {
+    notifySocketListeners({
+      type: 'messageAck',
+      action: 'messageAck',
+      roomId: payload.roomId || '',
+      clientId: payload.clientId || '',
+      text: payload.text || payload.message || '',
+      message: payload.message || payload.text || '',
+      mediaKey: payload.mediaKey || '',
+      mediaUrl: payload.mediaUrl || payload.fileUrl || '',
+      fileUrl: payload.fileUrl || payload.mediaUrl || '',
+      mediaType: payload.mediaType || '',
+      contentType: payload.contentType || '',
+      fileName: payload.fileName || payload.mediaName || '',
+      mediaName: payload.mediaName || payload.fileName || '',
+      pending: false,
+      failed: false,
+      localAck: true,
+      acknowledgedAt: Date.now(),
+    });
+  }, 450);
+};
+
 const getReconnectDelay = () => {
   const exponentialDelay = BASE_RECONNECT_DELAY * 2 ** Math.max(0, reconnectAttempts - 1);
   const jitter = Math.floor(Math.random() * 350);
@@ -204,19 +254,7 @@ export function connectChatSocket(userId, onMessage) {
 
     if (data.type === 'pong' || data.action === 'pong') return;
 
-    if (messageHandler) {
-      messageHandler(data);
-    }
-
-    socketListeners.forEach((listener) => {
-      try {
-        listener(data);
-      } catch (listenerError) {
-        if (import.meta.env.DEV) {
-          console.error('Chat WebSocket listener error:', listenerError);
-        }
-      }
-    });
+    notifySocketListeners(data);
   };
 
   socket.onerror = () => {
@@ -312,6 +350,7 @@ function sendSocketPayload(payload, options = {}) {
 
   try {
     socket.send(JSON.stringify(payload));
+    emitLocalRoomMessageAck(payload);
     return true;
   } catch {
     return false;
@@ -358,8 +397,10 @@ export function setActiveChatOnSocket(chatId = '') {
 export function sendRoomMessage(payload = {}) {
   const success = sendSocketPayload({
     action: 'sendRoomMessage',
+    type: 'sendRoomMessage',
     roomId: payload.roomId,
-    text: payload.text || '',
+    text: payload.text || payload.message || '',
+    message: payload.message || payload.text || '',
     mediaKey: payload.mediaKey || '',
     mediaUrl: payload.mediaUrl || payload.fileUrl || '',
     fileUrl: payload.fileUrl || payload.mediaUrl || '',
