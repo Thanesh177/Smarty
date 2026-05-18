@@ -92,11 +92,7 @@ export default function JoinRoomPage() {
       setStatus('');
       setError('');
 
-      console.log('JOIN BUTTON CLICKED', cleanInviteCode);
-
       const result = await roomApi.joinRoomFromInvite(cleanInviteCode);
-
-      console.log('JOIN RESULT', result);
 
       const joinedRoom = result?.room || result?.data?.room || result?.joinedRoom || invite || null;
       const joinedRoomId = normalizeRoomId(
@@ -159,7 +155,7 @@ export default function JoinRoomPage() {
         resultMessage.includes('already a member') ||
         resultMessage.includes('already joined');
 
-      if (joinedSuccessfully) {
+      if (joinedSuccessfully || joinedRoomId || joinedRoomName) {
         setStatus(result?.message || 'Joined room successfully.');
         storePendingRoomInvite('');
 
@@ -186,29 +182,6 @@ export default function JoinRoomPage() {
 
       if (result?.requested) {
         setStatus(result?.message || 'Join request sent.');
-        return;
-      }
-
-      if (joinedRoomId || joinedRoomName) {
-        storePendingRoomInvite('');
-        navigate('/rooms', {
-          replace: true,
-          state: {
-            openRoomId: joinedRoomId,
-            selectedRoomId: joinedRoomId,
-            activeRoomId: joinedRoomId,
-            roomId: joinedRoomId,
-            openRoomName: normalizedJoinedRoom.name,
-            joinedRoom: normalizedJoinedRoom,
-            openJoinedRoom: true,
-            source: 'roomInviteJoin',
-            refreshRooms: true,
-            forceRoomRefresh: true,
-            inviteCode: cleanInviteCode,
-            joinedAt: Date.now(),
-            inviteNavigationVersion: Date.now(),
-          },
-        });
         return;
       }
 
@@ -329,6 +302,12 @@ export default function JoinRoomPage() {
           </p>
         )}
 
+        {!user && (
+          <p className="room-invite-note">
+            Log in to join or request access to this room.
+          </p>
+        )}
+
         {error && (
           <p className="room-invite-error">
             {error}
@@ -349,9 +328,11 @@ export default function JoinRoomPage() {
         >
           {joining
             ? 'Joining...'
-            : invite?.requiresApproval
-              ? 'Request to Join'
-              : 'Join Room'}
+            : !user
+              ? 'Log in to join'
+              : invite?.requiresApproval
+                ? 'Request to Join'
+                : 'Join Room'}
         </button>
 
         <button

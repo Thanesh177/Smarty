@@ -222,16 +222,23 @@ export const newsApi = {
   },
 };
 
-const attachAuthHeader = async (config) => {
+const attachAuthHeader = async (config = {}) => {
   const token = await getAuthToken();
 
+  const nextConfig = {
+    ...config,
+    headers: {
+      ...(config.headers || {}),
+    },
+  };
+
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    nextConfig.headers.Authorization = `Bearer ${token}`;
   } else if (import.meta.env.DEV) {
     console.warn('⚠️ No auth token found');
   }
 
-  return config;
+  return nextConfig;
 };
 
 api.interceptors.request.use(async (config) => {
@@ -758,11 +765,11 @@ joinRoomFromInvite: async (inviteCode) => {
     const backendData = parseApiBody(error?.response?.data);
 
     if (status === 401 || status === 403) {
-      throw new Error(
+      error.message =
         backendData?.message ||
         backendData?.error ||
-        'Please log in before joining this private room.'
-      );
+        'Please log in before joining this private room.';
+      throw error;
     }
 
     throw error;

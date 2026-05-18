@@ -1027,23 +1027,8 @@ function Layout() {
                   }
                 />
 
-                <Route
-                  path="/rooms/invite/:inviteCode"
-                  element={
-                    <ProtectedRoute>
-                      <JoinRoomPage />
-                    </ProtectedRoute>
-                  }
-                />
-
-                <Route
-                  path="/rooms/join/:inviteCode"
-                  element={
-                    <ProtectedRoute>
-                      <JoinRoomPage />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/rooms/invite/:inviteCode" element={<JoinRoomPage />} />
+                <Route path="/rooms/join/:inviteCode" element={<JoinRoomPage />} />
 
                 <Route
                   path="/chat"
