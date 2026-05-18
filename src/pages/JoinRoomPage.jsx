@@ -92,6 +92,7 @@ export default function JoinRoomPage() {
       setStatus('');
       setError('');
 
+      storePendingRoomInvite(cleanInviteCode);
       const result = await roomApi.joinRoomFromInvite(cleanInviteCode);
       console.log('ROOM INVITE JOIN RESULT:', result);
 
@@ -148,11 +149,9 @@ export default function JoinRoomPage() {
         result?.alreadyJoined === true ||
         result?.alreadyMember === true ||
         result?.isMember === true ||
-        result?.requested !== true ||
         Boolean(result?.room) ||
         Boolean(result?.data?.room) ||
         Boolean(result?.joinedRoom) ||
-        Boolean(joinedRoomId) ||
         resultMessage.includes('joined') ||
         resultMessage.includes('already a member') ||
         resultMessage.includes('already joined') ||
@@ -246,6 +245,12 @@ export default function JoinRoomPage() {
   useEffect(() => {
     if (loading || joining || !cleanInviteCode || !loggedInUserId) return;
 
+    const isApprovalRequired = invite?.requiresApproval === true;
+    const isAutoAccept = invite?.autoAccept !== false;
+    const shouldAutoJoinAfterLogin = isAutoAccept && !isApprovalRequired;
+
+    if (!shouldAutoJoinAfterLogin) return;
+
     const autoJoinKey = `${loggedInUserId}:${cleanInviteCode}`;
     if (autoJoinAttemptedRef.current === autoJoinKey) return;
 
@@ -253,7 +258,7 @@ export default function JoinRoomPage() {
     window.requestAnimationFrame(() => {
       handleJoinRoom();
     });
-  }, [loggedInUserId, loading, joining, cleanInviteCode]);
+  }, [loggedInUserId, loading, joining, cleanInviteCode, invite?.requiresApproval, invite?.autoAccept]);
 
   if (loading) {
     return (

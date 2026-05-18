@@ -59,10 +59,30 @@ function hasStoredAuthToken() {
   );
 }
 
-async function startGoogleProfileSignIn() {
+async function startGoogleProfileSignIn(redirectPath = '') {
   try {
-    sessionStorage.setItem('smarty-post-login-redirect', '/profile');
-    localStorage.setItem('smarty-post-login-redirect', '/profile');
+    const currentPath = `${window.location.pathname || '/'}${window.location.search || ''}${window.location.hash || ''}`;
+
+    const pendingInviteCode = getPendingRoomInviteCode();
+
+    const inviteRedirectPath = pendingInviteCode
+      ? `/rooms/invite/${encodeURIComponent(pendingInviteCode)}`
+      : '';
+
+    const finalRedirectPath = (
+      redirectPath ||
+      inviteRedirectPath ||
+      currentPath ||
+      '/profile'
+    );
+
+    sessionStorage.setItem('smarty-post-login-redirect', finalRedirectPath);
+    localStorage.setItem('smarty-post-login-redirect', finalRedirectPath);
+
+    if (pendingInviteCode) {
+      sessionStorage.setItem('smarty-resume-room-invite', 'true');
+      localStorage.setItem('smarty-resume-room-invite', 'true');
+    }
 
     await signInWithRedirect({
       provider: 'Google',
@@ -156,7 +176,13 @@ function ProtectedRoute({ children }) {
   useEffect(() => {
     if (loading || isReallyAuthenticated || !shouldGoogleSignIn) return;
 
-    startGoogleProfileSignIn();
+    const pendingInviteCode = getPendingRoomInviteCode();
+
+startGoogleProfileSignIn(
+  pendingInviteCode
+    ? `/rooms/invite/${encodeURIComponent(pendingInviteCode)}`
+    : ''
+);
   }, [loading, isReallyAuthenticated, shouldGoogleSignIn]);
 
   if (loading || (!isReallyAuthenticated && shouldGoogleSignIn)) {
@@ -337,36 +363,49 @@ function Layout() {
     location.pathname === '/register' ||
     location.pathname === '/confirm';
 
-  useEffect(() => {
-    if (!user) return;
+useEffect(() => {
+  if (!user) return;
 
-    if (isRoomInvitePath(location.pathname)) {
-      clearPendingRoomInvite();
-      return;
-    }
+  const pendingInviteCode = getPendingRoomInviteCode();
 
-    const pendingInviteCode = getPendingRoomInviteCode();
-    if (!pendingInviteCode) return;
+  if (!pendingInviteCode) {
+    return;
+  }
 
-    const inviteTimestamp = getPendingRoomInviteTimestamp();
-    const isFreshInvite = Boolean(
-      inviteTimestamp &&
-      Date.now() - inviteTimestamp < 1000 * 60 * 5
-    );
+  const inviteTimestamp = getPendingRoomInviteTimestamp();
 
-    if (!isFreshInvite) {
-      clearPendingRoomInvite();
-      return;
-    }
+  const isFreshInvite = Boolean(
+    inviteTimestamp &&
+    Date.now() - inviteTimestamp < 1000 * 60 * 10
+  );
 
-    navigate(`/rooms/invite/${encodeURIComponent(pendingInviteCode)}`, {
-      replace: true,
-      state: {
-        resumePendingInvite: true,
-        pendingInviteCode,
-      },
-    });
-  }, [user, location.pathname, navigate]);
+  if (!isFreshInvite) {
+    clearPendingRoomInvite();
+    return;
+  }
+
+  const invitePath = `/rooms/invite/${encodeURIComponent(pendingInviteCode)}`;
+
+  const alreadyOnInvitePage = (
+    location.pathname === invitePath ||
+    location.pathname.startsWith('/rooms/invite/') ||
+    location.pathname.startsWith('/rooms/join/')
+  );
+
+  if (alreadyOnInvitePage) {
+    return;
+  }
+
+  navigate(invitePath, {
+    replace: true,
+    state: {
+      resumePendingInvite: true,
+      pendingInviteCode,
+      autoJoinAfterLogin: true,
+      inviteNavigationVersion: Date.now(),
+    },
+  });
+}, [user, location.pathname, navigate]);
 
 
   const goBack = useCallback(() => {
@@ -928,7 +967,7 @@ function Layout() {
                     return;
                   }
 
-                  await startGoogleProfileSignIn();
+                  await startGoogleProfileSignIn('/profile');
                 }}
               >
                 <CircleUserRound size={21} strokeWidth={2.15} />
