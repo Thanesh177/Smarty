@@ -1,22 +1,27 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import legacy from '@vitejs/plugin-legacy';
 
 export default defineConfig({
   base: '/',
   plugins: [
     react(),
+    legacy({
+      targets: ['defaults', 'not IE 11', 'iOS >= 12', 'Android >= 6'],
+    }),
   ],
 
   build: {
-    target: 'es2018',
+    // Let Vite use default optimal targets for production bundling
+    target: 'modules',
 
-    modulePreload: false,
+    modulePreload: true,
 
     sourcemap: false,
 
-    assetsInlineLimit: 0,
+    assetsInlineLimit: 4096, // Inlining small assets reduces HTTP requests
 
-    cssCodeSplit: false,
+    cssCodeSplit: true, // Split CSS to match chunk loading
 
     chunkSizeWarningLimit: 1200,
 
@@ -24,7 +29,13 @@ export default defineConfig({
 
     rollupOptions: {
       output: {
-        manualChunks: () => 'everything.js',
+        // REMOVED: manualChunks: () => 'everything.js'
+        // This splits your vendor dependencies naturally so mobiles don't crash
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        },
       },
     },
   },
@@ -43,29 +54,19 @@ export default defineConfig({
       '/bbc-api': {
         target: 'https://bbc-news-api.vercel.app',
         changeOrigin: true,
-        rewrite: (path) =>
-          path.replace(/^\/bbc-api/, ''),
+        rewrite: (path) => path.replace(/^\/bbc-api/, ''),
       },
-
       '/openlibrary': {
         target: 'https://openlibrary.org',
-
         changeOrigin: true,
         secure: true,
         ws: false,
-
         timeout: 30000,
         proxyTimeout: 30000,
-
-        rewrite: (path) =>
-          path.replace(/^\/openlibrary/, ''),
-
+        rewrite: (path) => path.replace(/^\/openlibrary/, ''),
         configure: (proxy) => {
           proxy.on('error', (err) => {
-            console.log(
-              'OpenLibrary proxy error:',
-              err.message
-            );
+            console.log('OpenLibrary proxy error:', err.message);
           });
         },
       },
