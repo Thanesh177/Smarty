@@ -790,23 +790,15 @@ useEffect(() => {
     };
   }, []);
 
-useEffect(() => {
-  if (
-    typeof navigator === 'undefined' ||
-    !('setAppBadge' in navigator)
-  ) {
-    return;
-  }
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('setAppBadge' in navigator)) return;
 
-  if (totalUnread > 0) {
-    navigator.setAppBadge(totalUnread).catch(() => {});
-  } else if (
-    'clearAppBadge' in navigator &&
-    typeof navigator.clearAppBadge === 'function'
-  ) {
-    navigator.clearAppBadge().catch(() => {});
-  }
-}, [totalUnread]);
+    if (totalUnread > 0) {
+      navigator.setAppBadge(totalUnread).catch(() => {});
+    } else if ('clearAppBadge' in navigator) {
+      navigator.clearAppBadge().catch(() => {});
+    }
+  }, [totalUnread]);
 
   // Push notifications after PWA install
   useEffect(() => {
