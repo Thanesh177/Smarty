@@ -17,7 +17,9 @@ const queryClient = new QueryClient({
   },
 });
 if ('clearAppBadge' in navigator) {
+  if ('clearAppBadge' in navigator && typeof navigator.clearAppBadge === 'function') {
   navigator.clearAppBadge().catch(() => {});
+}
 }
 // In-app browser + chunk-load recovery
 const SMARTY_CHUNK_RELOAD_KEY = 'smarty-chunk-reload-attempted';
