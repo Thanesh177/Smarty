@@ -2,18 +2,274 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#0ea5e9" />
+
+
+    <!-- Mobile / WebView -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#050816" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Apple -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Smarty" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>Smarty</title>
-    <script type="module" crossorigin src="/assets/index-BH2OvAGw.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BuC9pvbm.css">
-  <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
+
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+        background: #050816;
+        color: #ffffff;
+        overflow-x: hidden;
+      }
+
+      body {
+        font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      #root {
+        min-height: 100vh;
+        min-height: 100dvh;
+        background:
+          radial-gradient(circle at top, rgba(34, 211, 238, 0.11), transparent 28%),
+          radial-gradient(circle at bottom, rgba(99, 102, 241, 0.10), transparent 24%),
+          linear-gradient(180deg, #030712 0%, #020617 100%);
+      }
+
+      .boot-loader {
+        position: relative;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+
+      .boot-loader::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+        background-size: 42px 42px;
+        mask-image: radial-gradient(circle at center, black 34%, transparent 85%);
+        opacity: 0.34;
+        pointer-events: none;
+      }
+
+      .boot-loader-card {
+        position: relative;
+        z-index: 2;
+        width: min(88vw, 260px);
+        padding: 28px 22px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        text-align: center;
+        border-radius: 28px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+        backdrop-filter: blur(20px);
+        box-shadow:
+          0 20px 70px rgba(0,0,0,0.55),
+          inset 0 1px 0 rgba(255,255,255,0.08);
+      }
+
+      .boot-loader-orb {
+        position: relative;
+        width: 58px;
+        height: 58px;
+        border-radius: 999px;
+        background:
+          radial-gradient(circle at center, rgba(103, 232, 249, 0.92) 0 7%, transparent 8%),
+          conic-gradient(from 0deg, transparent 0 55%, rgba(34, 211, 238, 0.98) 72%, transparent 88% 100%);
+        box-shadow: 0 0 42px rgba(34, 211, 238, 0.30);
+        animation: bootSpin 1.05s linear infinite;
+      }
+
+      .boot-loader-orb::after {
+        content: '';
+        position: absolute;
+        inset: 10px;
+        border-radius: inherit;
+        background: #020617;
+        box-shadow:
+          inset 0 0 20px rgba(34, 211, 238, 0.08),
+          0 0 0 1px rgba(103, 232, 249, 0.12);
+      }
+
+      .boot-loader-orb::before {
+        content: '';
+        position: absolute;
+        inset: -9px;
+        border-radius: inherit;
+        border: 1px solid rgba(103, 232, 249, 0.16);
+        animation: bootSignal 1.8s ease-in-out infinite;
+      }
+
+      .boot-loader-card strong {
+        font-size: 1.04rem;
+        letter-spacing: -0.05em;
+        font-weight: 800;
+        color: #f8fafc;
+      }
+
+      .boot-loader-card span {
+        font-size: 0.8rem;
+        line-height: 1.5;
+        color: rgba(226, 232, 240, 0.66);
+      }
+
+      @keyframes bootSpin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes bootSignal {
+        0%,
+        100% {
+          transform: scale(0.92);
+          opacity: 0.32;
+        }
+
+        50% {
+          transform: scale(1.08);
+          opacity: 0.9;
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-CYa_8efN.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-DxaH5Qmu.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-Bf6jqIkQ.css">
+    <script type="module">import.meta.url;import("_").catch(()=>1);(async function*(){})().next();if(location.protocol!="file:"){window.__vite_is_modern_browser=true}</script>
+    <script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy chunks, syntax error above and the same error below should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script>
+  </head>
+
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-loader">
+        <div class="boot-loader-card">
+          <div class="boot-loader-orb"></div>
+          <strong>Smarty</strong>
+          <span>Loading your feed...</span>
+        </div>
+      </div>
+    </div>
+
+    <noscript>
+      <div
+        style="
+          padding: 24px;
+          color: white;
+          background: #050816;
+          font-family: system-ui;
+        "
+      >
+        Smarty requires JavaScript to run.
+      </div>
+    </noscript>
+
+    <script>
+      (function () {
+        var isInAppBrowser = /LinkedInApp|Telegram|FBAN|FBAV|Instagram/i.test(
+          navigator.userAgent || ''
+        );
+        window.__SMARTY_APP_MOUNTED__ = false;
+        window.__SMARTY_BOOT_STARTED__ = Date.now();
+
+        if ('serviceWorker' in navigator && isInAppBrowser) {
+          navigator.serviceWorker
+            .getRegistrations()
+            .then(function (registrations) {
+              registrations.forEach(function (registration) {
+                registration.unregister().catch(function () {});
+              });
+            })
+            .catch(function () {});
+        }
+
+        window.addEventListener('error', function (event) {
+          var message = event && event.message ? event.message : '';
+
+          if (
+            message.includes('Failed to fetch dynamically imported module') ||
+            message.includes('Importing a module script failed')
+          ) {
+            window.location.reload();
+          }
+        });
+
+        window.__SMARTY_SHOW_BOOT_ERROR__ = function () {
+          var root = document.getElementById('root');
+          var currentUrl = window.location.href;
+
+          if (!root || !root.innerText || !root.innerText.includes('Loading')) {
+            return;
+          }
+
+          var encodedUrl = currentUrl.replace(/"/g, '&quot;');
+
+          root.innerHTML =
+            '<div style="min-height:100vh;display:grid;place-items:center;background:#020617;color:white;font-family:Inter,system-ui;padding:24px;text-align:center;">' +
+            '<div style="max-width:360px;width:100%;padding:26px 20px;border-radius:28px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));box-shadow:0 20px 70px rgba(0,0,0,.45)">' +
+            '<div style="width:54px;height:54px;border-radius:999px;margin:0 auto 18px;background:conic-gradient(from 0deg,transparent 0 55%,#22d3ee 72%,transparent 88% 100%);box-shadow:0 0 38px rgba(34,211,238,.32)"></div>' +
+            '<h2 style="margin:0 0 10px;font-size:1.1rem;letter-spacing:-0.04em">Smarty could not fully open</h2>' +
+            '<p style="margin:0 0 16px;color:rgba(226,232,240,.72);line-height:1.6;font-size:.9rem">This in-app browser may be blocking the app bundle. Copy the link or reload once.</p>' +
+            '<div style="display:grid;gap:10px">' +
+            '<button id="smarty-reload-btn" style="width:100%;border:0;background:#22d3ee;color:#020617;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Reload Smarty</button>' +
+            '<a href="' + encodedUrl + '" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;border:1px solid rgba(103,232,249,.18);background:rgba(255,255,255,.04);color:#cffafe;padding:12px 18px;border-radius:999px;font-weight:850">Open in browser</a>' +
+            '<button id="smarty-copy-link-btn" style="width:100%;border:1px solid rgba(148,163,184,.16);background:rgba(15,23,42,.72);color:rgba(226,232,240,.9);padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Copy link</button>' +
+            '<p style="margin:2px 0 0;color:rgba(148,163,184,.72);font-size:.76rem;line-height:1.45;word-break:break-all">' + encodedUrl + '</p>' +
+            '</div>' +
+            '</div>' +
+            '</div>';
+
+          setTimeout(function () {
+            var reloadButton = document.getElementById('smarty-reload-btn');
+            var copyButton = document.getElementById('smarty-copy-link-btn');
+
+            if (reloadButton) {
+              reloadButton.onclick = function () {
+                window.location.reload();
+              };
+            }
+
+            if (copyButton) {
+              copyButton.onclick = function () {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(currentUrl).then(function () {
+                    copyButton.innerText = 'Link copied';
+                  }).catch(function () {
+                    copyButton.innerText = 'Copy manually below';
+                  });
+                } else {
+                  copyButton.innerText = 'Copy manually below';
+                }
+              };
+            }
+          }, 0);
+        };
+
+        setTimeout(function () {
+          if (!window.__SMARTY_APP_MOUNTED__) {
+            window.__SMARTY_SHOW_BOOT_ERROR__();
+          }
+        }, 5500);
+      })();
+    </script>
+    <script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script>
+    <script nomodule crossorigin id="vite-legacy-polyfill" src="/assets/polyfills-legacy-CH1fRpiB.js"></script>
+    <script nomodule crossorigin id="vite-legacy-entry" data-src="/assets/index-legacy-BwDCZVrL.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
   </body>
 </html>

@@ -7,7 +7,13 @@ export default defineConfig({
   plugins: [
     react(),
     legacy({
-      targets: ['defaults', 'not IE 11', 'iOS >= 12', 'Android >= 6'],
+      targets: [
+  'defaults',
+  'iOS >= 12',
+  'Android >= 7',
+  'Chrome >= 61',
+  'Safari >= 12',
+],
     }),
   ],
 
