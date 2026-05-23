@@ -86,9 +86,7 @@ function normalizeRedirectPath(value) {
   }
 }
 
-function getPostLoginRedirect() {
-  const fallback = '/feed';
-
+function getPendingInvitePath() {
   try {
     const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
 
@@ -97,7 +95,37 @@ function getPostLoginRedirect() {
       window.location.pathname.startsWith('/rooms/join/') ||
       window.location.pathname.startsWith('/room-invites/')
     ) {
+      localStorage.setItem('smarty-post-login-redirect', currentPath);
+      sessionStorage.setItem('smarty-post-login-redirect', currentPath);
       return currentPath;
+    }
+
+    const pendingInviteCode =
+      sessionStorage.getItem('pendingRoomInviteCode') ||
+      localStorage.getItem('pendingRoomInviteCode') ||
+      '';
+
+    if (pendingInviteCode) {
+      const invitePath = `/rooms/invite/${encodeURIComponent(pendingInviteCode)}`;
+      localStorage.setItem('smarty-post-login-redirect', invitePath);
+      sessionStorage.setItem('smarty-post-login-redirect', invitePath);
+      return invitePath;
+    }
+  } catch {
+    return '';
+  }
+
+  return '';
+}
+
+function getPostLoginRedirect() {
+  const fallback = '/feed';
+
+  try {
+    const pendingInvitePath = getPendingInvitePath();
+
+    if (pendingInvitePath) {
+      return normalizeRedirectPath(pendingInvitePath);
     }
 
     const stored =
@@ -128,7 +156,7 @@ function redirectAfterLogin() {
   }
 
   sessionStorage.setItem('smarty-auth-redirecting', targetPath);
-  window.location.replace(targetPath);
+  window.location.assign(targetPath);
 }
 
 function mapCognitoUser(currentUser, session) {
@@ -190,7 +218,7 @@ export function AuthProvider({ children }) {
           };
 
           saveAuthUser(authUser);
-          window.history.replaceState({}, document.title, getPostLoginRedirect());
+          window.history.replaceState({}, document.title, normalizeRedirectPath(getPostLoginRedirect()));
           setUser(authUser);
           setLoading(false);
           redirectAfterLogin();
@@ -226,6 +254,8 @@ export function AuthProvider({ children }) {
         if (!isUnauthenticated) {
           console.error('Auth init failed:', err);
         }
+
+        getPendingInvitePath();
 
         const cachedUser = localStorage.getItem('eduscroll_user');
 
@@ -326,6 +356,7 @@ export function AuthProvider({ children }) {
       await signOut();
     } finally {
       clearAuthStorage();
+      sessionStorage.removeItem('smarty-auth-redirecting');
       setUser(null);
     }
   };

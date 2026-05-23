@@ -5,6 +5,86 @@ import App from './App.jsx';
 import './index.css';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+// Detect problematic in-app browsers.
+const isInAppBrowser = () => {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+
+  const ua = navigator.userAgent || '';
+
+  return (
+    ua.includes('Telegram') ||
+    ua.includes('LinkedIn') ||
+    ua.includes('Instagram') ||
+    ua.includes('FBAN') ||
+    ua.includes('FBAV')
+  );
+};
+
+// Force users into the real browser because OAuth/session flows
+// are unreliable inside embedded mobile browsers.
+const redirectToExternalBrowser = () => {
+  if (!isInAppBrowser()) {
+    return;
+  }
+
+  const currentUrl = window.location.href;
+
+  // Telegram Android.
+  if (/Telegram/i.test(navigator.userAgent)) {
+    window.location.replace(
+      `https://t.me/share/url?url=${encodeURIComponent(currentUrl)}`
+    );
+
+    return;
+  }
+
+  // Generic fallback message.
+  document.body.innerHTML = `
+    <div style="
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:#050816;
+      color:white;
+      font-family:Inter,system-ui,sans-serif;
+      padding:24px;
+      text-align:center;
+    ">
+      <div style="max-width:420px;">
+        <h1 style="font-size:28px;margin-bottom:14px;">
+          Open Smarty in Safari or Chrome
+        </h1>
+
+        <p style="opacity:.82;line-height:1.6;font-size:15px;">
+          Login and invite links may not work correctly inside Telegram,
+          LinkedIn, Instagram, or Facebook in-app browsers.
+        </p>
+
+        <div style="margin-top:28px;">
+          <button
+            onclick="window.location.href='${currentUrl}'"
+            style="
+              border:none;
+              background:#14b8a6;
+              color:white;
+              padding:14px 22px;
+              border-radius:999px;
+              font-size:15px;
+              font-weight:600;
+              cursor:pointer;
+            "
+          >
+            Open in Browser
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
 // React Query setup
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,10 +96,12 @@ const queryClient = new QueryClient({
     },
   },
 });
-if ('clearAppBadge' in navigator) {
-  if ('clearAppBadge' in navigator && typeof navigator.clearAppBadge === 'function') {
+if (
+  typeof navigator !== 'undefined' &&
+  'clearAppBadge' in navigator &&
+  typeof navigator.clearAppBadge === 'function'
+) {
   navigator.clearAppBadge().catch(() => {});
-}
 }
 // In-app browser + chunk-load recovery
 const SMARTY_CHUNK_RELOAD_KEY = 'smarty-chunk-reload-attempted';
@@ -81,6 +163,7 @@ setTimeout(() => {
   }
 }, 15000);
 
+redirectToExternalBrowser();
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
