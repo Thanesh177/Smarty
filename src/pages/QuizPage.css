@@ -1569,3 +1569,80 @@
     width: 100% !important;
   }
 }
+/* =========================================================
+   Immediate selected button colour fix
+   ========================================================= */
+
+.brain-game .decision-btn,
+.brain-game .option-btn,
+.brain-game .match-tile,
+.brain-game .word-chip,
+.brain-game .memory-tile {
+  -webkit-tap-highlight-color: transparent !important;
+  touch-action: manipulation !important;
+  transition:
+    background 80ms ease,
+    border-color 80ms ease,
+    color 80ms ease,
+    box-shadow 80ms ease,
+    transform 80ms ease !important;
+}
+
+.brain-game .decision-btn.selected,
+.brain-game .decision-btn[aria-pressed='true'],
+.brain-game .option-btn.selected,
+.brain-game .option-btn[aria-pressed='true'],
+.brain-game .match-tile.active,
+.brain-game .match-tile.matched,
+.brain-game .match-tile[aria-pressed='true'],
+.brain-game .word-chip.active,
+.brain-game .word-chip[aria-pressed='true'],
+.brain-game .memory-tile.selected,
+.brain-game .memory-tile[aria-pressed='true'] {
+  background: linear-gradient(135deg, #06b6d4, #22c55e) !important;
+  color: #021014 !important;
+  border-color: rgba(34, 211, 238, 0.72) !important;
+  box-shadow: 0 14px 34px rgba(34, 211, 238, 0.24) !important;
+}
+
+.brain-game .decision-btn.selected:hover,
+.brain-game .decision-btn.selected:focus,
+.brain-game .decision-btn.selected:active,
+.brain-game .decision-btn[aria-pressed='true']:hover,
+.brain-game .decision-btn[aria-pressed='true']:focus,
+.brain-game .decision-btn[aria-pressed='true']:active,
+.brain-game .option-btn.selected:hover,
+.brain-game .option-btn.selected:focus,
+.brain-game .option-btn.selected:active,
+.brain-game .option-btn[aria-pressed='true']:hover,
+.brain-game .option-btn[aria-pressed='true']:focus,
+.brain-game .option-btn[aria-pressed='true']:active,
+.brain-game .word-chip.active:hover,
+.brain-game .word-chip.active:focus,
+.brain-game .word-chip.active:active,
+.brain-game .word-chip[aria-pressed='true']:hover,
+.brain-game .word-chip[aria-pressed='true']:focus,
+.brain-game .word-chip[aria-pressed='true']:active,
+.brain-game .memory-tile.selected:hover,
+.brain-game .memory-tile.selected:focus,
+.brain-game .memory-tile.selected:active,
+.brain-game .memory-tile[aria-pressed='true']:hover,
+.brain-game .memory-tile[aria-pressed='true']:focus,
+.brain-game .memory-tile[aria-pressed='true']:active {
+  background: linear-gradient(135deg, #06b6d4, #22c55e) !important;
+  color: #021014 !important;
+  border-color: rgba(34, 211, 238, 0.72) !important;
+  box-shadow: 0 14px 34px rgba(34, 211, 238, 0.24) !important;
+  transform: translate3d(0, -1px, 0) !important;
+}
+
+.brain-game .decision-btn.selected *,
+.brain-game .decision-btn[aria-pressed='true'] *,
+.brain-game .option-btn.selected *,
+.brain-game .option-btn[aria-pressed='true'] *,
+.brain-game .word-chip.active *,
+.brain-game .word-chip[aria-pressed='true'] *,
+.brain-game .memory-tile.selected *,
+.brain-game .memory-tile[aria-pressed='true'] * {
+  color: inherit !important;
+}
