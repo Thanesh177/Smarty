@@ -805,3 +805,317 @@
     transition-duration: 0.01ms !important;
   }
 }
+/* =========================================================
+   Game Profile — compact minimal final override
+   ========================================================= */
+
+.quiz-page {
+  width: min(1180px, calc(100% - 28px)) !important;
+  padding: clamp(14px, 3vw, 28px) 0 42px !important;
+}
+
+.back-btn {
+  min-height: 36px !important;
+  margin-bottom: 10px !important;
+  padding: 8px 13px !important;
+  border-radius: 999px !important;
+  font-size: 0.82rem !important;
+}
+
+.quiz-kicker {
+  margin-bottom: 8px !important;
+  font-size: 0.68rem !important;
+  letter-spacing: 0.14em !important;
+}
+
+.quiz-hero.game-profile-hero {
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 280px) !important;
+  gap: 16px !important;
+  padding: clamp(18px, 3vw, 26px) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+.quiz-hero.game-profile-hero h1 {
+  max-width: 700px !important;
+  font-size: clamp(2.15rem, 4.6vw, 4.6rem) !important;
+  line-height: 0.95 !important;
+}
+
+.quiz-hero.game-profile-hero p:not(.quiz-kicker) {
+  max-width: 600px !important;
+  margin-top: 12px !important;
+  font-size: 0.92rem !important;
+  line-height: 1.55 !important;
+}
+
+.game-profile-stat-card {
+  padding: 18px !important;
+  border-radius: 20px !important;
+}
+
+.game-profile-stat-card h3 {
+  font-size: 1.8rem !important;
+}
+
+.game-profile-stat-card p {
+  margin-top: 6px !important;
+  font-size: 0.78rem !important;
+}
+
+.profile-level-track {
+  height: 9px !important;
+  margin-top: 12px !important;
+}
+
+.profile-overview-grid {
+  gap: 12px !important;
+  margin: 18px auto !important;
+}
+
+.profile-overview-card {
+  min-height: 112px !important;
+  padding: 16px !important;
+  border-radius: 20px !important;
+}
+
+.profile-overview-card span {
+  width: 42px !important;
+  height: 42px !important;
+  margin-bottom: 8px !important;
+  border-radius: 14px !important;
+  font-size: 1.35rem !important;
+}
+
+.profile-overview-card strong {
+  margin-top: 6px !important;
+  font-size: 1rem !important;
+}
+
+.profile-overview-card p {
+  margin-top: 5px !important;
+  font-size: 0.74rem !important;
+  line-height: 1.35 !important;
+}
+
+.unlock-section {
+  margin: 28px auto !important;
+}
+
+.section-heading-row {
+  margin-bottom: 12px !important;
+}
+
+.unlock-section h2 {
+  font-size: clamp(1.25rem, 2.4vw, 1.85rem) !important;
+}
+
+.unlock-grid {
+  gap: 12px !important;
+}
+
+.unlock-card {
+  min-height: auto !important;
+  padding: 16px !important;
+  border-radius: 20px !important;
+  gap: 8px !important;
+}
+
+.unlock-card-top span {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 14px !important;
+  font-size: 1.4rem !important;
+}
+
+.unlock-card-top small {
+  padding: 5px 8px !important;
+  font-size: 0.6rem !important;
+}
+
+.unlock-card h3 {
+  margin: 12px 0 5px !important;
+  font-size: 1rem !important;
+}
+
+.unlock-card p {
+  min-height: auto !important;
+  font-size: 0.8rem !important;
+  line-height: 1.42 !important;
+}
+
+.unlock-status {
+  margin-top: 6px !important;
+  padding: 6px 10px !important;
+  font-size: 0.72rem !important;
+}
+
+.unlock-action-btn {
+  min-height: 40px !important;
+  margin-top: 8px !important;
+  padding: 10px 14px !important;
+  font-size: 0.84rem !important;
+}
+
+.memory-palace-grid {
+  gap: 8px !important;
+  margin: 14px 0 !important;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)) !important;
+}
+
+.memory-tile {
+  min-height: 44px !important;
+  padding: 11px 12px !important;
+  border-radius: 14px !important;
+  font-size: 0.82rem !important;
+}
+
+@media (min-width: 1180px) {
+  .unlock-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 950px) {
+  .quiz-hero.game-profile-hero {
+    grid-template-columns: 1fr !important;
+  }
+
+  .profile-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .unlock-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .quiz-page {
+    width: min(100% - 20px, 1180px) !important;
+    padding: 14px 0 34px !important;
+  }
+
+  .quiz-hero.game-profile-hero {
+    padding: 16px !important;
+    border-radius: 20px !important;
+  }
+
+  .quiz-hero.game-profile-hero h1 {
+    font-size: clamp(2rem, 10vw, 3rem) !important;
+  }
+
+  .quiz-hero.game-profile-hero p:not(.quiz-kicker) {
+    font-size: 0.86rem !important;
+  }
+
+  .profile-overview-grid {
+    grid-template-columns: repeat(3, minmax(104px, 1fr)) !important;
+    gap: 8px !important;
+    margin: 14px auto !important;
+  }
+
+  .profile-overview-card {
+    min-width: 104px !important;
+    min-height: 104px !important;
+    padding: 12px 8px !important;
+    border-radius: 18px !important;
+  }
+
+  .unlock-section {
+    margin: 22px auto !important;
+  }
+
+  .unlock-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .unlock-card {
+    padding: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .unlock-action-btn {
+    width: 100% !important;
+  }
+}
+/* =========================================================
+   Game Profile — desktop space-filling refinement
+   ========================================================= */
+
+@media (min-width: 1100px) {
+  .quiz-page {
+    width: min(1480px, calc(100% - 48px)) !important;
+    padding: 26px 0 56px !important;
+  }
+
+  .quiz-hero.game-profile-hero {
+    grid-template-columns: minmax(0, 1fr) 360px !important;
+    gap: 24px !important;
+    padding: 30px !important;
+  }
+
+  .quiz-hero.game-profile-hero h1 {
+    max-width: 920px !important;
+    font-size: clamp(3.2rem, 5vw, 6rem) !important;
+  }
+
+  .quiz-hero.game-profile-hero p:not(.quiz-kicker) {
+    max-width: 780px !important;
+    font-size: 1rem !important;
+  }
+
+  .game-profile-stat-card {
+    min-height: 210px !important;
+    padding: 24px !important;
+  }
+
+  .game-profile-stat-card h3 {
+    font-size: 2.25rem !important;
+  }
+
+  .profile-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 18px !important;
+    margin: 24px auto !important;
+  }
+
+  .profile-overview-card {
+    min-height: 140px !important;
+    padding: 22px !important;
+  }
+
+  .unlock-section {
+    margin: 36px auto !important;
+  }
+
+  .unlock-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 18px !important;
+  }
+
+  .unlock-card {
+    min-height: 230px !important;
+    padding: 22px !important;
+  }
+
+  .unlock-card h3 {
+    font-size: 1.12rem !important;
+  }
+
+  .unlock-card p {
+    font-size: 0.86rem !important;
+    line-height: 1.52 !important;
+  }
+}
+
+@media (min-width: 1450px) {
+  .quiz-page {
+    width: min(1560px, calc(100% - 72px)) !important;
+  }
+
+  .unlock-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+}

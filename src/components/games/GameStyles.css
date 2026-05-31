@@ -690,3 +690,408 @@
     width: 14px;
   }
 }
+
+/* =========================================================
+   Shared Games — production polish final override
+   ========================================================= */
+
+.brain-game {
+  width: min(100%, 860px);
+  gap: 14px;
+  padding: clamp(18px, 3vw, 30px);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.13), transparent 34%),
+    radial-gradient(circle at 100% 12%, rgba(139, 92, 246, 0.13), transparent 36%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(2, 6, 23, 0.84));
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+}
+
+.brain-game button,
+.brain-game input {
+  font-family: inherit;
+}
+
+.brain-game button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.memory-game-top,
+.survival-status-row {
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.memory-round-label {
+  margin: 7px 0 0;
+  color: rgba(203, 213, 225, 0.7);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.memory-progress-track {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.memory-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #06b6d4, #22c55e);
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.28);
+  transition: width 240ms ease;
+}
+
+.memory-timer.danger {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(248, 113, 113, 0.32);
+  animation: timerDangerPulse 0.8s ease-in-out infinite alternate;
+}
+
+.decision-btn,
+.memory-tile,
+.match-tile,
+.word-chip,
+.sequence-cell {
+  outline: none;
+}
+
+.decision-btn:focus-visible,
+.memory-tile:focus-visible,
+.match-tile:focus-visible,
+.word-chip:focus-visible,
+.sequence-cell:focus-visible,
+.game-main-btn:focus-visible,
+.secondary-btn:focus-visible {
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.18), 0 0 0 1px rgba(34, 211, 238, 0.5);
+}
+
+.decision-btn.correct,
+.memory-tile.correct,
+.word-chip.correct,
+.match-tile.correct {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(20, 184, 166, 0.92)) !important;
+  border-color: rgba(134, 239, 172, 0.46) !important;
+  color: #021014 !important;
+  box-shadow: 0 14px 34px rgba(34, 197, 94, 0.22) !important;
+}
+
+.decision-btn.wrong,
+.memory-tile.wrong,
+.word-chip.wrong,
+.match-tile.wrong {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.92), rgba(244, 63, 94, 0.86)) !important;
+  border-color: rgba(252, 165, 165, 0.42) !important;
+  color: #fff1f2 !important;
+  box-shadow: 0 14px 34px rgba(239, 68, 68, 0.18) !important;
+}
+
+.memory-tile.missed,
+.word-chip.missed,
+.decision-btn.missed {
+  border-color: rgba(250, 204, 21, 0.42) !important;
+  background: rgba(250, 204, 21, 0.12) !important;
+  color: #fde68a !important;
+}
+
+.memory-result {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border-radius: 18px;
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.18);
+  animation: feedbackSlide 0.28s ease both;
+}
+
+.memory-result.success {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.11);
+  border-color: rgba(34, 197, 94, 0.24);
+}
+
+.memory-result strong {
+  color: inherit;
+  font-size: 0.92rem;
+}
+
+.memory-result span {
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.memory-game-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.secondary-btn {
+  min-height: 46px;
+  padding: 11px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.72);
+  color: rgba(248, 250, 252, 0.92);
+  cursor: pointer;
+  font-weight: 900;
+  transition: transform 0.18s ease, background 0.18s ease, opacity 0.18s ease;
+}
+
+.secondary-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(30, 41, 59, 0.86);
+}
+
+.secondary-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.memory-choice-grid,
+.market-decision-row {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.market-decision-row .decision-btn {
+  display: flex;
+  min-height: 72px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  text-align: left;
+}
+
+.market-decision-row .decision-btn small {
+  color: rgba(226, 232, 240, 0.66);
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+.market-decision-row .decision-btn.selected small,
+.market-decision-row .decision-btn.correct small,
+.market-decision-row .decision-btn.wrong small {
+  color: inherit;
+  opacity: 0.78;
+}
+
+.market-survival-dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-stat-card {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.market-stat-card span,
+.market-stat-card small {
+  color: rgba(203, 213, 225, 0.68);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.market-stat-card strong {
+  color: #f8fafc;
+  font-size: 1.18rem;
+  letter-spacing: -0.03em;
+}
+
+.market-stat-card .positive {
+  color: #86efac;
+}
+
+.market-stat-card .negative {
+  color: #fca5a5;
+}
+
+.market-scenario-card {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 16px;
+  border-radius: 22px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    rgba(2, 6, 23, 0.48);
+  background-size: 36px 36px, 36px 36px, auto;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+}
+
+.market-mini-chart {
+  width: 100%;
+  min-height: 90px;
+  color: #67e8f9;
+  filter: drop-shadow(0 10px 20px rgba(34, 211, 238, 0.16));
+}
+
+.market-signal-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.market-signal-row span,
+.risk-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: rgba(226, 232, 240, 0.82);
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.risk-pill {
+  color: #fde68a !important;
+  background: rgba(245, 158, 11, 0.12) !important;
+  border-color: rgba(251, 191, 36, 0.2) !important;
+}
+
+.sequence-cell.ready:hover:not(:disabled) {
+  border-color: rgba(34, 211, 238, 0.42);
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.sequence-cell:disabled {
+  cursor: not-allowed;
+}
+
+.memory-word-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+}
+
+.word-chip {
+  min-height: 44px;
+  text-align: center;
+  cursor: pointer;
+  animation: memoryTileIn 0.26s ease both;
+}
+
+.word-chip.study {
+  cursor: default;
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.word-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+@keyframes timerDangerPulse {
+  from {
+    transform: scale(1);
+  }
+
+  to {
+    transform: scale(1.05);
+  }
+}
+
+@media (min-width: 980px) {
+  .brain-game {
+    width: min(100%, 920px);
+  }
+
+  .market-survival-game,
+  .trading-sim-game {
+    width: min(100%, 980px);
+  }
+}
+
+@media (max-width: 760px) {
+  .brain-game {
+    padding: 16px;
+    border-radius: 22px;
+    gap: 12px;
+  }
+
+  .brain-game h2 {
+    font-size: clamp(1.45rem, 8vw, 2rem);
+  }
+
+  .memory-game-top,
+  .survival-status-row {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .memory-timer {
+    min-width: 48px;
+    height: 34px;
+    font-size: 0.82rem;
+  }
+
+  .market-survival-dashboard,
+  .market-scenario-card {
+    grid-template-columns: 1fr;
+  }
+
+  .market-stat-card {
+    padding: 12px;
+  }
+
+  .market-decision-row .decision-btn {
+    min-height: 62px;
+  }
+
+  .memory-game-actions,
+  .memory-game-actions .game-main-btn,
+  .memory-game-actions .secondary-btn {
+    width: 100%;
+  }
+
+  .memory-game-actions .game-main-btn,
+  .memory-game-actions .secondary-btn {
+    justify-content: center;
+  }
+
+  .memory-word-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .serious-game,
+  .memory-tile,
+  .word-chip,
+  .candle,
+  .memory-result,
+  .trade-feedback,
+  .sequence-cell.active {
+    animation: none !important;
+  }
+
+  .brain-game *,
+  .brain-game *::before,
+  .brain-game *::after {
+    transition-duration: 0.01ms !important;
+  }
+}

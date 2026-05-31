@@ -18,33 +18,102 @@ const ITEM_POOL = [
   "Bottle",
   "Laptop",
   "Bridge",
+  "Compass",
+  "Candle",
+  "Guitar",
+  "Camera",
+  "Helmet",
+  "Rocket",
+  "Flower",
+  "Pencil",
 ];
 
-const DISTRACTORS = ["Glass", "Cloud", "Wallet", "Camera", "Planet", "Door"];
+const DISTRACTORS = [
+  "Glass",
+  "Cloud",
+  "Wallet",
+  "Planet",
+  "Door",
+  "Mirror",
+  "Spoon",
+  "Castle",
+  "Basket",
+  "Lamp",
+  "Robot",
+  "Feather",
+];
+
+const ROUNDS = [
+  {
+    id: "warmup",
+    label: "Warm-up",
+    itemCount: 5,
+    distractorCount: 4,
+    studySeconds: 7,
+    requiredCorrect: 4,
+    allowedWrong: 1,
+  },
+  {
+    id: "focus",
+    label: "Focus round",
+    itemCount: 6,
+    distractorCount: 5,
+    studySeconds: 6,
+    requiredCorrect: 5,
+    allowedWrong: 1,
+  },
+  {
+    id: "boss",
+    label: "Boss round",
+    itemCount: 7,
+    distractorCount: 6,
+    studySeconds: 5,
+    requiredCorrect: 6,
+    allowedWrong: 1,
+  },
+];
 
 function shuffle(items) {
   return [...items].sort(() => Math.random() - 0.5);
 }
 
-export default function MemoryPalaceGame({ onComplete }) {
-  const items = useMemo(() => shuffle(ITEM_POOL).slice(0, 6), []);
-  const recallOptions = useMemo(
-    () => shuffle([...items, ...shuffle(DISTRACTORS).slice(0, 4)]),
-    [items]
-  );
+function buildRound(roundIndex) {
+  const config = ROUNDS[roundIndex] || ROUNDS[0];
+  const items = shuffle(ITEM_POOL).slice(0, config.itemCount);
+  const recallOptions = shuffle([
+    ...items,
+    ...shuffle(DISTRACTORS.filter((item) => !items.includes(item))).slice(0, config.distractorCount),
+  ]);
 
+  return {
+    ...config,
+    items,
+    recallOptions,
+  };
+}
+
+export default function MemoryPalaceGame({ onComplete }) {
+  const [roundIndex, setRoundIndex] = useState(0);
+  const [round, setRound] = useState(() => buildRound(0));
   const [phase, setPhase] = useState("study");
   const [selected, setSelected] = useState([]);
-  const [timeLeft, setTimeLeft] = useState(6);
+  const [timeLeft, setTimeLeft] = useState(round.studySeconds);
   const [locked, setLocked] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const [roundScores, setRoundScores] = useState([]);
+
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const isLastRound = roundIndex >= ROUNDS.length - 1;
 
   useEffect(() => {
     if (phase !== "study") return undefined;
 
-    const interval = setInterval(() => {
+    setTimeLeft(round.studySeconds);
+
+    const interval = window.setInterval(() => {
       setTimeLeft((current) => {
         if (current <= 1) {
-          clearInterval(interval);
+          window.clearInterval(interval);
           setPhase("recall");
           return 0;
         }
@@ -53,37 +122,110 @@ export default function MemoryPalaceGame({ onComplete }) {
       });
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [phase]);
+    return () => window.clearInterval(interval);
+  }, [phase, round.studySeconds]);
 
   const toggle = (item) => {
-    if (locked) return;
+    if (locked || phase !== "recall") return;
 
-    setSelected((prev) =>
-      prev.includes(item) ? prev.filter((x) => x !== item) : [...prev, item]
-    );
+    setSelected((prev) => {
+      if (prev.includes(item)) {
+        return prev.filter((x) => x !== item);
+      }
+
+      if (prev.length >= round.items.length) {
+        return prev;
+      }
+
+      return [...prev, item];
+    });
+  };
+
+  const evaluateRound = () => {
+    const correctItems = selected.filter((item) => round.items.includes(item));
+    const wrongItems = selected.filter((item) => !round.items.includes(item));
+    const missedItems = round.items.filter((item) => !selected.includes(item));
+    const correct = correctItems.length;
+    const wrong = wrongItems.length;
+    const rawScore = Math.max(0, correct - wrong);
+    const score = Math.round((rawScore / round.items.length) * 100);
+    const success = correct >= round.requiredCorrect && wrong <= round.allowedWrong;
+
+    return {
+      success,
+      score,
+      correct,
+      wrong,
+      correctItems,
+      wrongItems,
+      missedItems,
+      selectedItems: selected,
+      targetItems: round.items,
+      roundId: round.id,
+      roundLabel: round.label,
+    };
   };
 
   const finish = () => {
-    if (locked) return;
+    if (locked || selected.length === 0) return;
 
-    const correct = selected.filter((item) => items.includes(item)).length;
-    const wrong = selected.filter((item) => !items.includes(item)).length;
-    const score = Math.max(0, correct - wrong);
-    const success = score >= 5;
+    const result = evaluateRound();
+    const nextScores = [...roundScores, result];
 
     setLocked(true);
+    setFeedback(result);
+    setRoundScores(nextScores);
+  };
 
-    setTimeout(() => {
-      onComplete({
-        success,
-        xp: success ? 10 : 0,
-        score,
-        message: success
-          ? `Excellent recall. You remembered ${correct}/${items.length} with strong focus.`
-          : `Memory tip: you remembered ${correct}/${items.length}. Link every item to a vivid place, image, or story.`,
-      });
-    }, 700);
+  const moveToNextRound = () => {
+    const nextRoundIndex = roundIndex + 1;
+    const nextRound = buildRound(nextRoundIndex);
+
+    setRoundIndex(nextRoundIndex);
+    setRound(nextRound);
+    setPhase("study");
+    setSelected([]);
+    setLocked(false);
+    setFeedback(null);
+    setTimeLeft(nextRound.studySeconds);
+  };
+
+  const completeGame = () => {
+    const results = roundScores.length ? roundScores : [evaluateRound()];
+    const totalScore = Math.round(
+      results.reduce((sum, item) => sum + item.score, 0) / results.length
+    );
+    const successfulRounds = results.filter((item) => item.success).length;
+    const success = successfulRounds >= 2;
+    const totalCorrect = results.reduce((sum, item) => sum + item.correct, 0);
+    const totalWrong = results.reduce((sum, item) => sum + item.wrong, 0);
+
+    onComplete?.({
+      success,
+      xp: success ? 18 : 6,
+      score: totalScore,
+      message: success
+        ? `Memory palace cleared. You passed ${successfulRounds}/${ROUNDS.length} rounds.`
+        : `Good practice. You passed ${successfulRounds}/${ROUNDS.length} rounds. Try linking each item to a vivid image or room location.`,
+      category: "memory",
+      game: "memory-palace",
+      rounds: results,
+      successfulRounds,
+      totalRounds: ROUNDS.length,
+      totalCorrect,
+      totalWrong,
+    });
+  };
+
+  const restartRound = () => {
+    const freshRound = buildRound(roundIndex);
+
+    setRound(freshRound);
+    setPhase("study");
+    setSelected([]);
+    setLocked(false);
+    setFeedback(null);
+    setTimeLeft(freshRound.studySeconds);
   };
 
   return (
@@ -92,22 +234,29 @@ export default function MemoryPalaceGame({ onComplete }) {
         <div>
           <p className="game-kicker">MEMORY PALACE</p>
           <h2>{phase === "study" ? "Memorize the room" : "Select what you remember"}</h2>
+          <p className="memory-round-label">
+            Round {roundIndex + 1}/{ROUNDS.length} · {round.label}
+          </p>
         </div>
 
         <span className={phase === "study" ? "memory-timer" : "memory-timer recall"}>
-          {phase === "study" ? `${timeLeft}s` : `${selected.length}/${items.length}`}
+          {phase === "study" ? `${timeLeft}s` : `${selected.length}/${round.items.length}`}
         </span>
+      </div>
+
+      <div className="memory-progress-track" aria-hidden="true">
+        <span style={{ width: `${((roundIndex + 1) / ROUNDS.length) * 100}%` }} />
       </div>
 
       <p className="game-hint">
         {phase === "study"
           ? "Build a quick mental story using these objects before time runs out."
-          : "Pick only the objects you saw. Wrong picks reduce your score."}
+          : `Pick only the ${round.items.length} objects you saw. Wrong picks reduce your score.`}
       </p>
 
       {phase === "study" ? (
         <div className="memory-palace-grid">
-          {items.map((item, index) => (
+          {round.items.map((item, index) => (
             <div key={item} className="memory-tile study" style={{ animationDelay: `${index * 70}ms` }}>
               <span>{item}</span>
             </div>
@@ -116,24 +265,89 @@ export default function MemoryPalaceGame({ onComplete }) {
       ) : (
         <>
           <div className="memory-palace-grid">
-            {recallOptions.map((item, index) => (
-              <button
-                key={item}
-                type="button"
-                className={selected.includes(item) ? "memory-tile selected" : "memory-tile"}
-                style={{ animationDelay: `${index * 45}ms` }}
-                onClick={() => toggle(item)}
-              >
-                <span>{item}</span>
-              </button>
-            ))}
+            {round.recallOptions.map((item, index) => {
+              const isSelected = selectedSet.has(item);
+              const isCorrect = feedback?.correctItems.includes(item);
+              const isWrong = feedback?.wrongItems.includes(item);
+              const isMissed = feedback?.missedItems.includes(item);
+
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  className={[
+                    "memory-tile",
+                    isSelected ? "selected" : "",
+                    isCorrect ? "correct" : "",
+                    isWrong ? "wrong" : "",
+                    isMissed ? "missed" : "",
+                  ].filter(Boolean).join(" ")}
+                  aria-pressed={isSelected}
+                  disabled={locked}
+                  style={{ animationDelay: `${index * 45}ms` }}
+                  onClick={() => toggle(item)}
+                >
+                  <span>{item}</span>
+                </button>
+              );
+            })}
           </div>
 
-          <p className="game-feedback">{selected.length} selected · aim for accuracy, not guessing.</p>
+          <p className="game-feedback">
+            {feedback
+              ? `${feedback.correct} correct · ${feedback.wrong} wrong · ${feedback.score}% score`
+              : `${selected.length} selected · aim for accuracy, not guessing.`}
+          </p>
 
-          <button className="game-main-btn" disabled={selected.length === 0 || locked} onClick={finish}>
-            {locked ? "Checking..." : "Submit Recall"}
-          </button>
+          {feedback && (
+            <div className={feedback.success ? "memory-result success" : "memory-result"}>
+              <strong>{feedback.success ? "Round cleared" : "Keep training"}</strong>
+              <span>
+                {feedback.success
+                  ? "Your recall accuracy was strong."
+                  : "Try creating a stronger story between the objects."}
+              </span>
+            </div>
+          )}
+
+          <div className="memory-game-actions">
+            {!feedback ? (
+              <button
+                type="button"
+                className="game-main-btn"
+                disabled={selected.length === 0 || locked}
+                onClick={finish}
+              >
+                Submit Recall
+              </button>
+            ) : isLastRound ? (
+              <button
+                type="button"
+                className="game-main-btn"
+                onClick={completeGame}
+              >
+                Finish Game
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="game-main-btn"
+                onClick={moveToNextRound}
+              >
+                Next Round
+              </button>
+            )}
+
+            {feedback && !isLastRound && (
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={restartRound}
+              >
+                Retry round
+              </button>
+            )}
+          </div>
         </>
       )}
     </div>

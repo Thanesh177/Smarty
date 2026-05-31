@@ -11,9 +11,13 @@ import XPOrb from "../components/ui/XPOrb";
 const BrainGameEngine = lazy(() => import("../components/games/BrainGameEngine"));
 const BossChallenge = lazy(() => import("../components/boss/BossChallenge"));
 
+const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
+const buildApiUrl = (path) => {
+  if (!API_BASE_URL) return '';
+  return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+};
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const TOPICS = [
 
   {
@@ -583,7 +587,7 @@ if (Array.isArray(activeQuiz) && activeQuiz.length > 0) {
       .slice(-3)
       .map((item) => item.q);
 
-    const res = await fetch(`${API_BASE_URL}/quiz/generate`, {
+    const res = await fetch(buildApiUrl('/quiz/generate'), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -691,7 +695,7 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
   );
 
   try {
-      const res = await fetch(`${API_BASE_URL}/quiz/save`, {
+      const res = await fetch(buildApiUrl('/quiz/save'), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -999,7 +1003,6 @@ if (topic && bossMode && !finished) {
           </div>
 
           <div className="ai-loading-card">
-            <div className="result-animation"></div>
             <h2>{loadingAI ? "Generating your quiz..." : " questions unavailable"}</h2>
             <p>
               {loadingAI
@@ -1032,25 +1035,8 @@ if (topic && bossMode && !finished) {
   <section className="quiz-hero">
     <div>
 
-            <p className="quiz-kicker">SMARTY QUIZ</p>
 
-            <h1>Choose what you want to improve today</h1>
 
-            <p>
-
-              Pick a topic, answer deeper questions, earn XP, keep your streak alive, and return later to see exactly how far you came.
-
-            </p>
-
-            <div className="hero-actions">
-              <button
-                type="button"
-                className="profile-btn"
-                onClick={() => window.location.href = "/game-profile"}
-              >
-                🎮 View Game Profile
-              </button>
-            </div>
           </div>
 
 <div className="streak-card streak-game-card">
@@ -1094,6 +1080,15 @@ if (topic && bossMode && !finished) {
 <p>Open Smarty every day, earn XP, and keep the flame alive.</p>
 </div>
 
+            <div className="hero-actions">
+              <button
+                type="button"
+                className="profile-btn"
+                onClick={() => window.location.href = "/game-profile"}
+              >
+                View Game Profile
+              </button>
+            </div>
         </section>
 
         <section className="topic-grid">
@@ -1116,7 +1111,7 @@ if (topic && bossMode && !finished) {
 
         <section className={`result-card ${won ? "win" : "lose"}`}>
 
-          <div className="result-animation">{won ? "🏆" : "💪"}</div>
+          <div className="result-animation">{won ? "🏆" : ""}</div>
 
           <p className="quiz-kicker">{topic.emoji} {topic.title}</p>
 
@@ -1134,7 +1129,7 @@ if (topic && bossMode && !finished) {
 
           <div className="progress-insight">
 
-            <h3>📊 Your Growth Report</h3>
+            <h3> Your Growth Report</h3>
 
             {saving && <p>Saving your progress to AWS...</p>}
 
@@ -1176,23 +1171,10 @@ if (topic && bossMode && !finished) {
 
               </div>
 
-              <div>
-
-                <span>Attempts</span>
-
-                <strong>{progress?.attempts ?? 1}</strong>
-
-              </div>
 
 
 
-              <div>
 
-                <span>Level</span>
-
-                <strong>{progress?.level ?? Math.max(1, Math.floor(xpPreview / 100) + 1)}</strong>
-
-              </div>
 
             </div>
 
@@ -1311,31 +1293,27 @@ if (topic && bossMode && !finished) {
 
 
         <h2>{current?.q || "Challenge question"}</h2>
+        
+<div className="option-list">
+  {currentOptions.map((option) => (
+    <button
+      key={option}
+      className={selected === option ? "option-btn selected" : "option-btn"}
+      type="button"
+      onClick={() => !locked && setSelected(option)}
+      disabled={locked}
+      aria-pressed={selected === option}
+    >
+      {option}
+    </button>
+  ))}
+</div>
 
-        <div className="option-list">
-          {(() => {
-            const currentOptions = current?.options || [];
-            return currentOptions.map((option) => (
-              <button
-                key={option}
-                className={selected === option ? "option-btn selected" : "option-btn"}
-                type="button"
-                onClick={() => !locked && setSelected(option)}
-                disabled={locked}
-                aria-pressed={selected === option}
-              >
-                {option}
-              </button>
-            ));
-          })()}
-        </div>
-
-        {(() => {
-          const currentOptions = current?.options || [];
-          return currentOptions.length === 0 && (
-            <p className="save-error">This question could not load properly. Please go back and try again.</p>
-          );
-        })()}
+{currentOptions.length === 0 && (
+  <p className="save-error">
+    This question could not load properly. Please go back and try again.
+  </p>
+)}
 
         <button
           type="button"

@@ -3,6 +3,7 @@ import "../GameStyles.css";
 
 const SCENARIOS = [
   {
+    id: "unexpected-expense",
     title: "Unexpected Expense",
     story: "Your phone breaks and repair costs $300. You have limited savings.",
     choices: [
@@ -14,6 +15,7 @@ const SCENARIOS = [
     lesson: "Emergency funds protect you from debt traps.",
   },
   {
+    id: "friend-pressure",
     title: "Friend Pressure",
     story: "Your friends want an expensive night out, but you are saving money.",
     choices: [
@@ -35,15 +37,22 @@ export default function LifeCrisisGame({ onComplete }) {
   const [choice, setChoice] = useState("");
 
   const finish = () => {
+    if (!choice) return;
+
     const success = choice === scenario.correct;
 
-    onComplete({
+    onComplete?.({
       success,
-      xp: success ? 10 : 0,
-      score: success ? 3 : 1,
+      xp: success ? 10 : 2,
+      score: success ? 100 : 35,
       message: success
         ? `Strong life judgment. ${scenario.lesson}`
         : `Life lesson: ${scenario.lesson}`,
+      category: "life-skills",
+      scenarioId: scenario.id,
+      scenarioTitle: scenario.title,
+      selectedChoice: choice,
+      correctChoice: scenario.correct,
     });
   };
 
@@ -56,8 +65,10 @@ export default function LifeCrisisGame({ onComplete }) {
       <div className="decision-row">
         {scenario.choices.map((item) => (
           <button
+            type="button"
             key={item}
             className={choice === item ? "decision-btn selected" : "decision-btn"}
+            aria-pressed={choice === item}
             onClick={() => setChoice(item)}
           >
             {item}
@@ -65,7 +76,12 @@ export default function LifeCrisisGame({ onComplete }) {
         ))}
       </div>
 
-      <button className="game-main-btn" disabled={!choice} onClick={finish}>
+      <button
+        type="button"
+        className="game-main-btn"
+        disabled={!choice}
+        onClick={finish}
+      >
         Make Decision
       </button>
     </div>

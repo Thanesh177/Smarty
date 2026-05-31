@@ -1492,3 +1492,80 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+@media (max-width: 1050px) {
+  .quiz-hero {
+    grid-template-columns: 1fr !important;
+  }
+
+  .streak-card {
+    max-width: none !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .quiz-page {
+    padding: 14px 10px 34px !important;
+  }
+
+  .quiz-hero {
+    gap: 14px !important;
+    margin-bottom: 18px !important;
+  }
+
+  .quiz-hero h1 {
+    font-size: clamp(2rem, 10vw, 3rem) !important;
+  }
+
+  .quiz-hero p {
+    font-size: 0.88rem !important;
+  }
+
+  .topic-grid,
+  .unlock-grid {
+    gap: 10px !important;
+  }
+
+  .topic-card,
+  .unlock-card,
+  .streak-card,
+  .question-card,
+  .result-card,
+  .brain-game,
+  .analytics-card {
+    border-radius: 18px !important;
+    padding: 15px !important;
+  }
+
+  .memory-wordle-row {
+    gap: 6px;
+  }
+
+  .memory-wordle-tile {
+    border-radius: 11px;
+  }
+
+  .memory-wordle-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .decision-row,
+  .option-list {
+    gap: 7px !important;
+  }
+
+  .decision-btn,
+  .option-btn {
+    min-height: 44px !important;
+    padding: 11px 13px !important;
+  }
+
+  .submit-answer-btn,
+  .game-main-btn,
+  .result-actions button,
+  .unlock-action-btn,
+  .profile-btn {
+    width: 100% !important;
+  }
+}

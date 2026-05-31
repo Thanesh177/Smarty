@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import imageCompression from 'browser-image-compression';
 import { postApi } from '../api/client';
 import './CreatePostPage.css';
-
+const MAX_IMAGE_SIZE_MB = 12;
+const MAX_VIDEO_SIZE_MB = 250;
+const BYTES_PER_MB = 1024 * 1024;
 const STAGES = [
   'Preparing files',
   'Compressing image',
@@ -11,6 +13,14 @@ const STAGES = [
   'Publishing post',
   'Success',
 ];
+
+const createSafeId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `post-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+};
 
 const compressImage = async (file) => {
   const type = String(file?.type || '').toLowerCase();
@@ -272,6 +282,7 @@ export default function CreatePostPage() {
     setImageFile(null);
     setVideoFile(null);
     setTopicMode('existing');
+    setStatus('');
   }, [topics]);
 
   const submit = useCallback(async (event) => {
@@ -337,7 +348,7 @@ export default function CreatePostPage() {
       setUploadProgress(90);
 
       await postApi.createPost({
-        id: crypto.randomUUID(),
+        id: createSafeId(),
         topic,
         title,
         body,
@@ -398,17 +409,104 @@ export default function CreatePostPage() {
     setForm((current) => ({ ...current, body: event.target.value }));
   }, []);
 
-  const handleImageFileChange = useCallback((event) => {
-    const file = event.target.files?.[0] || null;
-    setImageFile(file);
-    if (file) setVideoFile(null);
-  }, []);
+  const handleMediaFileChange = useCallback((event) => {
+  const file = event.target.files?.[0] || null;
 
-  const handleVideoFileChange = useCallback((event) => {
-    const file = event.target.files?.[0] || null;
+  if (!file) {
+    setImageFile(null);
+    setVideoFile(null);
+    return;
+  }
+
+  const fileType = String(file.type || '').toLowerCase();
+
+  if (fileType.startsWith('image/')) {
+    if (file.size > MAX_IMAGE_SIZE_MB * BYTES_PER_MB) {
+      setStatus(`Image must be smaller than ${MAX_IMAGE_SIZE_MB} MB.`);
+      event.target.value = '';
+      return;
+    }
+
+    setStatus('');
+    setImageFile(file);
+    setVideoFile(null);
+    return;
+  }
+
+  if (fileType.startsWith('video/')) {
+    if (file.size > MAX_VIDEO_SIZE_MB * BYTES_PER_MB) {
+      setStatus(`Video must be smaller than ${MAX_VIDEO_SIZE_MB} MB.`);
+      event.target.value = '';
+      return;
+    }
+
+    setStatus('');
     setVideoFile(file);
-    if (file) setImageFile(null);
-  }, []);
+    setImageFile(null);
+    return;
+  }
+
+  setStatus('Please select a valid image or video file.');
+  event.target.value = '';
+}, []);
+
+const chooseExistingTopic = useCallback(() => {
+  setTopicMode('existing');
+}, []);
+
+const chooseCustomTopic = useCallback(() => {
+  setTopicMode('custom');
+}, []);
+
+const handleImageFileChange = useCallback((event) => {
+  const file = event.target.files?.[0] || null;
+
+  if (!file) {
+    setImageFile(null);
+    return;
+  }
+
+  if (!String(file.type || '').startsWith('image/')) {
+    setStatus('Please select a valid image file.');
+    event.target.value = '';
+    return;
+  }
+
+  if (file.size > MAX_IMAGE_SIZE_MB * BYTES_PER_MB) {
+    setStatus(`Image must be smaller than ${MAX_IMAGE_SIZE_MB} MB.`);
+    event.target.value = '';
+    return;
+  }
+
+  setStatus('');
+  setImageFile(file);
+  setVideoFile(null);
+}, []);
+
+const handleVideoFileChange = useCallback((event) => {
+  const file = event.target.files?.[0] || null;
+
+  if (!file) {
+    setVideoFile(null);
+    return;
+  }
+
+  if (!String(file.type || '').startsWith('video/')) {
+    setStatus('Please select a valid video file.');
+    event.target.value = '';
+    return;
+  }
+
+  if (file.size > MAX_VIDEO_SIZE_MB * BYTES_PER_MB) {
+    setStatus(`Video must be smaller than ${MAX_VIDEO_SIZE_MB} MB.`);
+    event.target.value = '';
+    return;
+  }
+
+  setStatus('');
+  setVideoFile(file);
+  setImageFile(null);
+}, []);
 
   const setPublicVisibility = useCallback(() => {
     setForm((current) => ({ ...current, visibility: 'public' }));
@@ -466,116 +564,124 @@ export default function CreatePostPage() {
         </div>
       )}
 
-      <section className="create-hero">
+      <section className="create-hero create-hero-minimal">
         <div>
-          <span className="create-pill">Create reel</span>
-          <h1>Share something worth scrolling for.</h1>
+          <span className="create-pill">Create</span>
+          <h1>Share a useful idea.</h1>
           <p>
-            Turn a useful idea, fact, insight, or explanation into a short
-            educational post for the Smarty feed.
+            Post a short educational reel with optional image or video.
           </p>
         </div>
       </section>
 
       <section className="create-layout">
         <form className="create-form" onSubmit={submit}>
-          <div className="form-section">
-            <label>Topic</label>
-
-            <div className="topic-row">
-              <select
-                value={topicMode}
-                disabled={submitting}
-                onChange={handleTopicModeChange}
-              >
-                <option value="existing">Choose topic</option>
-                <option value="custom">Custom topic</option>
-              </select>
-
-              {topicMode === 'existing' ? (
-                <select
-                  value={form.topic}
-                  disabled={submitting}
-                  onChange={handleTopicChange}
-                >
-                  {renderedTopicOptions}
-                </select>
-              ) : (
-                <input
-                  placeholder="Example: Neuroscience, Space, Finance..."
-                  value={form.customTopic}
-                  disabled={submitting}
-                  onChange={handleCustomTopicChange}
-                />
-              )}
+          <div className="form-section compact-section">
+            <div className="section-title-row">
+              <label>Topic</label>
+              <span>Choose or create one</span>
             </div>
+
+<div className="topic-mode-toggle" role="group" aria-label="Topic mode">
+  <button
+    type="button"
+    className={topicMode === 'existing' ? 'active' : ''}
+    disabled={submitting}
+    onClick={chooseExistingTopic}
+  >
+    Choose topic
+  </button>
+
+  <button
+    type="button"
+    className={topicMode === 'custom' ? 'active' : ''}
+    disabled={submitting}
+    onClick={chooseCustomTopic}
+  >
+    Custom topic
+  </button>
+</div>
+
+<div className="topic-input-row">
+  {topicMode === 'existing' ? (
+    <select
+      value={form.topic}
+      disabled={submitting}
+      onChange={handleTopicChange}
+    >
+      {renderedTopicOptions}
+    </select>
+  ) : (
+    <input
+      placeholder="Example: Neuroscience, Space, Finance..."
+      value={form.customTopic}
+      disabled={submitting}
+      onChange={handleCustomTopicChange}
+    />
+  )}
+</div>
           </div>
 
-          <div className="form-section">
+          <div className="form-section compact-section">
             <label>Headline</label>
             <input
-              placeholder="Example: Your brain predicts the world before you see it"
+              placeholder="Write a short, clear title"
               value={form.title}
               disabled={submitting}
               onChange={handleTitleChange}
             />
           </div>
 
-          <div className="form-section">
+          <div className="form-section compact-section">
             <label>Content</label>
             <textarea
-              rows="11"
-              placeholder="Write a short, engaging educational post..."
+              rows="8"
+              placeholder="Explain the idea in a simple, engaging way..."
               value={form.body}
               disabled={submitting}
               onChange={handleBodyChange}
             />
           </div>
 
-          <div className="form-section">
-            <label>Media</label>
+          <div className="form-section compact-section">
+            <div className="section-title-row">
+              <label>Media</label>
+              <span>Optional</span>
+            </div>
 
-            <div className="media-upload-grid">
-              <label className="upload-card">
-                <span>Image</span>
+            <div className="media-upload-grid compact-media-grid">
+<label className="upload-card single-media-card">
+  <div>
+    <span>Upload media</span>
+    <em>Image or video · optional</em>
+  </div>
 
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={submitting}
-                  onChange={handleImageFileChange}
-                />
+  <input
+    type="file"
+    accept="image/*,video/*"
+    disabled={submitting}
+    onChange={handleMediaFileChange}
+  />
 
-                {imageFile ? (
-                  <>
-                    <small>{imageFile.name}</small>
-                    <img
-                      src={imagePreviewUrl}
-                      alt="Selected preview"
-                      className="image-preview"
-                      loading="lazy"
-                      decoding="async"
-                      fetchPriority="low"
-                      sizes="(max-width: 768px) 92vw, 640px"
-                    />
-                  </>
-                ) : (
-                  <small>Upload image</small>
-                )}
-              </label>
-
-              <label className="upload-card">
-                <span>Video</span>
-
-                <input
-                  type="file"
-                  accept="video/*"
-                  disabled={submitting}
-                  onChange={handleVideoFileChange}
-                />
-
-                <small>{videoFile ? videoFile.name : 'Upload video'}</small>
-              </label>
+  {imageFile ? (
+    <>
+      <small>{imageFile.name}</small>
+      <img
+        src={imagePreviewUrl}
+        alt="Selected preview"
+        className="image-preview"
+        loading="lazy"
+        decoding="async"
+        fetchPriority="low"
+        sizes="(max-width: 768px) 92vw, 640px"
+      />
+    </>
+  ) : videoFile ? (
+    <small>{videoFile.name}</small>
+  ) : (
+    <small>Tap to add image or video</small>
+  )}
+</label>
             </div>
           </div>
 
@@ -609,31 +715,14 @@ export default function CreatePostPage() {
               disabled={!canSubmit}
               type="submit"
             >
-              {submitting ? 'Publishing...' : 'Publish reel'}
+              {submitting ? 'Publishing...' : 'Publish'}
             </button>
           </div>
 
           {status && <p className="status">{status}</p>}
         </form>
 
-        <aside className="create-side">
-          <h3>Writing tips</h3>
 
-          <div className="tip-card">
-            <span>Hook</span>
-            <p>Start with a surprising idea or a question people want answered.</p>
-          </div>
-
-          <div className="tip-card">
-            <span>Clarity</span>
-            <p>Use simple explanations. One post should teach one strong idea.</p>
-          </div>
-
-          <div className="tip-card">
-            <span>Value</span>
-            <p>End with something practical, memorable, or worth sharing.</p>
-          </div>
-        </aside>
       </section>
     </main>
   );

@@ -59,6 +59,7 @@ const UnlockCard = memo(function UnlockCard({ item, totalXP }) {
       </strong>
 
       <button
+        type="button"
         className="unlock-action-btn"
         disabled={!unlocked}
         onClick={handleUse}
@@ -264,6 +265,7 @@ export default function GameProfile() {
   return (
     <main className="quiz-page">
       <button
+        type="button"
         className="back-btn"
         onClick={goBack}
       >
@@ -280,14 +282,22 @@ export default function GameProfile() {
         </div>
 
         <div className="streak-card streak-game-card game-profile-stat-card">
-          <h3>{totalXP} XP</h3>
-          <p>{levelStats.xpToNextLevel} XP to next level</p>
+          <div className="game-profile-stat-main">
+            <span>Total XP</span>
+            <h3>{totalXP}</h3>
+            <p>{levelStats.xpToNextLevel} XP to next level</p>
+          </div>
 
-          <div className="profile-level-track">
+          <div className="profile-level-track" aria-label="Level progress">
             <div
               className="profile-level-fill"
               style={{ width: `${levelStats.levelProgress}%` }}
             />
+          </div>
+
+          <div className="game-profile-stat-row">
+            <small>Level {levelStats.level}</small>
+            <small>{Math.round(levelStats.levelProgress)}%</small>
           </div>
         </div>
       </section>
@@ -296,7 +306,7 @@ export default function GameProfile() {
         <article className="profile-overview-card">
           <span>🏆</span>
           <strong>{unlockedCount}/{unlocks.length}</strong>
-          <p>Unlocks opened</p>
+          <p>Rewards unlocked</p>
         </article>
 
         <article className="profile-overview-card">
@@ -305,7 +315,7 @@ export default function GameProfile() {
           <p>Achievements earned</p>
         </article>
 
-        <article className="profile-overview-card">
+        <article className="profile-overview-card wide-overview-card">
           <span>🚀</span>
           <strong>{nextUnlock ? nextUnlock.title : "All unlocked"}</strong>
           <p>{nextUnlock ? `${nextUnlock.xp - totalXP} XP needed` : "You reached elite status"}</p>
@@ -316,7 +326,7 @@ export default function GameProfile() {
         <div className="section-heading-row">
           <div>
             <p className="quiz-kicker">UNLOCKS</p>
-            <h2>New Things To Do</h2>
+            <h2>Unlocked tools</h2>
           </div>
         </div>
 
@@ -329,7 +339,7 @@ export default function GameProfile() {
         <div className="section-heading-row">
           <div>
             <p className="quiz-kicker">BADGES</p>
-            <h2>Achievements</h2>
+            <h2>Achievement badges</h2>
           </div>
         </div>
 
