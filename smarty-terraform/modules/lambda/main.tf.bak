@@ -1,0 +1,27 @@
+resource "aws_lambda_function" "this" {
+  for_each = var.functions
+
+  function_name = each.key
+  runtime       = each.value.runtime
+  handler       = each.value.handler
+  role          = each.value.role_arn
+
+  filename         = each.value.filename
+  source_code_hash = filebase64sha256(each.value.filename)
+
+  timeout     = each.value.timeout
+  memory_size = each.value.memory_size
+
+  environment {
+    variables = each.value.environment
+  }
+
+lifecycle {
+  prevent_destroy = true
+
+  ignore_changes = [
+    filename,
+    source_code_hash
+  ]
+}
+}
