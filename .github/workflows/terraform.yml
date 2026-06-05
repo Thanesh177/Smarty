@@ -1,0 +1,37 @@
+name: Terraform
+
+on:
+  pull_request:
+    paths:
+      - "smarty-terraform/**"
+  workflow_dispatch:
+
+jobs:
+  terraform-plan:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        working-directory: smarty-terraform/environment/prod
+        run: terraform init
+
+      - name: Terraform Format Check
+        working-directory: smarty-terraform/environment/prod
+        run: terraform fmt -check -recursive ../../
+
+      - name: Terraform Validate
+        working-directory: smarty-terraform/environment/prod
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: smarty-terraform/environment/prod
+        run: terraform plan
