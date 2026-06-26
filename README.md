@@ -264,25 +264,14 @@ terraform init
 terraform plan
 ```
 
----
 
-# Future Improvements
-
-- CI/CD with GitHub Actions
-- AWS Secrets Manager
-- Terraform OIDC authentication
-- Automated Lambda deployments
-- Monitoring dashboards
-- Containerized workloads
-- Multi-region deployment
 
 ---
 
 # Author
 
-**Thanesh Nadarajah**
+**Thanesh Nadarajan**
 
-Master's Student – Computer Science
 
 Cloud • AWS • Terraform • React • Python • Serverless Architecture
 
@@ -292,6 +281,5 @@ https://github.com/Thanesh177
 
 ---
 
-# License
 
 This project is intended for educational and portfolio purposes.
