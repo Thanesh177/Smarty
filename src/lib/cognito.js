@@ -94,6 +94,13 @@ export const exchangeAndroidCodeForTokens = async (code, options = {}) => {
     redirect_uri: redirectUri,
   });
 
+  console.log('Android Cognito token request:', {
+    tokenUrl: `https://${COGNITO_DOMAIN}/oauth2/token`,
+    clientId: COGNITO_CLIENT_ID,
+    redirectUri,
+    hasCode: Boolean(code),
+  });
+
   const response = await fetch(`https://${COGNITO_DOMAIN}/oauth2/token`, {
     method: 'POST',
     headers: {
@@ -102,11 +109,29 @@ export const exchangeAndroidCodeForTokens = async (code, options = {}) => {
     body,
   });
 
-  const data = await response.json().catch(() => ({}));
+  const responseText = await response.text();
+  let data = {};
+
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch {
+    data = { raw: responseText };
+  }
 
   if (!response.ok) {
-    throw new Error(data?.error_description || data?.error || 'Android OAuth token exchange failed.');
+    console.error('Android Cognito token exchange failed:', {
+      status: response.status,
+      statusText: response.statusText,
+      data,
+    });
+    throw new Error(data?.error_description || data?.error || responseText || 'Android OAuth token exchange failed.');
   }
+
+  console.log('Android Cognito token exchange succeeded:', {
+    hasIdToken: Boolean(data.id_token),
+    hasAccessToken: Boolean(data.access_token),
+    hasRefreshToken: Boolean(data.refresh_token),
+  });
 
   return data;
 };
