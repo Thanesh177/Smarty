@@ -159,6 +159,13 @@ const getAuthToken = async () => {
     return cachedAuthToken;
   }
 
+  const storedToken = getStoredToken();
+
+  if (storedToken && now - cachedAuthTokenAt < AUTH_TOKEN_CACHE_MS) {
+    cachedAuthToken = storedToken;
+    return storedToken;
+  }
+
   if (pendingAuthTokenPromise) {
     return pendingAuthTokenPromise;
   }
@@ -178,14 +185,24 @@ const getAuthToken = async () => {
         return token;
       }
 
+      if (storedToken) {
+        cachedAuthToken = storedToken;
+        cachedAuthTokenAt = Date.now();
+        return storedToken;
+      }
+
       cachedAuthToken = '';
       cachedAuthTokenAt = 0;
-      clearStoredToken();
       return '';
     } catch {
+      if (storedToken) {
+        cachedAuthToken = storedToken;
+        cachedAuthTokenAt = Date.now();
+        return storedToken;
+      }
+
       cachedAuthToken = '';
       cachedAuthTokenAt = 0;
-      clearStoredToken();
       return '';
     } finally {
       pendingAuthTokenPromise = null;
