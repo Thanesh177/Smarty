@@ -171,10 +171,15 @@ export function AuthProvider({ children }) {
         const params = new URLSearchParams(window.location.search);
         const androidCode = params.get('code');
         const hasOAuthState = params.has('state');
-        const isAndroidReturn = params.get('platform') === 'android' || isRunningInsideAndroidApp();
+        const isAndroidReturn =
+          params.get('platform') === 'android' ||
+          params.get('redirect_uri')?.startsWith('smarty://callback') ||
+          isRunningInsideAndroidApp();
 
         if (isAndroidReturn && androidCode && hasOAuthState) {
-          const tokens = await exchangeAndroidCodeForTokens(androidCode);
+          const tokens = await exchangeAndroidCodeForTokens(androidCode, {
+            redirectUri: 'smarty://callback',
+          });
           const payload = decodeJwtPayload(tokens.id_token);
 
           const email = payload.email || '';
@@ -190,7 +195,8 @@ export function AuthProvider({ children }) {
           };
 
           saveAuthUser(authUser);
-          window.history.replaceState({}, document.title, getPostLoginRedirect());
+          const redirectPath = getPostLoginRedirect();
+          window.history.replaceState({}, document.title, redirectPath);
           setUser(authUser);
           setLoading(false);
           redirectAfterLogin();
