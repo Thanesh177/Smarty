@@ -76,7 +76,7 @@ export const startAndroidGoogleLogin = () => {
   window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${query.toString()}`;
 };
 
-export const exchangeAndroidCodeForTokens = async (code) => {
+export const exchangeAndroidCodeForTokens = async (code, options = {}) => {
   if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
     throw new Error('Missing Cognito domain or client ID. Check VITE_COGNITO_DOMAIN and VITE_COGNITO_CLIENT_ID.');
   }
@@ -85,11 +85,13 @@ export const exchangeAndroidCodeForTokens = async (code) => {
     throw new Error('Missing authorization code from Android callback.');
   }
 
+  const redirectUri = options.redirectUri || ANDROID_REDIRECT_URI;
+
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: COGNITO_CLIENT_ID,
     code,
-    redirect_uri: ANDROID_REDIRECT_URI,
+    redirect_uri: redirectUri,
   });
 
   const response = await fetch(`https://${COGNITO_DOMAIN}/oauth2/token`, {
@@ -123,8 +125,8 @@ Amplify.configure({
         oauth: {
           domain: COGNITO_DOMAIN,
           scopes: ['openid', 'email', 'profile'],
-          redirectSignIn: [redirectSignIn, APP_ORIGIN, ANDROID_REDIRECT_URI],
-          redirectSignOut: [redirectSignOut, `${APP_ORIGIN}/login`, ANDROID_REDIRECT_URI],
+          redirectSignIn: [redirectSignIn, WEB_REDIRECT_SIGN_IN, ANDROID_REDIRECT_URI],
+          redirectSignOut: [redirectSignOut, WEB_REDIRECT_SIGN_OUT, ANDROID_REDIRECT_URI],
           responseType: 'code',
         },
       },
