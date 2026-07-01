@@ -200,7 +200,7 @@ export function AuthProvider({ children }) {
             saveAuthUser(authUser);
 
             const stateRedirect = normalizeRedirectPath(params.get('state'));
-            const redirectPath = stateRedirect === '/login' ? '/feed' : stateRedirect;
+            const redirectPath = stateRedirect.startsWith('/login') ? '/feed' : stateRedirect;
 
             window.history.replaceState({}, document.title, redirectPath);
             setUser(authUser);
