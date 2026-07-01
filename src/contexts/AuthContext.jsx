@@ -177,30 +177,43 @@ export function AuthProvider({ children }) {
           isRunningInsideAndroidApp();
 
         if (isAndroidReturn && androidCode && hasOAuthState) {
-          const tokens = await exchangeAndroidCodeForTokens(androidCode, {
-            redirectUri: 'smarty://callback',
-          });
-          const payload = decodeJwtPayload(tokens.id_token);
+          try {
+            console.log('Android OAuth callback detected. Exchanging code with Cognito...');
 
-          const email = payload.email || '';
-          const authUser = {
-            id: payload.sub || null,
-            userId: payload.sub || null,
-            sub: payload.sub || null,
-            username: getSafeUsername(null, payload, email),
-            email,
-            name: getSafeName(payload, email),
-            token: tokens.id_token,
-            accessToken: tokens.access_token,
-          };
+            const tokens = await exchangeAndroidCodeForTokens(androidCode, {
+              redirectUri: 'smarty://callback',
+            });
+            const payload = decodeJwtPayload(tokens.id_token);
 
-          saveAuthUser(authUser);
-          const redirectPath = getPostLoginRedirect();
-          window.history.replaceState({}, document.title, redirectPath);
-          setUser(authUser);
-          setLoading(false);
-          redirectAfterLogin();
-          return;
+            const email = payload.email || '';
+            const authUser = {
+              id: payload.sub || null,
+              userId: payload.sub || null,
+              sub: payload.sub || null,
+              username: getSafeUsername(null, payload, email),
+              email,
+              name: getSafeName(payload, email),
+              token: tokens.id_token,
+              accessToken: tokens.access_token,
+            };
+
+            saveAuthUser(authUser);
+
+            const stateRedirect = normalizeRedirectPath(params.get('state'));
+            const redirectPath = stateRedirect === '/login' ? '/feed' : stateRedirect;
+
+            window.history.replaceState({}, document.title, redirectPath);
+            setUser(authUser);
+            setLoading(false);
+            sessionStorage.removeItem('smarty-auth-redirecting');
+            return;
+          } catch (androidOAuthError) {
+            console.error('Android OAuth token exchange failed:', androidOAuthError);
+            clearAuthStorage();
+            setUser(null);
+            setLoading(false);
+            return;
+          }
         }
 
         const cachedToken = localStorage.getItem('eduscroll_token');
