@@ -1,0 +1,63 @@
+name: Chat Service CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "services/chat-service/**"
+      - "k8s/chat-service/**"
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      AWS_REGION: us-east-1
+      ECR_REPOSITORY: smarty-chat-service
+      EKS_CLUSTER_NAME: smarty-prod
+      IMAGE_TAG: ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::147179611217:role/GitHubActionsEKSRole
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        working-directory: services/chat-service
+        run: |
+          docker build -t $ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REPOSITORY:$IMAGE_TAG 147179611217.dkr.ecr.us-east-1.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Push Docker image
+        run: |
+          docker push 147179611217.dkr.ecr.us-east-1.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name $EKS_CLUSTER_NAME --region $AWS_REGION
+
+      - name: Deploy green version
+        run: |
+          sed -i "s|IMAGE_PLACEHOLDER|147179611217.dkr.ecr.us-east-1.amazonaws.com/$ECR_REPOSITORY:$IMAGE_TAG|g" k8s/chat-service/deployment-green.yaml
+          kubectl apply -f k8s/chat-service/deployment-green.yaml
+
+      - name: Wait for green rollout
+        run: |
+          kubectl rollout status deployment/chat-service-green -n smarty --timeout=180s
+
+      - name: Switch traffic to green
+        run: |
+          kubectl patch service chat-service -n smarty -p '{"spec":{"selector":{"app":"chat-service","version":"green"}}}'

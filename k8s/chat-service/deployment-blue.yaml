@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chat-service-blue
+  namespace: smarty
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: chat-service
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: chat-service
+        version: blue
+    spec:
+      containers:
+        - name: chat-service
+          image: 147179611217.dkr.ecr.us-east-1.amazonaws.com/smarty-chat-service:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: AWS_REGION
+              value: us-east-1
+            - name: CHAT_MESSAGES_TABLE
+              value: ChatMessages
+            - name: SMARTY_CHATS_TABLE
+              value: SmartyChats
+            - name: CHAT_MEDIA_BUCKET
+              value: smarty-chat-media
+            - name: REDIS_HOST
+              value: redis
+            - name: REDIS_PORT
+              value: "6379"
