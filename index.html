@@ -3,15 +3,20 @@
   <head>
     <meta charset="UTF-8" />
 
-
     <!-- Mobile / WebView -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#050816" />
     <meta name="color-scheme" content="dark" />
 
     <!-- Apple -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
     <meta name="apple-mobile-web-app-title" content="Smarty" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
 
@@ -38,8 +43,16 @@
         min-height: 100vh;
         min-height: 100dvh;
         background:
-          radial-gradient(circle at top, rgba(34, 211, 238, 0.11), transparent 28%),
-          radial-gradient(circle at bottom, rgba(99, 102, 241, 0.10), transparent 24%),
+          radial-gradient(
+            circle at top,
+            rgba(34, 211, 238, 0.11),
+            transparent 28%
+          ),
+          radial-gradient(
+            circle at bottom,
+            rgba(99, 102, 241, 0.1),
+            transparent 24%
+          ),
           linear-gradient(180deg, #030712 0%, #020617 100%);
       }
 
@@ -53,12 +66,16 @@
       }
 
       .boot-loader::before {
-        content: '';
+        content: "";
         position: absolute;
         inset: 0;
         background-image:
-          linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+          linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.025) 1px,
+            transparent 1px
+          );
         background-size: 42px 42px;
         mask-image: radial-gradient(circle at center, black 34%, transparent 85%);
         opacity: 0.34;
@@ -76,13 +93,16 @@
         gap: 12px;
         text-align: center;
         border-radius: 28px;
-        border: 1px solid rgba(255,255,255,0.08);
-        background:
-          linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03));
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.07),
+          rgba(255, 255, 255, 0.03)
+        );
         backdrop-filter: blur(20px);
         box-shadow:
-          0 20px 70px rgba(0,0,0,0.55),
-          inset 0 1px 0 rgba(255,255,255,0.08);
+          0 20px 70px rgba(0, 0, 0, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
       }
 
       .boot-loader-orb {
@@ -91,14 +111,23 @@
         height: 58px;
         border-radius: 999px;
         background:
-          radial-gradient(circle at center, rgba(103, 232, 249, 0.92) 0 7%, transparent 8%),
-          conic-gradient(from 0deg, transparent 0 55%, rgba(34, 211, 238, 0.98) 72%, transparent 88% 100%);
-        box-shadow: 0 0 42px rgba(34, 211, 238, 0.30);
+          radial-gradient(
+            circle at center,
+            rgba(103, 232, 249, 0.92) 0 7%,
+            transparent 8%
+          ),
+          conic-gradient(
+            from 0deg,
+            transparent 0 55%,
+            rgba(34, 211, 238, 0.98) 72%,
+            transparent 88% 100%
+          );
+        box-shadow: 0 0 42px rgba(34, 211, 238, 0.3);
         animation: bootSpin 1.05s linear infinite;
       }
 
       .boot-loader-orb::after {
-        content: '';
+        content: "";
         position: absolute;
         inset: 10px;
         border-radius: inherit;
@@ -109,7 +138,7 @@
       }
 
       .boot-loader-orb::before {
-        content: '';
+        content: "";
         position: absolute;
         inset: -9px;
         border-radius: inherit;
@@ -177,13 +206,42 @@
 
     <script>
       (function () {
-        var isInAppBrowser = /LinkedInApp|Telegram|FBAN|FBAV|Instagram/i.test(
-          navigator.userAgent || ''
-        );
+        var userAgent = navigator.userAgent || "";
+        var isSmartyNativeApp =
+          window.__SMARTY_NATIVE_APP__ === true ||
+          /Smarty-iOS\/\d+(?:\.\d+)*/i.test(userAgent);
+
+        var isInAppBrowser =
+          !isSmartyNativeApp &&
+          /LinkedInApp|Telegram|FBAN|FBAV|Instagram/i.test(userAgent);
+
         window.__SMARTY_APP_MOUNTED__ = false;
         window.__SMARTY_BOOT_STARTED__ = Date.now();
 
-        if ('serviceWorker' in navigator && isInAppBrowser) {
+        function markSmartyMounted() {
+          window.__SMARTY_APP_MOUNTED__ = true;
+        }
+
+        function hasReactMounted() {
+          var root = document.getElementById("root");
+
+          if (!root) {
+            return false;
+          }
+
+          return !root.querySelector(".boot-loader");
+        }
+
+        function escapeHtml(value) {
+          return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+        }
+
+        if ("serviceWorker" in navigator && isInAppBrowser) {
           navigator.serviceWorker
             .getRegistrations()
             .then(function (registrations) {
@@ -194,48 +252,101 @@
             .catch(function () {});
         }
 
-        window.addEventListener('error', function (event) {
-          var message = event && event.message ? event.message : '';
+        window.addEventListener("smarty:mounted", markSmartyMounted);
 
-          if (
-            message.includes('Failed to fetch dynamically imported module') ||
-            message.includes('Importing a module script failed')
-          ) {
+        var rootObserver = new MutationObserver(function () {
+          if (hasReactMounted()) {
+            markSmartyMounted();
+            rootObserver.disconnect();
+          }
+        });
+
+        function observeRoot() {
+          var root = document.getElementById("root");
+
+          if (root) {
+            rootObserver.observe(root, {
+              childList: true,
+              subtree: true,
+            });
+          }
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", observeRoot, {
+            once: true,
+          });
+        } else {
+          observeRoot();
+        }
+
+        window.addEventListener("error", function (event) {
+          var message = event && event.message ? event.message : "";
+          var isModuleLoadFailure =
+            message.includes("Failed to fetch dynamically imported module") ||
+            message.includes("Importing a module script failed");
+
+          if (!isModuleLoadFailure) {
+            return;
+          }
+
+          var reloadKey = "smarty-module-reload-attempted";
+
+          if (!sessionStorage.getItem(reloadKey)) {
+            sessionStorage.setItem(reloadKey, "1");
             window.location.reload();
           }
         });
 
         window.__SMARTY_SHOW_BOOT_ERROR__ = function () {
-          var root = document.getElementById('root');
+          var root = document.getElementById("root");
           var currentUrl = window.location.href;
 
-          if (!root || !root.innerText || !root.innerText.includes('Loading')) {
+          if (
+            window.__SMARTY_APP_MOUNTED__ ||
+            hasReactMounted() ||
+            !root ||
+            !root.querySelector(".boot-loader")
+          ) {
+            markSmartyMounted();
             return;
           }
 
-          var encodedUrl = currentUrl.replace(/"/g, '&quot;');
+          var encodedUrl = escapeHtml(currentUrl);
+          var description = isSmartyNativeApp
+            ? "Smarty is taking longer than expected to load. Reload the app once."
+            : "This browser may be blocking part of the app bundle. Reload once or open Smarty in your browser.";
 
           root.innerHTML =
             '<div style="min-height:100vh;display:grid;place-items:center;background:#020617;color:white;font-family:Inter,system-ui;padding:24px;text-align:center;">' +
             '<div style="max-width:360px;width:100%;padding:26px 20px;border-radius:28px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));box-shadow:0 20px 70px rgba(0,0,0,.45)">' +
             '<div style="width:54px;height:54px;border-radius:999px;margin:0 auto 18px;background:conic-gradient(from 0deg,transparent 0 55%,#22d3ee 72%,transparent 88% 100%);box-shadow:0 0 38px rgba(34,211,238,.32)"></div>' +
             '<h2 style="margin:0 0 10px;font-size:1.1rem;letter-spacing:-0.04em">Smarty could not fully open</h2>' +
-            '<p style="margin:0 0 16px;color:rgba(226,232,240,.72);line-height:1.6;font-size:.9rem">This in-app browser may be blocking the app bundle. Copy the link or reload once.</p>' +
+            '<p style="margin:0 0 16px;color:rgba(226,232,240,.72);line-height:1.6;font-size:.9rem">' +
+            escapeHtml(description) +
+            "</p>" +
             '<div style="display:grid;gap:10px">' +
             '<button id="smarty-reload-btn" style="width:100%;border:0;background:#22d3ee;color:#020617;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Reload Smarty</button>' +
-            '<a href="' + encodedUrl + '" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;border:1px solid rgba(103,232,249,.18);background:rgba(255,255,255,.04);color:#cffafe;padding:12px 18px;border-radius:999px;font-weight:850">Open in browser</a>' +
+            (isSmartyNativeApp
+              ? ""
+              : '<a href="' +
+                encodedUrl +
+                '" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;border:1px solid rgba(103,232,249,.18);background:rgba(255,255,255,.04);color:#cffafe;padding:12px 18px;border-radius:999px;font-weight:850">Open in browser</a>') +
             '<button id="smarty-copy-link-btn" style="width:100%;border:1px solid rgba(148,163,184,.16);background:rgba(15,23,42,.72);color:rgba(226,232,240,.9);padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Copy link</button>' +
-            '<p style="margin:2px 0 0;color:rgba(148,163,184,.72);font-size:.76rem;line-height:1.45;word-break:break-all">' + encodedUrl + '</p>' +
-            '</div>' +
-            '</div>' +
-            '</div>';
+            '<p style="margin:2px 0 0;color:rgba(148,163,184,.72);font-size:.76rem;line-height:1.45;word-break:break-all">' +
+            encodedUrl +
+            "</p>" +
+            "</div>" +
+            "</div>" +
+            "</div>";
 
           setTimeout(function () {
-            var reloadButton = document.getElementById('smarty-reload-btn');
-            var copyButton = document.getElementById('smarty-copy-link-btn');
+            var reloadButton = document.getElementById("smarty-reload-btn");
+            var copyButton = document.getElementById("smarty-copy-link-btn");
 
             if (reloadButton) {
               reloadButton.onclick = function () {
+                sessionStorage.removeItem("smarty-module-reload-attempted");
                 window.location.reload();
               };
             }
@@ -243,13 +354,16 @@
             if (copyButton) {
               copyButton.onclick = function () {
                 if (navigator.clipboard && navigator.clipboard.writeText) {
-                  navigator.clipboard.writeText(currentUrl).then(function () {
-                    copyButton.innerText = 'Link copied';
-                  }).catch(function () {
-                    copyButton.innerText = 'Copy manually below';
-                  });
+                  navigator.clipboard
+                    .writeText(currentUrl)
+                    .then(function () {
+                      copyButton.innerText = "Link copied";
+                    })
+                    .catch(function () {
+                      copyButton.innerText = "Copy manually below";
+                    });
                 } else {
-                  copyButton.innerText = 'Copy manually below';
+                  copyButton.innerText = "Copy manually below";
                 }
               };
             }
@@ -257,18 +371,19 @@
         };
 
         setTimeout(function () {
-          if (!window.__SMARTY_APP_MOUNTED__) {
+          if (!window.__SMARTY_APP_MOUNTED__ && !hasReactMounted()) {
             window.__SMARTY_SHOW_BOOT_ERROR__();
           }
-        }, 5500);
+        }, isSmartyNativeApp ? 12000 : 5500);
       })();
     </script>
+
     <script
       id="smarty-main-module"
       type="module"
       crossorigin
       src="/src/main.jsx"
-      onload="window.__SMARTY_APP_MOUNTED__ = true"
+      onload="window.dispatchEvent(new Event('smarty:mounted'))"
       onerror="window.__SMARTY_SHOW_BOOT_ERROR__ && window.__SMARTY_SHOW_BOOT_ERROR__()"
     ></script>
   </body>

@@ -1,10 +1,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  ArrowRight,
   Bookmark,
   MessageCircle,
   Bot,
   Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { postApi, creatorApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
@@ -150,6 +152,91 @@ const getCachedExplanation = (post) => {
     ? text
     : '';
 };
+
+const getTopicVisualMeta = (topicName, index = 0) => {
+  const normalized = normalizeTopic(topicName);
+
+  const topicPalettes = {
+      all: ['🌐', 'Everything', 'Explore the full Smarty feed'],
+    psychology: ['🧠', 'Mind Lab', 'Human behaviour, cognition, and mental health'],
+    science: ['🔬', 'Discovery Mode', 'Experiments, facts, and curiosity'],
+    technology: ['⚡', 'Future Stack', 'AI, cloud, apps, and modern tools'],
+    coding: ['💻', 'Build Mode', 'Programming, projects, and engineering'],
+    business: ['📈', 'Growth Room', 'Startups, strategy, and money'],
+    health: ['💚', 'Wellness Hub', 'Body, lifestyle, and care'],
+    education: ['📚', 'Study Zone', 'Concepts, revision, and learning'],
+    law: ['⚖️', 'Case Mode', 'Rules, rights, and legal reasoning'],
+  };
+
+  return topicPalettes[normalized] || [
+    ['✨', 'Smart Pick', 'Fresh ideas selected for you'],
+    ['🚀', 'Deep Dive', 'Explore this learning lane'],
+    ['🌙', 'Focus Flow', 'Calm, focused topic discovery'],
+    ['💡', 'Idea Spark', 'Quick knowledge worth saving'],
+  ][index % 4];
+};
+
+const uniqueTopicList = (values = []) => {
+  const topicMap = new Map();
+
+  values.forEach((value) => {
+    const topicValue = String(value || '').trim();
+    if (!topicValue) return;
+
+    const key = normalizeTopic(topicValue);
+    if (!topicMap.has(key)) topicMap.set(key, topicValue);
+  });
+
+  return Array.from(topicMap.values()).sort((a, b) => a.localeCompare(b));
+};
+
+const TopicLaunchCard = memo(function TopicLaunchCard({
+  item,
+  index,
+  onSelect,
+}) {
+  const [emoji, label, description] = getTopicVisualMeta(item, index);
+  const isAllTopics = normalizeTopic(item) === 'all';
+
+  return (
+    <button
+      type="button"
+      className={
+        isAllTopics
+          ? 'topic-launch-card topic-launch-card-featured'
+          : 'topic-launch-card'
+      }
+      style={{
+        '--topic-delay': `${Math.min(index * 70, 560)}ms`,
+      }}
+      onClick={() => onSelect(item)}
+      aria-label={`Show ${item} posts`}
+    >
+      <span className="topic-launch-card-glow" aria-hidden="true" />
+
+      <span className="topic-launch-orb" aria-hidden="true">
+        {emoji}
+      </span>
+
+      <span className="topic-launch-copy">
+        <span className="topic-launch-card-header">
+          <strong>
+            {isAllTopics ? 'Explore everything' : item}
+          </strong>
+
+          <ArrowRight
+            size={17}
+            strokeWidth={2.2}
+            aria-hidden="true"
+          />
+        </span>
+
+        <small>{label}</small>
+        <em>{description}</em>
+      </span>
+    </button>
+  );
+});
 
 const TopicPill = memo(function TopicPill({ item, active, onSelect }) {
   return (
@@ -448,7 +535,9 @@ export default function FeedPage() {
   const [translations, setTranslations] = useState({});
   const [translating, setTranslating] = useState({});
   const [showTranslated, setShowTranslated] = useState({});
-  const [selectedTopic, setSelectedTopic] = useState('All');
+  const [selectedTopic, setSelectedTopic] = useState('');
+  const [allTopics, setAllTopics] = useState([]);
+  const [topicsLoading, setTopicsLoading] = useState(false);
   const [toast, setToast] = useState('');
   const [simpleExplanations, setSimpleExplanations] = useState({});
   const [explaining, setExplaining] = useState({});
@@ -521,6 +610,55 @@ export default function FeedPage() {
     return Array.from(map.values()).sort((a, b) => getPostTime(b) - getPostTime(a));
   }, [posts]);
 
+  const routeFilteredPosts = useMemo(() => {
+    if (!topic) return visiblePosts;
+
+    const routeTopic = normalizeTopic(topic);
+
+    return visiblePosts.filter((post) => {
+      const topicValue = normalizeTopic(
+        post.topic ||
+          post.category ||
+          post.roomName ||
+          post.subject ||
+          'Smarty'
+      );
+
+      return topicValue === routeTopic;
+    });
+  }, [topic, visiblePosts]);
+
+  useEffect(() => {
+  let cancelled = false;
+
+  async function loadTopics() {
+    try {
+      setTopicsLoading(true);
+
+      const data = await postApi.getTopics();
+
+      const nextTopics = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.topics)
+          ? data.topics
+          : [];
+
+      if (!cancelled && nextTopics.length > 0) {
+        setAllTopics(uniqueTopicList(nextTopics));
+      }
+    } catch (err) {
+      console.error('Could not load topics:', err);
+    } finally {
+      if (!cancelled) setTopicsLoading(false);
+    }
+  }
+
+  loadTopics();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   const handleTranslate = useCallback(async (post, lang = 'Hindi') => {
     const postId = getPostId(post);
@@ -587,52 +725,56 @@ export default function FeedPage() {
   }, [translating]);
 
 
-  const routeFilteredPosts = useMemo(() => {
-    if (!topic) return visiblePosts;
 
-    return visiblePosts.filter(
-      (post) =>
-        normalizeTopic(post.topic) === normalizeTopic(topic) ||
-        normalizeTopic(post.category) === normalizeTopic(topic)
-    );
-  }, [visiblePosts, topic]);
 
 const topics = useMemo(() => {
-  const topicMap = new Map();
+  if (allTopics.length > 0) {
+    return ['All', ...allTopics];
+  }
 
-  routeFilteredPosts.forEach((post) => {
-    const topicValue = String(
-      post.topic ||
-      post.category ||
-      post.roomName ||
-      post.subject ||
-      'Smarty'
-    ).trim();
+  return [
+    'All',
+    ...uniqueTopicList(
+      visiblePosts.map((post) => (
+        post.topic ||
+        post.category ||
+        post.roomName ||
+        post.subject ||
+        'Smarty'
+      ))
+    ),
+  ];
+}, [allTopics, visiblePosts]);
 
-    const key = normalizeTopic(topicValue);
-    if (!topicMap.has(key)) topicMap.set(key, topicValue);
-  });
+const launchTopics = useMemo(() => topics, [topics]);
 
-  return ['All', ...Array.from(topicMap.values())];
-}, [routeFilteredPosts]);
+  const filteredPosts = useMemo(() => {
+    if (!selectedTopic) return [];
+    if (selectedTopic === 'All') return routeFilteredPosts;
 
-const filteredPosts = useMemo(() => {
-  if (selectedTopic === 'All') return routeFilteredPosts;
+    const selected = normalizeTopic(selectedTopic);
 
-  const selected = normalizeTopic(selectedTopic);
+    const selectedPosts = [];
+    const remainingPosts = [];
 
-  return routeFilteredPosts.filter((post) => {
-    const topicValue = normalizeTopic(
-      post.topic ||
-      post.category ||
-      post.roomName ||
-      post.subject ||
-      'Smarty'
-    );
+    routeFilteredPosts.forEach((post) => {
+      const topicValue = normalizeTopic(
+        post.topic ||
+          post.category ||
+          post.roomName ||
+          post.subject ||
+          'Smarty'
+      );
 
-    return topicValue === selected;
-  });
-}, [routeFilteredPosts, selectedTopic]);
+      if (topicValue === selected) {
+        selectedPosts.push(post);
+      } else {
+        remainingPosts.push(post);
+      }
+    });
+
+    return [...selectedPosts, ...remainingPosts];
+  }, [routeFilteredPosts, selectedTopic]);
 
   const renderedFeedPosts = useMemo(
     () => filteredPosts.slice(0, renderLimit),
@@ -928,29 +1070,41 @@ const filteredPosts = useMemo(() => {
     }
   }, [explaining, simpleExplanations, showToast]);
 
+  const handleChangeTopic = useCallback(() => {
+    setSelectedTopic('');
+    setRenderLimit(INITIAL_RENDER_LIMIT);
+    restoredFeedPositionRef.current = true;
 
-const handleTopicSelect = useCallback((item) => {
-  const nextTopic = item || 'All';
-
-  setSelectedTopic(nextTopic);
-  setRenderLimit(INITIAL_RENDER_LIMIT);
-  restoredFeedPositionRef.current = true;
-
-  requestAnimationFrame(() => {
-    feedRef.current?.scrollTo({
-      top: 0,
-      behavior: 'smooth',
+    requestAnimationFrame(() => {
+      feedRef.current?.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
     });
-  });
-}, []);
+  }, []);
 
-const handleTopicClick = useCallback(
-  (postTopic) => {
-    if (!postTopic) return;
-    handleTopicSelect(postTopic);
-  },
-  [handleTopicSelect]
-);
+  const handleTopicSelect = useCallback((item) => {
+    const nextTopic = item || 'All';
+
+    setSelectedTopic(nextTopic);
+    setRenderLimit(INITIAL_RENDER_LIMIT);
+    restoredFeedPositionRef.current = true;
+
+    requestAnimationFrame(() => {
+      feedRef.current?.scrollTo({
+        top: 0,
+        behavior: 'smooth',
+      });
+    });
+  }, []);
+
+  const handleTopicClick = useCallback(
+    (postTopic) => {
+      if (!postTopic) return;
+      handleTopicSelect(postTopic);
+    },
+    [handleTopicSelect]
+  );
 
   // REMOVED handleAiDetails callback block
 
@@ -1018,7 +1172,7 @@ const handleTopicClick = useCallback(
   );
 
   const renderedTopics = useMemo(
-    () => topics.map((item) => (
+    () => launchTopics.map((item) => (
       <TopicPill
         key={item}
         item={item}
@@ -1026,7 +1180,19 @@ const handleTopicClick = useCallback(
         onSelect={handleTopicSelect}
       />
     )),
-    [handleTopicSelect, selectedTopic, topics]
+    [handleTopicSelect, selectedTopic, launchTopics]
+  );
+
+  const renderedLaunchTopics = useMemo(
+    () => launchTopics.map((item, index) => (
+      <TopicLaunchCard
+        key={item}
+        item={item}
+        index={index}
+        onSelect={handleTopicSelect}
+      />
+    )),
+    [handleTopicSelect, launchTopics]
   );
 
   const renderedPosts = useMemo(
@@ -1100,27 +1266,124 @@ const handleTopicClick = useCallback(
 
       {toast && <div className="success-toast">{toast}</div>}
 
-      <section className="topic-rail mobile-feed-topic-rail" aria-label="Feed topics">
-        <div className="mobile-topic-scroll" role="tablist" aria-label="Select feed topic">
-          {renderedTopics}
+{!selectedTopic && (
+  <section
+    className="topic-launch-screen"
+    aria-label="Choose a learning topic"
+  >
+    <div
+      className="topic-launch-backdrop"
+      aria-hidden="true"
+    >
+      <span className="topic-launch-ambient topic-launch-ambient-one" />
+      <span className="topic-launch-ambient topic-launch-ambient-two" />
+      <span className="topic-launch-grid-lines" />
+    </div>
+
+    <div className="topic-launch-shell">
+      <header className="topic-launch-hero">
+        <div className="topic-launch-badge">
+          <Sparkles
+            size={14}
+            strokeWidth={2.2}
+            aria-hidden="true"
+          />
+
+          <span>Personalize your feed</span>
         </div>
-      </section>
 
-      {loading && filteredPosts.length === 0 && <FeedSkeleton />}
+        <h1>
+          Learn what matters
+          <span> to you.</span>
+        </h1>
 
-      {error && <p className="feed-status error">{error}</p>}
+        <p>
+          Choose a topic and Smarty will shape a focused feed
+          around your curiosity.
+        </p>
 
-      {!loading && !error && filteredPosts.length === 0 && (
+        <div
+          className="topic-launch-meta"
+          aria-label="Topic selection details"
+        >
+          <span>
+            {Math.max(launchTopics.length - 1, 0)} focused topics
+          </span>
+
+          <span aria-hidden="true">•</span>
+
+          <span>Fresh ideas daily</span>
+        </div>
+      </header>
+
+      <div className="topic-launch-content">
+        <div className="topic-launch-section-heading">
+          <div>
+            <span>Explore</span>
+            <h2>Pick your learning lane</h2>
+          </div>
+
+          <p>You can switch topics anytime.</p>
+        </div>
+
+        {(loading || topicsLoading) &&
+        launchTopics.length === 0 ? (
+          <div
+            className="topic-launch-loading"
+            role="status"
+            aria-live="polite"
+          >
+            <Loader2
+              size={20}
+              strokeWidth={2.25}
+              className="spin-icon"
+            />
+
+            <span>Curating your topics...</span>
+          </div>
+        ) : (
+          <div className="topic-launch-grid">
+            {renderedLaunchTopics}
+          </div>
+        )}
+      </div>
+    </div>
+  </section>
+)}
+
+      {selectedTopic && (
+        <section className="topic-rail mobile-feed-topic-rail" aria-label="Feed topics">
+          <button
+            type="button"
+            className="change-topic-btn"
+            onClick={handleChangeTopic}
+          >
+            Change topic
+          </button>
+
+          <div className="mobile-topic-scroll" role="tablist" aria-label="Select feed topic">
+            {renderedTopics}
+          </div>
+        </section>
+      )}
+
+      {selectedTopic && loading && filteredPosts.length === 0 && <FeedSkeleton />}
+
+      {selectedTopic && error && <p className="feed-status error">{error}</p>}
+
+      {selectedTopic && !loading && !error && filteredPosts.length === 0 && (
         <p className="feed-status">No posts found for this topic.</p>
       )}
 
-      <section className="snap-feed">
-        {renderedPosts}
-      </section>
+      {selectedTopic && (
+        <section className="snap-feed">
+          {renderedPosts}
+        </section>
+      )}
 
-      <div ref={loadMoreRef} className="feed-load-trigger" />
+      {selectedTopic && <div ref={loadMoreRef} className="feed-load-trigger" />}
 
-      {(loadingMore || renderLimit < filteredPosts.length) && (
+      {selectedTopic && (loadingMore || renderLimit < filteredPosts.length) && (
         <p className="feed-status">Loading more posts...</p>
       )}
     </main>
