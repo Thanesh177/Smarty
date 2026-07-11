@@ -222,25 +222,25 @@
 
       /Smarty-iOS/i.test(userAgent);
 
-    var isInAppBrowser =
+    var isThirdPartyInAppBrowser =
 
-      !isSmartyNativeApp &&
+      /LinkedInApp|Telegram|FBAN|FBAV|Instagram|TikTok/i.test(userAgent);
 
-      /LinkedInApp|Telegram|FBAN|FBAV|Instagram/i.test(userAgent);
+    var isBlockedInAppBrowser =
 
-    window.__SMARTY_APP_MOUNTED__ = false;
+      !isSmartyNativeApp && isThirdPartyInAppBrowser;
 
-    window.__SMARTY_BOOT_STARTED__ = Date.now();
+    window.__SMARTY_IS_NATIVE_APP__ = isSmartyNativeApp;
 
-    console.log("Smarty boot environment", {
+    window.__SMARTY_IS_BLOCKED_BROWSER__ = isBlockedInAppBrowser;
 
-      isSmartyNativeApp: isSmartyNativeApp,
+    console.log("[Smarty environment]", {
 
-      isInAppBrowser: isInAppBrowser,
+      nativeApp: isSmartyNativeApp,
+
+      blockedBrowser: isBlockedInAppBrowser,
 
       userAgent: userAgent,
-
-      url: window.location.href,
 
     });
 

@@ -3,7 +3,20 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import './index.css';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import {
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
+
+const userAgent = navigator.userAgent || '';
+
+const isSmartyNativeApp =
+  window.__SMARTY_NATIVE_APP__ === true ||
+  window.__SMARTY_PLATFORM__ === 'ios' ||
+  window.__SMARTY_IS_NATIVE_APP__ === true ||
+  /Smarty-iOS/i.test(userAgent);
+
+window.__SMARTY_IS_NATIVE_APP__ = isSmartyNativeApp;
 
 // React Query setup
 const queryClient = new QueryClient({
@@ -16,9 +29,11 @@ const queryClient = new QueryClient({
     },
   },
 });
+
 if ('clearAppBadge' in navigator) {
   navigator.clearAppBadge().catch(() => {});
 }
+
 // In-app browser + chunk-load recovery
 const SMARTY_CHUNK_RELOAD_KEY = 'smarty-chunk-reload-attempted';
 
@@ -58,8 +73,9 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-// Remove old service workers completely. This helps clear stale PWA caches from older builds.
-if ('serviceWorker' in navigator) {
+// Remove stale service workers in normal browsers, but preserve the official
+// iOS app's WebView session and startup state.
+if ('serviceWorker' in navigator && !isSmartyNativeApp) {
   navigator.serviceWorker
     .getRegistrations()
     .then((registrations) => {
@@ -70,7 +86,7 @@ if ('serviceWorker' in navigator) {
     .catch(() => {});
 }
 
-// Keep reload protection active during startup to avoid infinite WebView reload loops.
+// Keep reload protection active during startup to avoid infinite WebView loops.
 setTimeout(() => {
   try {
     sessionStorage.removeItem(SMARTY_CHUNK_RELOAD_KEY);
@@ -87,15 +103,6 @@ if (!rootElement) {
 
 const root = ReactDOM.createRoot(rootElement);
 
-// Signal that React has started mounting.
-window.__SMARTY_APP_MOUNTED__ = true;
-
-// Remove boot-loader marker after React startup begins.
-requestAnimationFrame(() => {
-  delete rootElement.dataset.bootLoading;
-});
-
-
 root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
@@ -105,3 +112,13 @@ root.render(
     </QueryClientProvider>
   </React.StrictMode>
 );
+
+// Signal successful React startup only after the first browser paint.
+// This prevents the boot fallback from misclassifying the official iOS WKWebView.
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    window.__SMARTY_APP_MOUNTED__ = true;
+    delete rootElement.dataset.bootLoading;
+    window.dispatchEvent(new Event('smarty:mounted'));
+  });
+});
