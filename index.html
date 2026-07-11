@@ -204,19 +204,45 @@
       </div>
     </noscript>
 
-    <script>
-      (function () {
-        var userAgent = navigator.userAgent || "";
-        var isSmartyNativeApp =
-          window.__SMARTY_NATIVE_APP__ === true ||
-          /Smarty-iOS\/\d+(?:\.\d+)*/i.test(userAgent);
+<script>
 
-        var isInAppBrowser =
-          !isSmartyNativeApp &&
-          /LinkedInApp|Telegram|FBAN|FBAV|Instagram/i.test(userAgent);
+  (function () {
 
-        window.__SMARTY_APP_MOUNTED__ = false;
-        window.__SMARTY_BOOT_STARTED__ = Date.now();
+    var userAgent = navigator.userAgent || "";
+
+    var urlParams = new URLSearchParams(window.location.search);
+
+    var isSmartyNativeApp =
+
+      window.__SMARTY_NATIVE_APP__ === true ||
+
+      window.__SMARTY_PLATFORM__ === "ios" ||
+
+      urlParams.get("nativeApp") === "ios" ||
+
+      /Smarty-iOS/i.test(userAgent);
+
+    var isInAppBrowser =
+
+      !isSmartyNativeApp &&
+
+      /LinkedInApp|Telegram|FBAN|FBAV|Instagram/i.test(userAgent);
+
+    window.__SMARTY_APP_MOUNTED__ = false;
+
+    window.__SMARTY_BOOT_STARTED__ = Date.now();
+
+    console.log("Smarty boot environment", {
+
+      isSmartyNativeApp: isSmartyNativeApp,
+
+      isInAppBrowser: isInAppBrowser,
+
+      userAgent: userAgent,
+
+      url: window.location.href,
+
+    });
 
         function markSmartyMounted() {
           window.__SMARTY_APP_MOUNTED__ = true;
