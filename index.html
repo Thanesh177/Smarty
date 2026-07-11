@@ -395,13 +395,16 @@
             }
           }, 0);
         };
+    setTimeout(function () {
+      if (isSmartyNativeApp) {
+        return;
+      }
 
-        setTimeout(function () {
-          if (!window.__SMARTY_APP_MOUNTED__ && !hasReactMounted()) {
-            window.__SMARTY_SHOW_BOOT_ERROR__();
-          }
-        }, isSmartyNativeApp ? 12000 : 5500);
-      })();
+      if (!window.__SMARTY_APP_MOUNTED__ && !hasReactMounted()) {
+        window.__SMARTY_SHOW_BOOT_ERROR__();
+      }
+    }, 6500);
+          })();
     </script>
 
     <script
