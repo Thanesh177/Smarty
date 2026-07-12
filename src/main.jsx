@@ -113,9 +113,16 @@ root.render(
   </React.StrictMode>
 );
 
-window.__SMARTY_APP_MOUNTED__ = true;
-window.dispatchEvent(new Event('smarty:mounted'));
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    window.__SMARTY_APP_MOUNTED__ = true;
 
-window.webkit?.messageHandlers?.smartyNative?.postMessage({
-  action: 'appReady',
+    window.dispatchEvent(new Event('smarty:mounted'));
+
+    if (window.webkit?.messageHandlers?.smartyNative) {
+      window.webkit.messageHandlers.smartyNative.postMessage({
+        action: 'appReady',
+      });
+    }
+  });
 });

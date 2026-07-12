@@ -205,196 +205,192 @@
     </noscript>
 
 <script>
-
   (function () {
-
     var userAgent = navigator.userAgent || "";
-
     var urlParams = new URLSearchParams(window.location.search);
 
     var isSmartyNativeApp =
-
       window.__SMARTY_NATIVE_APP__ === true ||
-
       window.__SMARTY_PLATFORM__ === "ios" ||
-
+      window.__SMARTY_IS_NATIVE_APP__ === true ||
       urlParams.get("nativeApp") === "ios" ||
-
       /Smarty-iOS/i.test(userAgent);
 
     var isThirdPartyInAppBrowser =
-
       /LinkedInApp|Telegram|FBAN|FBAV|Instagram|TikTok/i.test(userAgent);
 
     var isBlockedInAppBrowser =
-
       !isSmartyNativeApp && isThirdPartyInAppBrowser;
 
     window.__SMARTY_IS_NATIVE_APP__ = isSmartyNativeApp;
-
     window.__SMARTY_IS_BLOCKED_BROWSER__ = isBlockedInAppBrowser;
+    window.__SMARTY_APP_MOUNTED__ = false;
+    window.__SMARTY_BOOT_STARTED__ = Date.now();
 
     console.log("[Smarty environment]", {
-
       nativeApp: isSmartyNativeApp,
-
       blockedBrowser: isBlockedInAppBrowser,
-
       userAgent: userAgent,
-
     });
 
-        function markSmartyMounted() {
-          window.__SMARTY_APP_MOUNTED__ = true;
-        }
+    function markSmartyMounted() {
+      window.__SMARTY_APP_MOUNTED__ = true;
+    }
 
-        function hasReactMounted() {
-          var root = document.getElementById("root");
+    function hasReactMounted() {
+      var root = document.getElementById("root");
 
-          if (!root) {
-            return false;
-          }
+      if (!root) {
+        return false;
+      }
 
-          return !root.querySelector(".boot-loader");
-        }
+      return !root.querySelector(".boot-loader");
+    }
 
-        function escapeHtml(value) {
-          return String(value || "")
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-        }
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
 
-        if ("serviceWorker" in navigator && isInAppBrowser) {
-          navigator.serviceWorker
-            .getRegistrations()
-            .then(function (registrations) {
-              registrations.forEach(function (registration) {
-                registration.unregister().catch(function () {});
-              });
-            })
-            .catch(function () {});
-        }
-
-        window.addEventListener("smarty:mounted", markSmartyMounted);
-
-        var rootObserver = new MutationObserver(function () {
-          if (hasReactMounted()) {
-            markSmartyMounted();
-            rootObserver.disconnect();
-          }
-        });
-
-        function observeRoot() {
-          var root = document.getElementById("root");
-
-          if (root) {
-            rootObserver.observe(root, {
-              childList: true,
-              subtree: true,
-            });
-          }
-        }
-
-        if (document.readyState === "loading") {
-          document.addEventListener("DOMContentLoaded", observeRoot, {
-            once: true,
+    if ("serviceWorker" in navigator && isBlockedInAppBrowser) {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then(function (registrations) {
+          registrations.forEach(function (registration) {
+            registration.unregister().catch(function () {});
           });
-        } else {
-          observeRoot();
+        })
+        .catch(function () {});
+    }
+
+    window.addEventListener("smarty:mounted", markSmartyMounted);
+
+    var rootObserver = new MutationObserver(function () {
+      if (hasReactMounted()) {
+        markSmartyMounted();
+        rootObserver.disconnect();
+      }
+    });
+
+    function observeRoot() {
+      var root = document.getElementById("root");
+
+      if (!root) {
+        return;
+      }
+
+      rootObserver.observe(root, {
+        childList: true,
+        subtree: true,
+      });
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", observeRoot, {
+        once: true,
+      });
+    } else {
+      observeRoot();
+    }
+
+    window.addEventListener("error", function (event) {
+      var message = event && event.message ? event.message : "";
+
+      var isModuleLoadFailure =
+        message.includes("Failed to fetch dynamically imported module") ||
+        message.includes("Importing a module script failed");
+
+      if (!isModuleLoadFailure) {
+        return;
+      }
+
+      var reloadKey = "smarty-module-reload-attempted";
+
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, "1");
+        window.location.reload();
+      }
+    });
+
+    window.__SMARTY_SHOW_BOOT_ERROR__ = function () {
+      var root = document.getElementById("root");
+      var currentUrl = window.location.href;
+
+      if (
+        window.__SMARTY_APP_MOUNTED__ ||
+        hasReactMounted() ||
+        !root ||
+        !root.querySelector(".boot-loader")
+      ) {
+        markSmartyMounted();
+        return;
+      }
+
+      var encodedUrl = escapeHtml(currentUrl);
+
+      var description = isSmartyNativeApp
+        ? "Smarty is taking longer than expected to load. Reload the app once."
+        : isBlockedInAppBrowser
+          ? "This in-app browser may be blocking part of Smarty. Open it in your browser or reload once."
+          : "Smarty could not finish loading its application bundle. Reload once and try again.";
+
+      root.innerHTML =
+        '<div style="min-height:100vh;display:grid;place-items:center;background:#020617;color:white;font-family:Inter,system-ui;padding:24px;text-align:center;">' +
+        '<div style="max-width:360px;width:100%;padding:26px 20px;border-radius:28px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));box-shadow:0 20px 70px rgba(0,0,0,.45)">' +
+        '<div style="width:54px;height:54px;border-radius:999px;margin:0 auto 18px;background:conic-gradient(from 0deg,transparent 0 55%,#22d3ee 72%,transparent 88% 100%);box-shadow:0 0 38px rgba(34,211,238,.32)"></div>' +
+        '<h2 style="margin:0 0 10px;font-size:1.1rem;letter-spacing:-0.04em">Smarty could not fully open</h2>' +
+        '<p style="margin:0 0 16px;color:rgba(226,232,240,.72);line-height:1.6;font-size:.9rem">' +
+        escapeHtml(description) +
+        "</p>" +
+        '<div style="display:grid;gap:10px">' +
+        '<button id="smarty-reload-btn" style="width:100%;border:0;background:#22d3ee;color:#020617;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Reload Smarty</button>' +
+        (isSmartyNativeApp
+          ? ""
+          : '<a href="' +
+            encodedUrl +
+            '" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;border:1px solid rgba(103,232,249,.18);background:rgba(255,255,255,.04);color:#cffafe;padding:12px 18px;border-radius:999px;font-weight:850">Open in browser</a>') +
+        '<button id="smarty-copy-link-btn" style="width:100%;border:1px solid rgba(148,163,184,.16);background:rgba(15,23,42,.72);color:rgba(226,232,240,.9);padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Copy link</button>' +
+        '<p style="margin:2px 0 0;color:rgba(148,163,184,.72);font-size:.76rem;line-height:1.45;word-break:break-all">' +
+        encodedUrl +
+        "</p>" +
+        "</div>" +
+        "</div>" +
+        "</div>";
+
+      setTimeout(function () {
+        var reloadButton = document.getElementById("smarty-reload-btn");
+        var copyButton = document.getElementById("smarty-copy-link-btn");
+
+        if (reloadButton) {
+          reloadButton.onclick = function () {
+            sessionStorage.removeItem("smarty-module-reload-attempted");
+            window.location.reload();
+          };
         }
 
-        window.addEventListener("error", function (event) {
-          var message = event && event.message ? event.message : "";
-          var isModuleLoadFailure =
-            message.includes("Failed to fetch dynamically imported module") ||
-            message.includes("Importing a module script failed");
-
-          if (!isModuleLoadFailure) {
-            return;
-          }
-
-          var reloadKey = "smarty-module-reload-attempted";
-
-          if (!sessionStorage.getItem(reloadKey)) {
-            sessionStorage.setItem(reloadKey, "1");
-            window.location.reload();
-          }
-        });
-
-        window.__SMARTY_SHOW_BOOT_ERROR__ = function () {
-          var root = document.getElementById("root");
-          var currentUrl = window.location.href;
-
-          if (
-            window.__SMARTY_APP_MOUNTED__ ||
-            hasReactMounted() ||
-            !root ||
-            !root.querySelector(".boot-loader")
-          ) {
-            markSmartyMounted();
-            return;
-          }
-
-          var encodedUrl = escapeHtml(currentUrl);
-          var description = isSmartyNativeApp
-            ? "Smarty is taking longer than expected to load. Reload the app once."
-            : "This browser may be blocking part of the app bundle. Reload once or open Smarty in your browser.";
-
-          root.innerHTML =
-            '<div style="min-height:100vh;display:grid;place-items:center;background:#020617;color:white;font-family:Inter,system-ui;padding:24px;text-align:center;">' +
-            '<div style="max-width:360px;width:100%;padding:26px 20px;border-radius:28px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));box-shadow:0 20px 70px rgba(0,0,0,.45)">' +
-            '<div style="width:54px;height:54px;border-radius:999px;margin:0 auto 18px;background:conic-gradient(from 0deg,transparent 0 55%,#22d3ee 72%,transparent 88% 100%);box-shadow:0 0 38px rgba(34,211,238,.32)"></div>' +
-            '<h2 style="margin:0 0 10px;font-size:1.1rem;letter-spacing:-0.04em">Smarty could not fully open</h2>' +
-            '<p style="margin:0 0 16px;color:rgba(226,232,240,.72);line-height:1.6;font-size:.9rem">' +
-            escapeHtml(description) +
-            "</p>" +
-            '<div style="display:grid;gap:10px">' +
-            '<button id="smarty-reload-btn" style="width:100%;border:0;background:#22d3ee;color:#020617;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Reload Smarty</button>' +
-            (isSmartyNativeApp
-              ? ""
-              : '<a href="' +
-                encodedUrl +
-                '" target="_blank" rel="noopener noreferrer" style="display:block;text-decoration:none;border:1px solid rgba(103,232,249,.18);background:rgba(255,255,255,.04);color:#cffafe;padding:12px 18px;border-radius:999px;font-weight:850">Open in browser</a>') +
-            '<button id="smarty-copy-link-btn" style="width:100%;border:1px solid rgba(148,163,184,.16);background:rgba(15,23,42,.72);color:rgba(226,232,240,.9);padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer">Copy link</button>' +
-            '<p style="margin:2px 0 0;color:rgba(148,163,184,.72);font-size:.76rem;line-height:1.45;word-break:break-all">' +
-            encodedUrl +
-            "</p>" +
-            "</div>" +
-            "</div>" +
-            "</div>";
-
-          setTimeout(function () {
-            var reloadButton = document.getElementById("smarty-reload-btn");
-            var copyButton = document.getElementById("smarty-copy-link-btn");
-
-            if (reloadButton) {
-              reloadButton.onclick = function () {
-                sessionStorage.removeItem("smarty-module-reload-attempted");
-                window.location.reload();
-              };
-            }
-
-            if (copyButton) {
-              copyButton.onclick = function () {
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                  navigator.clipboard
-                    .writeText(currentUrl)
-                    .then(function () {
-                      copyButton.innerText = "Link copied";
-                    })
-                    .catch(function () {
-                      copyButton.innerText = "Copy manually below";
-                    });
-                } else {
+        if (copyButton) {
+          copyButton.onclick = function () {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard
+                .writeText(currentUrl)
+                .then(function () {
+                  copyButton.innerText = "Link copied";
+                })
+                .catch(function () {
                   copyButton.innerText = "Copy manually below";
-                }
-              };
+                });
+            } else {
+              copyButton.innerText = "Copy manually below";
             }
-          }, 0);
-        };
+          };
+        }
+      }, 0);
+    };
+
     setTimeout(function () {
       if (isSmartyNativeApp) {
         return;
@@ -404,16 +400,15 @@
         window.__SMARTY_SHOW_BOOT_ERROR__();
       }
     }, 6500);
-          })();
-    </script>
+  })();
+</script>
 
-    <script
-      id="smarty-main-module"
-      type="module"
-      crossorigin
-      src="/src/main.jsx"
-      onload="window.dispatchEvent(new Event('smarty:mounted'))"
-      onerror="window.__SMARTY_SHOW_BOOT_ERROR__ && window.__SMARTY_SHOW_BOOT_ERROR__()"
-    ></script>
+  <script
+    id="smarty-main-module"
+    type="module"
+    crossorigin
+    src="/src/main.jsx"
+    onerror="window.__SMARTY_SHOW_BOOT_ERROR__ && window.__SMARTY_SHOW_BOOT_ERROR__()"
+  ></script>
   </body>
 </html>
