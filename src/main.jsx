@@ -120,5 +120,10 @@ requestAnimationFrame(() => {
     window.__SMARTY_APP_MOUNTED__ = true;
     delete rootElement.dataset.bootLoading;
     window.dispatchEvent(new Event('smarty:mounted'));
+
+    // Tell the native iOS shell that React rendered successfully.
+    window.webkit?.messageHandlers?.smartyNative?.postMessage({
+      action: 'appReady',
+    });
   });
 });
