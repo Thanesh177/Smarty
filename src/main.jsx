@@ -113,17 +113,9 @@ root.render(
   </React.StrictMode>
 );
 
-// Signal successful React startup only after the first browser paint.
-// This prevents the boot fallback from misclassifying the official iOS WKWebView.
-requestAnimationFrame(() => {
-  requestAnimationFrame(() => {
-    window.__SMARTY_APP_MOUNTED__ = true;
-    delete rootElement.dataset.bootLoading;
-    window.dispatchEvent(new Event('smarty:mounted'));
+window.__SMARTY_APP_MOUNTED__ = true;
+window.dispatchEvent(new Event('smarty:mounted'));
 
-    // Tell the native iOS shell that React rendered successfully.
-    window.webkit?.messageHandlers?.smartyNative?.postMessage({
-      action: 'appReady',
-    });
-  });
+window.webkit?.messageHandlers?.smartyNative?.postMessage({
+  action: 'appReady',
 });
