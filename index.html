@@ -239,22 +239,15 @@
       return document.getElementById("root");
     }
 
-    function hasReactMounted() {
-      var root = getRoot();
+function hasReactMounted() {
+  return window.__SMARTY_APP_MOUNTED__ === true;
+}
 
-      if (!root) {
-        return false;
-      }
+function markSmartyMounted() {
+  window.__SMARTY_APP_MOUNTED__ = true;
 
-      return !root.querySelector(".boot-loader");
-    }
-
-    function markSmartyMounted() {
-      window.__SMARTY_APP_MOUNTED__ = true;
-      window.__SMARTY_BOOT_ERROR__ = "";
-
-      console.log("[Smarty] React mounted");
-    }
+  console.log("[Smarty] React mounted");
+}
 
     function escapeHtml(value) {
       return String(value || "")
@@ -316,45 +309,13 @@
         .catch(function () {});
     }
 
-    var rootObserver = new MutationObserver(function () {
-      if (hasReactMounted()) {
-        markSmartyMounted();
-        rootObserver.disconnect();
-      }
-    });
-
-    function observeRoot() {
-      var root = getRoot();
-
-      if (!root) {
-        return;
-      }
-
-      rootObserver.observe(root, {
-        childList: true,
-        subtree: true,
-      });
-    }
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", observeRoot, {
-        once: true,
-      });
-    } else {
-      observeRoot();
-    }
 
     window.__SMARTY_SHOW_BOOT_ERROR__ = function () {
       var root = getRoot();
 
-      if (
-        window.__SMARTY_APP_MOUNTED__ ||
-        hasReactMounted() ||
-        !root
-      ) {
-        markSmartyMounted();
-        return;
-      }
+if (window.__SMARTY_APP_MOUNTED__ || !root) {
+  return;
+}
 
       var currentUrl = window.location.href;
       var encodedUrl = escapeHtml(currentUrl);
@@ -396,18 +357,17 @@
       }
     };
 
-    setTimeout(function () {
-      console.log("[Smarty] boot check", {
-        native: isSmartyNativeApp,
-        mounted: window.__SMARTY_APP_MOUNTED__,
-        reactMounted: hasReactMounted(),
-        error: window.__SMARTY_BOOT_ERROR__,
-      });
+setTimeout(function () {
+  console.log("[Smarty] boot check", {
+    native: isSmartyNativeApp,
+    mounted: window.__SMARTY_APP_MOUNTED__,
+    error: window.__SMARTY_BOOT_ERROR__,
+  });
 
-      if (!window.__SMARTY_APP_MOUNTED__ && !hasReactMounted()) {
-        window.__SMARTY_SHOW_BOOT_ERROR__();
-      }
-    }, isSmartyNativeApp ? 12000 : 6500);
+  if (!window.__SMARTY_APP_MOUNTED__) {
+    window.__SMARTY_SHOW_BOOT_ERROR__();
+  }
+}, isSmartyNativeApp ? 15000 : 6500);
   })();
 </script>
 

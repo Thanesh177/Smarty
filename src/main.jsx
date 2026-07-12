@@ -116,13 +116,10 @@ root.render(
 requestAnimationFrame(() => {
   requestAnimationFrame(() => {
     window.__SMARTY_APP_MOUNTED__ = true;
+    window.dispatchEvent(new Event("smarty:mounted"));
 
-    window.dispatchEvent(new Event('smarty:mounted'));
-
-    if (window.webkit?.messageHandlers?.smartyNative) {
-      window.webkit.messageHandlers.smartyNative.postMessage({
-        action: 'appReady',
-      });
-    }
+    window.webkit?.messageHandlers?.smartyNative?.postMessage({
+      action: "appReady",
+    });
   });
 });
