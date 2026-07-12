@@ -822,10 +822,57 @@ useEffect(() => {
   }, [user]);
 
   // Foreground push listener
-  useEffect(() => {
-    const unsubscribe = listenForForegroundMessages();
-    return () => unsubscribe && unsubscribe();
-  }, []);
+useEffect(() => {
+
+  let unsubscribe = () => {};
+
+  let cancelled = false;
+
+  async function setupMessaging() {
+
+    try {
+
+      const cleanup = await listenForForegroundMessages();
+
+      if (cancelled) {
+
+        cleanup?.();
+
+        return;
+
+      }
+
+      if (typeof cleanup === 'function') {
+
+        unsubscribe = cleanup;
+
+      }
+
+    } catch (error) {
+
+      console.error(
+
+        'Failed to start foreground messaging:',
+
+        error
+
+      );
+
+    }
+
+  }
+
+  setupMessaging();
+
+  return () => {
+
+    cancelled = true;
+
+    unsubscribe();
+
+  };
+
+}, []);
 
   useEffect(() => {
     const handleSmartyNotification = (event) => {
