@@ -8,8 +8,12 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT || 20000);
 const AUTH_TOKEN_CACHE_MS = 45 * 1000;
-const APP_ORIGIN = 'https://main.d3qiuefonbp8n9.amplifyapp.com';
-const ROOM_INVITE_API_BASE_URL =
+const PRODUCTION_ORIGIN = 'https://smarty.wiki';
+
+const APP_ORIGIN =
+  typeof window !== 'undefined' && window.location?.origin
+    ? window.location.origin
+    : PRODUCTION_ORIGIN;const ROOM_INVITE_API_BASE_URL =
   import.meta.env.VITE_ROOM_INVITE_API_BASE_URL || API_BASE_URL;
 
 const PENDING_ROOM_INVITE_CODE_KEY = 'smarty_pending_room_invite_code';
@@ -679,7 +683,9 @@ export const roomApi = {
         parsed?.inviteUrl ||
         parsed?.link ||
         parsed?.url ||
-        (inviteCode ? `${APP_ORIGIN}/rooms/invite/${encodeURIComponent(inviteCode)}` : ''),
+       (inviteCode
+  ? `${APP_ORIGIN}/rooms/invite/${encodeURIComponent(inviteCode)}`
+  : ''),
     };
   },
 
