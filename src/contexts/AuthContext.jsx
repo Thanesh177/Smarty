@@ -100,7 +100,7 @@ function getCognitoLogoutUrl() {
   ).replace(/^https?:\/\//, '');
 
   const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
-  const logoutUri = `${window.location.origin}/login`;
+ const logoutUri = `${window.location.origin}/feed`;
 
   if (!cognitoDomain || !clientId) {
     return logoutUri;
@@ -404,7 +404,7 @@ const logout = async () => {
       console.warn('Native local sign-out failed:', error);
     }
 
-    window.location.replace('/login');
+    window.location.replace('/feed');
     return;
   }
 
