@@ -62,6 +62,58 @@ function clearAuthStorage() {
   localStorage.removeItem('eduscroll_access_token');
 }
 
+function clearAmplifyAuthStorage() {
+  const prefixes = [
+    'CognitoIdentityServiceProvider.',
+    'aws-amplify-cache',
+    'amplify-signin-with-hostedUI',
+  ];
+
+  Object.keys(localStorage).forEach((key) => {
+    if (prefixes.some((prefix) => key.startsWith(prefix))) {
+      localStorage.removeItem(key);
+    }
+  });
+
+  Object.keys(sessionStorage).forEach((key) => {
+    if (prefixes.some((prefix) => key.startsWith(prefix))) {
+      sessionStorage.removeItem(key);
+    }
+  });
+}
+
+function isRunningInsideNativeApp() {
+  return Boolean(
+    window.AndroidBridge ||
+      window.SmartyAndroid ||
+      window.__SMARTY_NATIVE_APP__ === true ||
+      window.__SMARTY_PLATFORM__ === 'ios' ||
+      window.__SMARTY_IS_NATIVE_APP__ === true ||
+      navigator.userAgent.includes('SmartyAndroid') ||
+      navigator.userAgent.includes('Smarty-iOS')
+  );
+}
+
+function getCognitoLogoutUrl() {
+  const cognitoDomain = String(
+    import.meta.env.VITE_COGNITO_DOMAIN || ''
+  ).replace(/^https?:\/\//, '');
+
+  const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
+  const logoutUri = `${window.location.origin}/login`;
+
+  if (!cognitoDomain || !clientId) {
+    return logoutUri;
+  }
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    logout_uri: logoutUri,
+  });
+
+  return `https://${cognitoDomain}/logout?${params.toString()}`;
+}
+
 function isRunningInsideAndroidApp() {
   return Boolean(window.AndroidBridge || window.SmartyAndroid || navigator.userAgent.includes('SmartyAndroid'));
 }
@@ -340,14 +392,24 @@ export function AuthProvider({ children }) {
     return result;
   };
 
-  const logout = async () => {
+const logout = async () => {
+  clearAuthStorage();
+  clearAmplifyAuthStorage();
+  setUser(null);
+
+  if (isRunningInsideNativeApp()) {
     try {
-      await signOut();
-    } finally {
-      clearAuthStorage();
-      setUser(null);
+      await signOut({ global: false });
+    } catch (error) {
+      console.warn('Native local sign-out failed:', error);
     }
-  };
+
+    window.location.replace('/login');
+    return;
+  }
+
+  window.location.assign(getCognitoLogoutUrl());
+};
 
   const refreshToken = async () => {
     const session = await fetchAuthSession({ forceRefresh: true });
