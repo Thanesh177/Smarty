@@ -714,6 +714,35 @@ module "http_api" {
   source = "../../modules/http-api"
 
   api_name = "smarty"
+
+  cors_configuration = {
+    allow_origins = [
+      "https://smarty.wiki",
+      "https://www.smarty.wiki",
+      "https://main.d3qiuefonbp8n9.amplifyapp.com",
+    ]
+
+    allow_methods = [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ]
+
+    allow_headers = [
+      "authorization",
+      "content-type",
+      "x-amz-date",
+      "x-api-key",
+      "x-amz-security-token",
+    ]
+
+    expose_headers    = []
+    max_age           = 86400
+    allow_credentials = false
+  }
 }
 
 module "websocket_api" {

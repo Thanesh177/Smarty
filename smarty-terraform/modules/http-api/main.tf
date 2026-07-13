@@ -14,6 +14,22 @@ resource "aws_apigatewayv2_api" "main" {
   }
 }
 
+resource "aws_apigatewayv2_api" "this" {
+  name          = var.api_name
+  protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = var.cors_configuration.allow_origins
+    allow_methods = var.cors_configuration.allow_methods
+    allow_headers = var.cors_configuration.allow_headers
+
+    expose_headers = var.cors_configuration.expose_headers
+
+    max_age           = var.cors_configuration.max_age
+    allow_credentials = var.cors_configuration.allow_credentials
+  }
+}
+
 
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.main.id

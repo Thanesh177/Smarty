@@ -26,8 +26,13 @@ const getPostTime = (post) => Number(post?.createdAtMs || post?.updatedAtMs || p
 
 const normalizeCreatorProfile = (value) => value?.profile || value?.user || value || null;
 
+
+
 const INITIAL_RENDER_LIMIT = 3;
 const RENDER_BATCH_SIZE = 3;
+
+const INITIAL_TOPIC_LIMIT = 12;
+const TOPIC_BATCH_SIZE = 4;
 const FAST_IMAGE_LIMIT = 4;
 const IMAGE_PRELOAD_MARGIN = '900px';
 const FEED_SCROLL_STORAGE_KEY = 'smarty.feed.scrollY';
@@ -62,6 +67,9 @@ const isSystemGeneratedPost = (post) => {
     authorName === 'smarty-ai'
   );
 };
+
+
+
 
 const getDisplayUsername = (post, creatorProfile = null) => {
   const profile = creatorProfile?.profile || creatorProfile?.user || creatorProfile || {};
@@ -194,34 +202,67 @@ const TopicLaunchCard = memo(function TopicLaunchCard({
   item,
   index,
   onSelect,
+  position,
+  dragRef,
+  suppressClickRef,
 }) {
-  const [emoji, label, description] = getTopicVisualMeta(item, index);
-  const isAllTopics = normalizeTopic(item) === 'all';
+  const [emoji, label, description] =
+    getTopicVisualMeta(item, index);
+
+  const isAllTopics =
+    normalizeTopic(item) === 'all';
 
   return (
     <button
       type="button"
-      className={
+      className={`topic-launch-card ${
         isAllTopics
-          ? 'topic-launch-card topic-launch-card-featured'
-          : 'topic-launch-card'
-      }
+          ? 'topic-launch-card-featured'
+          : ''
+      }`}
       style={{
-        '--topic-delay': `${Math.min(index * 70, 560)}ms`,
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        width: `${position.width}px`,
+        height: `${position.height}px`,
+        '--topic-delay': `${Math.min((index % 4) * 45, 135)}ms`,
       }}
-      onClick={() => onSelect(item)}
+onClick={(event) => {
+  if (
+    suppressClickRef?.current ||
+    dragRef?.current?.moved
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    suppressClickRef.current = false;
+    dragRef.current.moved = false;
+
+    return;
+  }
+
+  onSelect(item);
+}}
       aria-label={`Show ${item} posts`}
     >
-      <span className="topic-launch-card-glow" aria-hidden="true" />
+      <span
+        className="topic-launch-card-glow"
+        aria-hidden="true"
+      />
 
-      <span className="topic-launch-orb" aria-hidden="true">
+      <span
+        className="topic-launch-orb"
+        aria-hidden="true"
+      >
         {emoji}
       </span>
 
       <span className="topic-launch-copy">
         <span className="topic-launch-card-header">
           <strong>
-            {isAllTopics ? 'Explore everything' : item}
+            {isAllTopics
+              ? 'Explore everything'
+              : item}
           </strong>
 
           <ArrowRight
@@ -253,31 +294,39 @@ const TopicPill = memo(function TopicPill({ item, active, onSelect }) {
 });
 
 // Memoized image component for feed posts with lazy loading and IntersectionObserver
-const FeedImage = memo(function FeedImage({ src, alt, index }) {
+const FeedImage = memo(function FeedImage({
+  src,
+  alt,
+  index,
+}) {
   const imgRef = useRef(null);
-  const [shouldLoad, setShouldLoad] = useState(index < FAST_IMAGE_LIMIT);
 
-  useEffect(() => {
-    if (shouldLoad || !imgRef.current) return undefined;
+  const [shouldLoad, setShouldLoad] = useState(
+    index < FAST_IMAGE_LIMIT
+  );
 
-    const observer = new window.IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setShouldLoad(true);
-          observer.disconnect();
-        }
-      },
-      {
-        root: null,
-        rootMargin: IMAGE_PRELOAD_MARGIN,
-        threshold: 0,
-      }
-    );
+useEffect(() => {
+  if (shouldLoad || !imgRef.current) {
+    return undefined;
+  }
 
-    observer.observe(imgRef.current);
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (!entry.isIntersecting) return;
 
-    return () => observer.disconnect();
-  }, [shouldLoad]);
+      setShouldLoad(true);
+      observer.disconnect();
+    },
+    {
+      rootMargin: IMAGE_PRELOAD_MARGIN,
+      threshold: 0,
+    }
+  );
+
+  observer.observe(imgRef.current);
+
+  return () => observer.disconnect();
+}, [shouldLoad]);
 
   return (
     <img
@@ -285,14 +334,21 @@ const FeedImage = memo(function FeedImage({ src, alt, index }) {
       src={shouldLoad ? src : undefined}
       data-src={src}
       alt={alt}
-      loading={index < FAST_IMAGE_LIMIT ? 'eager' : 'lazy'}
+      loading={
+        index < FAST_IMAGE_LIMIT ? 'eager' : 'lazy'
+      }
       decoding="async"
-      fetchPriority={index < FAST_IMAGE_LIMIT ? 'high' : shouldLoad ? 'auto' : 'low'}
+      fetchPriority={
+        index < FAST_IMAGE_LIMIT
+          ? 'high'
+          : shouldLoad
+            ? 'auto'
+            : 'low'
+      }
       className="feed-image"
     />
   );
 });
-
 const FeedPostCard = memo(function FeedPostCard({
   post,
   index,
@@ -507,6 +563,27 @@ const FeedPostCard = memo(function FeedPostCard({
 });
 
 export default function FeedPage() {
+  const topicRevealFrameRef = useRef(null);
+  const topicEdgeLoadLockRef = useRef(false);
+  const topicEdgeLoadTimerRef = useRef(null);
+  const lastTopicCanvasPositionRef = useRef({
+  left: null,
+  top: null,
+});
+const launchTopicsLengthRef = useRef(0);
+const topicDisplayLimitRef = useRef(INITIAL_TOPIC_LIMIT);
+const topicDragLoadDistanceRef = useRef(0);
+const touchGestureRef = useRef({
+  startX: 0,
+  startY: 0,
+  moved: false,
+});
+const canvasDraggingRef = useRef(false);
+const canvasAnimationFrameRef = useRef(null);
+const pendingCanvasPositionRef = useRef({
+  left: 0,
+  top: 0,
+});
   const { topic } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -516,7 +593,12 @@ export default function FeedPage() {
   const requestedCreatorIdsRef = useRef(new Set());
   const toastTimerRef = useRef(null);
   const restoredFeedPositionRef = useRef(false);
-
+const previousTopicCanvasLayoutRef = useRef({
+  width: 0,
+  height: 0,
+  offsetX: 0,
+  offsetY: 0,
+});
   const {
     posts,
     loading,
@@ -531,7 +613,20 @@ export default function FeedPage() {
   } = useFeed();
 
   const loadMoreRef = useRef(null);
+  const topicCanvasRef = useRef(null);
   const feedRef = useRef(null);
+
+const canvasDragRef = useRef({
+  pointerId: null,
+  startX: 0,
+  startY: 0,
+  lastX: 0,
+  lastY: 0,
+  scrollLeft: 0,
+  scrollTop: 0,
+  moved: false,
+});
+const suppressTopicClickRef = useRef(false);
   const [translations, setTranslations] = useState({});
   const [translating, setTranslating] = useState({});
   const [showTranslated, setShowTranslated] = useState({});
@@ -543,18 +638,212 @@ export default function FeedPage() {
   const [explaining, setExplaining] = useState({});
   const [savedPostIds, setSavedPostIds] = useState({});
   const [creatorProfiles, setCreatorProfiles] = useState({});
-  const [renderLimit, setRenderLimit] = useState(INITIAL_RENDER_LIMIT);
-  useEffect(() => {
-    mountedRef.current = true;
-
-    return () => {
-      mountedRef.current = false;
-      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-      if (highlightRemoveTimerRef.current) clearTimeout(highlightRemoveTimerRef.current);
-    };
-  }, []);
+  const [renderLimit, setRenderLimit] = useState(
+    INITIAL_RENDER_LIMIT
+  );
+  const [topicDisplayLimit, setTopicDisplayLimit] = useState(
+    INITIAL_TOPIC_LIMIT
+  );
+  const [isCanvasDragging, setIsCanvasDragging] = useState(false);
 
 
+
+const handleCanvasPointerDown = useCallback((event) => {
+  if (
+    event.pointerType !== 'mouse' ||
+    event.button !== 0
+  ) {
+    return;
+  }
+
+  /*
+   * Let cards receive normal desktop clicks.
+   * Mouse dragging starts only from the canvas background.
+   */
+  if (event.target.closest('.topic-launch-card')) {
+    suppressTopicClickRef.current = false;
+    canvasDragRef.current.moved = false;
+    return;
+  }
+
+  const canvas = topicCanvasRef.current;
+
+  if (!canvas) return;
+
+  canvasDraggingRef.current = true;
+  suppressTopicClickRef.current = false;
+  topicDragLoadDistanceRef.current = 0;
+
+  canvasDragRef.current = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    lastX: event.clientX,
+    lastY: event.clientY,
+    scrollLeft: canvas.scrollLeft,
+    scrollTop: canvas.scrollTop,
+    moved: false,
+  };
+
+  canvas.setPointerCapture?.(event.pointerId);
+  setIsCanvasDragging(true);
+}, []);
+
+const handleCanvasPointerMove = useCallback((event) => {
+  if (event.pointerType !== 'mouse') {
+    return;
+  }
+
+  const canvas = topicCanvasRef.current;
+
+  if (
+    !canvas ||
+    !canvasDraggingRef.current ||
+    canvasDragRef.current.pointerId !== event.pointerId
+  ) {
+    return;
+  }
+
+  const deltaX =
+    event.clientX - canvasDragRef.current.startX;
+
+  const deltaY =
+    event.clientY - canvasDragRef.current.startY;
+
+  const stepX =
+    event.clientX - canvasDragRef.current.lastX;
+
+  const stepY =
+    event.clientY - canvasDragRef.current.lastY;
+
+  const stepDistance = Math.hypot(stepX, stepY);
+
+  canvasDragRef.current.lastX = event.clientX;
+  canvasDragRef.current.lastY = event.clientY;
+
+if (Math.hypot(deltaX, deltaY) > 6) {
+  canvasDragRef.current.moved = true;
+  suppressTopicClickRef.current = true;
+}
+
+  pendingCanvasPositionRef.current = {
+    left: canvasDragRef.current.scrollLeft - deltaX,
+    top: canvasDragRef.current.scrollTop - deltaY,
+  };
+
+  if (!canvasAnimationFrameRef.current) {
+    canvasAnimationFrameRef.current =
+      requestAnimationFrame(() => {
+        const currentCanvas =
+          topicCanvasRef.current;
+
+        if (currentCanvas) {
+          currentCanvas.scrollLeft =
+            pendingCanvasPositionRef.current.left;
+
+          currentCanvas.scrollTop =
+            pendingCanvasPositionRef.current.top;
+        }
+
+        canvasAnimationFrameRef.current = null;
+      });
+  }
+
+  topicDragLoadDistanceRef.current += stepDistance;
+
+  if (
+    topicDragLoadDistanceRef.current >= 220 &&
+    !topicEdgeLoadLockRef.current &&
+    topicDisplayLimitRef.current <
+      launchTopicsLengthRef.current
+  ) {
+    topicDragLoadDistanceRef.current = 0;
+    topicEdgeLoadLockRef.current = true;
+
+    setTopicDisplayLimit((current) => {
+      const next = Math.min(
+        current + TOPIC_BATCH_SIZE,
+        launchTopicsLengthRef.current
+      );
+
+      topicDisplayLimitRef.current = next;
+      return next;
+    });
+
+    if (topicEdgeLoadTimerRef.current) {
+      clearTimeout(topicEdgeLoadTimerRef.current);
+    }
+
+    topicEdgeLoadTimerRef.current =
+      window.setTimeout(() => {
+        topicEdgeLoadLockRef.current = false;
+        topicEdgeLoadTimerRef.current = null;
+      }, 180);
+  }
+}, []);
+
+const stopCanvasDragging = useCallback((event) => {
+  if (event.pointerType !== 'mouse') {
+    return;
+  }
+
+  const canvas = topicCanvasRef.current;
+
+  canvasDraggingRef.current = false;
+  topicDragLoadDistanceRef.current = 0;
+
+  if (canvas?.hasPointerCapture?.(event.pointerId)) {
+    canvas.releasePointerCapture(event.pointerId);
+  }
+
+  canvasDragRef.current.pointerId = null;
+
+  if (canvasAnimationFrameRef.current) {
+    cancelAnimationFrame(
+      canvasAnimationFrameRef.current
+    );
+
+    canvasAnimationFrameRef.current = null;
+  }
+
+  setIsCanvasDragging(false);
+
+  window.setTimeout(() => {
+    suppressTopicClickRef.current = false;
+    canvasDragRef.current.moved = false;
+  }, 80);
+}, []);
+
+useEffect(() => {
+  mountedRef.current = true;
+
+  return () => {
+    mountedRef.current = false;
+
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+    }
+
+    if (highlightRemoveTimerRef.current) {
+      clearTimeout(highlightRemoveTimerRef.current);
+    }
+
+    if (topicEdgeLoadTimerRef.current) {
+      clearTimeout(topicEdgeLoadTimerRef.current);
+      topicEdgeLoadTimerRef.current = null;
+    }
+
+    if (topicRevealFrameRef.current) {
+      cancelAnimationFrame(topicRevealFrameRef.current);
+      topicRevealFrameRef.current = null;
+    }
+
+    if (canvasAnimationFrameRef.current) {
+      cancelAnimationFrame(canvasAnimationFrameRef.current);
+      canvasAnimationFrameRef.current = null;
+    }
+  };
+}, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -748,6 +1037,40 @@ const topics = useMemo(() => {
 
 const launchTopics = useMemo(() => topics, [topics]);
 
+const visibleLaunchTopics = useMemo(
+  () => launchTopics.slice(0, topicDisplayLimit),
+  [launchTopics, topicDisplayLimit]
+);
+
+useEffect(() => {
+  launchTopicsLengthRef.current =
+    launchTopics.length;
+}, [launchTopics.length]);
+
+useEffect(() => {
+  topicDisplayLimitRef.current =
+    topicDisplayLimit;
+}, [topicDisplayLimit]);
+
+const topicCanvasLayout = useMemo(
+  () =>
+    getTopicCanvasLayout(
+      visibleLaunchTopics.length
+    ),
+  [visibleLaunchTopics.length]
+);
+
+const topicCanvasSurfaceStyle = useMemo(
+  () => ({
+    width: `max(${topicCanvasLayout.width}px, calc(100vw + 160px))`,
+    height: `max(${topicCanvasLayout.height}px, calc(100% + 160px))`,
+  }),
+  [
+    topicCanvasLayout.height,
+    topicCanvasLayout.width,
+  ]
+);
+
   const filteredPosts = useMemo(() => {
     if (!selectedTopic) return [];
     if (selectedTopic === 'All') return routeFilteredPosts;
@@ -796,6 +1119,9 @@ const launchTopics = useMemo(() => topics, [topics]);
       setRenderLimit(Math.min(neededRenderLimit + RENDER_BATCH_SIZE, filteredPosts.length));
     }
   }, [filteredPosts, renderLimit]);
+
+
+
 
   useEffect(() => {
     if (restoredFeedPositionRef.current) return undefined;
@@ -862,6 +1188,98 @@ const launchTopics = useMemo(() => topics, [topics]);
     feedPosts.findIndex((item) => getPostId(item) === targetPostId)
   ), []);
 
+useEffect(() => {
+  if (selectedTopic) return undefined;
+
+  const canvas = topicCanvasRef.current;
+
+  if (!canvas) return undefined;
+
+  const frame = requestAnimationFrame(() => {
+    canvas.scrollLeft = Math.max(
+      0,
+      (canvas.scrollWidth - canvas.clientWidth) / 2
+    );
+
+    canvas.scrollTop = Math.max(
+      0,
+      (canvas.scrollHeight - canvas.clientHeight) / 2
+    );
+
+    lastTopicCanvasPositionRef.current = {
+      left: canvas.scrollLeft,
+      top: canvas.scrollTop,
+    };
+
+previousTopicCanvasLayoutRef.current = {
+  width: topicCanvasLayout.width,
+  height: topicCanvasLayout.height,
+  offsetX: topicCanvasLayout.offsetX,
+  offsetY: topicCanvasLayout.offsetY,
+};
+  });
+
+  return () => cancelAnimationFrame(frame);
+}, [selectedTopic]);
+
+
+useEffect(() => {
+  const canvas = topicCanvasRef.current;
+
+  if (!canvas || selectedTopic) {
+    return undefined;
+  }
+
+  const previous =
+    previousTopicCanvasLayoutRef.current;
+
+  if (!previous.width || !previous.height) {
+    previousTopicCanvasLayoutRef.current = {
+      width: topicCanvasLayout.width,
+      height: topicCanvasLayout.height,
+      offsetX: topicCanvasLayout.offsetX,
+      offsetY: topicCanvasLayout.offsetY,
+    };
+
+    return undefined;
+  }
+
+  const offsetShiftX =
+    topicCanvasLayout.offsetX - previous.offsetX;
+
+  const offsetShiftY =
+    topicCanvasLayout.offsetY - previous.offsetY;
+
+  previousTopicCanvasLayoutRef.current = {
+    width: topicCanvasLayout.width,
+    height: topicCanvasLayout.height,
+    offsetX: topicCanvasLayout.offsetX,
+    offsetY: topicCanvasLayout.offsetY,
+  };
+
+  if (offsetShiftX === 0 && offsetShiftY === 0) {
+    return undefined;
+  }
+
+  const frame = requestAnimationFrame(() => {
+    canvas.scrollLeft += offsetShiftX;
+    canvas.scrollTop += offsetShiftY;
+
+    lastTopicCanvasPositionRef.current = {
+      left: canvas.scrollLeft,
+      top: canvas.scrollTop,
+    };
+  });
+
+  return () => cancelAnimationFrame(frame);
+}, [
+  selectedTopic,
+  topicCanvasLayout.width,
+  topicCanvasLayout.height,
+  topicCanvasLayout.offsetX,
+  topicCanvasLayout.offsetY,
+]);
+
   useEffect(() => {
     const pruneByRenderedPosts = (current) => {
       let changed = false;
@@ -887,33 +1305,54 @@ const launchTopics = useMemo(() => topics, [topics]);
   }, [renderedPostIdSet]);
 
   useEffect(() => {
-    if (!loadMoreRef.current) return undefined;
+  const target = loadMoreRef.current;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting || loadingMore || loading) return;
+  if (!target) return undefined;
 
-        if (renderLimit < filteredPosts.length) {
-          setRenderLimit((current) => Math.min(current + RENDER_BATCH_SIZE, filteredPosts.length));
-          return;
-        }
-
-        if (nextCursor) {
-          observer.unobserve(entry.target);
-          loadMore();
-        }
-      },
-      {
-        root: null,
-        rootMargin: '600px',
-        threshold: 0,
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (
+        !entry.isIntersecting ||
+        loadingMore ||
+        loading
+      ) {
+        return;
       }
-    );
 
-    observer.observe(loadMoreRef.current);
+      if (renderLimit < filteredPosts.length) {
+        setRenderLimit((current) =>
+          Math.min(
+            current + RENDER_BATCH_SIZE,
+            filteredPosts.length
+          )
+        );
 
-    return () => observer.disconnect();
-  }, [nextCursor, loadingMore, loading, loadMore, renderLimit, filteredPosts.length]);
+        return;
+      }
+
+      if (nextCursor) {
+        observer.unobserve(entry.target);
+        loadMore();
+      }
+    },
+    {
+      root: feedRef.current,
+      rootMargin: '600px',
+      threshold: 0,
+    }
+  );
+
+  observer.observe(target);
+
+  return () => observer.disconnect();
+}, [
+  nextCursor,
+  loadingMore,
+  loading,
+  loadMore,
+  renderLimit,
+  filteredPosts.length,
+]);
 
   const visibleCreatorIds = useMemo(
     () => [
@@ -1069,19 +1508,21 @@ const launchTopics = useMemo(() => topics, [topics]);
       }
     }
   }, [explaining, simpleExplanations, showToast]);
+const handleChangeTopic = useCallback(() => {
+  setSelectedTopic('');
+  setRenderLimit(INITIAL_RENDER_LIMIT);
+  setTopicDisplayLimit(INITIAL_TOPIC_LIMIT);
+  topicDisplayLimitRef.current =
+  INITIAL_TOPIC_LIMIT;
+  restoredFeedPositionRef.current = true;
 
-  const handleChangeTopic = useCallback(() => {
-    setSelectedTopic('');
-    setRenderLimit(INITIAL_RENDER_LIMIT);
-    restoredFeedPositionRef.current = true;
-
-    requestAnimationFrame(() => {
-      feedRef.current?.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      });
+  requestAnimationFrame(() => {
+    feedRef.current?.scrollTo({
+      top: 0,
+      behavior: 'smooth',
     });
-  }, []);
+  });
+}, []);
 
   const handleTopicSelect = useCallback((item) => {
     const nextTopic = item || 'All';
@@ -1183,17 +1624,110 @@ const launchTopics = useMemo(() => topics, [topics]);
     [handleTopicSelect, selectedTopic, launchTopics]
   );
 
-  const renderedLaunchTopics = useMemo(
-    () => launchTopics.map((item, index) => (
-      <TopicLaunchCard
-        key={item}
-        item={item}
-        index={index}
-        onSelect={handleTopicSelect}
-      />
-    )),
-    [handleTopicSelect, launchTopics]
+const renderedLaunchTopics = useMemo(
+  () =>
+    visibleLaunchTopics.map((item, index) => {
+      const position =
+        getTopicCanvasPosition(index);
+
+      return (
+       <TopicLaunchCard
+  key={item}
+  item={item}
+  index={index}
+  position={{
+    ...position,
+    x: position.x + topicCanvasLayout.offsetX,
+    y: position.y + topicCanvasLayout.offsetY,
+  }}
+  onSelect={handleTopicSelect}
+  dragRef={canvasDragRef}
+  suppressClickRef={suppressTopicClickRef}
+/>
+      );
+    }),
+  [
+    handleTopicSelect,
+    topicCanvasLayout.offsetX,
+    topicCanvasLayout.offsetY,
+    visibleLaunchTopics,
+  ]
+);
+
+
+const handleTopicCanvasScroll = useCallback(() => {
+  const canvas = topicCanvasRef.current;
+
+  if (
+    !canvas ||
+    topicEdgeLoadLockRef.current ||
+    topicDisplayLimitRef.current >=
+      launchTopicsLengthRef.current
+  ) {
+    return;
+  }
+
+  const previous =
+    lastTopicCanvasPositionRef.current;
+
+  if (
+    previous.left === null ||
+    previous.top === null
+  ) {
+    lastTopicCanvasPositionRef.current = {
+      left: canvas.scrollLeft,
+      top: canvas.scrollTop,
+    };
+
+    return;
+  }
+
+  const travelDistance = Math.hypot(
+    canvas.scrollLeft - previous.left,
+    canvas.scrollTop - previous.top
   );
+
+  if (travelDistance < 48) return;
+
+  lastTopicCanvasPositionRef.current = {
+    left: canvas.scrollLeft,
+    top: canvas.scrollTop,
+  };
+
+  topicEdgeLoadLockRef.current = true;
+
+  if (topicRevealFrameRef.current) {
+    cancelAnimationFrame(
+      topicRevealFrameRef.current
+    );
+  }
+
+  topicRevealFrameRef.current =
+    requestAnimationFrame(() => {
+      setTopicDisplayLimit((current) => {
+        const next = Math.min(
+          current + TOPIC_BATCH_SIZE,
+          launchTopicsLengthRef.current
+        );
+
+        topicDisplayLimitRef.current = next;
+
+        return next;
+      });
+
+      topicRevealFrameRef.current = null;
+    });
+
+  if (topicEdgeLoadTimerRef.current) {
+    clearTimeout(topicEdgeLoadTimerRef.current);
+  }
+
+  topicEdgeLoadTimerRef.current =
+    window.setTimeout(() => {
+      topicEdgeLoadLockRef.current = false;
+      topicEdgeLoadTimerRef.current = null;
+    }, 110);
+}, []);
 
   const renderedPosts = useMemo(
     () => renderedFeedPosts.map((post, index) => {
@@ -1289,41 +1823,25 @@ const launchTopics = useMemo(() => topics, [topics]);
             aria-hidden="true"
           />
 
-          <span>Personalize your feed</span>
+          <span>Choose your feed</span>
         </div>
 
         <h1>
-          Learn what matters
-          <span> to you.</span>
+          What do you want to
+          <span> learn?</span>
         </h1>
 
         <p>
-          Choose a topic and Smarty will shape a focused feed
-          around your curiosity.
+          Pick a topic to open a focused feed made for you.
         </p>
-
-        <div
-          className="topic-launch-meta"
-          aria-label="Topic selection details"
-        >
-          <span>
-            {Math.max(launchTopics.length - 1, 0)} focused topics
-          </span>
-
-          <span aria-hidden="true">•</span>
-
-          <span>Fresh ideas daily</span>
-        </div>
       </header>
 
       <div className="topic-launch-content">
         <div className="topic-launch-section-heading">
           <div>
-            <span>Explore</span>
-            <h2>Pick your learning lane</h2>
+            <span>Topics</span>
+            <h2>Choose one to begin</h2>
           </div>
-
-          <p>You can switch topics anytime.</p>
         </div>
 
         {(loading || topicsLoading) &&
@@ -1339,12 +1857,83 @@ const launchTopics = useMemo(() => topics, [topics]);
               className="spin-icon"
             />
 
-            <span>Curating your topics...</span>
+            <span>Loading topics...</span>
           </div>
         ) : (
-          <div className="topic-launch-grid">
-            {renderedLaunchTopics}
-          </div>
+          <>
+<div
+  ref={topicCanvasRef}
+  className={`topic-canvas-viewport ${
+    isCanvasDragging
+      ? 'topic-canvas-dragging'
+      : ''
+  }`}
+  onScroll={handleTopicCanvasScroll}
+  onTouchStart={(event) => {
+    const canvas = topicCanvasRef.current;
+    const touch = event.touches?.[0];
+
+    if (!canvas || !touch) return;
+
+    touchGestureRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      moved: false,
+    };
+
+    canvasDragRef.current.moved = false;
+
+    lastTopicCanvasPositionRef.current = {
+      left: canvas.scrollLeft,
+      top: canvas.scrollTop,
+    };
+  }}
+  onTouchMove={(event) => {
+    const touch = event.touches?.[0];
+
+    if (!touch) return;
+
+    const deltaX =
+      touch.clientX -
+      touchGestureRef.current.startX;
+
+    const deltaY =
+      touch.clientY -
+      touchGestureRef.current.startY;
+
+    if (Math.hypot(deltaX, deltaY) > 8) {
+      touchGestureRef.current.moved = true;
+      canvasDragRef.current.moved = true;
+    }
+  }}
+  onTouchEnd={() => {
+    window.setTimeout(() => {
+      touchGestureRef.current.moved = false;
+      canvasDragRef.current.moved = false;
+    }, 80);
+  }}
+onPointerDown={handleCanvasPointerDown}
+onPointerMove={handleCanvasPointerMove}
+onPointerUp={stopCanvasDragging}
+onPointerCancel={stopCanvasDragging}
+onLostPointerCapture={(event) => {
+  if (event.pointerType === 'mouse') {
+    canvasDraggingRef.current = false;
+    canvasDragRef.current.pointerId = null;
+    setIsCanvasDragging(false);
+  }
+}}
+>
+<div
+  className="topic-canvas-surface"
+style={topicCanvasSurfaceStyle}
+>
+  {renderedLaunchTopics}
+</div>
+</div>
+
+
+          </>
         )}
       </div>
     </div>
@@ -1388,4 +1977,153 @@ const launchTopics = useMemo(() => topics, [topics]);
       )}
     </main>
   );
+}
+
+function getTopicCanvasPosition(index) {
+  const cardsPerCluster = 12;
+
+  const clusterCards = [
+    { x: 16, y: 26, width: 210, height: 150 },
+    { x: 242, y: 12, width: 180, height: 190 },
+    { x: 438, y: 30, width: 228, height: 150 },
+
+    { x: 10, y: 194, width: 184, height: 188 },
+    { x: 210, y: 216, width: 244, height: 150 },
+    { x: 470, y: 194, width: 190, height: 190 },
+
+    { x: 26, y: 398, width: 226, height: 152 },
+    { x: 268, y: 388, width: 182, height: 190 },
+    { x: 466, y: 412, width: 218, height: 150 },
+
+    { x: 56, y: 570, width: 188, height: 180 },
+    { x: 260, y: 592, width: 232, height: 148 },
+    { x: 508, y: 570, width: 176, height: 184 },
+  ];
+
+  const clusterIndex = Math.floor(
+    index / cardsPerCluster
+  );
+
+  const cardIndex = index % cardsPerCluster;
+  const cluster = getSpiralClusterPosition(clusterIndex);
+  const card = clusterCards[cardIndex];
+
+  const clusterWidth = 690;
+  const clusterHeight = 770;
+
+  const canvasCenterX = 1050;
+  const canvasCenterY = 720;
+
+  return {
+    width: card.width,
+    height: card.height,
+    x:
+      canvasCenterX +
+      cluster.x * clusterWidth +
+      card.x,
+    y:
+      canvasCenterY +
+      cluster.y * clusterHeight +
+      card.y,
+  };
+}
+
+function getSpiralClusterPosition(index) {
+  if (index === 0) {
+    return { x: 0, y: 0 };
+  }
+
+  const spiral = [
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 0, y: 1 },
+    { x: -1, y: 1 },
+    { x: -1, y: 0 },
+    { x: -1, y: -1 },
+    { x: 0, y: -1 },
+    { x: 1, y: -1 },
+
+    { x: 2, y: -1 },
+    { x: 2, y: 0 },
+    { x: 2, y: 1 },
+    { x: 2, y: 2 },
+    { x: 1, y: 2 },
+    { x: 0, y: 2 },
+    { x: -1, y: 2 },
+    { x: -2, y: 2 },
+    { x: -2, y: 1 },
+    { x: -2, y: 0 },
+    { x: -2, y: -1 },
+    { x: -2, y: -2 },
+    { x: -1, y: -2 },
+    { x: 0, y: -2 },
+    { x: 1, y: -2 },
+    { x: 2, y: -2 },
+  ];
+
+  return (
+    spiral[index - 1] || {
+      x: index % 5,
+      y: Math.floor(index / 5),
+    }
+  );
+}
+
+function getTopicCanvasLayout(topicCount) {
+  const edgePadding = 20;
+
+  const cards = Array.from(
+    { length: topicCount },
+    (_, index) => ({
+      index,
+      ...getTopicCanvasPosition(index),
+    })
+  );
+
+  if (cards.length === 0) {
+    return {
+      width: 800,
+      height: 700,
+      offsetX: 0,
+      offsetY: 0,
+    };
+  }
+
+  const minX = Math.min(
+    ...cards.map((card) => card.x)
+  );
+
+  const minY = Math.min(
+    ...cards.map((card) => card.y)
+  );
+
+  const maxX = Math.max(
+    ...cards.map(
+      (card) => card.x + card.width
+    )
+  );
+
+  const maxY = Math.max(
+    ...cards.map(
+      (card) => card.y + card.height
+    )
+  );
+
+  return {
+    width:
+      maxX -
+      minX +
+      edgePadding * 2,
+
+    height:
+      maxY -
+      minY +
+      edgePadding * 2,
+
+    offsetX:
+      edgePadding - minX,
+
+    offsetY:
+      edgePadding - minY,
+  };
 }

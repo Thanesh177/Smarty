@@ -5,12 +5,12 @@ const COGNITO_DOMAIN = (import.meta.env.VITE_COGNITO_DOMAIN || '').replace(/^htt
 const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID;
 const COGNITO_USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID;
 
-const WEB_REDIRECT_SIGN_IN = 'https://main.d3qiuefonbp8n9.amplifyapp.com/';
-const WEB_REDIRECT_SIGN_OUT = 'https://main.d3qiuefonbp8n9.amplifyapp.com/login';
+const WEB_REDIRECT_SIGN_IN = 'https://smarty.wiki/';
+const WEB_REDIRECT_SIGN_OUT = 'https://smarty.wiki/login';
 const LOCAL_REDIRECT_SIGN_IN = 'http://localhost:5173/';
 const LOCAL_REDIRECT_SIGN_OUT = 'http://localhost:5173/login';
 const ANDROID_REDIRECT_URI = 'smarty://callback';
-const APP_ORIGIN = 'https://main.d3qiuefonbp8n9.amplifyapp.com';
+const APP_ORIGIN = 'https://smarty.wiki/login';
 
 const isBrowser = typeof window !== 'undefined';
 
