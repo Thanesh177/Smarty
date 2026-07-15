@@ -178,8 +178,8 @@ const getAuthToken = async () => {
     try {
       const session = await fetchAuthSession();
       const token =
-        session?.tokens?.idToken?.toString() ||
         session?.tokens?.accessToken?.toString() ||
+        session?.tokens?.idToken?.toString() ||
         '';
 
       if (token) {
@@ -1057,6 +1057,11 @@ export const creatorApi = {
 async getFollowRequests() {
   const { data } = await api.get(endpoints.creator.followRequests);
   return data.requests || data.items || [];
+},
+
+deleteAccount: async () => {
+  const response = await api.delete('/account');
+  return response.data;
 },
 
 async approveFollowRequest(followerId) {

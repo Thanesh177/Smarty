@@ -2,6 +2,9 @@ import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'reac
 import { useState, useEffect, useCallback, useRef, Component, useMemo } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { signInWithRedirect } from 'aws-amplify/auth';
+import SupportPage from './pages/SupportPage';
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
 import NavbarMenu from './components/NavbarMenu';
 import { notificationApi, chatApi, getPendingRoomInvite } from './api/client';
 import {
@@ -1105,6 +1108,9 @@ useEffect(() => {
                 <Route path="/read-books" element={<ReadBookPage />} />
                 <Route path="/preview-books" element={<ReadBookPage />} />
                 <Route path="/read-book/:bookId" element={<BookReaderPage />} />
+                <Route path="/support" element={<SupportPage/>} />
+                <Route path="/terms" element={<TermsPage/>} />
+                <Route path="/privacy" element={<PrivacyPage/>} />
 
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />

@@ -1,6 +1,7 @@
 import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
 
+
 const COGNITO_DOMAIN = (
   import.meta.env.VITE_COGNITO_DOMAIN || ''
 ).replace(/^https?:\/\//, '');
@@ -40,6 +41,8 @@ const isNativeApp = () => {
     /Smarty-iOS/i.test(userAgent)
   );
 };
+
+
 
 const getCurrentOrigin = () => {
   if (!isBrowser) {
@@ -110,21 +113,36 @@ const redirectSignOut = isNativeApp()
   ? NATIVE_REDIRECT_URI
   : getWebRedirectSignOut();
 
+
 export const isAndroidCognitoLogin = isNativeApp;
 export const isNativeCognitoLogin = isNativeApp;
 
-export const startAndroidGoogleLogin = () => {
+export const startNativeSocialLogin = (
+  provider,
+  fallbackPath = '/feed'
+) => {
   if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
     throw new Error(
       'Missing Cognito domain or client ID. ' +
-      'Check VITE_COGNITO_DOMAIN and VITE_COGNITO_CLIENT_ID.'
+        'Check VITE_COGNITO_DOMAIN and VITE_COGNITO_CLIENT_ID.'
+    );
+  }
+
+  const allowedProviders = [
+    'Google',
+    'Apple',
+  ];
+
+  if (!allowedProviders.includes(provider)) {
+    throw new Error(
+      `Unsupported identity provider: ${provider}`
     );
   }
 
   saveCurrentRedirectPath();
 
   const query = new URLSearchParams({
-    identity_provider: 'Google',
+    identity_provider: provider,
     redirect_uri: NATIVE_REDIRECT_URI,
     response_type: 'code',
     client_id: COGNITO_CLIENT_ID,
@@ -132,13 +150,19 @@ export const startAndroidGoogleLogin = () => {
     state:
       sessionStorage.getItem(
         'smarty-post-login-redirect'
-      ) || '/feed',
+      ) || fallbackPath,
   });
 
   window.location.href =
     `https://${COGNITO_DOMAIN}` +
     `/oauth2/authorize?${query.toString()}`;
 };
+
+
+export const startAndroidGoogleLogin = () =>
+  startNativeSocialLogin('Google');
+export const startNativeAppleLogin = () =>
+  startNativeSocialLogin('Apple');
 
 export const exchangeAndroidCodeForTokens = async (
   code,

@@ -193,7 +193,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [loadingCreator, setLoadingCreator] = useState(false);
   const [status, setStatus] = useState('');
-
+const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -617,6 +617,57 @@ export default function ProfilePage() {
     }
   }
 
+  const handleDeleteAccount = useCallback(async () => {
+  if (deleteAccountLoading) return;
+
+  const confirmed = window.confirm(
+    'Permanently delete your Smarty account? This action cannot be undone.'
+  );
+
+  if (!confirmed) return;
+
+  const typedConfirmation = window.prompt(
+    'Type DELETE to permanently delete your account.'
+  );
+
+  if (typedConfirmation?.trim() !== 'DELETE') {
+    setStatus('Account deletion cancelled. Type DELETE exactly.');
+    return;
+  }
+
+  try {
+    setDeleteAccountLoading(true);
+    setStatus('Deleting your account...');
+
+    await withTimeout(creatorApi.deleteAccount(), 30000);
+
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (storageError) {
+      console.warn(
+        'Could not clear browser storage after account deletion:',
+        storageError
+      );
+    }
+
+    window.location.replace('/login?accountDeleted=1');
+  } catch (err) {
+    console.error('DELETE ACCOUNT ERROR:', err?.response?.data || err);
+
+    setStatus(
+      err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'Unable to delete your account. Please try again.'
+    );
+  } finally {
+    if (mountedRef.current) {
+      setDeleteAccountLoading(false);
+    }
+  }
+}, [deleteAccountLoading, withTimeout]);
+
   async function openApprovedCreator(creator) {
     const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
 
@@ -838,19 +889,38 @@ export default function ProfilePage() {
             <p>Manage your content, update your profile, and explore creators.</p>
           </div>
 
-          <div className="profile-card">
-            <h3>Account</h3>
+<div className="profile-card">
+  <h3>Account</h3>
 
-            <div className="detail-row">
-              <span>Username</span>
-              <strong>{displayName}</strong>
-            </div>
+  <div className="detail-row">
+    <span>Username</span>
+    <strong>{displayName}</strong>
+  </div>
 
-            <div className="detail-row">
-              <span>Email</span>
-              <strong>{profile?.email || 'Not set'}</strong>
-            </div>
-          </div>
+  <div className="detail-row">
+    <span>Email</span>
+    <strong>{profile?.email || 'Not set'}</strong>
+  </div>
+
+  <div className="profile-danger-zone">
+    <div>
+      <strong>Delete account</strong>
+      <p>
+        Permanently remove your Smarty account and associated account data.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      className="profile-delete-account-btn"
+      onClick={handleDeleteAccount}
+      disabled={deleteAccountLoading}
+      aria-busy={deleteAccountLoading}
+    >
+      {deleteAccountLoading ? 'Deleting...' : 'Delete account'}
+    </button>
+  </div>
+</div>
 
           <div className="profile-card">
             <h3>Tips</h3>

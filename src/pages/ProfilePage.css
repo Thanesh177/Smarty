@@ -1564,3 +1564,81 @@
 .profile-edit-box button {
   padding: 11px 13px;
 }
+.profile-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 88, 116, 0.28);
+  border-radius: 18px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 69, 103, 0.08),
+      rgba(255, 69, 103, 0.03)
+    );
+}
+
+.profile-danger-zone > div {
+  min-width: 0;
+}
+
+.profile-danger-zone strong {
+  display: block;
+  color: #ffd5dd;
+  font-size: 0.98rem;
+}
+
+.profile-danger-zone p {
+  margin: 0.35rem 0 0;
+  color: rgba(235, 241, 255, 0.68);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.profile-delete-account-btn {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(255, 101, 128, 0.5);
+  border-radius: 999px;
+  background: rgba(255, 60, 95, 0.12);
+  color: #ff9eb0;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    opacity 160ms ease;
+}
+
+.profile-delete-account-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 60, 95, 0.2);
+  border-color: rgba(255, 126, 150, 0.78);
+}
+
+.profile-delete-account-btn:focus-visible {
+  outline: 3px solid rgba(255, 88, 116, 0.26);
+  outline-offset: 3px;
+}
+
+.profile-delete-account-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+@media (max-width: 640px) {
+  .profile-danger-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .profile-delete-account-btn {
+    width: 100%;
+  }
+}

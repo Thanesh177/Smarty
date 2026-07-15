@@ -392,3 +392,46 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.btn-danger {
+  min-height: 44px;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(255, 92, 118, 0.42);
+  border-radius: 999px;
+  background: rgba(255, 65, 98, 0.12);
+  color: #ff9aae;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    opacity 160ms ease;
+}
+
+.btn-danger:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 65, 98, 0.2);
+  border-color: rgba(255, 112, 137, 0.72);
+}
+
+.btn-danger:focus-visible {
+  outline: 3px solid rgba(255, 92, 118, 0.28);
+  outline-offset: 3px;
+}
+
+.btn-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.delete-account-error {
+  margin: 0.85rem 0 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(255, 92, 118, 0.32);
+  border-radius: 14px;
+  background: rgba(255, 65, 98, 0.1);
+  color: #ffb2c0;
+  font-size: 0.9rem;
+}

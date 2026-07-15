@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import { useAuth } from '../contexts/AuthContext';
-import { isAndroidCognitoLogin, startAndroidGoogleLogin } from '../lib/cognito';
 import './LoginPage.css';
+
+import {
+  isNativeCognitoLogin,
+  startNativeAppleLogin,
+  startAndroidGoogleLogin,
+} from '../lib/cognito';
 
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
@@ -13,7 +18,8 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+const [submitting, setSubmitting] = useState(false);
+const [socialProvider, setSocialProvider] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -47,11 +53,14 @@ export default function LoginPage() {
   if (loading) return <p className="status">Loading...</p>;
   if (user) return <Navigate to={from === '/login' ? '/profile' : from} replace />;
 
-  const handleGoogleLogin = async () => {
-    setError('');
-    setMessage('');
-    if (submitting) return;
-    setSubmitting(true);
+const handleGoogleLogin = async () => {
+  setError('');
+  setMessage('');
+
+  if (submitting) return;
+
+  setSubmitting(true);
+  setSocialProvider('google');
 
     try {
       const redirectTarget = from === '/login' ? '/profile' : from;
@@ -66,11 +75,63 @@ export default function LoginPage() {
       await signInWithRedirect({
         provider: 'Google',
       });
-    } catch (err) {
-      setError(err?.message || 'Google login failed. Please try again in Chrome or Safari.');
-      setSubmitting(false);
-    }
+} catch (err) {
+  setSocialProvider('');
+  setError(
+    err?.message ||
+      'Google login failed. Please try again in Chrome or Safari.'
+  );
+
+  setSubmitting(false);
+  setSocialProvider('');
+}
   };
+
+
+
+const handleAppleLogin = async () => {
+  setError('');
+  setMessage('');
+
+  if (submitting) return;
+
+  setSubmitting(true);
+  setSocialProvider('apple');
+
+  try {
+    const redirectTarget =
+      from === '/login' ? '/profile' : from;
+
+    sessionStorage.setItem(
+      'smarty-post-login-redirect',
+      redirectTarget
+    );
+
+    localStorage.setItem(
+      'smarty-post-login-redirect',
+      redirectTarget
+    );
+
+    if (isNativeCognitoLogin()) {
+      startNativeAppleLogin();
+      return;
+    }
+
+    await signInWithRedirect({
+      provider: 'Apple',
+    });
+  } catch (err) {
+    console.error('Apple login failed:', err);
+
+    setError(
+      err?.message ||
+        'Apple login failed. Please try again.'
+    );
+
+    setSubmitting(false);
+    setSocialProvider('');
+  }
+};
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -184,16 +245,44 @@ export default function LoginPage() {
             {submitting ? 'Please wait...' : 'Login'}
           </button>
 
-          <button
-            type="button"
-            className="google-login-btn"
-            data-google-login-button
-            disabled={submitting}
-            onClick={handleGoogleLogin}
-          >
-            <span className="google-icon">G</span>
-            {submitting ? 'Opening Google...' : 'Continue with Google'}
-          </button>
+<div className="social-login-stack">
+  <button
+    type="button"
+    className="apple-login-btn"
+    disabled={submitting}
+    onClick={handleAppleLogin}
+  >
+    <span
+      className="apple-icon"
+      aria-hidden="true"
+    >
+      
+    </span>
+
+    {socialProvider === 'apple'
+      ? 'Opening Apple...'
+      : 'Continue with Apple'}
+  </button>
+
+  <button
+    type="button"
+    className="google-login-btn"
+    data-google-login-button
+    disabled={submitting}
+    onClick={handleGoogleLogin}
+  >
+    <span
+      className="google-icon"
+      aria-hidden="true"
+    >
+      G
+    </span>
+
+    {socialProvider === 'google'
+      ? 'Opening Google...'
+      : 'Continue with Google'}
+  </button>
+</div>
 
           <div className="login-links">
             <Link className="text-btn" to="/register" state={{ from }}>
