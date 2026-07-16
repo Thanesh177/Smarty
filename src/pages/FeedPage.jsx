@@ -7,6 +7,19 @@ import {
   Bot,
   Loader2,
   Sparkles,
+  Globe2,
+  Brain,
+  Microscope,
+  Cpu,
+  Code2,
+  TrendingUp,
+  HeartPulse,
+  GraduationCap,
+  Scale,
+  Compass,
+  Rocket,
+  MoonStar,
+  Lightbulb,
 } from 'lucide-react';
 import { postApi, creatorApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
@@ -28,8 +41,8 @@ const normalizeCreatorProfile = (value) => value?.profile || value?.user || valu
 
 
 
-const INITIAL_RENDER_LIMIT = 3;
-const RENDER_BATCH_SIZE = 3;
+const INITIAL_RENDER_LIMIT = 10;
+const RENDER_BATCH_SIZE = 8;
 
 const INITIAL_TOPIC_LIMIT = 12;
 const TOPIC_BATCH_SIZE = 4;
@@ -165,23 +178,88 @@ const getTopicVisualMeta = (topicName, index = 0) => {
   const normalized = normalizeTopic(topicName);
 
   const topicPalettes = {
-      all: ['🌐', 'Everything', 'Explore the full Smarty feed'],
-    psychology: ['🧠', 'Mind Lab', 'Human behaviour, cognition, and mental health'],
-    science: ['🔬', 'Discovery Mode', 'Experiments, facts, and curiosity'],
-    technology: ['⚡', 'Future Stack', 'AI, cloud, apps, and modern tools'],
-    coding: ['💻', 'Build Mode', 'Programming, projects, and engineering'],
-    business: ['📈', 'Growth Room', 'Startups, strategy, and money'],
-    health: ['💚', 'Wellness Hub', 'Body, lifestyle, and care'],
-    education: ['📚', 'Study Zone', 'Concepts, revision, and learning'],
-    law: ['⚖️', 'Case Mode', 'Rules, rights, and legal reasoning'],
+    all: {
+      icon: Globe2,
+      label: 'Everything',
+      description: 'Explore the full Smarty feed',
+    },
+
+    psychology: {
+      icon: Brain,
+      label: 'Mind Lab',
+      description: 'Human behaviour, cognition, and mental health',
+    },
+
+    science: {
+      icon: Microscope,
+      label: 'Discovery Mode',
+      description: 'Experiments, facts, and curiosity',
+    },
+
+    technology: {
+      icon: Cpu,
+      label: 'Future Stack',
+      description: 'AI, cloud, apps, and modern tools',
+    },
+
+    coding: {
+      icon: Code2,
+      label: 'Build Mode',
+      description: 'Programming, projects, and engineering',
+    },
+
+    business: {
+      icon: TrendingUp,
+      label: 'Growth Room',
+      description: 'Startups, strategy, and money',
+    },
+
+    health: {
+      icon: HeartPulse,
+      label: 'Wellness Hub',
+      description: 'Body, lifestyle, and care',
+    },
+
+    education: {
+      icon: GraduationCap,
+      label: 'Study Zone',
+      description: 'Concepts, revision, and learning',
+    },
+
+    law: {
+      icon: Scale,
+      label: 'Case Mode',
+      description: 'Rules, rights, and legal reasoning',
+    },
   };
 
-  return topicPalettes[normalized] || [
-    ['✨', 'Smart Pick', 'Fresh ideas selected for you'],
-    ['🚀', 'Deep Dive', 'Explore this learning lane'],
-    ['🌙', 'Focus Flow', 'Calm, focused topic discovery'],
-    ['💡', 'Idea Spark', 'Quick knowledge worth saving'],
-  ][index % 4];
+  const fallbackTopics = [
+    {
+      icon: Sparkles,
+      label: 'Smart Pick',
+      description: 'Fresh ideas selected for you',
+    },
+    {
+      icon: Rocket,
+      label: 'Deep Dive',
+      description: 'Explore this learning lane',
+    },
+    {
+      icon: MoonStar,
+      label: 'Focus Flow',
+      description: 'Calm, focused topic discovery',
+    },
+    {
+      icon: Lightbulb,
+      label: 'Idea Spark',
+      description: 'Quick knowledge worth saving',
+    },
+  ];
+
+  return (
+    topicPalettes[normalized] ||
+    fallbackTopics[index % fallbackTopics.length]
+  );
 };
 
 const uniqueTopicList = (values = []) => {
@@ -206,8 +284,11 @@ const TopicLaunchCard = memo(function TopicLaunchCard({
   dragRef,
   suppressClickRef,
 }) {
-  const [emoji, label, description] =
-    getTopicVisualMeta(item, index);
+const {
+  icon: TopicIcon,
+  label,
+  description,
+} = getTopicVisualMeta(item, index);
 
   const isAllTopics =
     normalizeTopic(item) === 'all';
@@ -250,12 +331,15 @@ onClick={(event) => {
         aria-hidden="true"
       />
 
-      <span
-        className="topic-launch-orb"
-        aria-hidden="true"
-      >
-        {emoji}
-      </span>
+<span
+  className="topic-launch-orb"
+  aria-hidden="true"
+>
+  <TopicIcon
+    size={30}
+    strokeWidth={1.8}
+  />
+</span>
 
       <span className="topic-launch-copy">
         <span className="topic-launch-card-header">
@@ -612,9 +696,10 @@ const previousTopicCanvasLayoutRef = useRef({
     savePost,
   } = useFeed();
 
-  const loadMoreRef = useRef(null);
-  const topicCanvasRef = useRef(null);
-  const feedRef = useRef(null);
+const loadMoreRef = useRef(null);
+const feedLoadLockRef = useRef(false);
+const topicCanvasRef = useRef(null);
+const feedRef = useRef(null);
 
 const canvasDragRef = useRef({
   pointerId: null,
@@ -645,7 +730,6 @@ const suppressTopicClickRef = useRef(false);
     INITIAL_TOPIC_LIMIT
   );
   const [isCanvasDragging, setIsCanvasDragging] = useState(false);
-
 
 
 const handleCanvasPointerDown = useCallback((event) => {
@@ -689,6 +773,81 @@ const handleCanvasPointerDown = useCallback((event) => {
   setIsCanvasDragging(true);
 }, []);
 
+const updateTopicCardDepth = useCallback(() => {
+  const canvas = topicCanvasRef.current;
+
+  if (!canvas) return;
+
+  const canvasRect = canvas.getBoundingClientRect();
+
+  const centerX =
+    canvasRect.left + canvasRect.width / 2;
+
+  const centerY =
+    canvasRect.top + canvasRect.height / 2;
+
+  const maxDistance = Math.hypot(
+    canvasRect.width / 2,
+    canvasRect.height / 2
+  );
+
+  const cards = canvas.querySelectorAll(
+    '.topic-launch-card'
+  );
+
+  cards.forEach((card) => {
+    const cardRect = card.getBoundingClientRect();
+
+    const cardCenterX =
+      cardRect.left + cardRect.width / 2;
+
+    const cardCenterY =
+      cardRect.top + cardRect.height / 2;
+
+    const distance = Math.hypot(
+      cardCenterX - centerX,
+      cardCenterY - centerY
+    );
+
+    const normalizedDistance = Math.min(
+      distance / maxDistance,
+      1
+    );
+
+    const scale =
+      0.55 + (1 - normalizedDistance) * 0.45;
+
+    const opacity =
+      0.35 + (1 - normalizedDistance) * 0.65;
+
+    card.style.setProperty(
+      '--topic-center-scale',
+      scale.toFixed(3)
+    );
+
+    card.style.setProperty(
+      '--topic-center-opacity',
+      opacity.toFixed(3)
+    );
+
+    card.style.boxShadow =
+      `0 ${
+        8 + (1 - normalizedDistance) * 18
+      }px ${
+        20 + (1 - normalizedDistance) * 30
+      }px rgba(0, 0, 0, 0.28)`;
+card.style.filter =
+  `blur(${normalizedDistance * 0.8}px)`;
+
+    card.style.zIndex = String(
+      Math.round(
+        (1 - normalizedDistance) * 20
+      ) + 2
+    );
+  });
+}, []);
+
+
 const handleCanvasPointerMove = useCallback((event) => {
   if (event.pointerType !== 'mouse') {
     return;
@@ -726,10 +885,17 @@ if (Math.hypot(deltaX, deltaY) > 6) {
   suppressTopicClickRef.current = true;
 }
 
-  pendingCanvasPositionRef.current = {
-    left: canvasDragRef.current.scrollLeft - deltaX,
-    top: canvasDragRef.current.scrollTop - deltaY,
-  };
+const DRAG_SPEED = 0.55;
+
+pendingCanvasPositionRef.current = {
+  left:
+    canvasDragRef.current.scrollLeft -
+    deltaX * DRAG_SPEED,
+
+  top:
+    canvasDragRef.current.scrollTop -
+    deltaY * DRAG_SPEED,
+};
 
   if (!canvasAnimationFrameRef.current) {
     canvasAnimationFrameRef.current =
@@ -743,6 +909,7 @@ if (Math.hypot(deltaX, deltaY) > 6) {
 
           currentCanvas.scrollTop =
             pendingCanvasPositionRef.current.top;
+            updateTopicCardDepth();
         }
 
         canvasAnimationFrameRef.current = null;
@@ -780,7 +947,7 @@ if (Math.hypot(deltaX, deltaY) > 6) {
         topicEdgeLoadTimerRef.current = null;
       }, 180);
   }
-}, []);
+}, [updateTopicCardDepth]);
 
 const stopCanvasDragging = useCallback((event) => {
   if (event.pointerType !== 'mouse') {
@@ -1036,6 +1203,15 @@ const topics = useMemo(() => {
 }, [allTopics, visiblePosts]);
 
 const launchTopics = useMemo(() => topics, [topics]);
+
+useEffect(() => {
+  if (selectedTopic) return;
+
+  const fullTopicCount = launchTopics.length;
+
+  setTopicDisplayLimit(fullTopicCount);
+  topicDisplayLimitRef.current = fullTopicCount;
+}, [selectedTopic, launchTopics.length]);
 
 const visibleLaunchTopics = useMemo(
   () => launchTopics.slice(0, topicDisplayLimit),
@@ -1304,48 +1480,73 @@ useEffect(() => {
     setSavedPostIds(pruneByRenderedPosts);
   }, [renderedPostIdSet]);
 
-  useEffect(() => {
+useEffect(() => {
   const target = loadMoreRef.current;
+  const root = feedRef.current;
 
-  if (!target) return undefined;
+  if (!target || !root || !selectedTopic) {
+    return undefined;
+  }
 
   const observer = new IntersectionObserver(
-    ([entry]) => {
+    async ([entry]) => {
       if (
         !entry.isIntersecting ||
+        loading ||
         loadingMore ||
-        loading
+        feedLoadLockRef.current
       ) {
         return;
       }
 
-      if (renderLimit < filteredPosts.length) {
-        setRenderLimit((current) =>
-          Math.min(
-            current + RENDER_BATCH_SIZE,
-            filteredPosts.length
-          )
+      feedLoadLockRef.current = true;
+
+      try {
+        /*
+         * First reveal more posts that are already loaded in memory.
+         */
+        if (renderLimit < filteredPosts.length) {
+          setRenderLimit((current) =>
+            Math.min(
+              current + RENDER_BATCH_SIZE,
+              filteredPosts.length
+            )
+          );
+
+          return;
+        }
+
+        /*
+         * After all current posts are rendered, request the next API page.
+         */
+        if (nextCursor) {
+          await loadMore();
+        }
+      } catch (loadError) {
+        console.error(
+          'Infinite feed load failed:',
+          loadError
         );
-
-        return;
-      }
-
-      if (nextCursor) {
-        observer.unobserve(entry.target);
-        loadMore();
+      } finally {
+        window.setTimeout(() => {
+          feedLoadLockRef.current = false;
+        }, 120);
       }
     },
     {
-      root: feedRef.current,
-      rootMargin: '600px',
-      threshold: 0,
+      root,
+      rootMargin: '1200px 0px',
+      threshold: 0.01,
     }
   );
 
   observer.observe(target);
 
-  return () => observer.disconnect();
+  return () => {
+    observer.disconnect();
+  };
 }, [
+  selectedTopic,
   nextCursor,
   loadingMore,
   loading,
@@ -1353,6 +1554,15 @@ useEffect(() => {
   renderLimit,
   filteredPosts.length,
 ]);
+
+
+useEffect(() => {
+  if (!loadingMore) {
+    feedLoadLockRef.current = false;
+  }
+}, [loadingMore, nextCursor]);
+
+
 
   const visibleCreatorIds = useMemo(
     () => [
@@ -1418,6 +1628,39 @@ useEffect(() => {
       toastTimerRef.current = null;
     }, duration);
   }, []);
+
+  useEffect(() => {
+  const canvas = topicCanvasRef.current;
+
+  if (!canvas || selectedTopic) {
+    return undefined;
+  }
+
+  const handleWheel = (event) => {
+    event.preventDefault();
+
+    const WHEEL_SPEED = 0.42;
+
+    canvas.scrollLeft +=
+      event.deltaX * WHEEL_SPEED;
+
+    canvas.scrollTop +=
+      event.deltaY * WHEEL_SPEED;
+  };
+
+  canvas.addEventListener(
+    'wheel',
+    handleWheel,
+    { passive: false }
+  );
+
+  return () => {
+    canvas.removeEventListener(
+      'wheel',
+      handleWheel
+    );
+  };
+}, [selectedTopic]);
 
 
   useEffect(() => {
@@ -1508,12 +1751,18 @@ useEffect(() => {
       }
     }
   }, [explaining, simpleExplanations, showToast]);
+  
 const handleChangeTopic = useCallback(() => {
+  const fullTopicCount =
+    launchTopics.length;
+
   setSelectedTopic('');
   setRenderLimit(INITIAL_RENDER_LIMIT);
-  setTopicDisplayLimit(INITIAL_TOPIC_LIMIT);
+  setTopicDisplayLimit(fullTopicCount);
+
   topicDisplayLimitRef.current =
-  INITIAL_TOPIC_LIMIT;
+    fullTopicCount;
+
   restoredFeedPositionRef.current = true;
 
   requestAnimationFrame(() => {
@@ -1522,7 +1771,9 @@ const handleChangeTopic = useCallback(() => {
       behavior: 'smooth',
     });
   });
-}, []);
+}, [
+  launchTopics.length,
+]);
 
   const handleTopicSelect = useCallback((item) => {
     const nextTopic = item || 'All';
@@ -1655,11 +1906,42 @@ const renderedLaunchTopics = useMemo(
 );
 
 
+useEffect(() => {
+  if (selectedTopic) return undefined;
+
+  const frame = requestAnimationFrame(() => {
+    updateTopicCardDepth();
+  });
+
+  return () => {
+    cancelAnimationFrame(frame);
+  };
+}, [
+  selectedTopic,
+  visibleLaunchTopics.length,
+  topicCanvasLayout.width,
+  topicCanvasLayout.height,
+  updateTopicCardDepth,
+]);
+
 const handleTopicCanvasScroll = useCallback(() => {
   const canvas = topicCanvasRef.current;
 
+  if (!canvas) return;
+
+  if (topicRevealFrameRef.current) {
+    cancelAnimationFrame(
+      topicRevealFrameRef.current
+    );
+  }
+
+  topicRevealFrameRef.current =
+    requestAnimationFrame(() => {
+      updateTopicCardDepth();
+      topicRevealFrameRef.current = null;
+    });
+
   if (
-    !canvas ||
     topicEdgeLoadLockRef.current ||
     topicDisplayLimitRef.current >=
       launchTopicsLengthRef.current
@@ -1696,30 +1978,21 @@ const handleTopicCanvasScroll = useCallback(() => {
 
   topicEdgeLoadLockRef.current = true;
 
-  if (topicRevealFrameRef.current) {
-    cancelAnimationFrame(
-      topicRevealFrameRef.current
+  setTopicDisplayLimit((current) => {
+    const next = Math.min(
+      current + TOPIC_BATCH_SIZE,
+      launchTopicsLengthRef.current
     );
-  }
 
-  topicRevealFrameRef.current =
-    requestAnimationFrame(() => {
-      setTopicDisplayLimit((current) => {
-        const next = Math.min(
-          current + TOPIC_BATCH_SIZE,
-          launchTopicsLengthRef.current
-        );
+    topicDisplayLimitRef.current = next;
 
-        topicDisplayLimitRef.current = next;
-
-        return next;
-      });
-
-      topicRevealFrameRef.current = null;
-    });
+    return next;
+  });
 
   if (topicEdgeLoadTimerRef.current) {
-    clearTimeout(topicEdgeLoadTimerRef.current);
+    clearTimeout(
+      topicEdgeLoadTimerRef.current
+    );
   }
 
   topicEdgeLoadTimerRef.current =
@@ -1727,7 +2000,8 @@ const handleTopicCanvasScroll = useCallback(() => {
       topicEdgeLoadLockRef.current = false;
       topicEdgeLoadTimerRef.current = null;
     }, 110);
-}, []);
+}, [updateTopicCardDepth]);
+
 
   const renderedPosts = useMemo(
     () => renderedFeedPosts.map((post, index) => {
@@ -1920,6 +2194,8 @@ onLostPointerCapture={(event) => {
   if (event.pointerType === 'mouse') {
     canvasDraggingRef.current = false;
     canvasDragRef.current.pointerId = null;
+    canvasDragRef.current.moved = false;
+suppressTopicClickRef.current = false;
     setIsCanvasDragging(false);
   }
 }}
@@ -1942,13 +2218,7 @@ style={topicCanvasSurfaceStyle}
 
       {selectedTopic && (
         <section className="topic-rail mobile-feed-topic-rail" aria-label="Feed topics">
-          <button
-            type="button"
-            className="change-topic-btn"
-            onClick={handleChangeTopic}
-          >
-            Change topic
-          </button>
+
 
           <div className="mobile-topic-scroll" role="tablist" aria-label="Select feed topic">
             {renderedTopics}
@@ -1956,31 +2226,52 @@ style={topicCanvasSurfaceStyle}
         </section>
       )}
 
-      {selectedTopic && loading && filteredPosts.length === 0 && <FeedSkeleton />}
+{selectedTopic && loading && filteredPosts.length === 0 && (
+  <FeedSkeleton />
+)}
 
-      {selectedTopic && error && <p className="feed-status error">{error}</p>}
+{selectedTopic && error && (
+  <p className="feed-status error">
+    {error}
+  </p>
+)}
 
-      {selectedTopic && !loading && !error && filteredPosts.length === 0 && (
-        <p className="feed-status">No posts found for this topic.</p>
-      )}
+{selectedTopic &&
+  !loading &&
+  !error &&
+  filteredPosts.length === 0 && (
+    <p className="feed-status">
+      No posts found for this topic.
+    </p>
+  )}
 
-      {selectedTopic && (
-        <section className="snap-feed">
-          {renderedPosts}
-        </section>
-      )}
+{selectedTopic && (
+  <section className="snap-feed">
+    {renderedPosts}
 
-      {selectedTopic && <div ref={loadMoreRef} className="feed-load-trigger" />}
+    <div
+      ref={loadMoreRef}
+      className="feed-load-trigger"
+      aria-hidden="true"
+    />
+  </section>
+)}
 
-      {selectedTopic && (loadingMore || renderLimit < filteredPosts.length) && (
-        <p className="feed-status">Loading more posts...</p>
-      )}
+{selectedTopic &&
+  (loadingMore ||
+    renderLimit < filteredPosts.length) && (
+    <p className="feed-status">
+      Loading more posts...
+    </p>
+  )}
     </main>
   );
 }
 
 function getTopicCanvasPosition(index) {
   const cardsPerCluster = 12;
+
+  
 
   const clusterCards = [
     { x: 16, y: 26, width: 210, height: 150 },
@@ -2000,32 +2291,36 @@ function getTopicCanvasPosition(index) {
     { x: 492, y: 680, width: 176, height: 184 },
   ];
 
-  const clusterIndex = Math.floor(
-    index / cardsPerCluster
-  );
+const clusterIndex = Math.floor(
+  index / cardsPerCluster
+);
 
-  const cardIndex = index % cardsPerCluster;
-  const cluster = getSpiralClusterPosition(clusterIndex);
-  const card = clusterCards[cardIndex];
+const cardIndex = index % cardsPerCluster;
+const cluster = getSpiralClusterPosition(clusterIndex);
+const card = clusterCards[cardIndex];
 
-  const clusterWidth = 740;
-  const clusterHeight = 920;
+const isDesktop =
+  typeof window !== 'undefined' &&
+  window.innerWidth >= 1024;
 
-  const canvasCenterX = 1050;
-  const canvasCenterY = 720;
+const clusterWidth = isDesktop ? 860 : 740;
+const clusterHeight = isDesktop ? 1080 : 920;
 
-  return {
-    width: card.width,
-    height: card.height,
-    x:
-      canvasCenterX +
-      cluster.x * clusterWidth +
-      card.x,
-    y:
-      canvasCenterY +
-      cluster.y * clusterHeight +
-      card.y,
-  };
+const canvasCenterX = 1050;
+const canvasCenterY = 720;
+
+return {
+  width: card.width,
+  height: card.height,
+  x:
+    canvasCenterX +
+    cluster.x * clusterWidth +
+    card.x,
+  y:
+    canvasCenterY +
+    cluster.y * clusterHeight +
+    card.y,
+};
 }
 
 function getSpiralClusterPosition(index) {
@@ -2068,6 +2363,8 @@ function getSpiralClusterPosition(index) {
     }
   );
 }
+
+
 
 function getTopicCanvasLayout(topicCount) {
   const edgePadding = 20;
