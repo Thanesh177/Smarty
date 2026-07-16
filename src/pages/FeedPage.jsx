@@ -1826,10 +1826,10 @@ const handleTopicCanvasScroll = useCallback(() => {
           <span>Choose your feed</span>
         </div>
 
-        <h1>
+        {/* <h1>
           What do you want to
           <span> learn?</span>
-        </h1>
+        </h1> */}
 
         <p>
           Pick a topic to open a focused feed made for you.
