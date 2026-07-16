@@ -1984,20 +1984,20 @@ function getTopicCanvasPosition(index) {
 
   const clusterCards = [
     { x: 16, y: 26, width: 210, height: 150 },
-    { x: 242, y: 12, width: 180, height: 190 },
-    { x: 438, y: 30, width: 228, height: 150 },
+    { x: 254, y: 26, width: 180, height: 190 },
+    { x: 462, y: 26, width: 228, height: 150 },
 
-    { x: 10, y: 194, width: 184, height: 188 },
-    { x: 210, y: 216, width: 244, height: 150 },
-    { x: 470, y: 194, width: 190, height: 190 },
+    { x: 16, y: 244, width: 184, height: 188 },
+    { x: 228, y: 244, width: 244, height: 150 },
+    { x: 500, y: 244, width: 190, height: 190 },
 
-    { x: 26, y: 398, width: 226, height: 152 },
-    { x: 268, y: 388, width: 182, height: 190 },
-    { x: 466, y: 412, width: 218, height: 150 },
+    { x: 16, y: 462, width: 226, height: 152 },
+    { x: 270, y: 462, width: 182, height: 190 },
+    { x: 480, y: 462, width: 218, height: 150 },
 
-    { x: 56, y: 570, width: 188, height: 180 },
-    { x: 260, y: 592, width: 232, height: 148 },
-    { x: 508, y: 570, width: 176, height: 184 },
+    { x: 16, y: 680, width: 188, height: 180 },
+    { x: 232, y: 680, width: 232, height: 148 },
+    { x: 492, y: 680, width: 176, height: 184 },
   ];
 
   const clusterIndex = Math.floor(
@@ -2008,8 +2008,8 @@ function getTopicCanvasPosition(index) {
   const cluster = getSpiralClusterPosition(clusterIndex);
   const card = clusterCards[cardIndex];
 
-  const clusterWidth = 690;
-  const clusterHeight = 770;
+  const clusterWidth = 740;
+  const clusterHeight = 920;
 
   const canvasCenterX = 1050;
   const canvasCenterY = 720;

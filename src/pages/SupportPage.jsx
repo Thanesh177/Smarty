@@ -1,4 +1,4 @@
-import './text.css';
+import './Text.css';
 
 export default function SupportPage() {
   return (
