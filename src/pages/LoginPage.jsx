@@ -34,7 +34,7 @@ const [socialProvider, setSocialProvider] = useState('');
         sessionStorage.setItem('smarty-post-login-redirect', redirectTarget);
         localStorage.setItem('smarty-post-login-redirect', redirectTarget);
 
-        if (isAndroidCognitoLogin()) {
+        if (isNativeCognitoLogin()) {
           startAndroidGoogleLogin();
           return;
         }
@@ -67,7 +67,7 @@ const handleGoogleLogin = async () => {
       sessionStorage.setItem('smarty-post-login-redirect', redirectTarget);
       localStorage.setItem('smarty-post-login-redirect', redirectTarget);
 
-      if (isAndroidCognitoLogin()) {
+     if (isNativeCognitoLogin()) {
         startAndroidGoogleLogin();
         return;
       }
