@@ -194,6 +194,8 @@ export default function ProfilePage() {
   const [loadingCreator, setLoadingCreator] = useState(false);
   const [status, setStatus] = useState('');
 const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
+const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
+const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [newUsername, setNewUsername] = useState('');
@@ -617,21 +619,28 @@ const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
     }
   }
 
-  const handleDeleteAccount = useCallback(async () => {
+  
+
+const openDeleteAccountConfirm = useCallback(() => {
   if (deleteAccountLoading) return;
 
-  const confirmed = window.confirm(
-    'Permanently delete your Smarty account? This action cannot be undone.'
-  );
+  setDeleteConfirmationText('');
+  setStatus('');
+  setShowDeleteAccountConfirm(true);
+}, [deleteAccountLoading]);
 
-  if (!confirmed) return;
+const closeDeleteAccountConfirm = useCallback(() => {
+  if (deleteAccountLoading) return;
 
-  const typedConfirmation = window.prompt(
-    'Type DELETE to permanently delete your account.'
-  );
+  setShowDeleteAccountConfirm(false);
+  setDeleteConfirmationText('');
+}, [deleteAccountLoading]);
 
-  if (typedConfirmation?.trim() !== 'DELETE') {
-    setStatus('Account deletion cancelled. Type DELETE exactly.');
+const handleDeleteAccount = useCallback(async () => {
+  if (deleteAccountLoading) return;
+
+  if (deleteConfirmationText.trim() !== 'DELETE') {
+    setStatus('Type DELETE exactly to permanently delete your account.');
     return;
   }
 
@@ -639,7 +648,12 @@ const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
     setDeleteAccountLoading(true);
     setStatus('Deleting your account...');
 
-    await withTimeout(creatorApi.deleteAccount(), 30000);
+    const deleteAccountRequest =
+      typeof userApi.deleteAccount === 'function'
+        ? userApi.deleteAccount()
+        : creatorApi.deleteAccount();
+
+    await withTimeout(deleteAccountRequest, 30000);
 
     try {
       localStorage.clear();
@@ -666,7 +680,7 @@ const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
       setDeleteAccountLoading(false);
     }
   }
-}, [deleteAccountLoading, withTimeout]);
+}, [deleteAccountLoading, deleteConfirmationText, withTimeout]);
 
   async function openApprovedCreator(creator) {
     const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
@@ -795,16 +809,13 @@ const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
             <p className="profile-bio">Learn. Share. Grow with Smarty.</p>
 
             <div className="profile-action-row">
-              <button
-                type="button"
-                className="profile-edit-btn"
-                onClick={() => {
-                  setStatus('');
-                  setEditingProfile((prev) => !prev);
-                }}
-              >
-                {editingProfile ? 'Close' : 'Edit'}
-              </button>
+<button
+  type="button"
+  className="profile-edit-btn"
+  onClick={openProfileEditor}
+>
+  Edit
+</button>
 
               <button
                 type="button"
@@ -910,15 +921,15 @@ const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
       </p>
     </div>
 
-    <button
-      type="button"
-      className="profile-delete-account-btn"
-      onClick={handleDeleteAccount}
-      disabled={deleteAccountLoading}
-      aria-busy={deleteAccountLoading}
-    >
-      {deleteAccountLoading ? 'Deleting...' : 'Delete account'}
-    </button>
+<button
+  type="button"
+  className="profile-delete-account-btn"
+  onClick={openDeleteAccountConfirm}
+  disabled={deleteAccountLoading}
+  aria-busy={deleteAccountLoading}
+>
+  {deleteAccountLoading ? 'Deleting...' : 'Delete account'}
+</button>
   </div>
 </div>
 
@@ -1056,6 +1067,86 @@ const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
           )}
         </section>
       )}
+
+      {showDeleteAccountConfirm && (
+  <div
+    className="profile-modal-overlay"
+    role="presentation"
+    onClick={closeDeleteAccountConfirm}
+  >
+    <section
+      className="profile-modal profile-edit-box"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Delete account"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="profile-modal-header">
+        <div>
+          <h2>Delete your account</h2>
+          <p>This action is permanent and cannot be undone.</p>
+        </div>
+
+        <button
+          type="button"
+          className="profile-modal-close"
+          onClick={closeDeleteAccountConfirm}
+          disabled={deleteAccountLoading}
+          aria-label="Close delete account confirmation"
+        >
+          ✕
+        </button>
+      </div>
+
+<div className="profile-modal-body">
+  <p>
+    Type <strong>DELETE</strong> to permanently remove your Smarty
+    account and associated account data.
+  </p>
+
+  <input
+    value={deleteConfirmationText}
+    placeholder="Type DELETE"
+    autoComplete="off"
+    autoCapitalize="characters"
+    onChange={(event) =>
+      setDeleteConfirmationText(event.target.value)
+    }
+  />
+
+  {status && (
+    <p className="status" role="alert">
+      {status}
+    </p>
+  )}
+</div>
+
+      <div className="profile-modal-footer">
+        <button
+          type="button"
+          className="profile-modal-cancel"
+          onClick={closeDeleteAccountConfirm}
+          disabled={deleteAccountLoading}
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          className="profile-delete-account-btn"
+          onClick={handleDeleteAccount}
+          disabled={
+            deleteAccountLoading ||
+            deleteConfirmationText.trim() !== 'DELETE'
+          }
+          aria-busy={deleteAccountLoading}
+        >
+          {deleteAccountLoading ? 'Deleting...' : 'Delete permanently'}
+        </button>
+      </div>
+    </section>
+  </div>
+)}
 
       {editingProfile && (
         <div

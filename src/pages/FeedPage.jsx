@@ -621,21 +621,27 @@ const FeedPostCard = memo(function FeedPostCard({
         <div className="post-author">
           {creatorId ? (
             <Link
-              to={`/creator/${encodeURIComponent(String(creatorId))}`}
-              className="creator-link"
-              title={`Open ${creatorName}'s creator profile`}
-              aria-label={`Open ${creatorName}'s creator profile`}
-              onClick={(event) => event.stopPropagation()}
-              state={{
-                fromPostId: postId,
-                creatorId,
-                databaseAuthorId: creatorId,
-                databaseAuthor: post.author || '',
-                source: 'feed-author-link',
-              }}
-            >
-              {creatorName}
-            </Link>
+  to={`/creator/${encodeURIComponent(
+    String(creatorId)
+  )}`}
+  className="creator-link"
+  title={`Open ${creatorName}'s creator profile`}
+  aria-label={`Open ${creatorName}'s creator profile`}
+  onClick={(event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onOpenCreator(creatorId, postId);
+  }}
+  state={{
+    fromPostId: postId,
+    creatorId,
+    databaseAuthorId: creatorId,
+    databaseAuthor: post.author || '',
+    source: 'feed-author-link',
+  }}
+>
+  {creatorName}
+</Link>
           ) : (
             <span
               className="creator-link creator-link-disabled"
@@ -2235,6 +2241,35 @@ const handleTopicClick = useCallback(
     [navigate]
   );
 
+  const handleOpenCreator = useCallback(
+  (creatorId, postId = '') => {
+    const normalizedCreatorId = String(
+      creatorId || ''
+    ).trim();
+
+    if (!normalizedCreatorId) {
+      showToast('Creator profile unavailable');
+      return;
+    }
+
+    navigate(
+      `/creator/${encodeURIComponent(
+        normalizedCreatorId
+      )}`,
+      {
+        state: {
+          fromPostId: postId,
+          creatorId: normalizedCreatorId,
+          databaseAuthorId:
+            normalizedCreatorId,
+          source: 'feed-author-link',
+        },
+      }
+    );
+  },
+  [navigate, showToast]
+);
+
   const handleOpenPost = useCallback(
     (post, creatorName) => {
       const postId = getPostId(post);
@@ -2486,23 +2521,23 @@ const handleTopicCanvasScroll = useCallback(() => {
 />
       );
     }),
-[
-  savedPostIds,
-  creatorProfiles,
-  explaining,
-  renderedFeedPosts,
-  handleOpenPost,
-  handleOpenCreator,
-  handleComments,
-  handleExplain,
-  handleSave,
-  handleTopicClick,
-  handleTranslateChange,
-  showTranslated,
-  simpleExplanations,
-  translating,
-  translations,
-]
+    [
+      savedPostIds,
+      creatorProfiles,
+      explaining,
+      renderedFeedPosts,
+handleOpenPost,
+handleOpenCreator,
+handleComments,
+      handleExplain,
+      handleSave,
+      handleTopicClick,
+      handleTranslateChange,
+      showTranslated,
+      simpleExplanations,
+      translating,
+      translations,
+    ]
   );
 
   return (
