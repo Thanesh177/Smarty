@@ -397,16 +397,20 @@ return (
         ? 'topic-launch-card-featured'
         : ''
     }`}
-    style={{
-      left: `${position.x}px`,
-      top: `${position.y}px`,
-      width: `${position.width}px`,
-      height: `${position.height}px`,
-      '--topic-delay': `${Math.min(
-        (index % 4) * 45,
-        135
-      )}ms`,
-    }}
+style={{
+  left: `${position.x}px`,
+  top: `${position.y}px`,
+  width: `${position.width}px`,
+  height: `${position.height}px`,
+  '--topic-delay': `${Math.min(
+    (index % 5) * 36,
+    144
+  )}ms`,
+  '--topic-center-scale': 1,
+  '--topic-center-opacity': 1,
+  '--topic-center-lift': '0px',
+  '--topic-center-blur': '0px',
+}}
     onPointerDown={(event) => {
       event.stopPropagation();
     }}
@@ -828,6 +832,15 @@ const previousTopicCanvasLayoutRef = useRef({
     savePost,
   } = useFeed();
 
+  const canvasVelocityRef = useRef({
+  x: 0,
+  y: 0,
+});
+
+const canvasMomentumFrameRef = useRef(null);
+
+const lastCanvasMoveTimeRef = useRef(0);
+
 const loadMoreRef = useRef(null);
 const feedLoadLockRef = useRef(false);
 const topicCanvasRef = useRef(null);
@@ -869,43 +882,20 @@ const suppressTopicClickRef = useRef(false);
   );
   const [isCanvasDragging, setIsCanvasDragging] = useState(false);
 
-const handleCanvasPointerDown = useCallback((event) => {
-  if (
-    event.pointerType !== 'mouse' ||
-    event.button !== 0
-  ) {
-    return;
+
+const stopCanvasMomentum = useCallback(() => {
+  if (canvasMomentumFrameRef.current) {
+    cancelAnimationFrame(
+      canvasMomentumFrameRef.current
+    );
+
+    canvasMomentumFrameRef.current = null;
   }
 
-  /*
-   * Let cards receive normal desktop clicks.
-   * Mouse dragging starts only from the canvas background.
-   */
-if (event.target.closest('.topic-launch-card')) {
-  return;
-}
-
-  const canvas = topicCanvasRef.current;
-
-  if (!canvas) return;
-
-  canvasDraggingRef.current = true;
-  suppressTopicClickRef.current = false;
-  topicDragLoadDistanceRef.current = 0;
-
-  canvasDragRef.current = {
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    lastX: event.clientX,
-    lastY: event.clientY,
-    scrollLeft: canvas.scrollLeft,
-    scrollTop: canvas.scrollTop,
-    moved: false,
+  canvasVelocityRef.current = {
+    x: 0,
+    y: 0,
   };
-
-  canvas.setPointerCapture?.(event.pointerId);
-  setIsCanvasDragging(true);
 }, []);
 
 const updateTopicCardDepth = useCallback(() => {
@@ -913,47 +903,67 @@ const updateTopicCardDepth = useCallback(() => {
 
   if (!canvas) return;
 
-  const canvasRect = canvas.getBoundingClientRect();
+  const canvasRect =
+    canvas.getBoundingClientRect();
 
   const centerX =
-    canvasRect.left + canvasRect.width / 2;
+    canvasRect.left +
+    canvasRect.width / 2;
 
   const centerY =
-    canvasRect.top + canvasRect.height / 2;
+    canvasRect.top +
+    canvasRect.height / 2;
 
-  const maxDistance = Math.hypot(
-    canvasRect.width / 2,
-    canvasRect.height / 2
+  const maxDistance = Math.max(
+    1,
+    Math.hypot(
+      canvasRect.width / 2,
+      canvasRect.height / 2
+    )
   );
 
-  const cards = canvas.querySelectorAll(
-    '.topic-launch-card'
-  );
+  const cards =
+    canvas.querySelectorAll(
+      '.topic-launch-card'
+    );
 
   cards.forEach((card) => {
-    const cardRect = card.getBoundingClientRect();
+    const cardRect =
+      card.getBoundingClientRect();
 
     const cardCenterX =
-      cardRect.left + cardRect.width / 2;
+      cardRect.left +
+      cardRect.width / 2;
 
     const cardCenterY =
-      cardRect.top + cardRect.height / 2;
+      cardRect.top +
+      cardRect.height / 2;
 
     const distance = Math.hypot(
       cardCenterX - centerX,
       cardCenterY - centerY
     );
 
-    const normalizedDistance = Math.min(
-      distance / maxDistance,
-      1
-    );
+    const normalizedDistance =
+      Math.min(
+        distance / maxDistance,
+        1
+      );
+
+    const focus =
+      1 - normalizedDistance;
 
     const scale =
-      0.55 + (1 - normalizedDistance) * 0.45;
+      0.76 + focus * 0.24;
 
     const opacity =
-      0.35 + (1 - normalizedDistance) * 0.65;
+      0.52 + focus * 0.48;
+
+    const lift =
+      focus * -8;
+
+    const blur =
+      normalizedDistance * 0.35;
 
     card.style.setProperty(
       '--topic-center-scale',
@@ -965,19 +975,18 @@ const updateTopicCardDepth = useCallback(() => {
       opacity.toFixed(3)
     );
 
-    card.style.boxShadow =
-      `0 ${
-        8 + (1 - normalizedDistance) * 18
-      }px ${
-        20 + (1 - normalizedDistance) * 30
-      }px rgba(0, 0, 0, 0.28)`;
-card.style.filter =
-  `blur(${normalizedDistance * 0.8}px)`;
+    card.style.setProperty(
+      '--topic-center-lift',
+      `${lift.toFixed(1)}px`
+    );
+
+    card.style.setProperty(
+      '--topic-center-blur',
+      `${blur.toFixed(2)}px`
+    );
 
     card.style.zIndex = String(
-      Math.round(
-        (1 - normalizedDistance) * 20
-      ) + 2
+      Math.round(focus * 20) + 2
     );
   });
 }, []);
@@ -1109,6 +1118,114 @@ const wrapTopicCanvasPosition =
     });
   }, [updateTopicCardDepth]);
 
+  
+const startCanvasMomentum = useCallback(() => {
+  const canvas = topicCanvasRef.current;
+
+  if (!canvas) return;
+
+  stopCanvasMomentum();
+
+  const animateMomentum = () => {
+    const currentCanvas =
+      topicCanvasRef.current;
+
+    if (!currentCanvas) {
+      canvasMomentumFrameRef.current = null;
+      return;
+    }
+
+    const velocity =
+      canvasVelocityRef.current;
+
+    velocity.x *= 0.92;
+    velocity.y *= 0.92;
+
+    if (
+      Math.abs(velocity.x) < 0.12 &&
+      Math.abs(velocity.y) < 0.12
+    ) {
+      canvasVelocityRef.current = {
+        x: 0,
+        y: 0,
+      };
+
+      canvasMomentumFrameRef.current = null;
+      return;
+    }
+
+    currentCanvas.scrollLeft -= velocity.x;
+    currentCanvas.scrollTop -= velocity.y;
+
+    wrapTopicCanvasPosition();
+    updateTopicCardDepth();
+
+    canvasMomentumFrameRef.current =
+      requestAnimationFrame(
+        animateMomentum
+      );
+  };
+
+  canvasMomentumFrameRef.current =
+    requestAnimationFrame(
+      animateMomentum
+    );
+}, [
+  stopCanvasMomentum,
+  updateTopicCardDepth,
+  wrapTopicCanvasPosition,
+]);
+
+const handleCanvasPointerDown = useCallback((event) => {
+  if (
+    event.pointerType !== 'mouse' ||
+    event.button !== 0
+  ) {
+    return;
+  }
+
+  /*
+   * Let cards receive normal desktop clicks.
+   * Mouse dragging starts only from the canvas background.
+   */
+if (event.target.closest('.topic-launch-card')) {
+  return;
+}
+
+  const canvas = topicCanvasRef.current;
+
+  if (!canvas) return;
+  stopCanvasMomentum();
+
+lastCanvasMoveTimeRef.current =
+  performance.now();
+
+canvasVelocityRef.current = {
+  x: 0,
+  y: 0,
+};
+  canvasDraggingRef.current = true;
+  suppressTopicClickRef.current = false;
+  topicDragLoadDistanceRef.current = 0;
+
+  canvasDragRef.current = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    lastX: event.clientX,
+    lastY: event.clientY,
+    scrollLeft: canvas.scrollLeft,
+    scrollTop: canvas.scrollTop,
+    moved: false,
+  };
+
+  canvas.setPointerCapture?.(event.pointerId);
+  setIsCanvasDragging(true);
+}, [stopCanvasMomentum]);
+
+
+
+
 
 const handleCanvasPointerMove = useCallback((event) => {
   if (event.pointerType !== 'mouse') {
@@ -1138,6 +1255,19 @@ const handleCanvasPointerMove = useCallback((event) => {
     event.clientY - canvasDragRef.current.lastY;
 
   const stepDistance = Math.hypot(stepX, stepY);
+  const now = performance.now();
+
+const elapsed = Math.max(
+  8,
+  now - lastCanvasMoveTimeRef.current
+);
+
+lastCanvasMoveTimeRef.current = now;
+
+canvasVelocityRef.current = {
+  x: (stepX / elapsed) * 16,
+  y: (stepY / elapsed) * 16,
+};
 
   canvasDragRef.current.lastX = event.clientX;
   canvasDragRef.current.lastY = event.clientY;
@@ -1147,7 +1277,7 @@ if (Math.hypot(deltaX, deltaY) > 6) {
   suppressTopicClickRef.current = true;
 }
 
-const DRAG_SPEED = 0.55;
+const DRAG_SPEED = 0.75;
 
 pendingCanvasPositionRef.current = {
   left:
@@ -1238,14 +1368,16 @@ const stopCanvasDragging = useCallback((event) => {
 
     canvasAnimationFrameRef.current = null;
   }
-
+if (canvasDragRef.current.moved) {
+  startCanvasMomentum();
+}
   setIsCanvasDragging(false);
 
   window.setTimeout(() => {
     suppressTopicClickRef.current = false;
     canvasDragRef.current.moved = false;
   }, 80);
-}, []);
+}, [startCanvasMomentum]);
 
 useEffect(() => {
   mountedRef.current = true;
@@ -2005,23 +2137,44 @@ useEffect(() => {
 const handleWheel = (event) => {
   event.preventDefault();
 
-  const WHEEL_SPEED = 0.42;
+  stopCanvasMomentum();
+
+  const WHEEL_SPEED = 0.58;
+
+  const horizontalAmount =
+    Math.abs(event.deltaX) >
+    Math.abs(event.deltaY)
+      ? event.deltaX
+      : event.shiftKey
+        ? event.deltaY
+        : event.deltaX;
+
+  const verticalAmount =
+    event.shiftKey
+      ? 0
+      : event.deltaY;
 
   canvas.scrollLeft +=
-    event.deltaX * WHEEL_SPEED;
+    horizontalAmount *
+    WHEEL_SPEED;
 
   canvas.scrollTop +=
-    event.deltaY * WHEEL_SPEED;
+    verticalAmount *
+    WHEEL_SPEED;
 
-  if (wheelAnimationFrameRef.current) {
+  if (
+    wheelAnimationFrameRef.current
+  ) {
     return;
   }
 
   wheelAnimationFrameRef.current =
     requestAnimationFrame(() => {
       wrapTopicCanvasPosition();
+      updateTopicCardDepth();
 
-      wheelAnimationFrameRef.current = null;
+      wheelAnimationFrameRef.current =
+        null;
     });
 };
 
@@ -2049,6 +2202,8 @@ return () => {
 };
 }, [
   selectedTopic,
+  stopCanvasMomentum,
+  updateTopicCardDepth,
   wrapTopicCanvasPosition,
 ]);
 
@@ -2393,88 +2548,99 @@ useEffect(() => {
   updateTopicCardDepth,
 ]);
 
-const handleTopicCanvasScroll = useCallback(() => {
-  const canvas = topicCanvasRef.current;
+const handleTopicCanvasScroll =
+  useCallback(() => {
+    const canvas =
+      topicCanvasRef.current;
 
-  if (!canvas) return;
+    if (!canvas) return;
 
-  wrapTopicCanvasPosition();
+    if (topicRevealFrameRef.current) {
+      cancelAnimationFrame(
+        topicRevealFrameRef.current
+      );
+    }
 
-  if (topicRevealFrameRef.current) {
-    cancelAnimationFrame(
-      topicRevealFrameRef.current
+    topicRevealFrameRef.current =
+      requestAnimationFrame(() => {
+        wrapTopicCanvasPosition();
+        updateTopicCardDepth();
+
+        topicRevealFrameRef.current =
+          null;
+      });
+
+    if (
+      topicEdgeLoadLockRef.current ||
+      topicDisplayLimitRef.current >=
+        launchTopicsLengthRef.current
+    ) {
+      return;
+    }
+
+    const previous =
+      lastTopicCanvasPositionRef.current;
+
+    if (
+      previous.left === null ||
+      previous.top === null
+    ) {
+      lastTopicCanvasPositionRef.current = {
+        left: canvas.scrollLeft,
+        top: canvas.scrollTop,
+      };
+
+      return;
+    }
+
+    const travelDistance = Math.hypot(
+      canvas.scrollLeft -
+        previous.left,
+      canvas.scrollTop -
+        previous.top
     );
-  }
 
-  topicRevealFrameRef.current =
-    requestAnimationFrame(() => {
-      updateTopicCardDepth();
-      topicRevealFrameRef.current = null;
-    });
+    if (travelDistance < 80) return;
 
-  if (
-    topicEdgeLoadLockRef.current ||
-    topicDisplayLimitRef.current >=
-      launchTopicsLengthRef.current
-  ) {
-    return;
-  }
-
-  const previous =
-    lastTopicCanvasPositionRef.current;
-
-  if (
-    previous.left === null ||
-    previous.top === null
-  ) {
     lastTopicCanvasPositionRef.current = {
       left: canvas.scrollLeft,
       top: canvas.scrollTop,
     };
 
-    return;
-  }
+    topicEdgeLoadLockRef.current = true;
 
-  const travelDistance = Math.hypot(
-    canvas.scrollLeft - previous.left,
-    canvas.scrollTop - previous.top
-  );
+    setTopicDisplayLimit((current) => {
+      const next = Math.min(
+        current + TOPIC_BATCH_SIZE,
+        launchTopicsLengthRef.current
+      );
 
-  if (travelDistance < 48) return;
+      topicDisplayLimitRef.current =
+        next;
 
-  lastTopicCanvasPositionRef.current = {
-    left: canvas.scrollLeft,
-    top: canvas.scrollTop,
-  };
+      return next;
+    });
 
-  topicEdgeLoadLockRef.current = true;
-
-  setTopicDisplayLimit((current) => {
-    const next = Math.min(
-      current + TOPIC_BATCH_SIZE,
-      launchTopicsLengthRef.current
-    );
-
-    topicDisplayLimitRef.current = next;
-
-    return next;
-  });
-
-  if (topicEdgeLoadTimerRef.current) {
-    clearTimeout(
+    if (
       topicEdgeLoadTimerRef.current
-    );
-  }
+    ) {
+      clearTimeout(
+        topicEdgeLoadTimerRef.current
+      );
+    }
 
-  topicEdgeLoadTimerRef.current =
-    window.setTimeout(() => {
-      topicEdgeLoadLockRef.current = false;
-      topicEdgeLoadTimerRef.current = null;
-    }, 110);
-}, [
-  updateTopicCardDepth,
-  wrapTopicCanvasPosition,
-]);
+    topicEdgeLoadTimerRef.current =
+      window.setTimeout(() => {
+        topicEdgeLoadLockRef.current =
+          false;
+
+        topicEdgeLoadTimerRef.current =
+          null;
+      }, 160);
+  }, [
+    updateTopicCardDepth,
+    wrapTopicCanvasPosition,
+  ]);
 
 
   const renderedPosts = useMemo(
