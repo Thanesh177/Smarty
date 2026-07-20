@@ -28,17 +28,93 @@ import './FeedPage.css';
 
 const normalizeTopic = (value) =>
   String(value || '')
+    .normalize('NFKD')
     .toLowerCase()
     .trim()
-    .replace(/\s+/g, '-');
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
+const TOPIC_ALIASES = new Map([
+  ['ai', 'artificial-intelligence'],
+  ['artificial-intelligence', 'artificial-intelligence'],
+  ['tech', 'technology'],
+  ['technology', 'technology'],
+  ['programming', 'coding'],
+  ['software-development', 'coding'],
+  ['coding', 'coding'],
+  ['mental-health', 'psychology'],
+]);
+
+const getCanonicalTopic = (value) => {
+  const normalized = normalizeTopic(value);
+
+  return TOPIC_ALIASES.get(normalized) || normalized;
+};
+
+const areTopicsEquivalent = (left, right) => {
+  const normalizedLeft = getCanonicalTopic(left);
+  const normalizedRight = getCanonicalTopic(right);
+
+  return Boolean(
+    normalizedLeft &&
+      normalizedRight &&
+      normalizedLeft === normalizedRight
+  );
+};
+
+const getTopicValue = (value) => {
+  if (value && typeof value === 'object') {
+    return String(
+      value.name ||
+        value.label ||
+        value.title ||
+        value.topic ||
+        value.topicName ||
+        value.slug ||
+        value.id ||
+        ''
+    ).trim();
+  }
+
+  return String(value || '').trim();
+};
+
+const getPostTopics = (post) => {
+  const rawValues = [
+    post?.topic,
+    post?.topics,
+    post?.category,
+    post?.categories,
+    post?.roomName,
+    post?.subject,
+    post?.tags,
+  ];
+
+  return rawValues
+    .flatMap((value) => {
+      if (Array.isArray(value)) {
+        return value;
+      }
+
+      if (
+        typeof value === 'string' &&
+        value.includes(',')
+      ) {
+        return value.split(',');
+      }
+
+      return [value];
+    })
+    .map(getTopicValue)
+    .filter(Boolean);
+};
 
 const getPostId = (post) => post?.reelId || post?.id || '';
 
 const getPostTime = (post) => Number(post?.createdAtMs || post?.updatedAtMs || post?.createdAt || post?.updatedAt || post?.timestamp || 0);
 
 const normalizeCreatorProfile = (value) => value?.profile || value?.user || value || null;
-
 
 
 const INITIAL_RENDER_LIMIT = 10;
@@ -266,14 +342,20 @@ const uniqueTopicList = (values = []) => {
   const topicMap = new Map();
 
   values.forEach((value) => {
-    const topicValue = String(value || '').trim();
+    const topicValue = getTopicValue(value);
+
     if (!topicValue) return;
 
-    const key = normalizeTopic(topicValue);
-    if (!topicMap.has(key)) topicMap.set(key, topicValue);
+    const key = getCanonicalTopic(topicValue);
+
+    if (!key || topicMap.has(key)) return;
+
+    topicMap.set(key, topicValue);
   });
 
-  return Array.from(topicMap.values()).sort((a, b) => a.localeCompare(b));
+  return Array.from(topicMap.values()).sort((a, b) =>
+    a.localeCompare(b)
+  );
 };
 
 const TopicLaunchCard = memo(function TopicLaunchCard({
@@ -281,51 +363,43 @@ const TopicLaunchCard = memo(function TopicLaunchCard({
   index,
   onSelect,
   position,
-  dragRef,
-  suppressClickRef,
 }) {
-const {
-  icon: TopicIcon,
-  label,
-  description,
-} = getTopicVisualMeta(item, index);
+  const {
+    icon: TopicIcon,
+    label,
+    description,
+  } = getTopicVisualMeta(item, index);
 
   const isAllTopics =
     normalizeTopic(item) === 'all';
-
-  return (
-    <button
-      type="button"
-      className={`topic-launch-card ${
-        isAllTopics
-          ? 'topic-launch-card-featured'
-          : ''
-      }`}
-      style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        width: `${position.width}px`,
-        height: `${position.height}px`,
-        '--topic-delay': `${Math.min((index % 4) * 45, 135)}ms`,
-      }}
-onClick={(event) => {
-  if (
-    suppressClickRef?.current ||
-    dragRef?.current?.moved
-  ) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    suppressClickRef.current = false;
-    dragRef.current.moved = false;
-
-    return;
-  }
-
-  onSelect(item);
-}}
-      aria-label={`Show ${item} posts`}
-    >
+return (
+  <button
+    type="button"
+    className={`topic-launch-card ${
+      isAllTopics
+        ? 'topic-launch-card-featured'
+        : ''
+    }`}
+    style={{
+      left: `${position.x}px`,
+      top: `${position.y}px`,
+      width: `${position.width}px`,
+      height: `${position.height}px`,
+      '--topic-delay': `${Math.min(
+        (index % 4) * 45,
+        135
+      )}ms`,
+    }}
+    onPointerDown={(event) => {
+      event.stopPropagation();
+    }}
+    onClick={(event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onSelect(item);
+    }}
+    aria-label={`Show ${item} posts`}
+  >
       <span
         className="topic-launch-card-glow"
         aria-hidden="true"
@@ -336,7 +410,7 @@ onClick={(event) => {
   aria-hidden="true"
 >
   <TopicIcon
-    size={30}
+    size={27}
     strokeWidth={1.8}
   />
 </span>
@@ -363,16 +437,39 @@ onClick={(event) => {
   );
 });
 
-const TopicPill = memo(function TopicPill({ item, active, onSelect }) {
+const TopicPill = memo(function TopicPill({
+  item,
+  active,
+  onSelect,
+}) {
+  const topicName =
+    getTopicValue(item) || 'Topic';
+
   return (
-    <button
-      type="button"
-      className={active ? 'topic-pill active' : 'topic-pill'}
-      onClick={() => onSelect(item)}
-      title={item}
-    >
-      <span>{item[0]}</span>
-      <strong>{item}</strong>
+  <button
+  type="button"
+  className={
+    active
+      ? 'topic-pill active'
+      : 'topic-pill'
+  }
+  onPointerDown={(event) => {
+    event.stopPropagation();
+  }}
+  onClick={(event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onSelect(topicName);
+  }}
+  title={topicName}
+  aria-pressed={active}
+  aria-label={`Show ${topicName} posts`}
+>
+      <span>
+        {topicName.charAt(0).toUpperCase()}
+      </span>
+
+      <strong>{topicName}</strong>
     </button>
   );
 });
@@ -489,22 +586,19 @@ const FeedPostCard = memo(function FeedPostCard({
       )}
 
       <div className="post-content">
-        <button
-          type="button"
-          className="post-topic clickable-topic"
-          onClick={(event) => {
-            event.stopPropagation();
-            onTopicClick(
-              post.topic ||
-              post.category ||
-              post.roomName ||
-              post.subject ||
-              'Smarty'
-            );
-          }}
-        >
-          {post.topic || post.category || post.roomName || post.subject || 'Smarty'}
-        </button>
+<button
+  type="button"
+  className="post-topic clickable-topic"
+  onClick={(event) => {
+    event.stopPropagation();
+
+    onTopicClick(
+      getPostTopics(post)[0] || 'Smarty'
+    );
+  }}
+>
+  {getPostTopics(post)[0] || 'Smarty'}
+</button>
 
         <div className="post-author">
           {creatorId ? (
@@ -646,7 +740,49 @@ const FeedPostCard = memo(function FeedPostCard({
   );
 });
 
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() => {
+    if (
+      typeof window === 'undefined' ||
+      typeof window.matchMedia !== 'function'
+    ) {
+      return false;
+    }
+
+    return window.matchMedia(query).matches;
+  });
+
+  useEffect(() => {
+    if (
+      typeof window === 'undefined' ||
+      typeof window.matchMedia !== 'function'
+    ) {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia(query);
+
+    const handleChange = (event) => {
+      setMatches(event.matches);
+    };
+
+    setMatches(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener(
+        'change',
+        handleChange
+      );
+    };
+  }, [query]);
+
+  return matches;
+}
+
 export default function FeedPage() {
+  const wrappingTopicCanvasRef = useRef(false);
+
   const topicRevealFrameRef = useRef(null);
   const topicEdgeLoadLockRef = useRef(false);
   const topicEdgeLoadTimerRef = useRef(null);
@@ -668,9 +804,24 @@ const pendingCanvasPositionRef = useRef({
   left: 0,
   top: 0,
 });
+const isDesktopCanvas = useMediaQuery(
+  '(min-width: 1024px)'
+);
   const { topic } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+const routeTopic = useMemo(() => {
+  const params =
+    new URLSearchParams(
+      location.search
+    );
+
+  return (
+    params.get('topic') ||
+    topic ||
+    ''
+  );
+}, [location.search, topic]);
   const mountedRef = useRef(true);
   const highlightTimerRef = useRef(null);
   const highlightRemoveTimerRef = useRef(null);
@@ -700,6 +851,12 @@ const loadMoreRef = useRef(null);
 const feedLoadLockRef = useRef(false);
 const topicCanvasRef = useRef(null);
 const feedRef = useRef(null);
+const wheelAnimationFrameRef = useRef(null);
+const topicSearchLoadRef = useRef({
+  topic: '',
+  cursors: new Set(),
+  loading: false,
+});
 
 const canvasDragRef = useRef({
   pointerId: null,
@@ -731,7 +888,6 @@ const suppressTopicClickRef = useRef(false);
   );
   const [isCanvasDragging, setIsCanvasDragging] = useState(false);
 
-
 const handleCanvasPointerDown = useCallback((event) => {
   if (
     event.pointerType !== 'mouse' ||
@@ -744,11 +900,9 @@ const handleCanvasPointerDown = useCallback((event) => {
    * Let cards receive normal desktop clicks.
    * Mouse dragging starts only from the canvas background.
    */
-  if (event.target.closest('.topic-launch-card')) {
-    suppressTopicClickRef.current = false;
-    canvasDragRef.current.moved = false;
-    return;
-  }
+if (event.target.closest('.topic-launch-card')) {
+  return;
+}
 
   const canvas = topicCanvasRef.current;
 
@@ -847,6 +1001,133 @@ card.style.filter =
   });
 }, []);
 
+const wrapTopicCanvasPosition =
+  useCallback(() => {
+    const canvas = topicCanvasRef.current;
+
+    if (
+      !canvas ||
+      wrappingTopicCanvasRef.current
+    ) {
+      return;
+    }
+
+    const maxScrollLeft = Math.max(
+      0,
+      canvas.scrollWidth -
+        canvas.clientWidth
+    );
+
+    const maxScrollTop = Math.max(
+      0,
+      canvas.scrollHeight -
+        canvas.clientHeight
+    );
+
+    if (
+      maxScrollLeft === 0 &&
+      maxScrollTop === 0
+    ) {
+      return;
+    }
+
+    const horizontalBuffer = Math.min(
+      160,
+      Math.max(56, maxScrollLeft * 0.08)
+    );
+
+    const verticalBuffer = Math.min(
+      160,
+      Math.max(56, maxScrollTop * 0.08)
+    );
+
+    let nextLeft = canvas.scrollLeft;
+    let nextTop = canvas.scrollTop;
+    let wrapped = false;
+
+    if (
+      maxScrollLeft >
+      horizontalBuffer * 2
+    ) {
+      if (
+        canvas.scrollLeft <=
+        horizontalBuffer
+      ) {
+        nextLeft =
+          maxScrollLeft -
+          horizontalBuffer;
+
+        wrapped = true;
+      } else if (
+        canvas.scrollLeft >=
+        maxScrollLeft -
+          horizontalBuffer
+      ) {
+        nextLeft = horizontalBuffer;
+        wrapped = true;
+      }
+    }
+
+    if (
+      maxScrollTop >
+      verticalBuffer * 2
+    ) {
+      if (
+        canvas.scrollTop <=
+        verticalBuffer
+      ) {
+        nextTop =
+          maxScrollTop -
+          verticalBuffer;
+
+        wrapped = true;
+      } else if (
+        canvas.scrollTop >=
+        maxScrollTop -
+          verticalBuffer
+      ) {
+        nextTop = verticalBuffer;
+        wrapped = true;
+      }
+    }
+
+    if (!wrapped) return;
+
+    wrappingTopicCanvasRef.current = true;
+
+    const previousLeft =
+      canvas.scrollLeft;
+
+    const previousTop =
+      canvas.scrollTop;
+
+    canvas.scrollTo({
+      left: nextLeft,
+      top: nextTop,
+      behavior: 'auto',
+    });
+
+    if (canvasDraggingRef.current) {
+      canvasDragRef.current.scrollLeft +=
+        nextLeft - previousLeft;
+
+      canvasDragRef.current.scrollTop +=
+        nextTop - previousTop;
+    }
+
+    lastTopicCanvasPositionRef.current = {
+      left: nextLeft,
+      top: nextTop,
+    };
+
+    requestAnimationFrame(() => {
+      wrappingTopicCanvasRef.current =
+        false;
+
+      updateTopicCardDepth();
+    });
+  }, [updateTopicCardDepth]);
+
 
 const handleCanvasPointerMove = useCallback((event) => {
   if (event.pointerType !== 'mouse') {
@@ -903,14 +1184,16 @@ pendingCanvasPositionRef.current = {
         const currentCanvas =
           topicCanvasRef.current;
 
-        if (currentCanvas) {
-          currentCanvas.scrollLeft =
-            pendingCanvasPositionRef.current.left;
+if (currentCanvas) {
+  currentCanvas.scrollLeft =
+    pendingCanvasPositionRef.current.left;
 
-          currentCanvas.scrollTop =
-            pendingCanvasPositionRef.current.top;
-            updateTopicCardDepth();
-        }
+  currentCanvas.scrollTop =
+    pendingCanvasPositionRef.current.top;
+
+  wrapTopicCanvasPosition();
+  updateTopicCardDepth();
+}
 
         canvasAnimationFrameRef.current = null;
       });
@@ -947,8 +1230,10 @@ pendingCanvasPositionRef.current = {
         topicEdgeLoadTimerRef.current = null;
       }, 180);
   }
-}, [updateTopicCardDepth]);
-
+}, [
+  updateTopicCardDepth,
+  wrapTopicCanvasPosition,
+]);
 const stopCanvasDragging = useCallback((event) => {
   if (event.pointerType !== 'mouse') {
     return;
@@ -1066,23 +1351,6 @@ useEffect(() => {
     return Array.from(map.values()).sort((a, b) => getPostTime(b) - getPostTime(a));
   }, [posts]);
 
-  const routeFilteredPosts = useMemo(() => {
-    if (!topic) return visiblePosts;
-
-    const routeTopic = normalizeTopic(topic);
-
-    return visiblePosts.filter((post) => {
-      const topicValue = normalizeTopic(
-        post.topic ||
-          post.category ||
-          post.roomName ||
-          post.subject ||
-          'Smarty'
-      );
-
-      return topicValue === routeTopic;
-    });
-  }, [topic, visiblePosts]);
 
   useEffect(() => {
   let cancelled = false;
@@ -1115,6 +1383,7 @@ useEffect(() => {
     cancelled = true;
   };
 }, []);
+
 
   const handleTranslate = useCallback(async (post, lang = 'Hindi') => {
     const postId = getPostId(post);
@@ -1191,13 +1460,14 @@ const topics = useMemo(() => {
   return [
     'All',
     ...uniqueTopicList(
-      visiblePosts.map((post) => (
-        post.topic ||
-        post.category ||
-        post.roomName ||
-        post.subject ||
-        'Smarty'
-      ))
+visiblePosts.flatMap((post) => {
+  const postTopics =
+    getPostTopics(post);
+
+  return postTopics.length > 0
+    ? postTopics
+    : ['Smarty'];
+})
     ),
   ];
 }, [allTopics, visiblePosts]);
@@ -1231,9 +1501,13 @@ useEffect(() => {
 const topicCanvasLayout = useMemo(
   () =>
     getTopicCanvasLayout(
-      visibleLaunchTopics.length
+      visibleLaunchTopics.length,
+      isDesktopCanvas
     ),
-  [visibleLaunchTopics.length]
+  [
+    visibleLaunchTopics.length,
+    isDesktopCanvas,
+  ]
 );
 
 const topicCanvasSurfaceStyle = useMemo(
@@ -1247,33 +1521,143 @@ const topicCanvasSurfaceStyle = useMemo(
   ]
 );
 
-  const filteredPosts = useMemo(() => {
-    if (!selectedTopic) return [];
-    if (selectedTopic === 'All') return routeFilteredPosts;
+const filteredPosts = useMemo(() => {
+  if (!selectedTopic) return [];
 
-    const selected = normalizeTopic(selectedTopic);
+  if (areTopicsEquivalent(selectedTopic, 'All')) {
+    return visiblePosts;
+  }
 
-    const selectedPosts = [];
-    const remainingPosts = [];
+  return visiblePosts.filter((post) => {
+    const postTopics = getPostTopics(post);
 
-    routeFilteredPosts.forEach((post) => {
-      const topicValue = normalizeTopic(
-        post.topic ||
-          post.category ||
-          post.roomName ||
-          post.subject ||
-          'Smarty'
+    if (postTopics.length === 0) {
+      return areTopicsEquivalent(selectedTopic, 'Smarty');
+    }
+
+    return postTopics.some((postTopic) =>
+      areTopicsEquivalent(postTopic, selectedTopic)
+    );
+  });
+}, [selectedTopic, visiblePosts]);
+
+useEffect(() => {
+  const normalizedSelectedTopic =
+    getCanonicalTopic(selectedTopic);
+
+  if (
+    !normalizedSelectedTopic ||
+    normalizedSelectedTopic === 'all'
+  ) {
+    topicSearchLoadRef.current = {
+      topic: normalizedSelectedTopic,
+      cursors: new Set(),
+      loading: false,
+    };
+
+    return;
+  }
+
+  if (
+    topicSearchLoadRef.current.topic !==
+    normalizedSelectedTopic
+  ) {
+    topicSearchLoadRef.current = {
+      topic: normalizedSelectedTopic,
+      cursors: new Set(),
+      loading: false,
+    };
+  }
+
+  if (
+    filteredPosts.length > 0 ||
+    !nextCursor ||
+    loading ||
+    loadingMore ||
+    topicSearchLoadRef.current.loading
+  ) {
+    return;
+  }
+
+  const cursorKey =
+    typeof nextCursor === 'string'
+      ? nextCursor
+      : JSON.stringify(nextCursor);
+
+  if (
+    topicSearchLoadRef.current.cursors.has(cursorKey)
+  ) {
+    console.warn(
+      'Stopped repeated topic cursor:',
+      cursorKey
+    );
+
+    return;
+  }
+
+  topicSearchLoadRef.current.cursors.add(cursorKey);
+  topicSearchLoadRef.current.loading = true;
+
+  const requestedTopic = normalizedSelectedTopic;
+
+  Promise.resolve(loadMore())
+    .catch((loadError) => {
+      console.error(
+        'Could not load more posts for topic:',
+        selectedTopic,
+        loadError
       );
-
-      if (topicValue === selected) {
-        selectedPosts.push(post);
-      } else {
-        remainingPosts.push(post);
+    })
+    .finally(() => {
+      if (
+        topicSearchLoadRef.current.topic ===
+        requestedTopic
+      ) {
+        topicSearchLoadRef.current.loading = false;
       }
     });
+}, [
+  selectedTopic,
+  filteredPosts.length,
+  nextCursor,
+  loading,
+  loadingMore,
+  loadMore,
+]);
 
-    return [...selectedPosts, ...remainingPosts];
-  }, [routeFilteredPosts, selectedTopic]);
+useEffect(() => {
+  if (!routeTopic) return;
+
+  let decodedTopic = routeTopic;
+
+  try {
+    decodedTopic = decodeURIComponent(routeTopic);
+  } catch {
+    decodedTopic = routeTopic;
+  }
+
+  const matchingTopic = topics.find((item) =>
+    areTopicsEquivalent(
+      getTopicValue(item),
+      decodedTopic
+    )
+  );
+
+  const nextTopic =
+    getTopicValue(matchingTopic) || decodedTopic;
+
+  setSelectedTopic((currentTopic) => {
+    if (
+      areTopicsEquivalent(currentTopic, nextTopic)
+    ) {
+      return currentTopic;
+    }
+
+    return nextTopic;
+  });
+
+  setRenderLimit(INITIAL_RENDER_LIMIT);
+}, [routeTopic, topics]);
 
   const renderedFeedPosts = useMemo(
     () => filteredPosts.slice(0, renderLimit),
@@ -1359,7 +1743,7 @@ const topicCanvasSurfaceStyle = useMemo(
 
     restoredFeedPositionRef.current = false;
     setRenderLimit(INITIAL_RENDER_LIMIT);
-  }, [topic, selectedTopic]);
+  },  [routeTopic, selectedTopic]);
   const indexOfPostInFeed = useCallback((feedPosts, targetPostId) => (
     feedPosts.findIndex((item) => getPostId(item) === targetPostId)
   ), []);
@@ -1396,8 +1780,13 @@ previousTopicCanvasLayoutRef.current = {
   });
 
   return () => cancelAnimationFrame(frame);
-}, [selectedTopic]);
-
+}, [
+  selectedTopic,
+  topicCanvasLayout.width,
+  topicCanvasLayout.height,
+  topicCanvasLayout.offsetX,
+  topicCanvasLayout.offsetY,
+]);
 
 useEffect(() => {
   const canvas = topicCanvasRef.current;
@@ -1629,24 +2018,37 @@ useEffect(() => {
     }, duration);
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
   const canvas = topicCanvasRef.current;
 
   if (!canvas || selectedTopic) {
     return undefined;
   }
 
-  const handleWheel = (event) => {
-    event.preventDefault();
+const handleWheel = (event) => {
+  event.preventDefault();
 
-    const WHEEL_SPEED = 0.42;
+  const WHEEL_SPEED = 0.42;
 
-    canvas.scrollLeft +=
-      event.deltaX * WHEEL_SPEED;
+  canvas.scrollLeft +=
+    event.deltaX * WHEEL_SPEED;
 
-    canvas.scrollTop +=
-      event.deltaY * WHEEL_SPEED;
-  };
+  canvas.scrollTop +=
+    event.deltaY * WHEEL_SPEED;
+
+  if (wheelAnimationFrameRef.current) {
+    return;
+  }
+
+  wheelAnimationFrameRef.current =
+    requestAnimationFrame(() => {
+      wrapTopicCanvasPosition();
+
+      wheelAnimationFrameRef.current = null;
+    });
+};
+
+
 
   canvas.addEventListener(
     'wheel',
@@ -1654,14 +2056,24 @@ useEffect(() => {
     { passive: false }
   );
 
-  return () => {
-    canvas.removeEventListener(
-      'wheel',
-      handleWheel
-    );
-  };
-}, [selectedTopic]);
+return () => {
+  canvas.removeEventListener(
+    'wheel',
+    handleWheel
+  );
 
+  if (wheelAnimationFrameRef.current) {
+    cancelAnimationFrame(
+      wheelAnimationFrameRef.current
+    );
+
+    wheelAnimationFrameRef.current = null;
+  }
+};
+}, [
+  selectedTopic,
+  wrapTopicCanvasPosition,
+]);
 
   useEffect(() => {
     return () => {
@@ -1752,52 +2164,89 @@ useEffect(() => {
     }
   }, [explaining, simpleExplanations, showToast]);
   
-const handleChangeTopic = useCallback(() => {
-  const fullTopicCount =
-    launchTopics.length;
+const selectTopic = useCallback(
+  (item, source = 'topic-pill') => {
+    const nextTopic =
+      getTopicValue(item) || 'All';
 
-  setSelectedTopic('');
-  setRenderLimit(INITIAL_RENDER_LIMIT);
-  setTopicDisplayLimit(fullTopicCount);
+    const canonicalNextTopic =
+      getCanonicalTopic(nextTopic);
 
-  topicDisplayLimitRef.current =
-    fullTopicCount;
+    if (!canonicalNextTopic) {
+      showToast('This topic is unavailable');
+      return;
+    }
 
-  restoredFeedPositionRef.current = true;
+    const isCurrentTopic = areTopicsEquivalent(
+      selectedTopic,
+      nextTopic
+    );
 
-  requestAnimationFrame(() => {
-    feedRef.current?.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    });
-  });
-}, [
-  launchTopics.length,
-]);
+    topicSearchLoadRef.current = {
+      topic: canonicalNextTopic,
+      cursors: new Set(),
+      loading: false,
+    };
 
-  const handleTopicSelect = useCallback((item) => {
-    const nextTopic = item || 'All';
+    restoredFeedPositionRef.current = true;
 
     setSelectedTopic(nextTopic);
     setRenderLimit(INITIAL_RENDER_LIMIT);
-    restoredFeedPositionRef.current = true;
+
+    navigate(
+      {
+        pathname: '/feed',
+        search: `?topic=${encodeURIComponent(
+          nextTopic
+        )}`,
+      },
+      {
+        replace:
+          source === 'topic-pill' &&
+          isCurrentTopic,
+        state: {
+          selectedTopic: nextTopic,
+          source,
+        },
+      }
+    );
 
     requestAnimationFrame(() => {
-      feedRef.current?.scrollTo({
+      const feed = feedRef.current;
+
+      if (!feed) return;
+
+      feed.scrollTo({
         top: 0,
-        behavior: 'smooth',
+        behavior: 'auto',
       });
     });
-  }, []);
+  },
+  [navigate, selectedTopic, showToast]
+);
 
-  const handleTopicClick = useCallback(
-    (postTopic) => {
-      if (!postTopic) return;
-      handleTopicSelect(postTopic);
-    },
-    [handleTopicSelect]
-  );
+const handleTopicSelect = useCallback(
+  (item) => {
+    selectTopic(item, 'topic-card');
+  },
+  [selectTopic]
+);
 
+const handleTopicPillSelect = useCallback(
+  (item) => {
+    selectTopic(item, 'topic-pill');
+  },
+  [selectTopic]
+);
+
+const handleTopicClick = useCallback(
+  (postTopic) => {
+    if (!postTopic) return;
+
+    selectTopic(postTopic, 'post-topic');
+  },
+  [selectTopic]
+);
   // REMOVED handleAiDetails callback block
 
   const handleComments = useCallback(
@@ -1863,26 +2312,37 @@ const handleChangeTopic = useCallback(() => {
     [handleTranslate]
   );
 
-  const renderedTopics = useMemo(
-    () => launchTopics.map((item) => (
+const renderedTopics = useMemo(
+  () =>
+    launchTopics.map((item) => (
       <TopicPill
-        key={item}
+        key={getCanonicalTopic(item)}
         item={item}
-        active={normalizeTopic(selectedTopic) === normalizeTopic(item)}
-        onSelect={handleTopicSelect}
+        active={areTopicsEquivalent(
+          selectedTopic,
+          item
+        )}
+        onSelect={handleTopicPillSelect}
       />
     )),
-    [handleTopicSelect, selectedTopic, launchTopics]
-  );
+  [
+    handleTopicPillSelect,
+    selectedTopic,
+    launchTopics,
+  ]
+);
 
 const renderedLaunchTopics = useMemo(
   () =>
     visibleLaunchTopics.map((item, index) => {
-      const position =
-        getTopicCanvasPosition(index);
+const position =
+  getTopicCanvasPosition(
+    index,
+    isDesktopCanvas
+  );
 
       return (
-       <TopicLaunchCard
+     <TopicLaunchCard
   key={item}
   item={item}
   index={index}
@@ -1892,17 +2352,16 @@ const renderedLaunchTopics = useMemo(
     y: position.y + topicCanvasLayout.offsetY,
   }}
   onSelect={handleTopicSelect}
-  dragRef={canvasDragRef}
-  suppressClickRef={suppressTopicClickRef}
 />
       );
     }),
-  [
-    handleTopicSelect,
-    topicCanvasLayout.offsetX,
-    topicCanvasLayout.offsetY,
-    visibleLaunchTopics,
-  ]
+[
+  handleTopicSelect,
+  isDesktopCanvas,
+  topicCanvasLayout.offsetX,
+  topicCanvasLayout.offsetY,
+  visibleLaunchTopics,
+]
 );
 
 
@@ -1928,6 +2387,8 @@ const handleTopicCanvasScroll = useCallback(() => {
   const canvas = topicCanvasRef.current;
 
   if (!canvas) return;
+
+  wrapTopicCanvasPosition();
 
   if (topicRevealFrameRef.current) {
     cancelAnimationFrame(
@@ -2000,7 +2461,10 @@ const handleTopicCanvasScroll = useCallback(() => {
       topicEdgeLoadLockRef.current = false;
       topicEdgeLoadTimerRef.current = null;
     }, 110);
-}, [updateTopicCardDepth]);
+}, [
+  updateTopicCardDepth,
+  wrapTopicCanvasPosition,
+]);
 
 
   const renderedPosts = useMemo(
@@ -2079,6 +2543,24 @@ const handleTopicCanvasScroll = useCallback(() => {
     className="topic-launch-screen"
     aria-label="Choose a learning topic"
   >
+    <nav className="topic-canvas-navbar" aria-label="Smarty topic navigation">
+  <span className="topic-canvas-brand">
+    <Sparkles size={15} strokeWidth={2.2} aria-hidden="true" />
+    Smarty
+  </span>
+
+  <span className="topic-canvas-nav-label">
+    Explore topics
+  </span>
+</nav>
+
+<div className="topic-scroll-hint" aria-hidden="true">
+  <span className="topic-scroll-hint-icon">
+    <ArrowRight size={14} strokeWidth={2.2} />
+  </span>
+
+  <span>Swipe or drag to explore</span>
+</div>
     <div
       className="topic-launch-backdrop"
       aria-hidden="true"
@@ -2105,9 +2587,9 @@ const handleTopicCanvasScroll = useCallback(() => {
           <span> learn?</span>
         </h1> */}
 
-        <p>
-          Pick a topic to open a focused feed made for you.
-        </p>
+<p>
+  Enter a curated learning space tailored to what you want to explore next.
+</p>
       </header>
 
       <div className="topic-launch-content">
@@ -2231,17 +2713,46 @@ style={topicCanvasSurfaceStyle}
 )}
 
 {selectedTopic && error && (
-  <p className="feed-status error">
-    {error}
-  </p>
+  <div
+    className="feed-status error"
+    role="alert"
+  >
+    <p>{error}</p>
+
+    <button
+      type="button"
+      onClick={() => {
+        const retry =
+          refetch || refresh || reload;
+
+        if (typeof retry === 'function') {
+          retry();
+        }
+      }}
+    >
+      Try again
+    </button>
+  </div>
 )}
 
 {selectedTopic &&
   !loading &&
+  !loadingMore &&
   !error &&
-  filteredPosts.length === 0 && (
+  filteredPosts.length === 0 &&
+  !nextCursor && (
     <p className="feed-status">
-      No posts found for this topic.
+      No posts found in this topic.
+    </p>
+  )}
+
+{selectedTopic &&
+  !loading &&
+  !error &&
+  filteredPosts.length === 0 &&
+  nextCursor && (
+    <p className="feed-status">
+      Loading topic posts...
     </p>
   )}
 
