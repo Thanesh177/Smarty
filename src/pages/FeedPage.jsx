@@ -129,8 +129,25 @@ const FEED_RENDER_LIMIT_STORAGE_KEY = 'smarty.feed.renderLimit';
 const FEED_POST_ID_STORAGE_KEY = 'smarty.feed.postId';
 
 const getPostCreatorId = (post) => {
-  const authorId = post?.authorId || post?.authorID || post?.author_id || '';
-  return String(authorId || '').trim();
+  const creatorId =
+    post?.creatorId ||
+    post?.creatorID ||
+    post?.creator_id ||
+    post?.authorId ||
+    post?.authorID ||
+    post?.author_id ||
+    post?.userId ||
+    post?.userID ||
+    post?.user_id ||
+    post?.author?.id ||
+    post?.author?.userId ||
+    post?.creator?.id ||
+    post?.creator?.userId ||
+    post?.user?.id ||
+    post?.user?.userId ||
+    '';
+
+  return String(creatorId || '').trim();
 };
 
 const isSystemGeneratedPost = (post) => {
@@ -410,7 +427,7 @@ return (
   aria-hidden="true"
 >
   <TopicIcon
-    size={27}
+    size={30}
     strokeWidth={1.8}
   />
 </span>
@@ -545,6 +562,7 @@ const FeedPostCard = memo(function FeedPostCard({
   onTopicClick,
   onSave,
   onOpenPost,
+  onOpenCreator,
   onComments,
   onExplain,
   onTranslateChange,
@@ -740,46 +758,6 @@ const FeedPostCard = memo(function FeedPostCard({
   );
 });
 
-function useMediaQuery(query) {
-  const [matches, setMatches] = useState(() => {
-    if (
-      typeof window === 'undefined' ||
-      typeof window.matchMedia !== 'function'
-    ) {
-      return false;
-    }
-
-    return window.matchMedia(query).matches;
-  });
-
-  useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      typeof window.matchMedia !== 'function'
-    ) {
-      return undefined;
-    }
-
-    const mediaQuery = window.matchMedia(query);
-
-    const handleChange = (event) => {
-      setMatches(event.matches);
-    };
-
-    setMatches(mediaQuery.matches);
-    mediaQuery.addEventListener('change', handleChange);
-
-    return () => {
-      mediaQuery.removeEventListener(
-        'change',
-        handleChange
-      );
-    };
-  }, [query]);
-
-  return matches;
-}
-
 export default function FeedPage() {
   const wrappingTopicCanvasRef = useRef(false);
 
@@ -804,9 +782,6 @@ const pendingCanvasPositionRef = useRef({
   left: 0,
   top: 0,
 });
-const isDesktopCanvas = useMediaQuery(
-  '(min-width: 1024px)'
-);
   const { topic } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1501,13 +1476,9 @@ useEffect(() => {
 const topicCanvasLayout = useMemo(
   () =>
     getTopicCanvasLayout(
-      visibleLaunchTopics.length,
-      isDesktopCanvas
+      visibleLaunchTopics.length
     ),
-  [
-    visibleLaunchTopics.length,
-    isDesktopCanvas,
-  ]
+  [visibleLaunchTopics.length]
 );
 
 const topicCanvasSurfaceStyle = useMemo(
@@ -2227,6 +2198,14 @@ const selectTopic = useCallback(
 
 const handleTopicSelect = useCallback(
   (item) => {
+    if (
+      suppressTopicClickRef.current ||
+      canvasDragRef.current.moved ||
+      touchGestureRef.current.moved
+    ) {
+      return;
+    }
+
     selectTopic(item, 'topic-card');
   },
   [selectTopic]
@@ -2335,11 +2314,8 @@ const renderedTopics = useMemo(
 const renderedLaunchTopics = useMemo(
   () =>
     visibleLaunchTopics.map((item, index) => {
-const position =
-  getTopicCanvasPosition(
-    index,
-    isDesktopCanvas
-  );
+      const position =
+        getTopicCanvasPosition(index);
 
       return (
      <TopicLaunchCard
@@ -2355,13 +2331,12 @@ const position =
 />
       );
     }),
-[
-  handleTopicSelect,
-  isDesktopCanvas,
-  topicCanvasLayout.offsetX,
-  topicCanvasLayout.offsetY,
-  visibleLaunchTopics,
-]
+  [
+    handleTopicSelect,
+    topicCanvasLayout.offsetX,
+    topicCanvasLayout.offsetY,
+    visibleLaunchTopics,
+  ]
 );
 
 
@@ -2488,44 +2463,46 @@ const handleTopicCanvasScroll = useCallback(() => {
       const visibleExplanation = simpleExplanations[postId] || '';
 
       return (
-        <FeedPostCard
-          key={`${postId}-${post.createdAtMs || post.updatedAtMs || post.createdAt || post.updatedAt || ''}`}
-          post={post}
-          index={index}
-          postId={postId}
-          isSaved={isSaved}
-          creatorId={creatorId}
-          creatorName={creatorName}
-          translatedText={translations[postId]}
-          isTranslated={Boolean(showTranslated[postId])}
-          isTranslating={Boolean(translating[postId])}
-          isExplaining={Boolean(explaining[postId])}
-          explanation={visibleExplanation}
-          onTopicClick={handleTopicClick}
-          onSave={handleSave}
-          onOpenPost={handleOpenPost}
-          onComments={handleComments}
-          onExplain={handleExplain}
-          onTranslateChange={handleTranslateChange}
-        />
+<FeedPostCard
+  key={`${postId}-${post.createdAtMs || post.updatedAtMs || post.createdAt || post.updatedAt || ''}`}
+  post={post}
+  index={index}
+  postId={postId}
+  isSaved={isSaved}
+  creatorId={creatorId}
+  creatorName={creatorName}
+  translatedText={translations[postId]}
+  isTranslated={Boolean(showTranslated[postId])}
+  isTranslating={Boolean(translating[postId])}
+  isExplaining={Boolean(explaining[postId])}
+  explanation={visibleExplanation}
+  onTopicClick={handleTopicClick}
+  onSave={handleSave}
+  onOpenPost={handleOpenPost}
+  onOpenCreator={handleOpenCreator}
+  onComments={handleComments}
+  onExplain={handleExplain}
+  onTranslateChange={handleTranslateChange}
+/>
       );
     }),
-    [
-      savedPostIds,
-      creatorProfiles,
-      explaining,
-      renderedFeedPosts,
-      handleOpenPost,
-      handleComments,
-      handleExplain,
-      handleSave,
-      handleTopicClick,
-      handleTranslateChange,
-      showTranslated,
-      simpleExplanations,
-      translating,
-      translations,
-    ]
+[
+  savedPostIds,
+  creatorProfiles,
+  explaining,
+  renderedFeedPosts,
+  handleOpenPost,
+  handleOpenCreator,
+  handleComments,
+  handleExplain,
+  handleSave,
+  handleTopicClick,
+  handleTranslateChange,
+  showTranslated,
+  simpleExplanations,
+  translating,
+  translations,
+]
   );
 
   return (
