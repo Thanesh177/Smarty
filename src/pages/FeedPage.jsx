@@ -796,6 +796,7 @@ export default function FeedPage() {
   const wrappingTopicCanvasRef = useRef(false);
 
   const topicRevealFrameRef = useRef(null);
+  const topicScrollEndTimerRef = useRef(null);
   const topicSnapTimerRef = useRef(null);
   const topicSnapReleaseTimerRef = useRef(null);
   const isTopicAutoCenteringRef = useRef(false);
@@ -984,61 +985,43 @@ const updateTopicCardDepth = useCallback(() => {
 
   if (!canvas) return;
 
-  const cards = canvas.querySelectorAll(
-    '.topic-launch-card'
-  );
+  const cards = canvas.querySelectorAll('.topic-launch-card');
 
   const viewportCenterX =
-    canvas.scrollLeft +
-    canvas.clientWidth / 2;
+    canvas.scrollLeft + canvas.clientWidth / 2;
 
   const viewportCenterY =
-    canvas.scrollTop +
-    canvas.clientHeight / 2;
+    canvas.scrollTop + canvas.clientHeight / 2;
 
   const focusRadius = Math.max(
-    280,
-    Math.min(
-      canvas.clientWidth,
-      canvas.clientHeight
-    ) * 0.72
+    260,
+    Math.min(canvas.clientWidth, canvas.clientHeight) * 0.68
   );
 
-  /*
-   * Read every card's geometry before writing styles. Mixing reads and
-   * writes per card forces the browser to recalculate layout repeatedly
-   * while the canvas is moving.
-   */
   let cardMetrics = topicCardMetricsRef.current;
 
   const metricsAreStale =
     cardMetrics.length !== cards.length ||
-    cardMetrics.some(
-      (metric, index) =>
-        metric.card !== cards[index]
-    );
+    cardMetrics.some((metric, index) => metric.card !== cards[index]);
 
   if (metricsAreStale) {
-    cardMetrics = Array.from(cards, (card) => {
-      let offsetX = 0;
-      let offsetY = 0;
-      let element = card;
+    const canvasRect = canvas.getBoundingClientRect();
 
-      while (
-        element &&
-        element !== canvas
-      ) {
-        offsetX += element.offsetLeft || 0;
-        offsetY += element.offsetTop || 0;
-        element = element.offsetParent;
-      }
+    cardMetrics = Array.from(cards, (card) => {
+      const cardRect = card.getBoundingClientRect();
 
       return {
         card,
         centerX:
-          offsetX + card.offsetWidth / 2,
+          canvas.scrollLeft +
+          cardRect.left -
+          canvasRect.left +
+          cardRect.width / 2,
         centerY:
-          offsetY + card.offsetHeight / 2,
+          canvas.scrollTop +
+          cardRect.top -
+          canvasRect.top +
+          cardRect.height / 2,
       };
     });
 
@@ -1046,142 +1029,39 @@ const updateTopicCardDepth = useCallback(() => {
   }
 
   cardMetrics.forEach(({ card, centerX, centerY }) => {
+    const deltaX = centerX - viewportCenterX;
+    const deltaY = centerY - viewportCenterY;
+    const outsideFocusArea =
+      Math.abs(deltaX) >= focusRadius ||
+      Math.abs(deltaY) >= focusRadius;
+    const normalizedDistance = outsideFocusArea
+      ? 1
+      : Math.min(
+          Math.sqrt(deltaX * deltaX + deltaY * deltaY) / focusRadius,
+          1
+        );
+    const rawFocus = reducedMotionRef.current
+      ? 1
+      : 1 - normalizedDistance;
+    const easedFocus =
+      rawFocus * rawFocus * (3 - 2 * rawFocus);
 
-    const distance = Math.hypot(
-      centerX - viewportCenterX,
-      centerY - viewportCenterY
-    );
+    // Quantizing avoids rewriting styles for imperceptibly small changes.
+    const focusStep = Math.round(easedFocus * 24);
 
-    const isNearViewport =
-      distance <= focusRadius * 1.85;
+    if (card.dataset.topicFocusStep === String(focusStep)) return;
 
-    if (!isNearViewport) {
-      if (
-        card.dataset.topicVisible !== 'false'
-      ) {
-        card.dataset.topicVisible = 'false';
-        card.style.visibility = 'hidden';
-        card.style.pointerEvents = 'none';
-      }
+    card.dataset.topicFocusStep = String(focusStep);
 
-      return;
-    }
-
-    if (card.dataset.topicVisible !== 'true') {
-      card.dataset.topicVisible = 'true';
-      card.style.visibility = 'visible';
-      card.style.pointerEvents = 'auto';
-    }
-
-    const normalizedDistance = Math.min(
-      distance / focusRadius,
-      1
-    );
-
-    /*
-     * Smooth easing:
-     * close cards remain prominent;
-     * distant cards shrink more gradually.
-     */
-    const focus =
-      1 -
-      normalizedDistance *
-        normalizedDistance *
-        (3 - 2 * normalizedDistance);
-
-    if (reducedMotionRef.current) {
-      card.style.setProperty(
-        '--topic-center-scale',
-        '1'
-      );
-      card.style.setProperty(
-        '--topic-center-opacity',
-        '1'
-      );
-      card.style.setProperty(
-        '--topic-center-lift',
-        '0px'
-      );
-      card.style.setProperty(
-        '--topic-center-depth',
-        '0px'
-      );
-      card.style.setProperty(
-        '--topic-center-tilt-x',
-        '0deg'
-      );
-      card.style.setProperty(
-        '--topic-center-tilt-y',
-        '0deg'
-      );
-      return;
-    }
-
-    const scale =
-      0.86 + focus * 0.15;
-
-    const opacity =
-      0.62 + focus * 0.38;
-
-    const lift =
-      focus * -4;
-
-    const depth =
-      -110 + focus * 140;
-
-    const tiltX =
-      Math.max(
-        -1,
-        Math.min(
-          1,
-          (centerY - viewportCenterY) /
-            focusRadius
-        )
-      ) * -1.5;
-
-    const tiltY =
-      Math.max(
-        -1,
-        Math.min(
-          1,
-          (centerX - viewportCenterX) /
-            focusRadius
-        )
-      ) * 1.5;
-
-    card.style.setProperty(
-      '--topic-center-scale',
-      scale.toFixed(3)
-    );
-
-    card.style.setProperty(
-      '--topic-center-opacity',
-      opacity.toFixed(3)
-    );
-
-    card.style.setProperty(
-      '--topic-center-lift',
-      `${lift.toFixed(1)}px`
-    );
-
-    card.style.setProperty(
-      '--topic-center-depth',
-      `${depth.toFixed(1)}px`
-    );
-
-    card.style.setProperty(
-      '--topic-center-tilt-x',
-      `${tiltX.toFixed(2)}deg`
-    );
-
-    card.style.setProperty(
-      '--topic-center-tilt-y',
-      `${tiltY.toFixed(2)}deg`
-    );
-
-    card.style.zIndex = String(
-      Math.round(focus * 50) + 1
-    );
+    const focus = focusStep / 24;
+    const scale = 0.88 + focus * 0.22;
+    const opacity = 0.64 + focus * 0.36;
+    const lift = focus * -16;
+    card.style.setProperty('--topic-center-scale', scale.toFixed(3));
+    card.style.setProperty('--topic-center-opacity', opacity.toFixed(3));
+    card.style.setProperty('--topic-center-lift', `${lift.toFixed(1)}px`);
+    card.style.setProperty('--topic-focus', focus.toFixed(3));
+    card.dataset.topicCentered = focus >= 0.66 ? 'true' : 'false';
   });
 }, []);
 const wrapTopicCanvasPosition =
@@ -1220,73 +1100,40 @@ const wrapTopicCanvasPosition =
       };
     }
 
-    const horizontalBuffer = Math.min(
-      160,
-      Math.max(56, maxScrollLeft * 0.08)
-    );
-
-    const verticalBuffer = Math.min(
-      160,
-      Math.max(56, maxScrollTop * 0.08)
-    );
-    const wrapInset = 2;
-
     let nextLeft = canvas.scrollLeft;
     let nextTop = canvas.scrollTop;
     let wrappedHorizontal = false;
     let wrappedVertical = false;
+    const tileWidth = canvas.scrollWidth / 3;
+    const tileHeight = canvas.scrollHeight / 3;
+    const viewportCenterX =
+      canvas.scrollLeft + canvas.clientWidth / 2;
+    const viewportCenterY =
+      canvas.scrollTop + canvas.clientHeight / 2;
 
-    if (
-      maxScrollLeft >
-      horizontalBuffer * 2
-    ) {
-      if (
-        canvas.scrollLeft <=
-        horizontalBuffer
-      ) {
-        nextLeft =
-          maxScrollLeft -
-          horizontalBuffer -
-          wrapInset;
-
-        wrappedHorizontal = true;
-      } else if (
-        canvas.scrollLeft >=
-        maxScrollLeft -
-          horizontalBuffer
-      ) {
-        nextLeft =
-          horizontalBuffer +
-          wrapInset;
-        wrappedHorizontal = true;
-      }
+    /*
+     * Each neighbouring tile is an identical copy. Moving by exactly one
+     * tile preserves the visible pixels, making the boundary crossing
+     * visually continuous rather than an edge-to-edge teleport.
+     */
+    if (viewportCenterX < tileWidth) {
+      nextLeft += tileWidth;
+      wrappedHorizontal = true;
+    } else if (viewportCenterX >= tileWidth * 2) {
+      nextLeft -= tileWidth;
+      wrappedHorizontal = true;
     }
 
-    if (
-      maxScrollTop >
-      verticalBuffer * 2
-    ) {
-      if (
-        canvas.scrollTop <=
-        verticalBuffer
-      ) {
-        nextTop =
-          maxScrollTop -
-          verticalBuffer -
-          wrapInset;
-
-        wrappedVertical = true;
-      } else if (
-        canvas.scrollTop >=
-        maxScrollTop -
-          verticalBuffer
-      ) {
-        nextTop =
-          verticalBuffer +
-          wrapInset;
-        wrappedVertical = true;
-      }
+    if (viewportCenterY < tileHeight) {
+      nextTop += tileHeight;
+      wrappedVertical = true;
+    } else if (viewportCenterY >= tileHeight * 2) {
+      nextTop -= tileHeight;
+      wrappedVertical = true;
     }
+
+    nextLeft = Math.min(maxScrollLeft, Math.max(0, nextLeft));
+    nextTop = Math.min(maxScrollTop, Math.max(0, nextTop));
 
     if (
       !wrappedHorizontal &&
@@ -1550,7 +1397,7 @@ if (Math.hypot(deltaX, deltaY) > 6) {
   suppressTopicClickRef.current = true;
 }
 
-const DRAG_SPEED = 0.75;
+const DRAG_SPEED = 0.58;
 const maxLeft = Math.max(
   0,
   canvas.scrollWidth -
@@ -1632,7 +1479,8 @@ if (currentCanvas) {
         topicEdgeLoadTimerRef.current = null;
       }, 180);
   }
-}, [updateTopicCardDepth]);
+}, []);
+
 const stopCanvasDragging = useCallback((event) => {
   if (event.pointerType !== 'mouse') {
     return;
@@ -1656,16 +1504,13 @@ const stopCanvasDragging = useCallback((event) => {
 
     canvasAnimationFrameRef.current = null;
   }
-if (canvasDragRef.current.moved) {
-  startCanvasMomentum();
-}
   setIsCanvasDragging(false);
 
   window.setTimeout(() => {
     suppressTopicClickRef.current = false;
     canvasDragRef.current.moved = false;
   }, 80);
-}, [startCanvasMomentum]);
+}, []);
 
 useEffect(() => {
   mountedRef.current = true;
@@ -1694,6 +1539,11 @@ useEffect(() => {
     if (canvasAnimationFrameRef.current) {
       cancelAnimationFrame(canvasAnimationFrameRef.current);
       canvasAnimationFrameRef.current = null;
+    }
+
+    if (topicScrollEndTimerRef.current) {
+      clearTimeout(topicScrollEndTimerRef.current);
+      topicScrollEndTimerRef.current = null;
     }
   };
 }, []);
@@ -1890,6 +1740,32 @@ const visibleLaunchTopics = useMemo(
 );
 
 useEffect(() => {
+  if (selectedTopic) return undefined;
+
+  const canvas = topicCanvasRef.current;
+  const updateViewportWidth = () => {
+    setCanvasViewportWidth(
+      canvas?.clientWidth || window.innerWidth
+    );
+  };
+
+  updateViewportWidth();
+
+  const resizeObserver =
+    typeof ResizeObserver === 'undefined' || !canvas
+      ? null
+      : new ResizeObserver(updateViewportWidth);
+
+  resizeObserver?.observe(canvas);
+  window.addEventListener('resize', updateViewportWidth);
+
+  return () => {
+    resizeObserver?.disconnect();
+    window.removeEventListener('resize', updateViewportWidth);
+  };
+}, [selectedTopic]);
+
+useEffect(() => {
   launchTopicsLengthRef.current =
     launchTopics.length;
 }, [launchTopics.length]);
@@ -1909,8 +1785,10 @@ const topicCanvasLayout = useMemo(
 
 const topicCanvasSurfaceStyle = useMemo(
   () => ({
-    width: `max(${topicCanvasLayout.width}px, calc(100vw + 160px))`,
-    height: `max(${topicCanvasLayout.height}px, calc(100% + 160px))`,
+    width: `${topicCanvasLayout.width * 3}px`,
+    height: `${topicCanvasLayout.height * 3}px`,
+    '--topic-tile-content-width': `${topicCanvasLayout.width}px`,
+    '--topic-tile-content-height': `${topicCanvasLayout.height}px`,
   }),
   [
     topicCanvasLayout.height,
@@ -2614,11 +2492,7 @@ const selectTopic = useCallback(
 
 const handleTopicSelect = useCallback(
   (item) => {
-    if (
-      suppressTopicClickRef.current ||
-      canvasDragRef.current.moved ||
-      touchGestureRef.current.moved
-    ) {
+    if (touchGestureRef.current.moved) {
       return;
     }
 
@@ -2630,10 +2504,11 @@ const handleTopicSelect = useCallback(
 const handleTopicCardPointerIntent = useCallback(() => {
   stopCanvasMomentum();
 
-  // A fresh press on a card is a direct selection intent. Touch movement can
-  // still set these flags again before click, preserving drag protection.
+  // A fresh press is always direct selection intent, regardless of where the
+  // card sits in the canvas. A real touch drag can still mark itself as moved.
   suppressTopicClickRef.current = false;
   canvasDragRef.current.moved = false;
+  touchGestureRef.current.moved = false;
 }, [stopCanvasMomentum]);
 
 const handleTopicPillSelect = useCallback(
@@ -2779,53 +2654,113 @@ const renderedTopics = useMemo(
   ]
 );
 
-const renderedLaunchTopics = useMemo(
+const renderedTopicCanvasTiles = useMemo(
   () =>
-    visibleLaunchTopics.map((item, index) => {
-      const position =
-        getTopicCanvasPosition(index);
-      const isOnlyTopic =
-        visibleLaunchTopics.length === 1;
+    Array.from({ length: 9 }, (_, tileIndex) => {
+      const row = Math.floor(tileIndex / 3);
+      const column = tileIndex % 3;
+      const isPrimaryTile = tileIndex === 4;
+      const tileKey = `${column - 1}:${row - 1}`;
+      const horizontalTileOffset = column - 1;
+      const verticalTileOffset = row - 1;
+      const cloneBufferX = Math.min(
+        topicCanvasLayout.width,
+        Math.max(420, canvasViewportWidth * 0.58)
+      );
+      const cloneBufferY = Math.min(
+        topicCanvasLayout.height,
+        Math.max(
+          420,
+          (typeof window === 'undefined' ? 760 : window.innerHeight) * 0.62
+        )
+      );
 
       return (
-     <TopicLaunchCard
-  key={item}
-  item={item}
-  index={index}
-  position={{
-    ...position,
-    x: isOnlyTopic
-      ? `calc(50% - ${position.width / 2}px)`
-      : position.x + topicCanvasLayout.offsetX,
-    y: isOnlyTopic
-      ? `calc(50% - ${position.height / 2}px)`
-      : position.y + topicCanvasLayout.offsetY,
-  }}
-  onSelect={handleTopicSelect}
-  onPointerIntent={handleTopicCardPointerIntent}
-/>
+        <div
+          className={`topic-canvas-tile ${
+            isPrimaryTile ? 'topic-canvas-tile-primary' : ''
+          }`}
+          key={`topic-tile-${tileKey}`}
+          style={{
+            left: `${column * (100 / 3)}%`,
+            top: `${row * (100 / 3)}%`,
+          }}
+          aria-hidden={isPrimaryTile ? undefined : 'true'}
+        >
+          <div className="topic-canvas-tile-content">
+            {visibleLaunchTopics.map((item, index) => {
+              const position = getTopicCanvasPosition(index);
+              const isOnlyTopic = visibleLaunchTopics.length === 1;
+              const cardLeft = position.x + topicCanvasLayout.offsetX;
+              const cardTop = position.y + topicCanvasLayout.offsetY;
+              const cardRight = cardLeft + position.width;
+              const cardBottom = cardTop + position.height;
+              const isNearHorizontalSeam =
+                horizontalTileOffset === 0 ||
+                (horizontalTileOffset < 0
+                  ? cardRight >= topicCanvasLayout.width - cloneBufferX
+                  : cardLeft <= cloneBufferX);
+              const isNearVerticalSeam =
+                verticalTileOffset === 0 ||
+                (verticalTileOffset < 0
+                  ? cardBottom >= topicCanvasLayout.height - cloneBufferY
+                  : cardTop <= cloneBufferY);
+
+              // Neighbouring tiles only need cards that can actually enter the
+              // viewport. The complete primary tile remains available.
+              if (
+                !isPrimaryTile &&
+                (!isNearHorizontalSeam || !isNearVerticalSeam)
+              ) {
+                return null;
+              }
+
+              return (
+                <TopicLaunchCard
+                  key={`${tileKey}-${item}`}
+                  item={item}
+                  index={index}
+                  isClone={!isPrimaryTile}
+                  position={{
+                    ...position,
+                    x: isOnlyTopic
+                      ? `calc(50% - ${position.width / 2}px)`
+                      : position.x + topicCanvasLayout.offsetX,
+                    y: isOnlyTopic
+                      ? `calc(50% - ${position.height / 2}px)`
+                      : position.y + topicCanvasLayout.offsetY,
+                  }}
+                  onSelect={handleTopicSelect}
+                  onPointerIntent={handleTopicCardPointerIntent}
+                />
+              );
+            })}
+          </div>
+        </div>
       );
     }),
   [
     handleTopicSelect,
     handleTopicCardPointerIntent,
+    canvasViewportWidth,
     topicCanvasLayout.offsetX,
     topicCanvasLayout.offsetY,
+    topicCanvasLayout.height,
+    topicCanvasLayout.width,
     visibleLaunchTopics,
   ]
 );
 
-
 useEffect(() => {
   if (selectedTopic) return undefined;
+
+  topicCardMetricsRef.current = [];
 
   const frame = requestAnimationFrame(() => {
     updateTopicCardDepth();
   });
 
-  return () => {
-    cancelAnimationFrame(frame);
-  };
+  return () => cancelAnimationFrame(frame);
 }, [
   selectedTopic,
   visibleLaunchTopics.length,
@@ -2841,19 +2776,37 @@ const handleTopicCanvasScroll =
 
     if (!canvas) return;
 
-    if (topicRevealFrameRef.current) {
-      return;
+    canvas.classList.add('topic-canvas-scrolling');
+
+    if (topicScrollEndTimerRef.current) {
+      clearTimeout(topicScrollEndTimerRef.current);
     }
 
-    topicRevealFrameRef.current =
-      requestAnimationFrame(() => {
-        wrapTopicCanvasPosition();
-        updateTopicCardDepth();
+    topicScrollEndTimerRef.current = window.setTimeout(() => {
+      topicCanvasRef.current?.classList.remove('topic-canvas-scrolling');
+      topicScrollEndTimerRef.current = null;
+    }, 110);
 
-        topicRevealFrameRef.current =
-          null;
-      });
+    if (!topicRevealFrameRef.current) {
+      topicRevealFrameRef.current =
+        requestAnimationFrame(() => {
+          lastTopicCanvasPositionRef.current = {
+            left: canvas.scrollLeft,
+            top: canvas.scrollTop,
+          };
+
+          wrapTopicCanvasPosition();
+          updateTopicCardDepth();
+          topicRevealFrameRef.current = null;
+        });
+    }
+
+    if (showCanvasHint) {
+      dismissCanvasHint();
+    }
   }, [
+    dismissCanvasHint,
+    showCanvasHint,
     updateTopicCardDepth,
     wrapTopicCanvasPosition,
   ]);
@@ -2940,7 +2893,7 @@ handleComments,
   >
     <nav className="topic-canvas-navbar" aria-label="Smarty topic navigation">
   <span className="topic-canvas-brand">
-    <Sparkles size={15} strokeWidth={2.2} aria-hidden="true" />
+    <span className="topic-canvas-brand-monogram" aria-hidden="true">S</span>
     Smarty
   </span>
 
@@ -3074,7 +3027,7 @@ suppressTopicClickRef.current = false;
   className="topic-canvas-surface"
 style={topicCanvasSurfaceStyle}
 >
-  {renderedLaunchTopics}
+  {renderedTopicCanvasTiles}
 </div>
 </div>
 
@@ -3209,105 +3162,32 @@ style={topicCanvasSurfaceStyle}
 }
 
 function getTopicCanvasPosition(index) {
-  const cardsPerCluster = 12;
-
-  
-
-  const clusterCards = [
-    { x: 16, y: 26, width: 210, height: 150 },
-    { x: 272, y: 26, width: 180, height: 190 },
-    { x: 498, y: 26, width: 228, height: 150 },
-
-    { x: 16, y: 258, width: 184, height: 188 },
-    { x: 246, y: 258, width: 244, height: 150 },
-    { x: 536, y: 258, width: 190, height: 190 },
-
-    { x: 16, y: 490, width: 226, height: 152 },
-    { x: 288, y: 490, width: 182, height: 190 },
-    { x: 516, y: 490, width: 218, height: 150 },
-
-    { x: 16, y: 722, width: 188, height: 180 },
-    { x: 250, y: 722, width: 232, height: 148 },
-    { x: 528, y: 722, width: 176, height: 184 },
-  ];
-
-const clusterIndex = Math.floor(
-  index / cardsPerCluster
-);
-
-const cardIndex = index % cardsPerCluster;
-const cluster = getSpiralClusterPosition(clusterIndex);
-const card = clusterCards[cardIndex];
-
 const isDesktop =
   typeof window !== 'undefined' &&
-  window.innerWidth >= 1024;
-
-const clusterWidth = isDesktop ? 920 : 780;
-const clusterHeight = isDesktop ? 1140 : 980;
-
-const canvasCenterX = 1050;
-const canvasCenterY = 720;
+  window.innerWidth >= 760;
+const columns = isDesktop ? 4 : 3;
+const width = isDesktop ? 168 : 146;
+const height = isDesktop ? 132 : 120;
+const gapX = isDesktop ? 68 : 68;
+const gapY = isDesktop ? 62 : 68;
+const column = index % columns;
+const row = Math.floor(index / columns);
 
 return {
-  width: card.width,
-  height: card.height,
-  x:
-    canvasCenterX +
-    cluster.x * clusterWidth +
-    card.x,
-  y:
-    canvasCenterY +
-    cluster.y * clusterHeight +
-    card.y,
+  width,
+  height,
+  x: column * (width + gapX),
+  y: row * (height + gapY),
 };
-}
-
-function getSpiralClusterPosition(index) {
-  if (index === 0) {
-    return { x: 0, y: 0 };
-  }
-
-  const spiral = [
-    { x: 1, y: 0 },
-    { x: 1, y: 1 },
-    { x: 0, y: 1 },
-    { x: -1, y: 1 },
-    { x: -1, y: 0 },
-    { x: -1, y: -1 },
-    { x: 0, y: -1 },
-    { x: 1, y: -1 },
-
-    { x: 2, y: -1 },
-    { x: 2, y: 0 },
-    { x: 2, y: 1 },
-    { x: 2, y: 2 },
-    { x: 1, y: 2 },
-    { x: 0, y: 2 },
-    { x: -1, y: 2 },
-    { x: -2, y: 2 },
-    { x: -2, y: 1 },
-    { x: -2, y: 0 },
-    { x: -2, y: -1 },
-    { x: -2, y: -2 },
-    { x: -1, y: -2 },
-    { x: 0, y: -2 },
-    { x: 1, y: -2 },
-    { x: 2, y: -2 },
-  ];
-
-  return (
-    spiral[index - 1] || {
-      x: index % 5,
-      y: Math.floor(index / 5),
-    }
-  );
 }
 
 
 
 function getTopicCanvasLayout(topicCount) {
-  const edgePadding = 20;
+  const isDesktop =
+    typeof window !== 'undefined' &&
+    window.innerWidth >= 760;
+  const edgePadding = isDesktop ? 29 : 14;
 
   const cards = Array.from(
     { length: topicCount },

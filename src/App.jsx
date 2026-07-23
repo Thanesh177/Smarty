@@ -24,6 +24,7 @@ import {
   connectChatSocket,
   subscribeChatSocket,
 } from './api/chatSocket';
+import { getUserScopedStorageKey } from './lib/userScopedStorage';
 
 import JoinRoomPage from './pages/JoinRoomPage';
 import Booksinfo from './pages/Booksinfo';
@@ -247,7 +248,10 @@ function getUnreadFromChatsPayload(payload) {
       ? payload.chats
       : [];
 
-  return chats.reduce((sum, chat) => sum + Number(chat?.unreadCount || 0), 0);
+  return chats.reduce((sum, chat) => {
+    const count = Number(chat?.unreadCount || 0);
+    return sum + (Number.isFinite(count) ? Math.max(0, count) : 0);
+  }, 0);
 }
 
 function ReminderPopup({ title, body, visible, onClose, onClick }) {
@@ -280,17 +284,26 @@ function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const currentUserId = getUserSocketId(user);
+  const unreadStorageKey = useMemo(
+    () => getUserScopedStorageKey('smartyChatUnreadCount', currentUserId),
+    [currentUserId]
+  );
+  const activeChatStorageKey = useMemo(
+    () => getUserScopedStorageKey('activeChatId', currentUserId),
+    [currentUserId]
+  );
 
   const routeCacheRef = useRef(new Map());
   const lastRefreshRef = useRef(0);
 
   const cachedUnread = useMemo(() => {
     try {
-      return Number(localStorage.getItem('smartyChatUnreadCount') || 0);
+      return Number(localStorage.getItem(unreadStorageKey) || 0);
     } catch {
       return 0;
     }
-  }, []);
+  }, [unreadStorageKey]);
 
   const hideNavPaths = [
     '/quiz',
@@ -356,6 +369,8 @@ function Layout() {
   const touchStartXRef = useRef(null);
   const unreadRefreshInFlightRef = useRef(false);
   const unreadRefreshTimerRef = useRef(null);
+  const seenBadgeMessageIdsRef = useRef(new Set());
+  const recentNotificationIdsRef = useRef(new Set());
   const globalPullStartYRef = useRef(0);
   const globalPullDistanceRef = useRef(0);
   const globalPullAtTopRef = useRef(false);
@@ -601,24 +616,18 @@ useEffect(() => {
     if (!user) {
       setTotalUnread(0);
 
-      try {
-        localStorage.setItem('smartyChatUnreadCount', '0');
-      } catch {
-        // ignore storage errors
-      }
-
       return undefined;
     }
 
     let cancelled = false;
-    const userId = getUserSocketId(user);
+    const userId = currentUserId;
 
     const applyUnread = (value) => {
       const nextUnread = Math.max(0, Number(value || 0));
       setTotalUnread(nextUnread);
 
       try {
-        localStorage.setItem('smartyChatUnreadCount', String(nextUnread));
+        localStorage.setItem(unreadStorageKey, String(nextUnread));
       } catch {
         // ignore storage errors
       }
@@ -635,7 +644,8 @@ useEffect(() => {
       }
 
       const now = Date.now();
-      const cached = routeCacheRef.current.get('chatUnread');
+      const unreadCacheKey = `chatUnread:${userId}`;
+      const cached = routeCacheRef.current.get(unreadCacheKey);
 
       if (
         !force &&
@@ -654,7 +664,7 @@ useEffect(() => {
 
         const unreadValue = getUnreadFromChatsPayload(chatsPayload);
 
-        routeCacheRef.current.set('chatUnread', {
+        routeCacheRef.current.set(unreadCacheKey, {
           value: unreadValue,
           timestamp: now,
         });
@@ -678,10 +688,10 @@ useEffect(() => {
     };
 
     try {
-      const storedUnread = Number(localStorage.getItem('smartyChatUnreadCount') || 0);
-      if (storedUnread > 0) setTotalUnread(storedUnread);
+      const storedUnread = Number(localStorage.getItem(unreadStorageKey) || 0);
+      setTotalUnread(Math.max(0, storedUnread));
     } catch {
-      // ignore storage errors
+      setTotalUnread(0);
     }
 
     refreshChatUnread({ force: true });
@@ -694,8 +704,25 @@ useEffect(() => {
       if (data?.type !== 'newMessage' || !data?.message) return;
 
       const senderId = data.message.senderId || data.message.userId || '';
-      const activeChatId = localStorage.getItem('activeChatId') || '';
+      const activeChatId = localStorage.getItem(activeChatStorageKey) || '';
       const messageChatId = data.message.chatId || '';
+      const messageId = String(
+        data.message.messageId ||
+        data.message.id ||
+        data.message.clientId ||
+        ''
+      );
+
+      if (messageId) {
+        if (seenBadgeMessageIdsRef.current.has(messageId)) return;
+
+        seenBadgeMessageIdsRef.current.add(messageId);
+
+        if (seenBadgeMessageIdsRef.current.size > 300) {
+          seenBadgeMessageIdsRef.current.clear();
+          seenBadgeMessageIdsRef.current.add(messageId);
+        }
+      }
 
       if (senderId && senderId === userId) return;
 
@@ -708,7 +735,7 @@ useEffect(() => {
         const nextUnread = Number(current || 0) + 1;
 
         try {
-          localStorage.setItem('smartyChatUnreadCount', String(nextUnread));
+          localStorage.setItem(unreadStorageKey, String(nextUnread));
         } catch {
           // ignore storage errors
         }
@@ -726,7 +753,7 @@ useEffect(() => {
     const handleRefresh = () => refreshChatUnread({ force: true });
 
     const handleStorage = (event) => {
-      if (event.key === 'smartyChatUnreadCount') {
+      if (event.key === unreadStorageKey) {
         applyUnread(event.newValue);
       }
     };
@@ -752,6 +779,9 @@ useEffect(() => {
 
     return () => {
       cancelled = true;
+      unreadRefreshInFlightRef.current = false;
+      seenBadgeMessageIdsRef.current.clear();
+      routeCacheRef.current.delete(`chatUnread:${userId}`);
 
       if (unreadRefreshTimerRef.current) {
         window.clearTimeout(unreadRefreshTimerRef.current);
@@ -767,7 +797,7 @@ useEffect(() => {
       window.removeEventListener('chat-unread-refresh-request', handleRefresh);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [user]);
+  }, [activeChatStorageKey, currentUserId, unreadStorageKey, user]);
 
   // Android WebView push token bridge
   useEffect(() => {
@@ -781,7 +811,7 @@ useEffect(() => {
       setTotalUnread(nextUnread);
 
       try {
-        localStorage.setItem('smartyChatUnreadCount', String(nextUnread));
+        localStorage.setItem(unreadStorageKey, String(nextUnread));
       } catch {
         // ignore storage errors
       }
@@ -792,7 +822,7 @@ useEffect(() => {
     return () => {
       window.removeEventListener('chat-unread-update', handler);
     };
-  }, []);
+  }, [unreadStorageKey]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('setAppBadge' in navigator)) return;
@@ -812,8 +842,11 @@ useEffect(() => {
       const isStandalone =
         window.matchMedia('(display-mode: standalone)').matches ||
         window.navigator.standalone;
+      const alreadyGranted =
+        'Notification' in window &&
+        Notification.permission === 'granted';
 
-      if (!isStandalone) return;
+      if (!isStandalone && !alreadyGranted) return;
 
       try {
         await notificationApi.initPush(user);
@@ -881,12 +914,37 @@ useEffect(() => {
   useEffect(() => {
     const handleSmartyNotification = (event) => {
       const detail = event.detail || {};
+      const rawMessageId = String(
+        detail.rawPayload?.messageId ||
+        detail.rawPayload?.data?.messageId ||
+        detail.rawPayload?.data?.notificationId ||
+        ''
+      );
+
+      if (rawMessageId) {
+        if (recentNotificationIdsRef.current.has(rawMessageId)) return;
+
+        recentNotificationIdsRef.current.add(rawMessageId);
+
+        window.setTimeout(() => {
+          recentNotificationIdsRef.current.delete(rawMessageId);
+        }, 60_000);
+      }
 
       setPopupNotification({
         title: detail.title || 'Smarty',
         body: detail.body || 'You have a new notification.',
         url: detail.url || '/',
       });
+
+      const notificationType = String(detail.type || '').toLowerCase();
+
+      if (
+        notificationType.includes('chat') ||
+        notificationType.includes('message')
+      ) {
+        window.dispatchEvent(new Event('chat-unread-refresh-request'));
+      }
     };
 
     window.addEventListener('smarty-notification', handleSmartyNotification);
@@ -1027,12 +1085,18 @@ useEffect(() => {
               <NavLink
                 to="/chat"
                 className="quick-icon-link"
-                aria-label="Chat"
-                title="Chat"
+                aria-label={
+                  totalUnread > 0
+                    ? `Chat, ${totalUnread} unread message${totalUnread === 1 ? '' : 's'}`
+                    : 'Chat'
+                }
+                title={totalUnread > 0 ? `Chat · ${totalUnread} unread` : 'Chat'}
               >
                 <MessagesSquare size={21} strokeWidth={2.15} />
                 {totalUnread > 0 && (
-                  <span className="nav-badge">{totalUnread}</span>
+                  <span className="nav-badge" aria-hidden="true">
+                    {totalUnread > 99 ? '99+' : totalUnread}
+                  </span>
                 )}
               </NavLink>
 

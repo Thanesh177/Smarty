@@ -2386,8 +2386,19 @@
   letter-spacing: -0.035em;
 }
 
-.topic-canvas-brand svg {
-  color: #67e8f9;
+.topic-canvas-brand-monogram {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: #eaf8ff;
+  color: #09202d;
+  font-size: 0.76rem;
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: -0.06em;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
 }
 
 .topic-canvas-nav-label {
@@ -3303,5 +3314,119 @@
     animation: none;
     transition: none;
     transform: none;
+  }
+}
+
+/* Stable topic canvas: keep scrolling on the compositor and cards selectable. */
+.topic-canvas-viewport {
+  perspective: none;
+  scroll-behavior: auto;
+  overflow-anchor: none;
+  contain: layout paint size;
+}
+
+.topic-canvas-surface {
+  transform: none;
+  transform-style: flat;
+  contain: layout paint;
+}
+
+.topic-canvas-tile {
+  width: calc(100% / 3);
+  height: calc(100% / 3);
+  contain: layout paint style;
+}
+
+.topic-canvas-tile-content {
+  width: var(--topic-tile-content-width);
+  height: var(--topic-tile-content-height);
+}
+
+.topic-canvas-surface .topic-launch-card,
+.topic-canvas-surface .topic-launch-card:hover,
+.topic-canvas-surface .topic-launch-card:focus-visible {
+  visibility: visible !important;
+  content-visibility: visible;
+  opacity: var(--topic-center-opacity, 1) !important;
+  pointer-events: auto !important;
+  cursor: pointer;
+  transform:
+    translate3d(0, var(--topic-center-lift, 0px), 0)
+    scale(var(--topic-center-scale, 1)) !important;
+  transform-origin: center;
+  will-change: auto;
+  border-color: rgba(148, 163, 184, 0.09);
+  background:
+    radial-gradient(
+      circle at 22% 10%,
+      rgba(125, 211, 252, 0.07),
+      transparent 45%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(18, 31, 44, 0.98),
+      rgba(7, 14, 22, 0.98)
+    );
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.3),
+    0 0 18px rgba(56, 189, 248, 0.035),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  transition:
+    transform 100ms linear,
+    opacity 100ms linear,
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.topic-canvas-viewport.topic-canvas-scrolling
+  .topic-launch-card {
+  transition: none !important;
+}
+
+.topic-canvas-surface
+  .topic-launch-card[data-topic-centered="true"] {
+  z-index: 8;
+  border-color: rgba(125, 211, 252, 0.24);
+  background:
+    radial-gradient(
+      circle at 22% 10%,
+      rgba(125, 211, 252, 0.15),
+      transparent 47%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(20, 38, 52, 0.99),
+      rgba(8, 17, 27, 0.99)
+    );
+  box-shadow:
+    0 22px 48px rgba(0, 0, 0, 0.4),
+    0 0 28px rgba(56, 189, 248, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.topic-canvas-surface
+  .topic-launch-card[data-topic-centered="true"]
+  .topic-launch-orb {
+  color: #b9edff;
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.topic-canvas-viewport.topic-canvas-dragging
+  .topic-launch-card {
+  pointer-events: none !important;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topic-canvas-surface .topic-launch-card,
+  .topic-canvas-surface .topic-launch-card:hover,
+  .topic-canvas-surface .topic-launch-card:focus-visible {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none;
   }
 }

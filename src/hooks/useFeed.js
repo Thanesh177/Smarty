@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { postApi } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
+import { getUserScopedStorageKey } from '../lib/userScopedStorage';
 
 const FEED_CACHE_KEY = 'smarty_cached_feed_v2';
 const FEED_CURSOR_KEY = 'smarty_cached_feed_cursor_v2';
@@ -23,12 +25,23 @@ const dedupePosts = (items) => {
 };
 
 export default function useFeed() {
+  const { user } = useAuth();
+  const userId = user?.userId || user?.sub || user?.id || '';
+  const feedCacheKey = useMemo(
+    () => getUserScopedStorageKey(FEED_CACHE_KEY, userId),
+    [userId]
+  );
+  const feedCursorKey = useMemo(
+    () => getUserScopedStorageKey(FEED_CURSOR_KEY, userId),
+    [userId]
+  );
   const hasFetched = useRef(false);
   const preloadingRef = useRef(false);
+  const activeCacheScopeRef = useRef(userId);
 
   const [posts, setPosts] = useState(() => {
     try {
-      const cached = localStorage.getItem(FEED_CACHE_KEY);
+      const cached = localStorage.getItem(feedCacheKey);
       return cached ? dedupePosts(JSON.parse(cached)) : [];
     } catch {
       return [];
@@ -36,7 +49,7 @@ export default function useFeed() {
   });
 
   const [nextCursor, setNextCursor] = useState(() => {
-    return localStorage.getItem(FEED_CURSOR_KEY) || null;
+    return localStorage.getItem(feedCursorKey) || null;
   });
 
   const [preloadedPage, setPreloadedPage] = useState(null);
@@ -44,19 +57,43 @@ export default function useFeed() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
-  const saveCache = (items, cursor) => {
+  const saveCache = useCallback((items, cursor) => {
     try {
-      localStorage.setItem(FEED_CACHE_KEY, JSON.stringify(items));
+      localStorage.setItem(feedCacheKey, JSON.stringify(items));
 
       if (cursor) {
-        localStorage.setItem(FEED_CURSOR_KEY, cursor);
+        localStorage.setItem(feedCursorKey, cursor);
       } else {
-        localStorage.removeItem(FEED_CURSOR_KEY);
+        localStorage.removeItem(feedCursorKey);
       }
     } catch {
       // ignore storage quota errors
     }
-  };
+  }, [feedCacheKey, feedCursorKey]);
+
+  useEffect(() => {
+    if (activeCacheScopeRef.current === userId) return;
+
+    activeCacheScopeRef.current = userId;
+    hasFetched.current = false;
+    preloadingRef.current = false;
+
+    try {
+      const cached = localStorage.getItem(feedCacheKey);
+      const cachedPosts = cached ? dedupePosts(JSON.parse(cached)) : [];
+
+      setPosts(cachedPosts);
+      setNextCursor(localStorage.getItem(feedCursorKey) || null);
+      setLoading(cachedPosts.length === 0);
+    } catch {
+      setPosts([]);
+      setNextCursor(null);
+      setLoading(true);
+    }
+
+    setPreloadedPage(null);
+    setError('');
+  }, [feedCacheKey, feedCursorKey, userId]);
 
   const fetchPage = useCallback(async (cursor = null) => {
     return postApi.getFeed({
@@ -108,7 +145,7 @@ export default function useFeed() {
     } finally {
       setLoading(false);
     }
-  }, [fetchPage, posts.length, preloadNextPage]);
+  }, [fetchPage, posts.length, preloadNextPage, saveCache]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !nextCursor) return;
@@ -145,7 +182,7 @@ export default function useFeed() {
     } finally {
       setLoadingMore(false);
     }
-  }, [fetchPage, loadingMore, nextCursor, preloadedPage, preloadNextPage]);
+  }, [fetchPage, loadingMore, nextCursor, preloadedPage, preloadNextPage, saveCache]);
 
   useEffect(() => {
     if (hasFetched.current) return;

@@ -724,6 +724,7 @@ export default function TopicRoomsPage() {
   const roomsLoadingRef = useRef(false);
   const roomsLoadInFlightKeyRef = useRef('');
   const initialRoomsLoadedForUserRef = useRef('');
+  const roomAccountScopeRef = useRef(userId || '');
   const roomsCacheRef = useRef({ key: '', timestamp: 0, rooms: [] });
   const pendingRoomsReloadRef = useRef(false);
   const activeRoomImageUrlRef = useRef('');
@@ -1798,7 +1799,7 @@ async function approveJoinRequest(requestUserId) {
 
   async function loadRooms(searchValue = roomSearch, options = {}) {
     const normalizedSearch = String(searchValue || '').trim().toLowerCase();
-    const cacheKey = normalizedSearch;
+    const cacheKey = `${userId || 'anonymous'}:${normalizedSearch}`;
     const force = Boolean(options.force);
     const now = Date.now();
     const cached = roomsCacheRef.current;
@@ -2072,6 +2073,35 @@ async function approveJoinRequest(requestUserId) {
 
     openRoomFromNavigationState({ force: true });
   }, [user, userId, location.state, openRoomFromNavigationState]);
+
+  useEffect(() => {
+    const previousUserId = roomAccountScopeRef.current;
+
+    if (!previousUserId || previousUserId === userId) {
+      roomAccountScopeRef.current = userId || '';
+      return;
+    }
+
+    roomAccountScopeRef.current = userId || '';
+    activeRoomRef.current = null;
+    roomMessagesCacheRef.current = {};
+    roomMediaCacheRef.current = {};
+    membersCacheRef.current = {};
+    joinRequestsCacheRef.current = {};
+    userSearchCacheRef.current = {};
+    roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
+    initialRoomsLoadedForUserRef.current = '';
+    setRooms([]);
+    setMessages([]);
+    setActiveRoom(null);
+    setRoomInvites([]);
+    setRoomUnreadCounts({});
+    setMembers([]);
+    setInviteResults([]);
+    setActiveInfoMembers([]);
+    setActiveInfoRequests([]);
+    setMobileChatOpen(false);
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -4109,7 +4139,10 @@ return (
             const isPrivateCustom = room.type === 'custom' && room.privacy === 'private';
             const canLeave = isPrivateCustom && !isOwner;
             const canDelete = room.type === 'custom' && room.privacy === 'private' && isOwner;
-            const unreadCount = roomUnreadCounts[room.roomId] || room.unreadCount || 0;
+            const unreadCount =
+              roomUnreadCounts[room.roomId] ??
+              room.unreadCount ??
+              0;
             const roomImageUrl = roomIndex < ROOM_IMAGE_RENDER_LIMIT ? getRoomImageUrl(room) : '';
             const shouldEagerLoadRoomImage = roomIndex < ROOM_IMAGE_EAGER_LIMIT;
 

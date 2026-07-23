@@ -104,6 +104,18 @@ export const clearPendingRoomInvite = () => {
 let cachedAuthToken = '';
 let cachedAuthTokenAt = 0;
 let pendingAuthTokenPromise = null;
+let authTokenGeneration = 0;
+
+const resetAuthTokenCache = () => {
+  authTokenGeneration += 1;
+  cachedAuthToken = '';
+  cachedAuthTokenAt = 0;
+  pendingAuthTokenPromise = null;
+};
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('smarty:auth-changed', resetAuthTokenCache);
+}
 
 const mockFeed = [];
 const mockUser = null;
@@ -156,60 +168,139 @@ const clearStoredToken = () => {
   }
 };
 
+const decodeTokenPayload = (token) => {
+  try {
+    const part = String(token || '').split('.')[1] || '';
+    const normalized = part
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(part.length / 4) * 4, '=');
+
+    return JSON.parse(atob(normalized));
+  } catch {
+    return {};
+  }
+};
+
+const isUsableToken = (token, expectedSubject = '') => {
+  const payload = decodeTokenPayload(token);
+  const subject = String(payload.sub || '').trim();
+  const expected = String(expectedSubject || '').trim();
+  const expiresAt = Number(payload.exp || 0) * 1000;
+
+  return Boolean(
+    subject &&
+    expiresAt > Date.now() + 30_000 &&
+    (!expected || subject === expected)
+  );
+};
+
+const getVerifiedNativeStoredToken = () => {
+  const isNative = Boolean(
+    typeof window !== 'undefined' &&
+    (
+      window.AndroidBridge ||
+      window.SmartyAndroid ||
+      window.__SMARTY_NATIVE_APP__ === true ||
+      window.__SMARTY_PLATFORM__ === 'ios' ||
+      window.__SMARTY_IS_NATIVE_APP__ === true ||
+      /Smarty(?:Android|-iOS)/i.test(navigator.userAgent)
+    )
+  );
+
+  if (!isNative) return '';
+
+  try {
+    const token = getStoredToken();
+    const cachedUser = JSON.parse(localStorage.getItem('eduscroll_user') || 'null');
+    const subject = String(
+      cachedUser?.userId || cachedUser?.sub || cachedUser?.id || ''
+    ).trim();
+
+    return isUsableToken(token, subject) ? token : '';
+  } catch {
+    return '';
+  }
+};
+
 const getAuthToken = async () => {
   const now = Date.now();
+  const storedToken = getStoredToken();
 
-  if (cachedAuthToken && now - cachedAuthTokenAt < AUTH_TOKEN_CACHE_MS) {
+  if (
+    cachedAuthToken &&
+    cachedAuthToken === storedToken &&
+    isUsableToken(cachedAuthToken) &&
+    now - cachedAuthTokenAt < AUTH_TOKEN_CACHE_MS
+  ) {
     return cachedAuthToken;
   }
 
-  const storedToken = getStoredToken();
-
-  if (storedToken && now - cachedAuthTokenAt < AUTH_TOKEN_CACHE_MS) {
-    cachedAuthToken = storedToken;
-    return storedToken;
+  if (cachedAuthToken !== storedToken) {
+    cachedAuthToken = '';
+    cachedAuthTokenAt = 0;
   }
 
   if (pendingAuthTokenPromise) {
     return pendingAuthTokenPromise;
   }
 
+  const requestGeneration = authTokenGeneration;
+
   pendingAuthTokenPromise = (async () => {
     try {
       const session = await fetchAuthSession();
       const token =
-        session?.tokens?.accessToken?.toString() ||
         session?.tokens?.idToken?.toString() ||
+        session?.tokens?.accessToken?.toString() ||
         '';
 
-      if (token) {
+      if (
+        token &&
+        isUsableToken(token) &&
+        requestGeneration === authTokenGeneration
+      ) {
         cachedAuthToken = token;
         cachedAuthTokenAt = Date.now();
         setStoredToken(token);
         return token;
       }
 
-      if (storedToken) {
-        cachedAuthToken = storedToken;
+      const nativeStoredToken = getVerifiedNativeStoredToken();
+
+      if (nativeStoredToken && requestGeneration === authTokenGeneration) {
+        cachedAuthToken = nativeStoredToken;
         cachedAuthTokenAt = Date.now();
-        return storedToken;
+        return nativeStoredToken;
       }
 
-      cachedAuthToken = '';
-      cachedAuthTokenAt = 0;
+      if (requestGeneration === authTokenGeneration) {
+        cachedAuthToken = '';
+        cachedAuthTokenAt = 0;
+        clearStoredToken();
+      }
+
       return '';
     } catch {
-      if (storedToken) {
-        cachedAuthToken = storedToken;
+      const nativeStoredToken = getVerifiedNativeStoredToken();
+
+      if (nativeStoredToken && requestGeneration === authTokenGeneration) {
+        cachedAuthToken = nativeStoredToken;
         cachedAuthTokenAt = Date.now();
-        return storedToken;
+        return nativeStoredToken;
       }
 
-      cachedAuthToken = '';
-      cachedAuthTokenAt = 0;
+      if (requestGeneration === authTokenGeneration) {
+        cachedAuthToken = '';
+        cachedAuthTokenAt = 0;
+        clearStoredToken();
+      }
+
       return '';
     } finally {
-      pendingAuthTokenPromise = null;
+      if (requestGeneration === authTokenGeneration) {
+        pendingAuthTokenPromise = null;
+      }
     }
   })();
 

@@ -5,7 +5,6 @@ import {
   Newspaper,
   BrainCircuit,
   Users,
-  Sparkles,
   LogOut,
   LogIn,
 } from 'lucide-react';
@@ -126,7 +125,7 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
           >
             <div className="menu-header">
               <div className="menu-brand-mark" aria-hidden="true">
-                <Sparkles size={18} strokeWidth={2.3} />
+                S
               </div>
 
               <div className="menu-title">

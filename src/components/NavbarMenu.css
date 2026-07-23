@@ -167,6 +167,21 @@
   contain: layout;
 }
 
+.menu-brand-mark {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #eaf8ff;
+  color: #09202d;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
 .menu-header span {
   display: block;
   margin-bottom: 3px;
@@ -175,6 +190,15 @@
   font-weight: 850;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.menu-header .menu-brand-mark {
+  margin: 0;
+  color: #09202d;
+  font-size: 1rem;
+  line-height: 1;
+  letter-spacing: -0.06em;
+  text-transform: none;
 }
 
 .menu-header h3 {

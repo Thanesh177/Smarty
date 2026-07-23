@@ -9,17 +9,44 @@ import {
 } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 import { exchangeAndroidCodeForTokens } from '../lib/cognito';
+import { removeLegacyAccountCacheKeys } from '../lib/userScopedStorage';
 
 const AuthContext = createContext(null);
 
 function decodeJwtPayload(token) {
   try {
     const payload = token.split('.')[1];
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const normalized = payload
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(payload.length / 4) * 4, '=');
     return JSON.parse(atob(normalized));
   } catch {
     return {};
   }
+}
+
+function normalizeIdentity(value) {
+  return String(value || '').trim();
+}
+
+function isCurrentJwt(token, expectedSubject = '') {
+  if (!token) return false;
+
+  const payload = decodeJwtPayload(token);
+  const subject = normalizeIdentity(payload.sub);
+  const expected = normalizeIdentity(expectedSubject);
+  const expiresAt = Number(payload.exp || 0) * 1000;
+
+  if (!subject || !expiresAt || expiresAt <= Date.now() + 30_000) {
+    return false;
+  }
+
+  return !expected || subject === expected;
+}
+
+function notifyAuthChanged() {
+  window.dispatchEvent(new CustomEvent('smarty:auth-changed'));
 }
 
 function getSafeName(payload = {}, email = '') {
@@ -45,6 +72,25 @@ function getSafeUsername(currentUser, payload = {}, email = '') {
 function saveAuthUser(authUser) {
   if (!authUser) return;
 
+  const subject = normalizeIdentity(authUser.userId || authUser.sub || authUser.id);
+
+  if (!subject || !isCurrentJwt(authUser.token, subject)) {
+    throw new Error('Refusing to persist an unverified authentication session.');
+  }
+
+  try {
+    const previousUser = JSON.parse(localStorage.getItem('eduscroll_user') || 'null');
+    const previousSubject = normalizeIdentity(
+      previousUser?.userId || previousUser?.sub || previousUser?.id
+    );
+
+    if (previousSubject && previousSubject !== subject) {
+      removeLegacyAccountCacheKeys();
+    }
+  } catch {
+    removeLegacyAccountCacheKeys();
+  }
+
   if (authUser.token) {
     localStorage.setItem('eduscroll_token', authUser.token);
   }
@@ -54,12 +100,20 @@ function saveAuthUser(authUser) {
   }
 
   localStorage.setItem('eduscroll_user', JSON.stringify(authUser));
+  notifyAuthChanged();
 }
 
 function clearAuthStorage() {
   localStorage.removeItem('eduscroll_token');
   localStorage.removeItem('eduscroll_user');
   localStorage.removeItem('eduscroll_access_token');
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('idToken');
+  sessionStorage.removeItem('eduscroll_access_token');
+  sessionStorage.removeItem('accessToken');
+  sessionStorage.removeItem('idToken');
+  removeLegacyAccountCacheKeys();
+  notifyAuthChanged();
 }
 
 function clearAmplifyAuthStorage() {
@@ -192,6 +246,17 @@ function mapCognitoUser(currentUser, session) {
 
   const payload = idTokenObject?.payload || accessTokenObject?.payload || {};
   const sub = payload.sub || currentUser?.userId || null;
+  const currentUserId = normalizeIdentity(currentUser?.userId);
+  const sessionSubject = normalizeIdentity(sub);
+
+  if (
+    !sessionSubject ||
+    (currentUserId && currentUserId !== sessionSubject) ||
+    !isCurrentJwt(idToken || accessToken, sessionSubject)
+  ) {
+    throw new Error('Cognito session identity could not be verified.');
+  }
+
   const email =
     payload.email ||
     currentUser?.signInDetails?.loginId ||
@@ -210,6 +275,30 @@ function mapCognitoUser(currentUser, session) {
     token: idToken,
     accessToken,
   };
+}
+
+function getVerifiedNativeCachedUser() {
+  if (!isRunningInsideNativeApp()) return null;
+
+  try {
+    const cachedUser = JSON.parse(localStorage.getItem('eduscroll_user') || 'null');
+    const subject = normalizeIdentity(
+      cachedUser?.userId || cachedUser?.sub || cachedUser?.id
+    );
+
+    if (!cachedUser || !isCurrentJwt(cachedUser.token, subject)) {
+      return null;
+    }
+
+    return {
+      ...cachedUser,
+      id: subject,
+      userId: subject,
+      sub: subject,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function AuthProvider({ children }) {
@@ -236,12 +325,17 @@ export function AuthProvider({ children }) {
               redirectUri: 'smarty://callback',
             });
             const payload = decodeJwtPayload(tokens.id_token);
+            const subject = normalizeIdentity(payload.sub);
+
+            if (!subject || !isCurrentJwt(tokens.id_token, subject)) {
+              throw new Error('Native OAuth returned an invalid identity token.');
+            }
 
             const email = payload.email || '';
             const authUser = {
-              id: payload.sub || null,
-              userId: payload.sub || null,
-              sub: payload.sub || null,
+              id: subject,
+              userId: subject,
+              sub: subject,
               username: getSafeUsername(null, payload, email),
               email,
               name: getSafeName(payload, email),
@@ -268,17 +362,6 @@ export function AuthProvider({ children }) {
           }
         }
 
-        const cachedToken = localStorage.getItem('eduscroll_token');
-        const cachedUser = localStorage.getItem('eduscroll_user');
-
-        if (cachedToken && cachedUser) {
-          try {
-            setUser(JSON.parse(cachedUser));
-          } catch {
-            clearAuthStorage();
-          }
-        }
-
         const currentUser = await getCurrentUser();
         const session = await fetchAuthSession();
 
@@ -298,15 +381,12 @@ export function AuthProvider({ children }) {
           console.error('Auth init failed:', err);
         }
 
-        const cachedUser = localStorage.getItem('eduscroll_user');
+        const nativeCachedUser = getVerifiedNativeCachedUser();
 
-        if (cachedUser) {
-          try {
-            setUser(JSON.parse(cachedUser));
-          } catch {
-            setUser(null);
-          }
+        if (nativeCachedUser) {
+          setUser(nativeCachedUser);
         } else {
+          clearAuthStorage();
           setUser(null);
         }
       } finally {
@@ -342,6 +422,15 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
+    try {
+      await getCurrentUser();
+      await signOut({ global: false });
+    } catch {
+      // No existing Cognito session.
+    }
+
+    clearAuthStorage();
+
     const result = await signIn({
       username: email,
       password,

@@ -8,6 +8,7 @@ import {
   setActiveChatOnSocket,
   subscribeChatSocket,
 } from '../api/chatSocket';
+import { getUserScopedStorageKey } from '../lib/userScopedStorage';
 
 
 
@@ -598,6 +599,7 @@ export default function ChatPage() {
   const cancelRecordingRef = useRef(false);
   const messagePollTimerRef = useRef(null);
   const messageCacheRef = useRef(new Map());
+  const seenSocketMessageIdsRef = useRef(new Set());
   const lastChatsLoadRef = useRef(0);
   const MAX_RENDERED_MESSAGES = 180;
   const POLL_INTERVAL_VISIBLE = 12000;
@@ -608,6 +610,22 @@ export default function ChatPage() {
     () => user?.id || user?.userId || user?.sub,
     [user]
   );
+  const activeChatStorageKey = useMemo(
+    () => getUserScopedStorageKey('activeChatId', userId),
+    [userId]
+  );
+
+  useEffect(() => {
+    messageCacheRef.current.clear();
+    seenSocketMessageIdsRef.current.clear();
+    activeChatIdRef.current = null;
+    openedChatIdsRef.current.clear();
+    latestMessagesSignatureRef.current = '';
+    setActiveChat(null);
+    setMessages([]);
+    setMobileChatOpen(false);
+    setChats(readChatListCache(userId));
+  }, [userId]);
 
 function scrollMessagesToBottom(force = false) {
   if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
@@ -638,7 +656,7 @@ function scrollMessagesToBottom(force = false) {
       recordingStreamRef.current?.getTracks?.().forEach((track) => track.stop());
       recordingStreamRef.current = null;
       if (messagePollTimerRef.current) window.clearTimeout(messagePollTimerRef.current);
-localStorage.removeItem('activeChatId');
+localStorage.removeItem(activeChatStorageKey);
 
 try {
   setActiveChatOnSocket?.('');
@@ -646,7 +664,7 @@ try {
   console.error('Could not clear active chat on socket:', err);
 }
     };
-  }, []);
+  }, [activeChatStorageKey]);
 
   // === Fast request helpers, message cache, polling refs ===
   const normalizeMessages = useCallback((data) => {
@@ -816,6 +834,24 @@ try {
       }
       if (data.type !== 'newMessage') return;
 
+      const socketMessageId = String(
+        data.message?.messageId ||
+        data.message?.id ||
+        data.message?.clientId ||
+        ''
+      );
+
+      if (socketMessageId) {
+        if (seenSocketMessageIdsRef.current.has(socketMessageId)) return;
+
+        seenSocketMessageIdsRef.current.add(socketMessageId);
+
+        if (seenSocketMessageIdsRef.current.size > 300) {
+          seenSocketMessageIdsRef.current.clear();
+          seenSocketMessageIdsRef.current.add(socketMessageId);
+        }
+      }
+
       const activeChatId = activeChatIdRef.current;
 
       // If message belongs to currently open chat, do not increase unread
@@ -906,10 +942,10 @@ try {
     return () => {
       cancelled = true;
       cancelStartup?.();
-      localStorage.removeItem('activeChatId');
+      localStorage.removeItem(activeChatStorageKey);
       unsubscribeSocket?.();
     };
-  }, [userId, setCachedMessages]);
+  }, [activeChatStorageKey, userId, setCachedMessages]);
 
 useEffect(() => {
   scrollMessagesToBottom();
@@ -986,7 +1022,7 @@ useEffect(() => {
 
       setActiveChat(fixedChat);
       activeChatIdRef.current = fixedChat.chatId;
-      localStorage.setItem('activeChatId', fixedChat.chatId);
+      localStorage.setItem(activeChatStorageKey, fixedChat.chatId);
       setIsBlocked(fixedChat?.isBlocked || false);
       setMobileChatOpen(true);
 
@@ -1145,7 +1181,7 @@ const openChat = useCallback(async (chat) => {
   const fixedChat = normalizeChatRecord(chat);
   setActiveChat(fixedChat);
   activeChatIdRef.current = fixedChat.chatId;
-  localStorage.setItem('activeChatId', fixedChat.chatId);
+  localStorage.setItem(activeChatStorageKey, fixedChat.chatId);
   setMobileChatOpen(true);
   setMessages(cachedMessages);
   setActionsOpen(false);
@@ -1313,7 +1349,7 @@ useEffect(() => {
       });
 
       setActiveChat(fixedChat);
-      localStorage.setItem('activeChatId', fixedChat.chatId);
+      localStorage.setItem(activeChatStorageKey, fixedChat.chatId);
       setMobileChatOpen(true);
       setMessages([]);
       setActionsOpen(false);
@@ -1614,7 +1650,7 @@ const closeMobileChat = useCallback(() => {
   setOpenReactionMenuId(null);
   setEditingMessageId(null);
   setEditingText('');
-  localStorage.removeItem('activeChatId');
+  localStorage.removeItem(activeChatStorageKey);
   try {
     setActiveChatOnSocket?.('');
   } catch (err) {
@@ -2176,7 +2212,7 @@ const handleBlockUser = async () => {
       setOpenReactionMenuId(null);
       setEditingMessageId(null);
       setEditingText('');
-      localStorage.removeItem('activeChatId');
+      localStorage.removeItem(activeChatStorageKey);
       setStatus('Chat deleted.');
 
       if (messagePollTimerRef.current) {
@@ -2242,7 +2278,7 @@ const runDeleteChat = useCallback(() => {
       setOpenReactionMenuId(null);
       setEditingMessageId(null);
       setEditingText('');
-      localStorage.removeItem('activeChatId');
+      localStorage.removeItem(activeChatStorageKey);
       try {
         setActiveChatOnSocket?.('');
       } catch (err) {
