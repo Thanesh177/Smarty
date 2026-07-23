@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { chatApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -36,6 +36,75 @@ function getUserDisplayName(person) {
   if (email.includes('@')) return email.split('@')[0];
 
   return 'User';
+}
+
+function getProfileUserId(person, currentUserId = '') {
+  if (!person || typeof person !== 'object') return '';
+
+  const selfId = String(currentUserId || '').trim();
+  const candidates = [
+    person.otherUserId,
+    person.partnerId,
+    person.participantId,
+    person.receiverUserId,
+    person.receiverId,
+    person.senderId,
+    person.userId,
+    person.sub,
+    person.receiver?.userId,
+    person.receiver?.id,
+    person.receiver?.sub,
+    person.otherUser?.userId,
+    person.otherUser?.id,
+    person.otherUser?.sub,
+    person.participant?.userId,
+    person.participant?.id,
+    person.participant?.sub,
+    person.user?.userId,
+    person.user?.id,
+    person.user?.sub,
+  ];
+
+  if (!person.chatId) candidates.push(person.id);
+
+  [person.participants, person.members, person.users, person.userIds]
+    .filter(Array.isArray)
+    .forEach((items) => {
+      items.forEach((item) => {
+        if (item && typeof item === 'object') {
+          candidates.push(item.userId, item.id, item.sub);
+        } else {
+          candidates.push(item);
+        }
+      });
+    });
+
+  const normalizedCandidates = candidates
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+
+  const otherUserId = normalizedCandidates.find(
+    (candidate) => !selfId || candidate !== selfId
+  );
+
+  if (otherUserId) return otherUserId;
+
+  // A standalone user search result may intentionally be the signed-in user.
+  return person.chatId ? '' : normalizedCandidates[0] || '';
+}
+
+function getUserAvatarUrl(person) {
+  return String(
+    person?.photoUrl ||
+    person?.photoURL ||
+    person?.profilePic ||
+    person?.profilePictureUrl ||
+    person?.profilePicture ||
+    person?.avatarUrl ||
+    person?.picture ||
+    person?.receiverAvatarUrl ||
+    ''
+  ).trim();
 }
 
 // Chat avatar cache helpers
@@ -183,9 +252,16 @@ function normalizeChatRecord(chat) {
 
 
 function getDayLabel(timestamp) {
-  const date = new Date(Number(timestamp));
+  const numericTimestamp = Number(timestamp);
+  const date = new Date(
+    numericTimestamp > 0 && numericTimestamp < 1e12
+      ? numericTimestamp * 1000
+      : numericTimestamp
+  );
   const today = new Date();
   const yesterday = new Date();
+
+  if (Number.isNaN(date.getTime())) return 'Messages';
 
   yesterday.setDate(today.getDate() - 1);
 
@@ -196,6 +272,22 @@ function getDayLabel(timestamp) {
     weekday: 'long',
     month: 'short',
     day: 'numeric', 
+  });
+}
+
+function formatMessageTime(timestamp) {
+  const numericTimestamp = Number(timestamp);
+  const date = new Date(
+    numericTimestamp > 0 && numericTimestamp < 1e12
+      ? numericTimestamp * 1000
+      : numericTimestamp
+  );
+
+  if (!timestamp || Number.isNaN(date.getTime())) return '';
+
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
@@ -450,6 +542,7 @@ const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl
 });
 
 export default function ChatPage() {
+  const navigate = useNavigate();
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -462,6 +555,7 @@ export default function ChatPage() {
   const [isBlocked, setIsBlocked] = useState(false);
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
   const [chats, setChats] = useState(() => readChatListCache(user?.id || user?.userId || user?.sub));
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -497,6 +591,7 @@ export default function ChatPage() {
   const scrollTimerRef = useRef(null);
   const chatRequestSeqRef = useRef(0);
   const searchRequestSeqRef = useRef(0);
+  const searchDebounceRef = useRef(null);
   const openedChatIdsRef = useRef(new Set());
   const activeUploadAbortRef = useRef(null);
   const uploadResetTimerRef = useRef(null);
@@ -971,24 +1066,73 @@ useEffect(() => {
     };
   }, []);
 
-  const searchUsers = useCallback(async (e) => {
-    e.preventDefault();
-    setStatus('');
+  const runUserSearch = useCallback(async (searchTerm) => {
+    const normalizedQuery = searchTerm.trim();
+    if (!normalizedQuery) return;
 
-    if (!query.trim()) return;
+    setStatus('');
+    setIsSearchingUsers(true);
+    const requestId = searchRequestSeqRef.current + 1;
+    searchRequestSeqRef.current = requestId;
 
     try {
-      const requestId = searchRequestSeqRef.current + 1;
-      searchRequestSeqRef.current = requestId;
       // PACKET 3A: Use withTimeout for user search
-      const data = await withTimeout(chatApi.searchUsers(query.trim()), 9000, 'Search took too long.');
+      const data = await withTimeout(chatApi.searchUsers(normalizedQuery), 9000, 'Search took too long.');
       if (!mountedRef.current || requestId !== searchRequestSeqRef.current) return;
       setUsers(Array.isArray(data) ? data : Array.isArray(data?.users) ? data.users : []);
     } catch (err) {
       console.error('User search failed:', err);
-      if (mountedRef.current) setStatus('User search failed.');
+      if (mountedRef.current && requestId === searchRequestSeqRef.current) {
+        setUsers([]);
+        setStatus('User search failed.');
+      }
+    } finally {
+      if (mountedRef.current && requestId === searchRequestSeqRef.current) {
+        setIsSearchingUsers(false);
+      }
     }
-  }, [query, withTimeout]);
+  }, [withTimeout]);
+
+  const searchUsers = useCallback((event) => {
+    event.preventDefault();
+
+    if (searchDebounceRef.current) {
+      window.clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+
+    runUserSearch(query);
+  }, [query, runUserSearch]);
+
+  useEffect(() => {
+    const normalizedQuery = query.trim();
+
+    // Invalidate any request started for an older query immediately.
+    searchRequestSeqRef.current += 1;
+
+    if (searchDebounceRef.current) {
+      window.clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+
+    if (!normalizedQuery) {
+      setUsers([]);
+      setIsSearchingUsers(false);
+      return undefined;
+    }
+
+    searchDebounceRef.current = window.setTimeout(() => {
+      searchDebounceRef.current = null;
+      runUserSearch(normalizedQuery);
+    }, 300);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        window.clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = null;
+      }
+    };
+  }, [query, runUserSearch]);
 
 const openChat = useCallback(async (chat) => {
   if (!chat?.chatId) return;
@@ -1489,6 +1633,25 @@ const toggleActionsMenu = useCallback(() => {
   setActionsOpen((prev) => !prev);
 }, []);
 
+const openUserProfile = useCallback((person, event) => {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+
+  const profileUserId = getProfileUserId(person, userId);
+
+  if (profileUserId && String(profileUserId) === String(userId)) {
+    navigate('/profile');
+    return;
+  }
+
+  if (profileUserId) {
+    navigate(`/creator/${encodeURIComponent(profileUserId)}`);
+    return;
+  }
+
+  setStatus('This profile is unavailable.');
+}, [navigate, userId]);
+
 
 // Batch 4C: Memoized renderedChatList
 const renderedChatList = useMemo(
@@ -1512,19 +1675,15 @@ const renderedChatList = useMemo(
     return (
       <div
         key={chat.chatId}
-        role="button"
-        tabIndex={0}
         className={active ? 'chat-list-item active' : 'chat-list-item'}
-        onClick={() => openChat(chat)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            openChat(chat);
-          }
-        }}
       >
         <div className="chat-item">
-          <div className="chat-avatar-wrap">
+          <button
+            type="button"
+            className="chat-avatar-wrap chat-profile-avatar-btn"
+            aria-label={`Open ${getUserDisplayName(chat)}'s profile`}
+            onClick={(event) => openUserProfile(chat, event)}
+          >
             <div className="chat-avatar-stack">
               {(!realAvatar || !profileAvatarLoaded || profileAvatarFailed) && (
                 <div
@@ -1586,9 +1745,13 @@ const renderedChatList = useMemo(
                 />
               )}
             </div>
-          </div>
+          </button>
 
-          <div className="chat-content">
+          <button
+            type="button"
+            className="chat-content chat-open-chat-btn"
+            onClick={() => openChat(chat)}
+          >
             <strong>
               {getUserDisplayName({
                 username: chat.receiverUsername,
@@ -1603,7 +1766,7 @@ const renderedChatList = useMemo(
                 <span className="unread-badge">{unreadCount}</span>
               )}
             </div>
-          </div>
+          </button>
         </div>
       </div>
     );
@@ -1615,6 +1778,7 @@ const renderedChatList = useMemo(
     failedProfileAvatarIds,
     loadedProfileAvatarIds,
     openChat,
+    openUserProfile,
   ]
 );
 
@@ -2096,31 +2260,67 @@ const runDeleteChat = useCallback(() => {
   return (
 <main className={`chat-page ${mobileChatOpen && activeChat ? 'mobile-chat-open' : ''}`}>
       <section className="chat-sidebar">
+        <header className="chat-sidebar-heading">
+          <div>
+            <span>Inbox</span>
+            <h1>Messages</h1>
+          </div>
+          <span aria-label={`${chats.length} conversations`}>{chats.length}</span>
+        </header>
+
        <div className="chat-search-wrap" ref={searchAreaRef}>
   <form className="chat-search" onSubmit={searchUsers}>
     <input
-      placeholder="Search by username or email..."
+      placeholder="Search people..."
       value={query}
       autoComplete="off"
+      aria-label="Search users"
       onChange={handleQueryChange}
     />
-    <button type="submit" disabled={!query.trim()}>Search</button>
+    <button type="submit" disabled={!query.trim() || isSearchingUsers}>
+      {isSearchingUsers ? 'Searching…' : 'Search'}
+    </button>
   </form>
 
   {users.length > 0 && (
     <div className="user-results">
       <h3>Search results</h3>
-      {users.map((selectedUser) => (
-        <button
-          key={selectedUser.userId || selectedUser.id || selectedUser.email}
-          type="button"
-          data-initial={getUserDisplayName(selectedUser).slice(0, 2).toUpperCase()}
-          onClick={() => startChat(selectedUser)}
-        >
-          <strong>{getUserDisplayName(selectedUser)}</strong>
-          <span>{selectedUser.email || selectedUser.username || ''}</span>
-        </button>
-      ))}
+      {users.map((selectedUser) => {
+        const resultName = getUserDisplayName(selectedUser);
+        const resultAvatar = getUserAvatarUrl(selectedUser);
+
+        return (
+          <div
+            className="user-result-row"
+            key={selectedUser.userId || selectedUser.id || selectedUser.email}
+          >
+            <button
+              type="button"
+              className="user-result-avatar"
+              aria-label={`Open ${resultName}'s profile`}
+              onClick={(event) => openUserProfile(selectedUser, event)}
+            >
+              {resultAvatar ? (
+                <img src={resultAvatar} alt="" loading="lazy" decoding="async" />
+              ) : (
+                <span>{resultName.slice(0, 2).toUpperCase()}</span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              className="user-result-chat"
+              onClick={() => startChat(selectedUser)}
+            >
+              <span className="user-result-copy">
+                <strong>{resultName}</strong>
+                <span>{selectedUser.email || selectedUser.username || ''}</span>
+              </span>
+              <span className="user-result-start" aria-hidden="true">+</span>
+            </button>
+          </div>
+        );
+      })}
     </div>
   )}
 </div>
@@ -2129,7 +2329,7 @@ const runDeleteChat = useCallback(() => {
 
 
         <div className="chat-list">
-          <h3>Your chats</h3>
+          <h3>Recent</h3>
           {chats.length === 0 ? (
             <p className="empty-chat">No chats yet.</p>
           ) : (
@@ -2154,6 +2354,18 @@ const runDeleteChat = useCallback(() => {
               >
                 ←
               </button>
+              <button
+                type="button"
+                className="chat-header-avatar chat-profile-avatar-btn"
+                aria-label={`Open ${getUserDisplayName(activeChat)}'s profile`}
+                onClick={(event) => openUserProfile(activeChat, event)}
+              >
+                {getUserAvatarUrl(activeChat) ? (
+                  <img src={getUserAvatarUrl(activeChat)} alt="" />
+                ) : (
+                  <span>{getUserDisplayName(activeChat).slice(0, 2).toUpperCase()}</span>
+                )}
+              </button>
               <div className="chat-info">
                <h2>
   {getUserDisplayName({
@@ -2163,7 +2375,11 @@ const runDeleteChat = useCallback(() => {
   })}
 </h2>
 
-                {status && <span className="status-msg">{status}</span>}
+                {status ? (
+                  <span className="status-msg">{status}</span>
+                ) : (
+                  <span className="chat-context-label">Private conversation</span>
+                )}
               </div>
 <div className="chat-actions dropdown-actions">
   <button
@@ -2233,12 +2449,7 @@ const runDeleteChat = useCallback(() => {
   (msg.text || msg.message) && <p>{msg.text || msg.message}</p>
 )}
 <span className="timestamp">
-  {msg.createdAt
-    ? new Date(Number(msg.createdAt)).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : ''}
+  {formatMessageTime(msg.createdAt)}
   {msg.editedAt && !msg.isDeleted ? ' · edited' : ''}
 </span>
 

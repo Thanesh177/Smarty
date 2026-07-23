@@ -1,0 +1,729 @@
+/*
+ * Production page layer
+ * A quiet, consistent visual system shared by every route. Page-specific
+ * styles still own layout and behavior; this file normalizes composition.
+ */
+
+:root {
+  --page-bg: #02070d;
+  --page-bg-raised: #08111b;
+  --page-text: #f6f8fb;
+  --page-muted: #94a3b8;
+  --page-subtle: #64748b;
+  --page-accent: #7dd3fc;
+  --page-line: rgba(148, 163, 184, 0.12);
+  --page-hover: rgba(148, 163, 184, 0.07);
+  --page-gutter: clamp(16px, 3vw, 42px);
+  --page-section-gap: clamp(24px, 4vw, 48px);
+  --page-radius: clamp(14px, 1.4vw, 20px);
+}
+
+:where(
+  .books-page, .reader-page, .read-books-page, .news-page,
+  .feed-topics-page, .saved-page, .profile-page,
+  .creator-profile-container, .follow-requests-page, .chat-page,
+  .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
+  .create-page, .creator-dashboard-page, .quiz-page,
+  .legal-page, .login-page, .register-page, .auth-shell,
+  .room-invite-page
+) {
+  color: var(--page-text);
+  background-color: var(--page-bg);
+  background-image: none;
+}
+
+:where(
+  .books-page, .reader-page, .read-books-page, .news-page,
+  .feed-topics-page, .saved-page, .profile-page,
+  .creator-profile-container, .follow-requests-page, .chat-page,
+  .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
+  .create-page, .creator-dashboard-page, .quiz-page,
+  .legal-page, .login-page, .register-page, .auth-shell,
+  .room-invite-page
+) :where(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--page-accent);
+  outline-offset: 3px;
+}
+
+:where(
+  .books-page, .read-books-page, .news-page, .feed-topics-page,
+  .saved-page, .profile-page, .creator-profile-container,
+  .follow-requests-page, .comments-page, .reel-detail-page,
+  .post-ai-page, .create-page, .creator-dashboard-page,
+  .quiz-page, .legal-page
+) :where(button, a) {
+  transition-duration: 160ms;
+}
+
+/* Books discovery */
+.books-page {
+  padding: clamp(18px, 3vw, 38px) var(--page-gutter) 80px;
+}
+
+.books-hero {
+  min-height: 0;
+  margin-bottom: var(--page-section-gap);
+  gap: clamp(22px, 4vw, 48px);
+}
+
+.books-hero > div:first-child,
+.books-hero-card,
+.books-card,
+.books-discover-panel {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.books-hero > div:first-child,
+.books-hero-card,
+.books-card {
+  padding: clamp(16px, 2.2vw, 26px);
+}
+
+.books-hero > div:first-child::after,
+.books-hero-card::after,
+.books-card::before {
+  display: none;
+}
+
+.books-hero > div:first-child:hover,
+.books-hero-card:hover,
+.books-card:hover {
+  transform: none;
+  background: var(--page-hover);
+  box-shadow: none;
+}
+
+.books-hero h1 {
+  font-size: clamp(2.1rem, 4.5vw, 4.3rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.books-grid {
+  grid-template-columns: repeat(auto-fit, minmax(clamp(250px, 28vw, 330px), 1fr));
+  gap: clamp(18px, 2.5vw, 30px);
+}
+
+/* Reading library */
+.read-books-page {
+  padding: clamp(18px, 3vw, 36px) var(--page-gutter) 80px;
+}
+
+.read-books-hero {
+  min-height: 0;
+  padding: clamp(18px, 3vw, 36px) 0;
+  margin-bottom: clamp(18px, 3vw, 30px);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.read-books-hero::after { display: none; }
+
+.read-books-hero h1 {
+  font-size: clamp(2rem, 4.2vw, 4rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.books-loading-card {
+  border: 0;
+  background: rgba(148, 163, 184, 0.055);
+  box-shadow: none;
+}
+
+/* Book reader: retain the selected reading theme, simplify its chrome. */
+.reader-page .reader-surface-card {
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.reader-topbar,
+.reader-controls,
+.reader-focus-strip {
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+
+.reader-hero-card {
+  padding: clamp(18px, 3vw, 34px);
+}
+
+.reader-hero-copy h1 {
+  font-size: clamp(1.9rem, 4vw, 3.7rem);
+  letter-spacing: -0.05em;
+}
+
+/* News */
+.news-page {
+  padding: clamp(18px, 3vw, 34px) var(--page-gutter) 80px;
+}
+
+.news-hero {
+  margin-bottom: 18px;
+  padding: 8px 0 18px;
+  border-bottom-color: var(--page-line);
+}
+
+.news-hero h1 {
+  margin: 6px 0;
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  letter-spacing: -0.055em;
+}
+
+.news-controls { gap: 10px; }
+
+.news-controls input,
+.news-controls select {
+  border-color: transparent;
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.news-grid {
+  gap: clamp(20px, 2.7vw, 32px);
+}
+
+.news-card {
+  border: 0;
+  border-radius: var(--page-radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+.news-card:hover {
+  transform: translateY(-2px);
+  border-color: transparent;
+  background: var(--page-hover);
+  box-shadow: none;
+}
+
+.news-card img,
+.missing-news-image { border-radius: var(--page-radius); }
+
+.news-card-body { padding: 15px 2px 4px; }
+
+/* Topics */
+.feed-topics-page {
+  padding: clamp(16px, 3vw, 34px) var(--page-gutter) 80px;
+}
+
+.feed-topics-hero {
+  margin-bottom: clamp(18px, 3vw, 28px);
+  padding: 12px 0 4px;
+}
+
+.feed-topics-hero h1 {
+  font-size: clamp(2.1rem, 4.4vw, 4.4rem);
+  line-height: 1;
+  letter-spacing: -0.06em;
+  text-shadow: none;
+}
+
+.feed-topics-hero p { margin-top: 12px; line-height: 1.6; }
+
+.feed-topics-grid {
+  grid-template-columns: repeat(auto-fit, minmax(clamp(220px, 24vw, 300px), 1fr));
+  gap: clamp(18px, 2.6vw, 30px);
+}
+
+.feed-topic-card {
+  min-height: clamp(166px, 18vh, 220px);
+  padding: clamp(17px, 2vw, 23px);
+  border: 0;
+  border-radius: var(--page-radius);
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.feed-topic-card::before,
+.feed-topic-card::after { display: none; }
+
+.feed-topic-icon {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.08);
+  box-shadow: none;
+}
+
+.feed-topic-card:hover,
+.feed-topic-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: transparent;
+  background: var(--page-hover);
+  box-shadow: none;
+}
+
+/* Saved */
+.saved-page {
+  padding: clamp(18px, 3vw, 34px) var(--page-gutter) 80px;
+}
+
+.saved-hero { margin-bottom: 20px; align-items: center; }
+
+.saved-hero h1 {
+  margin: 10px 0 8px;
+  font-size: clamp(2rem, 4.2vw, 4rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.saved-summary,
+.saved-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.saved-summary { min-width: 140px; padding: 12px; text-align: right; }
+.saved-summary strong { font-size: 2rem; }
+
+.saved-grid { gap: clamp(20px, 2.6vw, 30px); }
+
+.saved-card {
+  grid-template-columns: clamp(110px, 12vw, 150px) 1fr;
+  border-radius: var(--page-radius);
+}
+
+.saved-card:hover {
+  transform: translateY(-2px);
+  background: var(--page-hover);
+  box-shadow: none;
+}
+
+.saved-card-media { border-radius: var(--page-radius); }
+
+/* Profile and creator profile */
+.profile-page,
+.creator-profile-container {
+  padding-inline: var(--page-gutter);
+}
+
+.profile-hero { margin-bottom: clamp(22px, 3vw, 34px); }
+
+.profile-card,
+.profile-post-card,
+.creator-profile-container .profile-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.profile-card:hover,
+.profile-post-card:hover {
+  transform: translateY(-2px);
+  background: var(--page-hover);
+  box-shadow: none;
+}
+
+.profile-header h1,
+.profile-hero h1 {
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  letter-spacing: -0.055em;
+}
+
+.creator-grid { gap: clamp(18px, 2.5vw, 28px); }
+
+/* Follow requests */
+.follow-requests-page {
+  padding: clamp(22px, 4vw, 44px) var(--page-gutter) 80px;
+}
+
+.follow-requests-header { margin-bottom: 22px; }
+
+.follow-requests-header h1 {
+  margin: 10px 0 8px;
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.request-list { gap: clamp(12px, 2vw, 18px); }
+
+.request-card,
+.request-empty-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+
+.request-card:hover {
+  transform: none;
+  border-color: transparent;
+  background: var(--page-hover);
+  box-shadow: none;
+}
+
+.request-avatar {
+  border-radius: 50%;
+  background: #162335;
+  box-shadow: none;
+}
+
+/* Chat */
+.chat-page {
+  background: var(--page-bg);
+}
+
+.chat-sidebar,
+.chat-window,
+.chat-window-top,
+.chat-search,
+.composer-shell {
+  border-color: var(--page-line);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.chat-sidebar,
+.chat-window { background: transparent; }
+
+.chat-list-item {
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.chat-list-item::before,
+.chat-list-item::after { display: none; }
+
+.chat-list-item:hover,
+.chat-list-item.active {
+  transform: none;
+  border-color: transparent;
+  background: var(--page-hover);
+  box-shadow: none;
+}
+
+.chat-window-top { min-height: 64px; padding-block: 10px; background: var(--page-bg); }
+
+/* Topic rooms */
+.rooms-page { background: var(--page-bg); }
+
+.rooms-page .sidebar,
+.rooms-page .chat,
+.rooms-page .chat-header {
+  background: transparent;
+  box-shadow: none;
+}
+
+.rooms-page .sidebar,
+.rooms-page .chat-header { border-color: var(--page-line); }
+
+.rooms-page .room-item {
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.rooms-page .room-item:not(.room-image-full-card)::before,
+.rooms-page .room-item:not(.room-image-full-card)::after { display: none; }
+
+.rooms-page .room-item:hover,
+.rooms-page .room-item.active {
+  transform: none;
+  border-color: transparent;
+  background-color: var(--page-hover);
+  box-shadow: none;
+}
+
+.rooms-page .chat-header { min-height: 64px; padding-block: 10px; }
+
+/* Comments and reel detail */
+.comments-page { padding-inline: var(--page-gutter); }
+
+.comments-topbar {
+  min-height: 62px;
+  padding-block: 10px;
+  border-bottom-color: var(--page-line);
+  background: var(--page-bg);
+  backdrop-filter: none;
+}
+
+.comments-list { gap: 8px; }
+
+.comment-card,
+.comments-empty,
+.comments-loading {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.comment-card:hover { background: var(--page-hover); }
+
+.reel-detail-page { padding: clamp(18px, 3vw, 34px) var(--page-gutter) 80px; }
+
+.reel-media-panel,
+.reel-content-panel,
+.reel-comments {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.reel-content-panel h1 {
+  font-size: clamp(1.8rem, 3.4vw, 3.2rem);
+  letter-spacing: -0.045em;
+}
+
+/* AI post assistant */
+.post-ai-page { padding: clamp(18px, 3vw, 34px) var(--page-gutter) 80px; }
+.post-ai-shell { gap: clamp(18px, 3vw, 30px); }
+
+.post-ai-header { padding-block: 6px; }
+.post-ai-header h1 {
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.post-ai-header,
+.post-ai-original,
+.post-ai-card,
+.post-ai-chat {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.post-ai-card,
+.post-ai-chat { padding-inline: 0; }
+
+/* Create and edit */
+.create-page { padding: clamp(18px, 3vw, 34px) var(--page-gutter) 80px; }
+
+.create-hero,
+.create-hero.create-hero-minimal {
+  min-height: 0;
+  margin-bottom: clamp(18px, 3vw, 30px);
+  padding: 8px 0;
+}
+
+.create-hero > div:first-child,
+.create-form,
+.create-side {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.create-hero > div:first-child { padding: 0; }
+.create-hero > div:first-child::before,
+.create-hero > div:first-child::after { display: none; }
+
+.create-hero h1,
+.create-hero-minimal h1 {
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.create-layout { gap: clamp(24px, 4vw, 48px); }
+
+/* Creator dashboard */
+.creator-dashboard-page { padding: clamp(18px, 3vw, 34px) var(--page-gutter) 80px; }
+
+.dashboard-hero { padding: 8px 0; margin-bottom: 20px; }
+.dashboard-hero h1 {
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.dashboard-hero,
+.dashboard-stat,
+.dashboard-panel,
+.dashboard-post-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.dashboard-grid,
+.dashboard-post-grid { gap: clamp(18px, 2.5vw, 28px); }
+
+.dashboard-post-card:hover {
+  transform: translateY(-2px);
+  background: var(--page-hover);
+  box-shadow: none;
+}
+
+/* Quiz, game profile and progress */
+.quiz-page { padding-inline: var(--page-gutter); }
+
+.quiz-hero,
+.progress-hero,
+.quiz-hero.game-profile-hero {
+  min-height: 0;
+  margin-bottom: clamp(22px, 3vw, 34px);
+  padding: clamp(20px, 3vw, 34px) 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.quiz-hero::before,
+.quiz-hero::after,
+.progress-hero::after,
+.quiz-hero.game-profile-hero::before,
+.quiz-hero.game-profile-hero::after { display: none; }
+
+.quiz-hero h1,
+.progress-hero h1,
+.quiz-hero.game-profile-hero h1 {
+  font-size: clamp(2rem, 4vw, 3.8rem);
+  line-height: 1;
+  letter-spacing: -0.055em;
+  text-shadow: none;
+}
+
+.topic-card,
+.question-card,
+.result-card,
+.profile-overview-card,
+.unlock-section,
+.progress-dashboard > * {
+  border: 0;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.topic-card:hover,
+.profile-overview-card:hover {
+  transform: translateY(-2px);
+  background: var(--page-hover);
+  box-shadow: none;
+}
+
+.quiz-page .topic-grid,
+.quiz-page .profile-overview-grid { gap: clamp(18px, 2.5vw, 28px) !important; }
+
+.quiz-page .topic-card::before,
+.quiz-page .profile-overview-card::before { display: none; }
+
+/* Auth, legal and invitation pages */
+.login-page,
+.register-page,
+.auth-shell,
+.room-invite-page {
+  padding: clamp(22px, 4vw, 48px) var(--page-gutter);
+}
+
+.login-hero h1,
+.register-card h1,
+.auth-card h1,
+.room-invite-card h1 {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.login-card,
+.register-card,
+.auth-card,
+.room-invite-card {
+  border: 0;
+  border-radius: var(--page-radius);
+  background: rgba(148, 163, 184, 0.055);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.login-card input,
+.register-card input,
+.auth-card input {
+  border-color: transparent;
+  background: rgba(148, 163, 184, 0.09);
+}
+
+.legal-page { padding: clamp(26px, 5vw, 64px) var(--page-gutter) 80px; }
+
+.legal-container {
+  max-width: 780px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.legal-container h1 {
+  font-size: clamp(2rem, 4vw, 3.7rem);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+@media (max-width: 760px) {
+  .news-hero,
+  .saved-hero { align-items: flex-start; }
+
+  .news-controls,
+  .saved-toolbar { grid-template-columns: 1fr; }
+
+  .news-card.featured { grid-column: auto; }
+
+  .saved-summary { min-width: 0; text-align: left; }
+
+  .saved-card { grid-template-columns: 104px 1fr; min-height: 178px; }
+  .saved-card-media :where(img, video, .saved-placeholder) { min-height: 178px; }
+
+  .request-card { padding: 14px 4px; }
+
+  .books-hero > div:first-child,
+  .books-hero-card,
+  .books-card { padding-inline: 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(
+    .books-page, .reader-page, .read-books-page, .news-page,
+    .feed-topics-page, .saved-page, .profile-page,
+    .creator-profile-container, .follow-requests-page, .chat-page,
+    .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
+    .create-page, .creator-dashboard-page, .quiz-page,
+    .legal-page, .login-page, .register-page, .auth-shell,
+    .room-invite-page
+  ) *,
+  :where(
+    .books-page, .reader-page, .read-books-page, .news-page,
+    .feed-topics-page, .saved-page, .profile-page,
+    .creator-profile-container, .follow-requests-page, .chat-page,
+    .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
+    .create-page, .creator-dashboard-page, .quiz-page,
+    .legal-page, .login-page, .register-page, .auth-shell,
+    .room-invite-page
+  ) *::before,
+  :where(
+    .books-page, .reader-page, .read-books-page, .news-page,
+    .feed-topics-page, .saved-page, .profile-page,
+    .creator-profile-container, .follow-requests-page, .chat-page,
+    .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
+    .create-page, .creator-dashboard-page, .quiz-page,
+    .legal-page, .login-page, .register-page, .auth-shell,
+    .room-invite-page
+  ) *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

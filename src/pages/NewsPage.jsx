@@ -70,7 +70,7 @@ const NewsCard = memo(function NewsCard({
           alt={article.title || 'BBC News'}
           loading={index < 2 ? 'eager' : 'lazy'}
           decoding="async"
-          fetchPriority={index < 2 ? 'high' : 'auto'}
+          fetchpriority={index < 2 ? 'high' : 'auto'}
         />
       ) : (
         <div className="missing-news-image">BBC News</div>

@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  ArrowLeft,
   ArrowRight,
   Bookmark,
   MessageCircle,
@@ -18,6 +19,7 @@ import {
   Scale,
   Compass,
   Rocket,
+  RefreshCw,
   MoonStar,
   Lightbulb,
 } from 'lucide-react';
@@ -379,7 +381,10 @@ const TopicLaunchCard = memo(function TopicLaunchCard({
   item,
   index,
   onSelect,
+  onFocus,
+  onPointerIntent,
   position,
+  isClone = false,
 }) {
   const {
     icon: TopicIcon,
@@ -398,8 +403,14 @@ return (
         : ''
     }`}
 style={{
-  left: `${position.x}px`,
-  top: `${position.y}px`,
+  left:
+    typeof position.x === 'number'
+      ? `${position.x}px`
+      : position.x,
+  top:
+    typeof position.y === 'number'
+      ? `${position.y}px`
+      : position.y,
   width: `${position.width}px`,
   height: `${position.height}px`,
   '--topic-delay': `${Math.min(
@@ -409,17 +420,30 @@ style={{
   '--topic-center-scale': 1,
   '--topic-center-opacity': 1,
   '--topic-center-lift': '0px',
-  '--topic-center-blur': '0px',
 }}
     onPointerDown={(event) => {
       event.stopPropagation();
+      onPointerIntent?.(event);
     }}
     onClick={(event) => {
       event.preventDefault();
       event.stopPropagation();
       onSelect(item);
     }}
-    aria-label={`Show ${item} posts`}
+    onFocus={(event) => {
+      if (!isClone) {
+        onFocus?.(event.currentTarget);
+      }
+    }}
+    aria-hidden={isClone || undefined}
+    aria-label={
+      isClone
+        ? undefined
+        : `Show ${item} posts`
+    }
+    tabIndex={isClone ? -1 : 0}
+    data-topic-clone={isClone ? 'true' : 'false'}
+    data-topic-selectable="true"
   >
       <span
         className="topic-launch-card-glow"
@@ -772,6 +796,10 @@ export default function FeedPage() {
   const wrappingTopicCanvasRef = useRef(false);
 
   const topicRevealFrameRef = useRef(null);
+  const topicSnapTimerRef = useRef(null);
+  const topicSnapReleaseTimerRef = useRef(null);
+  const isTopicAutoCenteringRef = useRef(false);
+  const reducedMotionRef = useRef(false);
   const topicEdgeLoadLockRef = useRef(false);
   const topicEdgeLoadTimerRef = useRef(null);
   const lastTopicCanvasPositionRef = useRef({
@@ -844,8 +872,8 @@ const lastCanvasMoveTimeRef = useRef(0);
 const loadMoreRef = useRef(null);
 const feedLoadLockRef = useRef(false);
 const topicCanvasRef = useRef(null);
+const topicCardMetricsRef = useRef([]);
 const feedRef = useRef(null);
-const wheelAnimationFrameRef = useRef(null);
 const topicSearchLoadRef = useRef({
   topic: '',
   cursors: new Set(),
@@ -869,6 +897,21 @@ const suppressTopicClickRef = useRef(false);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [allTopics, setAllTopics] = useState([]);
   const [topicsLoading, setTopicsLoading] = useState(false);
+  const [topicsError, setTopicsError] = useState('');
+  const [topicsReloadKey, setTopicsReloadKey] = useState(0);
+  const [canvasViewportWidth, setCanvasViewportWidth] = useState(
+    () =>
+      typeof window === 'undefined'
+        ? 1280
+        : window.innerWidth
+  );
+  const [showCanvasHint, setShowCanvasHint] = useState(
+    () =>
+      typeof window === 'undefined' ||
+      localStorage.getItem(
+        'smarty.topicCanvas.hasInteracted'
+      ) !== 'true'
+  );
   const [toast, setToast] = useState('');
   const [simpleExplanations, setSimpleExplanations] = useState({});
   const [explaining, setExplaining] = useState({});
@@ -898,6 +941,44 @@ const stopCanvasMomentum = useCallback(() => {
   };
 }, []);
 
+const dismissCanvasHint = useCallback(() => {
+  setShowCanvasHint(false);
+
+  try {
+    localStorage.setItem(
+      'smarty.topicCanvas.hasInteracted',
+      'true'
+    );
+  } catch {
+    // Storage can be unavailable in private browsing.
+  }
+}, []);
+
+useEffect(() => {
+  const motionPreference =
+    window.matchMedia(
+      '(prefers-reduced-motion: reduce)'
+    );
+
+  const updateMotionPreference = () => {
+    reducedMotionRef.current =
+      motionPreference.matches;
+  };
+
+  updateMotionPreference();
+  motionPreference.addEventListener?.(
+    'change',
+    updateMotionPreference
+  );
+
+  return () => {
+    motionPreference.removeEventListener?.(
+      'change',
+      updateMotionPreference
+    );
+  };
+}, []);
+
 const updateTopicCardDepth = useCallback(() => {
   const canvas = topicCanvasRef.current;
 
@@ -923,19 +1004,74 @@ const updateTopicCardDepth = useCallback(() => {
     ) * 0.72
   );
 
-  cards.forEach((card) => {
-    const cardCenterX =
-      card.offsetLeft +
-      card.offsetWidth / 2;
+  /*
+   * Read every card's geometry before writing styles. Mixing reads and
+   * writes per card forces the browser to recalculate layout repeatedly
+   * while the canvas is moving.
+   */
+  let cardMetrics = topicCardMetricsRef.current;
 
-    const cardCenterY =
-      card.offsetTop +
-      card.offsetHeight / 2;
+  const metricsAreStale =
+    cardMetrics.length !== cards.length ||
+    cardMetrics.some(
+      (metric, index) =>
+        metric.card !== cards[index]
+    );
+
+  if (metricsAreStale) {
+    cardMetrics = Array.from(cards, (card) => {
+      let offsetX = 0;
+      let offsetY = 0;
+      let element = card;
+
+      while (
+        element &&
+        element !== canvas
+      ) {
+        offsetX += element.offsetLeft || 0;
+        offsetY += element.offsetTop || 0;
+        element = element.offsetParent;
+      }
+
+      return {
+        card,
+        centerX:
+          offsetX + card.offsetWidth / 2,
+        centerY:
+          offsetY + card.offsetHeight / 2,
+      };
+    });
+
+    topicCardMetricsRef.current = cardMetrics;
+  }
+
+  cardMetrics.forEach(({ card, centerX, centerY }) => {
 
     const distance = Math.hypot(
-      cardCenterX - viewportCenterX,
-      cardCenterY - viewportCenterY
+      centerX - viewportCenterX,
+      centerY - viewportCenterY
     );
+
+    const isNearViewport =
+      distance <= focusRadius * 1.85;
+
+    if (!isNearViewport) {
+      if (
+        card.dataset.topicVisible !== 'false'
+      ) {
+        card.dataset.topicVisible = 'false';
+        card.style.visibility = 'hidden';
+        card.style.pointerEvents = 'none';
+      }
+
+      return;
+    }
+
+    if (card.dataset.topicVisible !== 'true') {
+      card.dataset.topicVisible = 'true';
+      card.style.visibility = 'visible';
+      card.style.pointerEvents = 'auto';
+    }
 
     const normalizedDistance = Math.min(
       distance / focusRadius,
@@ -953,30 +1089,65 @@ const updateTopicCardDepth = useCallback(() => {
         normalizedDistance *
         (3 - 2 * normalizedDistance);
 
+    if (reducedMotionRef.current) {
+      card.style.setProperty(
+        '--topic-center-scale',
+        '1'
+      );
+      card.style.setProperty(
+        '--topic-center-opacity',
+        '1'
+      );
+      card.style.setProperty(
+        '--topic-center-lift',
+        '0px'
+      );
+      card.style.setProperty(
+        '--topic-center-depth',
+        '0px'
+      );
+      card.style.setProperty(
+        '--topic-center-tilt-x',
+        '0deg'
+      );
+      card.style.setProperty(
+        '--topic-center-tilt-y',
+        '0deg'
+      );
+      return;
+    }
+
     const scale =
-      0.7 + focus * 0.32;
+      0.86 + focus * 0.15;
 
     const opacity =
-      0.38 + focus * 0.62;
-
-    const blur =
-      Math.pow(normalizedDistance, 1.65) *
-      3.2;
-
-    const brightness =
       0.62 + focus * 0.38;
 
-    const saturation =
-      0.7 + focus * 0.3;
-
     const lift =
-      focus * -12;
+      focus * -4;
 
-    const glow =
+    const depth =
+      -110 + focus * 140;
+
+    const tiltX =
       Math.max(
-        0,
-        (focus - 0.55) / 0.45
-      );
+        -1,
+        Math.min(
+          1,
+          (centerY - viewportCenterY) /
+            focusRadius
+        )
+      ) * -1.5;
+
+    const tiltY =
+      Math.max(
+        -1,
+        Math.min(
+          1,
+          (centerX - viewportCenterX) /
+            focusRadius
+        )
+      ) * 1.5;
 
     card.style.setProperty(
       '--topic-center-scale',
@@ -989,28 +1160,23 @@ const updateTopicCardDepth = useCallback(() => {
     );
 
     card.style.setProperty(
-      '--topic-center-blur',
-      `${blur.toFixed(2)}px`
-    );
-
-    card.style.setProperty(
-      '--topic-center-brightness',
-      brightness.toFixed(3)
-    );
-
-    card.style.setProperty(
-      '--topic-center-saturation',
-      saturation.toFixed(3)
-    );
-
-    card.style.setProperty(
       '--topic-center-lift',
       `${lift.toFixed(1)}px`
     );
 
     card.style.setProperty(
-      '--topic-center-glow',
-      glow.toFixed(3)
+      '--topic-center-depth',
+      `${depth.toFixed(1)}px`
+    );
+
+    card.style.setProperty(
+      '--topic-center-tilt-x',
+      `${tiltX.toFixed(2)}deg`
+    );
+
+    card.style.setProperty(
+      '--topic-center-tilt-y',
+      `${tiltY.toFixed(2)}deg`
     );
 
     card.style.zIndex = String(
@@ -1026,7 +1192,10 @@ const wrapTopicCanvasPosition =
       !canvas ||
       wrappingTopicCanvasRef.current
     ) {
-      return;
+      return {
+        horizontal: false,
+        vertical: false,
+      };
     }
 
     const maxScrollLeft = Math.max(
@@ -1045,7 +1214,10 @@ const wrapTopicCanvasPosition =
       maxScrollLeft === 0 &&
       maxScrollTop === 0
     ) {
-      return;
+      return {
+        horizontal: false,
+        vertical: false,
+      };
     }
 
     const horizontalBuffer = Math.min(
@@ -1057,10 +1229,12 @@ const wrapTopicCanvasPosition =
       160,
       Math.max(56, maxScrollTop * 0.08)
     );
+    const wrapInset = 2;
 
     let nextLeft = canvas.scrollLeft;
     let nextTop = canvas.scrollTop;
-    let wrapped = false;
+    let wrappedHorizontal = false;
+    let wrappedVertical = false;
 
     if (
       maxScrollLeft >
@@ -1072,16 +1246,19 @@ const wrapTopicCanvasPosition =
       ) {
         nextLeft =
           maxScrollLeft -
-          horizontalBuffer;
+          horizontalBuffer -
+          wrapInset;
 
-        wrapped = true;
+        wrappedHorizontal = true;
       } else if (
         canvas.scrollLeft >=
         maxScrollLeft -
           horizontalBuffer
       ) {
-        nextLeft = horizontalBuffer;
-        wrapped = true;
+        nextLeft =
+          horizontalBuffer +
+          wrapInset;
+        wrappedHorizontal = true;
       }
     }
 
@@ -1095,20 +1272,31 @@ const wrapTopicCanvasPosition =
       ) {
         nextTop =
           maxScrollTop -
-          verticalBuffer;
+          verticalBuffer -
+          wrapInset;
 
-        wrapped = true;
+        wrappedVertical = true;
       } else if (
         canvas.scrollTop >=
         maxScrollTop -
           verticalBuffer
       ) {
-        nextTop = verticalBuffer;
-        wrapped = true;
+        nextTop =
+          verticalBuffer +
+          wrapInset;
+        wrappedVertical = true;
       }
     }
 
-    if (!wrapped) return;
+    if (
+      !wrappedHorizontal &&
+      !wrappedVertical
+    ) {
+      return {
+        horizontal: false,
+        vertical: false,
+      };
+    }
 
     wrappingTopicCanvasRef.current = true;
 
@@ -1140,10 +1328,13 @@ const wrapTopicCanvasPosition =
     requestAnimationFrame(() => {
       wrappingTopicCanvasRef.current =
         false;
-
-      updateTopicCardDepth();
     });
-  }, [updateTopicCardDepth]);
+
+    return {
+      horizontal: wrappedHorizontal,
+      vertical: wrappedVertical,
+    };
+  }, []);
 
 
 const startCanvasMomentum = useCallback(() => {
@@ -1225,15 +1416,18 @@ const startCanvasMomentum = useCallback(() => {
     currentCanvas.scrollTop =
       nextTop;
 
-    updateTopicCardDepth();
+    const wrapped =
+      wrapTopicCanvasPosition();
 
     const reachedHorizontalEdge =
-      nextLeft <= 0 ||
-      nextLeft >= maxLeft;
+      !wrapped.horizontal &&
+      (nextLeft <= 0 ||
+        nextLeft >= maxLeft);
 
     const reachedVerticalEdge =
-      nextTop <= 0 ||
-      nextTop >= maxTop;
+      !wrapped.vertical &&
+      (nextTop <= 0 ||
+        nextTop >= maxTop);
 
     if (reachedHorizontalEdge) {
       velocity.x = 0;
@@ -1253,7 +1447,7 @@ const startCanvasMomentum = useCallback(() => {
     requestAnimationFrame(
       animateMomentum
     );
-}, [updateTopicCardDepth]);
+}, [wrapTopicCanvasPosition]);
 
 const handleCanvasPointerDown = useCallback((event) => {
   if (
@@ -1401,8 +1595,6 @@ if (currentCanvas) {
 
   currentCanvas.scrollTop =
     pendingCanvasPositionRef.current.top;
-
-updateTopicCardDepth();
 }
 
         canvasAnimationFrameRef.current = null;
@@ -2250,17 +2442,6 @@ const handleWheel = (event) => {
         : event.deltaY;
   }
 
-  if (wheelAnimationFrameRef.current) {
-    return;
-  }
-
-  wheelAnimationFrameRef.current =
-    requestAnimationFrame(() => {
-      updateTopicCardDepth();
-
-      wheelAnimationFrameRef.current =
-        null;
-    });
 };
 
 
@@ -2275,19 +2456,10 @@ return () => {
     'wheel',
     handleWheel
   );
-
-  if (wheelAnimationFrameRef.current) {
-    cancelAnimationFrame(
-      wheelAnimationFrameRef.current
-    );
-
-    wheelAnimationFrameRef.current = null;
-  }
 };
 }, [
   selectedTopic,
   stopCanvasMomentum,
-  updateTopicCardDepth,
 ]);
 
   useEffect(() => {
@@ -2455,12 +2627,35 @@ const handleTopicSelect = useCallback(
   [selectTopic]
 );
 
+const handleTopicCardPointerIntent = useCallback(() => {
+  stopCanvasMomentum();
+
+  // A fresh press on a card is a direct selection intent. Touch movement can
+  // still set these flags again before click, preserving drag protection.
+  suppressTopicClickRef.current = false;
+  canvasDragRef.current.moved = false;
+}, [stopCanvasMomentum]);
+
 const handleTopicPillSelect = useCallback(
   (item) => {
     selectTopic(item, 'topic-pill');
   },
   [selectTopic]
 );
+
+const handleBackToTopics = useCallback(() => {
+  setSelectedTopic('');
+  setRenderLimit(INITIAL_RENDER_LIMIT);
+  navigate('/feed');
+}, [navigate]);
+
+const handleFeedRetry = useCallback(() => {
+  const retry = refetch || refresh || reload;
+
+  if (typeof retry === 'function') {
+    retry();
+  }
+}, [refetch, refresh, reload]);
 
 const handleTopicClick = useCallback(
   (postTopic) => {
@@ -2589,6 +2784,8 @@ const renderedLaunchTopics = useMemo(
     visibleLaunchTopics.map((item, index) => {
       const position =
         getTopicCanvasPosition(index);
+      const isOnlyTopic =
+        visibleLaunchTopics.length === 1;
 
       return (
      <TopicLaunchCard
@@ -2597,15 +2794,21 @@ const renderedLaunchTopics = useMemo(
   index={index}
   position={{
     ...position,
-    x: position.x + topicCanvasLayout.offsetX,
-    y: position.y + topicCanvasLayout.offsetY,
+    x: isOnlyTopic
+      ? `calc(50% - ${position.width / 2}px)`
+      : position.x + topicCanvasLayout.offsetX,
+    y: isOnlyTopic
+      ? `calc(50% - ${position.height / 2}px)`
+      : position.y + topicCanvasLayout.offsetY,
   }}
   onSelect={handleTopicSelect}
+  onPointerIntent={handleTopicCardPointerIntent}
 />
       );
     }),
   [
     handleTopicSelect,
+    handleTopicCardPointerIntent,
     topicCanvasLayout.offsetX,
     topicCanvasLayout.offsetY,
     visibleLaunchTopics,
@@ -2644,12 +2847,16 @@ const handleTopicCanvasScroll =
 
     topicRevealFrameRef.current =
       requestAnimationFrame(() => {
+        wrapTopicCanvasPosition();
         updateTopicCardDepth();
 
         topicRevealFrameRef.current =
           null;
       });
-  }, [updateTopicCardDepth]);
+  }, [
+    updateTopicCardDepth,
+    wrapTopicCanvasPosition,
+  ]);
 
   const renderedPosts = useMemo(
     () => renderedFeedPosts.map((post, index) => {
@@ -2717,7 +2924,9 @@ handleComments,
   return (
     <main
       ref={feedRef}
-      className="snap-feed-page"
+      className={`snap-feed-page ${
+        selectedTopic ? 'has-inner-feed' : ''
+      }`}
       style={{ overscrollBehaviorY: 'auto' }}
     >
 
@@ -2759,13 +2968,8 @@ handleComments,
     <div className="topic-launch-shell">
       <header className="topic-launch-hero">
         <div className="topic-launch-badge">
-          <Sparkles
-            size={14}
-            strokeWidth={2.2}
-            aria-hidden="true"
-          />
 
-          <span>Choose your feed</span>
+
         </div>
 
         {/* <h1>
@@ -2773,9 +2977,7 @@ handleComments,
           <span> learn?</span>
         </h1> */}
 
-<p>
-  Enter a curated learning space tailored to what you want to explore next.
-</p>
+
       </header>
 
       <div className="topic-launch-content">
@@ -2885,39 +3087,72 @@ style={topicCanvasSurfaceStyle}
 )}
 
       {selectedTopic && (
-        <section className="topic-rail mobile-feed-topic-rail" aria-label="Feed topics">
+        <header className="feed-inner-header">
+          <div className="feed-inner-heading">
+            <button
+              type="button"
+              className="feed-inner-back"
+              onClick={handleBackToTopics}
+              aria-label="Back to topics"
+            >
+              <ArrowLeft size={17} strokeWidth={2} />
+              <span>Topics</span>
+            </button>
 
-
-          <div className="mobile-topic-scroll" role="tablist" aria-label="Select feed topic">
-            {renderedTopics}
+            <div className="feed-inner-title">
+              <h1>{selectedTopic}</h1>
+              <p>
+                {loading
+                  ? 'Loading posts'
+                  : error
+                    ? 'Feed unavailable'
+                    : `${filteredPosts.length}${nextCursor ? '+' : ''} ${
+                        filteredPosts.length === 1 ? 'post' : 'posts'
+                      }`}
+              </p>
+            </div>
           </div>
-        </section>
+
+          <nav
+            className="feed-inner-topics mobile-topic-scroll"
+            role="tablist"
+            aria-label="Select feed topic"
+          >
+            {renderedTopics}
+          </nav>
+        </header>
       )}
 
 {selectedTopic && loading && filteredPosts.length === 0 && (
-  <FeedSkeleton />
+  <div className="feed-inner-loading">
+    <FeedSkeleton />
+  </div>
 )}
 
 {selectedTopic && error && (
   <div
-    className="feed-status error"
+    className="feed-inner-state feed-inner-error"
     role="alert"
   >
-    <p>{error}</p>
+    <span className="feed-inner-state-icon" aria-hidden="true">
+      <RefreshCw size={20} strokeWidth={1.8} />
+    </span>
+    <span className="feed-inner-state-kicker">Connection problem</span>
+    <h2>We couldn't load this topic.</h2>
+    <p>{error || 'The feed is temporarily unavailable.'}</p>
 
-    <button
-      type="button"
-      onClick={() => {
-        const retry =
-          refetch || refresh || reload;
-
-        if (typeof retry === 'function') {
-          retry();
-        }
-      }}
-    >
-      Try again
-    </button>
+    <div className="feed-inner-state-actions">
+      <button type="button" onClick={handleFeedRetry}>
+        Try again
+      </button>
+      <button
+        type="button"
+        className="secondary"
+        onClick={handleBackToTopics}
+      >
+        Browse topics
+      </button>
+    </div>
   </div>
 )}
 
@@ -2927,9 +3162,17 @@ style={topicCanvasSurfaceStyle}
   !error &&
   filteredPosts.length === 0 &&
   !nextCursor && (
-    <p className="feed-status">
-      No posts found in this topic.
-    </p>
+    <div className="feed-inner-state">
+      <span className="feed-inner-state-icon" aria-hidden="true">
+        <Compass size={20} strokeWidth={1.8} />
+      </span>
+      <span className="feed-inner-state-kicker">Nothing here yet</span>
+      <h2>No posts in {selectedTopic}.</h2>
+      <p>Choose another topic or check back later.</p>
+      <button type="button" onClick={handleBackToTopics}>
+        Browse topics
+      </button>
+    </div>
   )}
 
 {selectedTopic &&
@@ -2937,7 +3180,7 @@ style={topicCanvasSurfaceStyle}
   !error &&
   filteredPosts.length === 0 &&
   nextCursor && (
-    <p className="feed-status">
+    <p className="feed-status feed-inner-status">
       Loading topic posts...
     </p>
   )}
@@ -2972,20 +3215,20 @@ function getTopicCanvasPosition(index) {
 
   const clusterCards = [
     { x: 16, y: 26, width: 210, height: 150 },
-    { x: 254, y: 26, width: 180, height: 190 },
-    { x: 462, y: 26, width: 228, height: 150 },
+    { x: 272, y: 26, width: 180, height: 190 },
+    { x: 498, y: 26, width: 228, height: 150 },
 
-    { x: 16, y: 244, width: 184, height: 188 },
-    { x: 228, y: 244, width: 244, height: 150 },
-    { x: 500, y: 244, width: 190, height: 190 },
+    { x: 16, y: 258, width: 184, height: 188 },
+    { x: 246, y: 258, width: 244, height: 150 },
+    { x: 536, y: 258, width: 190, height: 190 },
 
-    { x: 16, y: 462, width: 226, height: 152 },
-    { x: 270, y: 462, width: 182, height: 190 },
-    { x: 480, y: 462, width: 218, height: 150 },
+    { x: 16, y: 490, width: 226, height: 152 },
+    { x: 288, y: 490, width: 182, height: 190 },
+    { x: 516, y: 490, width: 218, height: 150 },
 
-    { x: 16, y: 680, width: 188, height: 180 },
-    { x: 232, y: 680, width: 232, height: 148 },
-    { x: 492, y: 680, width: 176, height: 184 },
+    { x: 16, y: 722, width: 188, height: 180 },
+    { x: 250, y: 722, width: 232, height: 148 },
+    { x: 528, y: 722, width: 176, height: 184 },
   ];
 
 const clusterIndex = Math.floor(
@@ -3000,8 +3243,8 @@ const isDesktop =
   typeof window !== 'undefined' &&
   window.innerWidth >= 1024;
 
-const clusterWidth = isDesktop ? 860 : 740;
-const clusterHeight = isDesktop ? 1080 : 920;
+const clusterWidth = isDesktop ? 920 : 780;
+const clusterHeight = isDesktop ? 1140 : 980;
 
 const canvasCenterX = 1050;
 const canvasCenterY = 720;

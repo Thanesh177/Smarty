@@ -50,6 +50,7 @@ import NewsPage from './pages/NewsPage';
 import ReadBookPage from './pages/ReadBookPage';
 import BookReaderPage from './pages/BookReaderPage';
 import PostAiPage from './pages/PostAiPage';
+import './styles/production-pages.css';
 
 const GLOBAL_PULL_REFRESH_RATIO = 0.4;
 

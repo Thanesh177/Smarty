@@ -673,6 +673,7 @@ export default function TopicRoomsPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteSearch, setInviteSearch] = useState('');
   const [inviteResults, setInviteResults] = useState([]);
+  const [searchingInviteUsers, setSearchingInviteUsers] = useState(false);
   const [pendingInviteUserIds, setPendingInviteUserIds] = useState(() => new Set());
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomPrivacy, setNewRoomPrivacy] = useState('public');
@@ -730,6 +731,7 @@ export default function TopicRoomsPage() {
   const joinRequestsCacheRef = useRef({});
   const userSearchCacheRef = useRef({});
   const userSearchTimerRef = useRef(null);
+  const userSearchRequestSeqRef = useRef(0);
   const inviteCopiedTimerRef = useRef(null);
   const roomInvitesLoadingRef = useRef(false);
   const sendingMessageRef = useRef(false);
@@ -1221,12 +1223,33 @@ const setMessagesContainerRef = useCallback((node) => {
   }, [imageCropSourceUrl]);
 
   useEffect(() => {
+    const query = inviteSearch.trim();
+
+    userSearchRequestSeqRef.current += 1;
+
+    if (userSearchTimerRef.current) {
+      window.clearTimeout(userSearchTimerRef.current);
+      userSearchTimerRef.current = null;
+    }
+
+    if (!query) {
+      setInviteResults([]);
+      setSearchingInviteUsers(false);
+      return undefined;
+    }
+
+    userSearchTimerRef.current = window.setTimeout(() => {
+      userSearchTimerRef.current = null;
+      searchUsers(query);
+    }, USER_SEARCH_DEBOUNCE_MS);
+
     return () => {
       if (userSearchTimerRef.current) {
         window.clearTimeout(userSearchTimerRef.current);
+        userSearchTimerRef.current = null;
       }
     };
-  }, []);
+  }, [inviteSearch]);
 
 
 
@@ -3365,23 +3388,31 @@ async function openRoom(room, options = {}) {
 
     if (!query) {
       setInviteResults([]);
+      setSearchingInviteUsers(false);
       return;
     }
+
+    const requestId = userSearchRequestSeqRef.current + 1;
+    userSearchRequestSeqRef.current = requestId;
 
     const cached = userSearchCacheRef.current[query];
     const now = Date.now();
 
     if (cached && now - cached.timestamp < ROOM_MEMBERS_CACHE_MS) {
-      setInviteResults(dedupeInviteUsers(cached.users));
+      if (mountedRef.current && requestId === userSearchRequestSeqRef.current) {
+        setInviteResults(dedupeInviteUsers(cached.users));
+        setSearchingInviteUsers(false);
+      }
       return;
     }
 
     try {
       setStatus('');
+      setSearchingInviteUsers(true);
 
       const data = await roomApi.searchUsers(query);
 
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || requestId !== userSearchRequestSeqRef.current) return;
 
       const users = dedupeInviteUsers(
         Array.isArray(data?.users) ? data.users : Array.isArray(data) ? data : []
@@ -3395,7 +3426,14 @@ async function openRoom(room, options = {}) {
       setInviteResults(users);
     } catch (err) {
       console.error(err);
-      setStatus(err?.response?.data?.error || 'Search failed');
+      if (mountedRef.current && requestId === userSearchRequestSeqRef.current) {
+        setInviteResults([]);
+        setStatus(err?.response?.data?.error || 'Search failed');
+      }
+    } finally {
+      if (mountedRef.current && requestId === userSearchRequestSeqRef.current) {
+        setSearchingInviteUsers(false);
+      }
     }
   }
 
@@ -4887,25 +4925,8 @@ onClick={() => {
                 <input
                   placeholder="Search by email or ID..."
                   value={inviteSearch}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setInviteSearch(value);
-
-                    if (userSearchTimerRef.current) {
-                      window.clearTimeout(userSearchTimerRef.current);
-                    }
-
-                    const query = value.trim();
-
-                    if (!query) {
-                      setInviteResults([]);
-                      return;
-                    }
-
-                    userSearchTimerRef.current = window.setTimeout(() => {
-                      searchUsers(query);
-                    }, USER_SEARCH_DEBOUNCE_MS);
-                  }}
+                  aria-label="Search users to invite"
+                  onChange={(e) => setInviteSearch(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -4919,8 +4940,19 @@ onClick={() => {
                   }}
                 />
 
-                <button type="button" className="approve-request-btn" onClick={() => searchUsers(inviteSearch)}>
-                  Search
+                <button
+                  type="button"
+                  className="approve-request-btn"
+                  onClick={() => {
+                    if (userSearchTimerRef.current) {
+                      window.clearTimeout(userSearchTimerRef.current);
+                      userSearchTimerRef.current = null;
+                    }
+                    searchUsers(inviteSearch);
+                  }}
+                  disabled={!inviteSearch.trim() || searchingInviteUsers}
+                >
+                  {searchingInviteUsers ? 'Searching...' : 'Search'}
                 </button>
               </div>
 
@@ -5232,4 +5264,3 @@ onClick={() => {
   </main>
 );
 }
-

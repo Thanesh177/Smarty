@@ -207,6 +207,8 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const cropDragRef = useRef(null);
   const mountedRef = useRef(false);
   const profileLoadIdRef = useRef(0);
+  const friendSearchRequestSeqRef = useRef(0);
+  const friendSearchTimerRef = useRef(null);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
   const [avatarImageLoaded, setAvatarImageLoaded] = useState(false);
 
@@ -226,6 +228,11 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
 
     return () => {
       mountedRef.current = false;
+      friendSearchRequestSeqRef.current += 1;
+      if (friendSearchTimerRef.current) {
+        window.clearTimeout(friendSearchTimerRef.current);
+        friendSearchTimerRef.current = null;
+      }
       window.removeEventListener('pageshow', handlePageShow);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -268,19 +275,25 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
     });
   }, []);
 
-  const searchFriends = useCallback(async () => {
-    const query = friendSearch.trim();
+  const runFriendSearch = useCallback(async (searchValue) => {
+    const query = String(searchValue || '').trim();
 
     if (!query) {
       setFriendResults([]);
+      setSearchingFriends(false);
       return;
     }
+
+    const requestId = friendSearchRequestSeqRef.current + 1;
+    friendSearchRequestSeqRef.current = requestId;
 
     try {
       setSearchingFriends(true);
       setStatus('');
 
       const data = await withTimeout(roomApi.searchUsers(query), 12000);
+      if (!mountedRef.current || requestId !== friendSearchRequestSeqRef.current) return;
+
       const users = data.users || data || [];
       const myId = profile?.id || profile?.userId || profile?.sub;
       const myEmail = profile?.email;
@@ -293,11 +306,54 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
       );
     } catch (err) {
       console.error(err);
-      setStatus(err?.response?.data?.error || 'Search failed');
+      if (mountedRef.current && requestId === friendSearchRequestSeqRef.current) {
+        setFriendResults([]);
+        setStatus(err?.response?.data?.error || 'Search failed');
+      }
     } finally {
-      setSearchingFriends(false);
+      if (mountedRef.current && requestId === friendSearchRequestSeqRef.current) {
+        setSearchingFriends(false);
+      }
     }
-  }, [friendSearch, profile, withTimeout]);
+  }, [profile, withTimeout]);
+
+  const searchFriends = useCallback(() => {
+    if (friendSearchTimerRef.current) {
+      window.clearTimeout(friendSearchTimerRef.current);
+      friendSearchTimerRef.current = null;
+    }
+
+    runFriendSearch(friendSearch);
+  }, [friendSearch, runFriendSearch]);
+
+  useEffect(() => {
+    const query = friendSearch.trim();
+
+    friendSearchRequestSeqRef.current += 1;
+
+    if (friendSearchTimerRef.current) {
+      window.clearTimeout(friendSearchTimerRef.current);
+      friendSearchTimerRef.current = null;
+    }
+
+    if (!query) {
+      setFriendResults([]);
+      setSearchingFriends(false);
+      return undefined;
+    }
+
+    friendSearchTimerRef.current = window.setTimeout(() => {
+      friendSearchTimerRef.current = null;
+      runFriendSearch(query);
+    }, 300);
+
+    return () => {
+      if (friendSearchTimerRef.current) {
+        window.clearTimeout(friendSearchTimerRef.current);
+        friendSearchTimerRef.current = null;
+      }
+    };
+  }, [friendSearch, runFriendSearch]);
 
   async function inviteFriend(targetUser) {
     if (!targetUser) return;
@@ -975,6 +1031,7 @@ const handleDeleteAccount = useCallback(async () => {
               <input
                 value={friendSearch}
                 placeholder="Search username or email"
+                aria-label="Search for people"
                 onChange={(e) => setFriendSearch(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') searchFriends();

@@ -20,6 +20,29 @@ const displayName = (item) => {
 const initials = (name) =>
   String(name || 'U').trim().slice(0, 1).toUpperCase();
 
+const getCommentDate = (value) => {
+  if (!value) return '';
+
+  const numericValue = Number(value);
+  const date = Number.isFinite(numericValue)
+    ? new Date(numericValue < 1e12 ? numericValue * 1000 : numericValue)
+    : new Date(value);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatCommentTime = (value) => {
+  const date = getCommentDate(value);
+  if (!date) return '';
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+};
+
 const CommentRow = memo(function CommentRow({
   item,
   index,
@@ -40,10 +63,22 @@ const CommentRow = memo(function CommentRow({
 }) {
   const ownerId = item.userId || item.authorId || item.senderId;
   const disabledCreator = mine || !ownerId;
+  const commentDate = getCommentDate(item.updatedAt || item.createdAt);
+  const commentTime = formatCommentTime(item.updatedAt || item.createdAt);
 
   return (
     <article className={mine ? 'comment-row mine' : 'comment-row'}>
-      {!mine && <div className="avatar">{initials(name)}</div>}
+      {!mine && (
+        <button
+          type="button"
+          className="avatar avatar-button"
+          aria-label={`Open ${name}'s profile`}
+          disabled={!ownerId}
+          onClick={() => onCreatorOpen(ownerId, false)}
+        >
+          {initials(name)}
+        </button>
+      )}
 
       <div className={mine ? 'comment-bubble mine' : 'comment-bubble'}>
         <div className="comment-head">
@@ -55,6 +90,12 @@ const CommentRow = memo(function CommentRow({
           >
             {mine ? 'You' : `@${name}`}
           </button>
+
+          {commentTime && (
+            <time dateTime={commentDate?.toISOString()}>
+              {item.updatedAt ? 'Edited · ' : ''}{commentTime}
+            </time>
+          )}
         </div>
 
         {editing ? (
@@ -113,7 +154,16 @@ const CommentRow = memo(function CommentRow({
         </div>
       </div>
 
-      {mine && <div className="avatar mine-avatar">Y</div>}
+      {mine && (
+        <button
+          type="button"
+          className="avatar mine-avatar avatar-button"
+          aria-label="Open your profile"
+          onClick={() => onCreatorOpen(ownerId, true)}
+        >
+          {initials(name)}
+        </button>
+      )}
     </article>
   );
 });
@@ -131,6 +181,11 @@ export default function CommentsPage() {
 
   const currentUserId = useMemo(
     () => user?.id || user?.userId || user?.sub,
+    [user]
+  );
+
+  const currentUserInitial = useMemo(
+    () => initials(user?.username || user?.name || user?.email || 'You'),
     [user]
   );
 
@@ -380,14 +435,22 @@ export default function CommentsPage() {
 
   const handleKeyDown = useCallback(
     (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) submit();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submit();
+      }
     },
     [submit]
   );
 
   const openCreator = useCallback(
     (ownerId, mine) => {
-      if (!mine && ownerId) navigate(`/creator/${ownerId}`);
+      if (mine) {
+        navigate('/profile');
+        return;
+      }
+
+      if (ownerId) navigate(`/creator/${ownerId}`);
     },
     [navigate]
   );
@@ -458,18 +521,19 @@ export default function CommentsPage() {
       {toast && <div className="comment-toast">{toast}</div>}
 
       <header className="comments-topbar">
-        <button type="button" className="icon-btn" onClick={goBack}>
+        <button type="button" className="icon-btn" aria-label="Go back" onClick={goBack}>
           ←
         </button>
 
         <div className="comments-title-wrap">
           <h1>Comments</h1>
-          <span>{comments.length} replies</span>
+          <span>{comments.length} {comments.length === 1 ? 'comment' : 'comments'}</span>
         </div>
 
         <button
           type="button"
           className="icon-btn"
+          aria-label="Write a comment"
           onClick={focusInput}
         >
           ✎
@@ -507,10 +571,19 @@ export default function CommentsPage() {
       )}
 
       <footer className="comment-compose">
-        <div className="compose-avatar">Y</div>
+        <button
+          type="button"
+          className="compose-avatar avatar-button"
+          aria-label="Open your profile"
+          onClick={() => navigate('/profile')}
+        >
+          {currentUserInitial}
+        </button>
 
-        <input
+        <textarea
           ref={inputRef}
+          rows={1}
+          aria-label={replyingTo ? `Reply to ${replyingTo.name}` : 'Write a comment'}
           placeholder={
             replyingTo
               ? `Reply to ${replyingTo.name}...`
