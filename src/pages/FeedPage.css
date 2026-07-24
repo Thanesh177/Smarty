@@ -3141,8 +3141,13 @@
 
 .topic-canvas-surface {
   position: relative;
-  min-width: 100%;
-  min-height: 100%;
+  /*
+   * The surface contains three repeated tiles on each axis. Each tile must
+   * remain at least as large as the viewport or the wrap threshold can sit
+   * beyond the browser's real scroll edge, leaving the gallery stuck.
+   */
+  min-width: 300%;
+  min-height: 300%;
   overflow: visible;
   contain: layout paint;
   transform: translateZ(0);

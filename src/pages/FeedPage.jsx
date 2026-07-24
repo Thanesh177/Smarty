@@ -1104,8 +1104,17 @@ const wrapTopicCanvasPosition =
     let nextTop = canvas.scrollTop;
     let wrappedHorizontal = false;
     let wrappedVertical = false;
-    const tileWidth = canvas.scrollWidth / 3;
-    const tileHeight = canvas.scrollHeight / 3;
+    const surface = canvas.querySelector(
+      '.topic-canvas-surface'
+    );
+    const tileWidth = Math.max(
+      1,
+      (surface?.offsetWidth || canvas.scrollWidth) / 3
+    );
+    const tileHeight = Math.max(
+      1,
+      (surface?.offsetHeight || canvas.scrollHeight) / 3
+    );
     const viewportCenterX =
       canvas.scrollLeft + canvas.clientWidth / 2;
     const viewportCenterY =
