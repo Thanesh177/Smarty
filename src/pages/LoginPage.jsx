@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import { useAuth } from '../contexts/AuthContext';
+import SmartyBrand from '../components/SmartyBrand';
 import './LoginPage.css';
 
 import {
@@ -13,10 +14,16 @@ import {
 export default function LoginPage() {
   const { user, loading, login } = useAuth();
   const location = useLocation();
-  const from = location.state?.from?.pathname || '/feed';
+  const fromState = location.state?.from;
+  const from =
+    (typeof fromState === 'string'
+      ? fromState
+      : fromState?.pathname) || '/feed';
 
   const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(
+    () => location.state?.oauthError || ''
+  );
   const [message, setMessage] = useState('');
 const [submitting, setSubmitting] = useState(false);
 const [socialProvider, setSocialProvider] = useState('');
@@ -180,10 +187,13 @@ const handleAppleLogin = async () => {
     <main className="login-page">
       <section className="login-hero">
         <div>
-          <h1>Learn faster. Scroll smarter.</h1>
+          <SmartyBrand
+            className="login-brand"
+            tagline="Learn something worth keeping"
+          />
+          <h1>Welcome back.</h1>
           <p>
-            Sign in to access your personalized educational feed, saved reels,
-            and creator tools.
+            Continue learning, saving, and creating from where you left off.
           </p>
         </div>
 
@@ -206,8 +216,8 @@ const handleAppleLogin = async () => {
       <section className="login-layout">
         <form className="login-card" onSubmit={handleSubmit}>
           <div className="login-card-header">
-            <h2>Welcome back</h2>
-            <p>Access your personalized learning feed.</p>
+            <h2>Sign in</h2>
+            <p>Use your email or a connected account.</p>
           </div>
 
           <label>
@@ -242,10 +252,14 @@ const handleAppleLogin = async () => {
             disabled={submitting || !form.email.trim() || !form.password}
             type="submit"
           >
-            {submitting ? 'Please wait...' : 'Login'}
+            {submitting && !socialProvider ? 'Signing in...' : 'Sign in'}
           </button>
 
-<div className="social-login-stack">
+          <div className="login-divider">
+            <span>or continue with</span>
+          </div>
+
+<div className="social-login-stack" aria-label="Social sign in options">
   <button
     type="button"
     className="apple-login-btn"
@@ -260,8 +274,8 @@ const handleAppleLogin = async () => {
     </span>
 
     {socialProvider === 'apple'
-      ? 'Opening Apple...'
-      : 'Continue with Apple'}
+      ? 'Opening...'
+      : 'Apple'}
   </button>
 
   <button
@@ -279,14 +293,14 @@ const handleAppleLogin = async () => {
     </span>
 
     {socialProvider === 'google'
-      ? 'Opening Google...'
-      : 'Continue with Google'}
+      ? 'Opening...'
+      : 'Google'}
   </button>
 </div>
 
           <div className="login-links">
             <Link className="text-btn" to="/register" state={{ from }}>
-              New here? Create an account
+              New to Smarty? Create an account
             </Link>
           </div>
         </form>

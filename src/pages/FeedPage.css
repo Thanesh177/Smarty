@@ -2386,6 +2386,43 @@
   letter-spacing: -0.035em;
 }
 
+.topic-canvas-navbar > .smarty-brand-lockup {
+  flex: 0 0 auto;
+  gap: 10px;
+}
+
+.topic-canvas-navbar
+  > .smarty-brand-lockup
+  .smarty-brand-mark {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-radius: 11px;
+}
+
+.topic-canvas-navbar
+  > .smarty-brand-lockup
+  .smarty-brand-mark
+  span {
+  font-size: 1rem;
+}
+
+.topic-canvas-navbar
+  > .smarty-brand-lockup
+  .smarty-brand-copy strong {
+  font-size: 1.02rem;
+  letter-spacing: -0.055em;
+}
+
+.topic-canvas-navbar
+  > .smarty-brand-lockup
+  .smarty-brand-copy small {
+  color: rgba(186, 230, 253, 0.5);
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+}
+
 .topic-canvas-brand-monogram {
   width: 22px;
   height: 22px;
@@ -2518,8 +2555,29 @@
       8px;
   }
 
-  .topic-canvas-brand {
-    font-size: 0.88rem;
+  .topic-canvas-navbar > .smarty-brand-lockup {
+    gap: 8px;
+  }
+
+  .topic-canvas-navbar
+    > .smarty-brand-lockup
+    .smarty-brand-mark {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+    border-radius: 10px;
+  }
+
+  .topic-canvas-navbar
+    > .smarty-brand-lockup
+    .smarty-brand-copy strong {
+    font-size: 0.94rem;
+  }
+
+  .topic-canvas-navbar
+    > .smarty-brand-lockup
+    .smarty-brand-copy small {
+    font-size: 0.52rem;
   }
 
   .topic-canvas-nav-label {
@@ -3377,14 +3435,14 @@
     0 0 18px rgba(56, 189, 248, 0.035),
     inset 0 1px 0 rgba(255, 255, 255, 0.045);
   transition:
-    transform 100ms linear,
-    opacity 100ms linear,
+    transform 155ms cubic-bezier(0.2, 0.72, 0.2, 1),
+    opacity 125ms ease-out,
     background-color 150ms ease,
     border-color 150ms ease,
     box-shadow 150ms ease;
 }
 
-.topic-canvas-viewport.topic-canvas-scrolling
+.topic-canvas-viewport.topic-canvas-wrapping
   .topic-launch-card {
   transition: none !important;
 }
@@ -3421,6 +3479,8 @@
   .topic-launch-card {
   pointer-events: none !important;
   transition:
+    transform 90ms linear,
+    opacity 90ms linear,
     background-color 150ms ease,
     border-color 150ms ease,
     box-shadow 150ms ease;

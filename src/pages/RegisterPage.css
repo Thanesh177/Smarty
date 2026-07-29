@@ -21,6 +21,10 @@
   letter-spacing: 0.02em;
 }
 
+.register-card > .smarty-brand-lockup {
+  margin-bottom: 2px;
+}
+
 .register-card h1 {
   margin: 0;
   color: white;

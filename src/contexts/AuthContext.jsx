@@ -154,7 +154,7 @@ function getCognitoLogoutUrl() {
   ).replace(/^https?:\/\//, '');
 
   const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID;
- const logoutUri = `${window.location.origin}/feed`;
+  const logoutUri = `${window.location.origin}/login`;
 
   if (!cognitoDomain || !clientId) {
     return logoutUri;
@@ -304,6 +304,7 @@ function getVerifiedNativeCachedUser() {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -416,6 +417,11 @@ export function AuthProvider({ children }) {
           console.error('OAuth login failed:', err);
         }
       }
+
+      if (payload.event === 'signedOut') {
+        clearAuthStorage();
+        setUser(null);
+      }
     });
 
     return () => unsubscribe();
@@ -481,24 +487,34 @@ export function AuthProvider({ children }) {
     return result;
   };
 
-const logout = async () => {
-  clearAuthStorage();
-  clearAmplifyAuthStorage();
-  setUser(null);
+  const logout = async () => {
+    if (loggingOut) return;
 
-  if (isRunningInsideNativeApp()) {
+    setLoggingOut(true);
+    setUser(null);
+    clearAuthStorage();
+
+    sessionStorage.removeItem('smarty-auth-redirecting');
+    sessionStorage.removeItem('smarty-post-login-redirect');
+    localStorage.removeItem('smarty-post-login-redirect');
+
     try {
+      // Amplify must see its own session records before they are cleared so it
+      // can revoke the local Cognito session and federated hosted-UI session.
       await signOut({ global: false });
     } catch (error) {
-      console.warn('Native local sign-out failed:', error);
+      console.warn('Cognito sign-out failed; using hosted logout fallback.', error);
+    } finally {
+      clearAuthStorage();
+      clearAmplifyAuthStorage();
     }
 
-    window.location.replace('/feed');
-    return;
-  }
+    const logoutTarget = isRunningInsideNativeApp()
+      ? '/login?loggedOut=1'
+      : getCognitoLogoutUrl();
 
-  window.location.assign(getCognitoLogoutUrl());
-};
+    window.location.replace(logoutTarget);
+  };
 
   const refreshToken = async () => {
     const session = await fetchAuthSession({ forceRefresh: true });
@@ -524,10 +540,11 @@ const logout = async () => {
       register,
       confirmRegistration,
       logout,
+      loggingOut,
       refreshToken,
       isAuthenticated: !!user,
     }),
-    [user, loading]
+    [user, loading, loggingOut]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

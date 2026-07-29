@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import './NavbarMenu.css';
 import { signInWithRedirect } from 'aws-amplify/auth';
+import SmartyBrand from './SmartyBrand';
 
 function hasStoredAuthToken() {
   return Boolean(
@@ -22,6 +23,7 @@ function hasStoredAuthToken() {
 
 function NavbarMenu({ user, logout, totalUnread = 0 }) {
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
 
   const startGoogleProfileLogin = useCallback(async () => {
@@ -50,10 +52,18 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
     event.stopPropagation?.();
   }, []);
 
-  const handleLogout = useCallback(() => {
-    logout?.();
+  const handleLogout = useCallback(async () => {
+    if (signingOut) return;
+
+    setSigningOut(true);
     closeMenu();
-  }, [closeMenu, logout]);
+
+    try {
+      await logout?.();
+    } finally {
+      setSigningOut(false);
+    }
+  }, [closeMenu, logout, signingOut]);
 
   const handleProfileClick = useCallback(async (event) => {
     event?.preventDefault?.();
@@ -124,14 +134,7 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
             }}
           >
             <div className="menu-header">
-              <div className="menu-brand-mark" aria-hidden="true">
-                S
-              </div>
-
-              <div className="menu-title">
-                <span>Smarty</span>
-                <h3>Explore</h3>
-              </div>
+              <SmartyBrand compact tagline="Explore" />
 
               <button
                 type="button"
@@ -179,8 +182,12 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
                   type="button"
                   className="logout-pill"
                   onClick={handleLogout}
+                  disabled={signingOut}
+                  aria-label={signingOut ? 'Signing out' : 'Sign out'}
+                  title={signingOut ? 'Signing out' : 'Sign out'}
                 >
                   <LogOut size={17} strokeWidth={2.2} />
+                  <span>{signingOut ? 'Signing out...' : 'Sign out'}</span>
                 </button>
               ) : (
                 <button

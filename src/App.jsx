@@ -16,9 +16,9 @@ import InstallPrompt from './components/InstallPrompt';
 import {
   CircleUserRound,
   MessagesSquare,
-  BrainCircuit,
   House,
 } from 'lucide-react';
+import SmartyBrand from './components/SmartyBrand';
 
 import {
   connectChatSocket,
@@ -989,61 +989,7 @@ useEffect(() => {
                 }
               }}
             >
-              <div
-                className="brand-mark"
-                aria-hidden="true"
-                style={{
-                  position: 'relative',
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '11px',
-                  display: 'grid',
-                  placeItems: 'center',
-                  overflow: 'hidden',
-                  background: 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(241,245,249,0.94))',
-
-                  backdropFilter: 'blur(12px)',
-                  WebkitBackdropFilter: 'blur(12px)',
-                }}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: '-30%',
-                    background: 'conic-gradient(from 90deg, rgba(56,189,248,0), rgba(56,189,248,0.28), rgba(168,85,247,0.22), rgba(56,189,248,0))',
-                  }}
-                />
-
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: '1px',
-                    borderRadius: '17px',
-                  }}
-                />
-
-                <div
-                  style={{
-                    position: 'relative',
-                    zIndex: 2,
-                    width: '34px',
-                    height: '34px',
-                    borderRadius: '12px',
-                    display: 'grid',
-                    placeItems: 'center',
-                    background: 'transparent',
-                  }}
-                >
-                  <BrainCircuit
-                    size={19}
-                    strokeWidth={2.5}
-                    color="#0f172a"
-                    style={{
-                      filter: 'drop-shadow(0 2px 6px rgba(56,189,248,0.22))',
-                    }}
-                  />
-                </div>
-              </div>
+              <SmartyBrand compact tagline="Learn with intent" />
             </NavLink>
 
             <div className="brand-actions">

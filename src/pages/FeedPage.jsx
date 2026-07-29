@@ -23,6 +23,7 @@ import {
   MoonStar,
   Lightbulb,
 } from 'lucide-react';
+import SmartyBrand from '../components/SmartyBrand';
 import { postApi, creatorApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import useFeed from '../hooks/useFeed';
@@ -796,7 +797,6 @@ export default function FeedPage() {
   const wrappingTopicCanvasRef = useRef(false);
 
   const topicRevealFrameRef = useRef(null);
-  const topicScrollEndTimerRef = useRef(null);
   const topicSnapTimerRef = useRef(null);
   const topicSnapReleaseTimerRef = useRef(null);
   const isTopicAutoCenteringRef = useRef(false);
@@ -1046,14 +1046,15 @@ const updateTopicCardDepth = useCallback(() => {
     const easedFocus =
       rawFocus * rawFocus * (3 - 2 * rawFocus);
 
-    // Quantizing avoids rewriting styles for imperceptibly small changes.
-    const focusStep = Math.round(easedFocus * 24);
+    // Fine-grained steps keep the depth response smooth without forcing
+    // imperceptible style writes on every fractional pixel of movement.
+    const focusStep = Math.round(easedFocus * 48);
 
     if (card.dataset.topicFocusStep === String(focusStep)) return;
 
     card.dataset.topicFocusStep = String(focusStep);
 
-    const focus = focusStep / 24;
+    const focus = focusStep / 48;
     const scale = 0.88 + focus * 0.22;
     const opacity = 0.64 + focus * 0.36;
     const lift = focus * -16;
@@ -1155,6 +1156,7 @@ const wrapTopicCanvasPosition =
     }
 
     wrappingTopicCanvasRef.current = true;
+    canvas.classList.add('topic-canvas-wrapping');
 
     const previousLeft =
       canvas.scrollLeft;
@@ -1184,6 +1186,12 @@ const wrapTopicCanvasPosition =
     requestAnimationFrame(() => {
       wrappingTopicCanvasRef.current =
         false;
+
+      requestAnimationFrame(() => {
+        canvas.classList.remove(
+          'topic-canvas-wrapping'
+        );
+      });
     });
 
     return {
@@ -1550,10 +1558,6 @@ useEffect(() => {
       canvasAnimationFrameRef.current = null;
     }
 
-    if (topicScrollEndTimerRef.current) {
-      clearTimeout(topicScrollEndTimerRef.current);
-      topicScrollEndTimerRef.current = null;
-    }
   };
 }, []);
 
@@ -2785,17 +2789,6 @@ const handleTopicCanvasScroll =
 
     if (!canvas) return;
 
-    canvas.classList.add('topic-canvas-scrolling');
-
-    if (topicScrollEndTimerRef.current) {
-      clearTimeout(topicScrollEndTimerRef.current);
-    }
-
-    topicScrollEndTimerRef.current = window.setTimeout(() => {
-      topicCanvasRef.current?.classList.remove('topic-canvas-scrolling');
-      topicScrollEndTimerRef.current = null;
-    }, 110);
-
     if (!topicRevealFrameRef.current) {
       topicRevealFrameRef.current =
         requestAnimationFrame(() => {
@@ -2901,10 +2894,10 @@ handleComments,
     aria-label="Choose a learning topic"
   >
     <nav className="topic-canvas-navbar" aria-label="Smarty topic navigation">
-  <span className="topic-canvas-brand">
-    <span className="topic-canvas-brand-monogram" aria-hidden="true">S</span>
-    Smarty
-  </span>
+  <SmartyBrand
+    className="topic-canvas-brand"
+    tagline="Learn · Share · Grow"
+  />
 
   <span className="topic-canvas-nav-label">
     Explore topics
@@ -3177,8 +3170,8 @@ const isDesktop =
 const columns = isDesktop ? 4 : 3;
 const width = isDesktop ? 168 : 146;
 const height = isDesktop ? 132 : 120;
-const gapX = isDesktop ? 68 : 68;
-const gapY = isDesktop ? 62 : 68;
+const gapX = isDesktop ? 88 : 76;
+const gapY = isDesktop ? 78 : 74;
 const column = index % columns;
 const row = Math.floor(index / columns);
 
@@ -3196,7 +3189,8 @@ function getTopicCanvasLayout(topicCount) {
   const isDesktop =
     typeof window !== 'undefined' &&
     window.innerWidth >= 760;
-  const edgePadding = isDesktop ? 29 : 14;
+  const edgePaddingX = isDesktop ? 44 : 38;
+  const edgePaddingY = isDesktop ? 39 : 37;
 
   const cards = Array.from(
     { length: topicCount },
@@ -3239,17 +3233,17 @@ function getTopicCanvasLayout(topicCount) {
     width:
       maxX -
       minX +
-      edgePadding * 2,
+      edgePaddingX * 2,
 
     height:
       maxY -
       minY +
-      edgePadding * 2,
+      edgePaddingY * 2,
 
     offsetX:
-      edgePadding - minX,
+      edgePaddingX - minX,
 
     offsetY:
-      edgePadding - minY,
+      edgePaddingY - minY,
   };
 }

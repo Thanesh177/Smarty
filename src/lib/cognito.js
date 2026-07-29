@@ -17,8 +17,6 @@ const PRODUCTION_ORIGIN = 'https://smarty.wiki';
 const LEGACY_AMPLIFY_ORIGIN =
   'https://main.d3qiuefonbp8n9.amplifyapp.com';
 
-const LOCAL_ORIGIN = 'http://localhost:5173';
-
 const NATIVE_REDIRECT_URI = 'smarty://callback';
 
 const isBrowser = typeof window !== 'undefined';
@@ -52,11 +50,24 @@ const getCurrentOrigin = () => {
   return window.location.origin;
 };
 
+const isLocalDevelopmentOrigin = (origin) => {
+  try {
+    const { hostname } = new URL(origin);
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]'
+    );
+  } catch {
+    return false;
+  }
+};
+
 const getWebRedirectSignIn = () => {
   const origin = getCurrentOrigin();
 
-  if (origin === LOCAL_ORIGIN) {
-    return `${LOCAL_ORIGIN}/`;
+  if (isLocalDevelopmentOrigin(origin)) {
+    return `${origin}/`;
   }
 
   if (origin === LEGACY_AMPLIFY_ORIGIN) {
@@ -69,8 +80,8 @@ const getWebRedirectSignIn = () => {
 const getWebRedirectSignOut = () => {
   const origin = getCurrentOrigin();
 
-  if (origin === LOCAL_ORIGIN) {
-    return `${LOCAL_ORIGIN}/login`;
+  if (isLocalDevelopmentOrigin(origin)) {
+    return `${origin}/login`;
   }
 
   if (origin === LEGACY_AMPLIFY_ORIGIN) {

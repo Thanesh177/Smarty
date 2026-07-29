@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import SmartyBrand from '../components/SmartyBrand';
 import { userApi } from '../api/client';
 import './RegisterPage.css';
 
@@ -84,7 +85,7 @@ export default function RegisterPage() {
   return (
     <main className="register-page">
       <form className="register-card" onSubmit={handleSubmit}>
-        <span className="register-logo">Smarty</span>
+        <SmartyBrand compact tagline="Create your account" />
 
         <h1>
           {step === 'register' && 'Create account'}
