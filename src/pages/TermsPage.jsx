@@ -6,10 +6,11 @@ export default function TermsPage() {
       <div className="legal-container">
 
         <h1>Terms of Service</h1>
-        <p className="updated">Last Updated: July 13, 2026</p>
+        <p className="updated">Last Updated: July 30, 2026</p>
 
         <p>
-          By accessing or using Smarty you agree to these Terms of Service.
+          By creating an account, signing in, or using Smarty, you agree to
+          these Terms of Use and End User License Agreement (EULA).
         </p>
 
         <h2>1. Eligibility</h2>
@@ -28,6 +29,13 @@ export default function TermsPage() {
         </ul>
 
         <h2>3. Acceptable Use</h2>
+
+        <p>
+          Smarty has zero tolerance for objectionable content or abusive users.
+          You must not create, upload, send, or promote content or behavior that
+          is unlawful, threatening, harassing, hateful, sexually explicit,
+          violent, deceptive, invasive of privacy, or otherwise harmful.
+        </p>
 
         <ul>
           <li>Do not break laws.</li>
@@ -58,7 +66,18 @@ export default function TermsPage() {
         <h2>6. Moderation</h2>
 
         <p>
-          We may remove content or suspend accounts that violate these Terms.
+          Users can report posts and abusive accounts from the relevant
+          content menu, and can block another user at any time. Blocking
+          immediately removes that user's content from the blocking user's
+          feed and prevents further interaction. A block made from objectionable
+          content also sends the content context to Smarty for moderation review.
+        </p>
+
+        <p>
+          Reports may be reviewed by Smarty's moderation team. We may remove
+          content, restrict features, suspend accounts, or permanently terminate
+          users who violate these Terms. Repeated or severe abuse may be reported
+          to the appropriate authorities where required by law.
         </p>
 
         <h2>7. Intellectual Property</h2>

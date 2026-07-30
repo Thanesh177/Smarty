@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SmartyBrand from '../components/SmartyBrand';
+import TermsAgreement, {
+  recordTermsAcceptance,
+} from '../components/TermsAgreement';
 import { userApi } from '../api/client';
 import './RegisterPage.css';
 
@@ -18,6 +21,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   if (user) return <Navigate to="/feed" replace />;
 
@@ -35,6 +39,11 @@ export default function RegisterPage() {
       if (step === 'register') {
         const cleanEmail = form.email.trim().toLowerCase();
 
+        if (!termsAccepted) {
+          setError('Please agree to the Terms of Use and EULA before registering.');
+          return;
+        }
+
         if (!cleanEmail) {
           setError('Please enter your email.');
           return;
@@ -47,6 +56,7 @@ export default function RegisterPage() {
         }
 
         const result = await register(form.name, cleanEmail, form.password);
+        recordTermsAcceptance(cleanEmail);
 
         if (result?.isSignUpComplete) {
           setMessage('Account created. You can log in now.');
@@ -122,6 +132,12 @@ export default function RegisterPage() {
               value={form.password}
               onChange={(e) => updateField('password', e.target.value)}
             />
+
+            <TermsAgreement
+              checked={termsAccepted}
+              disabled={submitting}
+              onChange={setTermsAccepted}
+            />
           </>
         )}
 
@@ -148,7 +164,12 @@ export default function RegisterPage() {
         {step !== 'done' ? (
           <button
             className="primary-btn"
-            disabled={submitting || (step === 'register' && (!form.email.trim() || !form.password)) || (step === 'confirm' && !form.code.trim())}
+            disabled={
+              submitting ||
+              (step === 'register' &&
+                (!form.email.trim() || !form.password || !termsAccepted)) ||
+              (step === 'confirm' && !form.code.trim())
+            }
             type="submit"
           >
             {submitting

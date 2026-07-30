@@ -998,6 +998,305 @@
   }
 }
 
+/* Feed safety and moderation */
+.post-author-row {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.post-author-row .post-author {
+  min-width: 0;
+}
+
+.post-safety-actions {
+  position: relative;
+  z-index: 12;
+  flex: 0 0 auto;
+}
+
+.post-more-button {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: rgba(148, 163, 184, 0.08);
+  color: rgba(226, 232, 240, 0.76);
+  cursor: pointer;
+}
+
+.post-more-button:hover,
+.post-more-button[aria-expanded='true'] {
+  background: rgba(148, 163, 184, 0.15);
+  color: #fff;
+}
+
+.post-safety-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 184px;
+  padding: 7px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 15px;
+  background: rgba(10, 19, 30, 0.98);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+}
+
+.post-safety-menu button {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 0.83rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.post-safety-menu button:hover {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.post-safety-menu button.danger {
+  color: #fda4af;
+}
+
+.moderation-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: center;
+  padding:
+    max(20px, env(safe-area-inset-top))
+    20px
+    max(20px, env(safe-area-inset-bottom));
+  background: rgba(2, 7, 12, 0.68);
+  backdrop-filter: blur(14px) saturate(0.8);
+}
+
+.moderation-dialog {
+  width: min(100%, 430px);
+  max-height: min(650px, calc(100dvh - 32px));
+  overflow-y: auto;
+  padding: 21px;
+  border: 1px solid rgba(203, 213, 225, 0.11);
+  border-radius: 20px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.035), transparent 35%),
+    #0a141e;
+  color: #f8fafc;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.moderation-dialog > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.moderation-dialog > header span {
+  display: block;
+  margin-bottom: 4px;
+  color: rgba(125, 211, 252, 0.82);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.moderation-dialog h2 {
+  margin: 0;
+  font-size: clamp(1.3rem, 4vw, 1.55rem);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.moderation-dialog > p {
+  margin: 10px 0 16px;
+  color: rgba(226, 232, 240, 0.66);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.moderation-dialog-close {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.075);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.moderation-dialog fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.moderation-dialog legend,
+.moderation-details {
+  color: rgba(241, 245, 249, 0.9);
+  font-size: 0.73rem;
+  font-weight: 750;
+}
+
+.moderation-reasons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.moderation-reasons label {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.moderation-reasons input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.moderation-reasons span {
+  min-height: 39px;
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.055);
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+
+.moderation-reasons input:checked + span {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.13);
+  color: #e0f2fe;
+}
+
+.moderation-reasons input:focus-visible + span {
+  outline: 2px solid rgba(125, 211, 252, 0.6);
+  outline-offset: 2px;
+}
+
+.moderation-details {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.moderation-details > span {
+  margin-left: 5px;
+  color: rgba(148, 163, 184, 0.64);
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.moderation-details textarea {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+  padding: 10px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 11px;
+  outline: none;
+  background: rgba(148, 163, 184, 0.07);
+  color: #f8fafc;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.moderation-details textarea:focus {
+  border-color: rgba(56, 189, 248, 0.45);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+}
+
+.moderation-dialog-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.moderation-dialog-actions button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 11px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.moderation-dialog-actions button.secondary {
+  background: rgba(148, 163, 184, 0.1);
+  color: #e2e8f0;
+}
+
+.moderation-dialog-actions button.primary {
+  background: #e0f2fe;
+  color: #082032;
+}
+
+.moderation-dialog-actions button.danger {
+  background: #be123c;
+  color: #fff;
+}
+
+.moderation-dialog-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (max-width: 520px) {
+  .moderation-dialog-backdrop {
+    place-items: center;
+    padding: 14px;
+  }
+
+  .moderation-dialog {
+    width: min(100%, 410px);
+    max-height: calc(100dvh - 28px);
+    padding: 18px;
+    border-radius: 18px;
+  }
+}
+
+@media (max-width: 340px) {
+  .moderation-reasons {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* =========================
    INNER TOPIC FEED
    Deliberately restrained: clear hierarchy, quiet surfaces, useful states.

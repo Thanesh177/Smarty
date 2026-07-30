@@ -5,6 +5,21 @@ import { getUserScopedStorageKey } from '../lib/userScopedStorage';
 
 const FEED_CACHE_KEY = 'smarty_cached_feed_v2';
 const FEED_CURSOR_KEY = 'smarty_cached_feed_cursor_v2';
+const BLOCKED_CREATORS_KEY = 'smarty_blocked_creators_v1';
+
+const getPostCreatorId = (post) =>
+  String(
+    post?.creatorId ||
+      post?.authorId ||
+      post?.userId ||
+      post?.author?.id ||
+      post?.author?.userId ||
+      post?.creator?.id ||
+      post?.creator?.userId ||
+      post?.user?.id ||
+      post?.user?.userId ||
+      ''
+  ).trim();
 
 const getPostTime = (post) =>
   Number(post?.createdAt || post?.updatedAt || post?.timestamp || 0);
@@ -35,6 +50,11 @@ export default function useFeed() {
     () => getUserScopedStorageKey(FEED_CURSOR_KEY, userId),
     [userId]
   );
+  const blockedCreatorsKey = useMemo(
+    () => getUserScopedStorageKey(BLOCKED_CREATORS_KEY, userId),
+    [userId]
+  );
+  const blockedCreatorIdsRef = useRef(new Set());
   const hasFetched = useRef(false);
   const preloadingRef = useRef(false);
   const activeCacheScopeRef = useRef(userId);
@@ -57,6 +77,31 @@ export default function useFeed() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
+  const readBlockedCreatorIds = useCallback(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(blockedCreatorsKey) || '[]');
+      return new Set(
+        Array.isArray(stored)
+          ? stored.map((id) => String(id || '').trim()).filter(Boolean)
+          : []
+      );
+    } catch {
+      return new Set();
+    }
+  }, [blockedCreatorsKey]);
+
+  const removeBlockedPosts = useCallback(
+    (items) => {
+      const blockedIds = blockedCreatorIdsRef.current;
+      if (!blockedIds.size) return items || [];
+
+      return (items || []).filter(
+        (post) => !blockedIds.has(getPostCreatorId(post))
+      );
+    },
+    []
+  );
+
   const saveCache = useCallback((items, cursor) => {
     try {
       localStorage.setItem(feedCacheKey, JSON.stringify(items));
@@ -75,12 +120,15 @@ export default function useFeed() {
     if (activeCacheScopeRef.current === userId) return;
 
     activeCacheScopeRef.current = userId;
+    blockedCreatorIdsRef.current = readBlockedCreatorIds();
     hasFetched.current = false;
     preloadingRef.current = false;
 
     try {
       const cached = localStorage.getItem(feedCacheKey);
-      const cachedPosts = cached ? dedupePosts(JSON.parse(cached)) : [];
+      const cachedPosts = cached
+        ? removeBlockedPosts(dedupePosts(JSON.parse(cached)))
+        : [];
 
       setPosts(cachedPosts);
       setNextCursor(localStorage.getItem(feedCursorKey) || null);
@@ -93,7 +141,18 @@ export default function useFeed() {
 
     setPreloadedPage(null);
     setError('');
-  }, [feedCacheKey, feedCursorKey, userId]);
+  }, [
+    feedCacheKey,
+    feedCursorKey,
+    readBlockedCreatorIds,
+    removeBlockedPosts,
+    userId,
+  ]);
+
+  useEffect(() => {
+    blockedCreatorIdsRef.current = readBlockedCreatorIds();
+    setPosts((current) => removeBlockedPosts(current));
+  }, [readBlockedCreatorIds, removeBlockedPosts]);
 
   const fetchPage = useCallback(async (cursor = null) => {
     return postApi.getFeed({
@@ -130,7 +189,7 @@ export default function useFeed() {
       setLoading(posts.length === 0);
 
       const data = await fetchPage(null);
-      const freshItems = dedupePosts(data.items || []);
+      const freshItems = removeBlockedPosts(dedupePosts(data.items || []));
       const cursor = data.nextCursor || null;
 
       setPosts(freshItems);
@@ -145,7 +204,13 @@ export default function useFeed() {
     } finally {
       setLoading(false);
     }
-  }, [fetchPage, posts.length, preloadNextPage, saveCache]);
+  }, [
+    fetchPage,
+    posts.length,
+    preloadNextPage,
+    removeBlockedPosts,
+    saveCache,
+  ]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !nextCursor) return;
@@ -167,7 +232,9 @@ export default function useFeed() {
       const mergedCursor = page.nextCursor || null;
 
       setPosts((current) => {
-        const updated = dedupePosts([...current, ...(page.items || [])]);
+        const updated = removeBlockedPosts(
+          dedupePosts([...current, ...(page.items || [])])
+        );
         saveCache(updated, mergedCursor);
         return updated;
       });
@@ -182,7 +249,15 @@ export default function useFeed() {
     } finally {
       setLoadingMore(false);
     }
-  }, [fetchPage, loadingMore, nextCursor, preloadedPage, preloadNextPage, saveCache]);
+  }, [
+    fetchPage,
+    loadingMore,
+    nextCursor,
+    preloadedPage,
+    preloadNextPage,
+    removeBlockedPosts,
+    saveCache,
+  ]);
 
   useEffect(() => {
     if (hasFetched.current) return;
@@ -229,6 +304,40 @@ export default function useFeed() {
     }
   };
 
+  const blockCreator = useCallback(
+    (creatorId) => {
+      const normalizedId = String(creatorId || '').trim();
+      if (!normalizedId) return;
+
+      blockedCreatorIdsRef.current.add(normalizedId);
+
+      try {
+        localStorage.setItem(
+          blockedCreatorsKey,
+          JSON.stringify([...blockedCreatorIdsRef.current])
+        );
+      } catch {
+        // The in-memory removal still takes effect when storage is unavailable.
+      }
+
+      setPreloadedPage((current) =>
+        current
+          ? {
+              ...current,
+              items: removeBlockedPosts(current.items),
+            }
+          : current
+      );
+
+      setPosts((current) => {
+        const updated = removeBlockedPosts(current);
+        saveCache(updated, nextCursor);
+        return updated;
+      });
+    },
+    [blockedCreatorsKey, nextCursor, removeBlockedPosts, saveCache]
+  );
+
   return {
     posts,
     loading,
@@ -239,5 +348,6 @@ export default function useFeed() {
     refreshFeed,
     likePost,
     savePost,
+    blockCreator,
   };
 }

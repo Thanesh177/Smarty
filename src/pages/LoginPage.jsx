@@ -185,36 +185,37 @@ const handleAppleLogin = async () => {
 
   return (
     <main className="login-page">
-      <section className="login-hero">
-        <div>
-          <SmartyBrand
-            className="login-brand"
-            tagline="Learn something worth keeping"
-          />
-          <h1>Welcome back.</h1>
-          <p>
-            Continue learning, saving, and creating from where you left off.
-          </p>
-        </div>
+      <div className="login-shell">
+        <section className="login-hero">
+          <div>
+            <SmartyBrand
+              className="login-brand"
+              tagline="Learn something worth keeping"
+            />
+            <h1>Welcome back.</h1>
+            <p>
+              Continue learning, saving, and creating from where you left off.
+            </p>
+          </div>
 
-        <div className="login-highlights">
-          <div>
-            <strong>01</strong>
-            <span>Personalized feed</span>
+          <div className="login-highlights">
+            <div>
+              <strong>01</strong>
+              <span>Personalized feed</span>
+            </div>
+            <div>
+              <strong>02</strong>
+              <span>Save useful posts</span>
+            </div>
+            <div>
+              <strong>03</strong>
+              <span>Create knowledge reels</span>
+            </div>
           </div>
-          <div>
-            <strong>02</strong>
-            <span>Save useful posts</span>
-          </div>
-          <div>
-            <strong>03</strong>
-            <span>Create knowledge reels</span>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="login-layout">
-        <form className="login-card" onSubmit={handleSubmit}>
+        <section className="login-layout">
+          <form className="login-card" onSubmit={handleSubmit}>
           <div className="login-card-header">
             <h2>Sign in</h2>
             <p>Use your email or a connected account.</p>
@@ -259,69 +260,41 @@ const handleAppleLogin = async () => {
             <span>or continue with</span>
           </div>
 
-<div className="social-login-stack" aria-label="Social sign in options">
-  <button
-    type="button"
-    className="apple-login-btn"
-    disabled={submitting}
-    onClick={handleAppleLogin}
-  >
-    <span
-      className="apple-icon"
-      aria-hidden="true"
-    >
-      
-    </span>
+            <div className="social-login-stack" aria-label="Social sign in options">
+              <button
+                type="button"
+                className="apple-login-btn"
+                disabled={submitting}
+                onClick={handleAppleLogin}
+              >
+                <span className="apple-icon" aria-hidden="true">
+                  
+                </span>
+                {socialProvider === 'apple' ? 'Opening...' : 'Apple'}
+              </button>
 
-    {socialProvider === 'apple'
-      ? 'Opening...'
-      : 'Apple'}
-  </button>
-
-  <button
-    type="button"
-    className="google-login-btn"
-    data-google-login-button
-    disabled={submitting}
-    onClick={handleGoogleLogin}
-  >
-    <span
-      className="google-icon"
-      aria-hidden="true"
-    >
-      G
-    </span>
-
-    {socialProvider === 'google'
-      ? 'Opening...'
-      : 'Google'}
-  </button>
-</div>
+              <button
+                type="button"
+                className="google-login-btn"
+                data-google-login-button
+                disabled={submitting}
+                onClick={handleGoogleLogin}
+              >
+                <span className="google-icon" aria-hidden="true">
+                  G
+                </span>
+                {socialProvider === 'google' ? 'Opening...' : 'Google'}
+              </button>
+            </div>
 
           <div className="login-links">
             <Link className="text-btn" to="/register" state={{ from }}>
               New to Smarty? Create an account
             </Link>
           </div>
-        </form>
-
-        <aside className="login-side">
-          <div className="login-tip">
-            <span>Save</span>
-            <p>Bookmark useful educational content and return to it anytime.</p>
-          </div>
-
-          <div className="login-tip">
-            <span>Create</span>
-            <p>Publish short knowledge posts that feel native to the app experience.</p>
-          </div>
-
-          <div className="login-tip">
-            <span>Sync</span>
-            <p>Your activity connects securely through Cognito and AWS APIs.</p>
-          </div>
-        </aside>
-      </section>
+          </form>
+        </section>
+      </div>
     </main>
   );
 }

@@ -1,0 +1,33 @@
+.terms-agreement {
+  display: grid !important;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 11px !important;
+  align-items: start;
+  color: rgba(226, 232, 240, 0.78) !important;
+  font-size: 0.78rem !important;
+  font-weight: 500 !important;
+  line-height: 1.55;
+  cursor: pointer;
+}
+
+label.terms-agreement input[type='checkbox'] {
+  width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  margin: 1px 0 0;
+  padding: 0 !important;
+  border-radius: 5px !important;
+  accent-color: #38bdf8;
+}
+
+.terms-agreement a {
+  color: #bae6fd;
+  font-weight: 750;
+  text-decoration: underline;
+  text-decoration-color: rgba(186, 230, 253, 0.4);
+  text-underline-offset: 3px;
+}
+
+.terms-agreement a:hover {
+  color: #fff;
+}

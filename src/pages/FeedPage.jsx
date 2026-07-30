@@ -22,11 +22,16 @@ import {
   RefreshCw,
   MoonStar,
   Lightbulb,
+  MoreHorizontal,
+  Flag,
+  UserX,
+  X,
 } from 'lucide-react';
 import SmartyBrand from '../components/SmartyBrand';
-import { postApi, creatorApi } from '../api/client';
+import { postApi, creatorApi, chatApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import useFeed from '../hooks/useFeed';
+import { useAuth } from '../contexts/AuthContext';
 import './FeedPage.css';
 
 const normalizeTopic = (value) =>
@@ -130,6 +135,14 @@ const IMAGE_PRELOAD_MARGIN = '900px';
 const FEED_SCROLL_STORAGE_KEY = 'smarty.feed.scrollY';
 const FEED_RENDER_LIMIT_STORAGE_KEY = 'smarty.feed.renderLimit';
 const FEED_POST_ID_STORAGE_KEY = 'smarty.feed.postId';
+const MODERATION_REASONS = [
+  'Harassment or bullying',
+  'Hate speech',
+  'Sexual or explicit content',
+  'Violence or threats',
+  'Spam or scam',
+  'Other objectionable content',
+];
 
 const getPostCreatorId = (post) => {
   const creatorId =
@@ -595,9 +608,12 @@ const FeedPostCard = memo(function FeedPostCard({
   onComments,
   onExplain,
   onTranslateChange,
+  onModerate,
+  canModerate,
 }) {
   const hasMedia = Boolean(post.videoUrl || post.imageUrl);
   const hasTranslation = Boolean(translatedText);
+  const [actionsOpen, setActionsOpen] = useState(false);
 
   return (
     <article
@@ -647,6 +663,7 @@ const FeedPostCard = memo(function FeedPostCard({
   {getPostTopics(post)[0] || 'Smarty'}
 </button>
 
+        <div className="post-author-row">
         <div className="post-author">
           {creatorId ? (
             <Link
@@ -679,6 +696,56 @@ const FeedPostCard = memo(function FeedPostCard({
             >
               {creatorName}
             </span>
+          )}
+        </div>
+
+          {canModerate && (
+            <div className="post-safety-actions">
+              <button
+                type="button"
+                className="post-more-button"
+                aria-label="Post safety options"
+                aria-expanded={actionsOpen}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setActionsOpen((current) => !current);
+                }}
+              >
+                <MoreHorizontal size={18} strokeWidth={2} />
+              </button>
+
+              {actionsOpen && (
+                <div
+                  className="post-safety-menu"
+                  role="menu"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      onModerate('report', post, creatorId, creatorName);
+                    }}
+                  >
+                    <Flag size={16} strokeWidth={2} />
+                    Report post
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="danger"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      onModerate('block', post, creatorId, creatorName);
+                    }}
+                  >
+                    <UserX size={16} strokeWidth={2} />
+                    Block user
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -794,6 +861,7 @@ const FeedPostCard = memo(function FeedPostCard({
 });
 
 export default function FeedPage() {
+  const { user } = useAuth();
   const wrappingTopicCanvasRef = useRef(false);
 
   const topicRevealFrameRef = useRef(null);
@@ -859,7 +927,11 @@ const previousTopicCanvasLayoutRef = useRef({
     refresh,
     reload,
     savePost,
+    blockCreator,
   } = useFeed();
+  const currentUserId = String(
+    user?.userId || user?.sub || user?.id || ''
+  ).trim();
 
   const canvasVelocityRef = useRef({
   x: 0,
@@ -925,6 +997,10 @@ const suppressTopicClickRef = useRef(false);
     INITIAL_TOPIC_LIMIT
   );
   const [isCanvasDragging, setIsCanvasDragging] = useState(false);
+  const [moderationTarget, setModerationTarget] = useState(null);
+  const [moderationReason, setModerationReason] = useState('');
+  const [moderationDetails, setModerationDetails] = useState('');
+  const [moderationSubmitting, setModerationSubmitting] = useState(false);
 
 
 const stopCanvasMomentum = useCallback(() => {
@@ -2306,6 +2382,115 @@ useEffect(() => {
     }, duration);
   }, []);
 
+  const openModerationDialog = useCallback(
+    (mode, post, creatorId, creatorName) => {
+      setModerationTarget({
+        mode,
+        post,
+        postId: getPostId(post),
+        creatorId: String(creatorId || '').trim(),
+        creatorName: creatorName || 'this user',
+      });
+      setModerationReason('');
+      setModerationDetails('');
+    },
+    []
+  );
+
+  const closeModerationDialog = useCallback(() => {
+    if (moderationSubmitting) return;
+    setModerationTarget(null);
+    setModerationReason('');
+    setModerationDetails('');
+  }, [moderationSubmitting]);
+
+  const submitModerationAction = useCallback(async () => {
+    if (
+      !moderationTarget?.creatorId ||
+      !moderationTarget?.postId ||
+      !moderationReason ||
+      moderationSubmitting
+    ) {
+      return;
+    }
+
+    const reason = [
+      moderationReason,
+      moderationDetails.trim(),
+    ]
+      .filter(Boolean)
+      .join(': ');
+
+    setModerationSubmitting(true);
+
+    try {
+      if (moderationTarget.mode === 'report') {
+        await chatApi.reportUser({
+          reportedUserId: moderationTarget.creatorId,
+          postId: moderationTarget.postId,
+          contentType: 'post',
+          source: 'feed-post-menu',
+          reason,
+        });
+
+        showToast('Post reported. Thank you for helping keep Smarty safe.', 2600);
+      } else {
+        await chatApi.blockUser(moderationTarget.creatorId, {
+          postId: moderationTarget.postId,
+          contentType: 'post',
+          source: 'feed-post-menu',
+          reason,
+        });
+
+        // Remove all cached and rendered posts immediately, before any refresh.
+        blockCreator(moderationTarget.creatorId);
+
+        // Blocking from objectionable content also creates a moderation report,
+        // so the developer receives the content and reason for review.
+        try {
+          await chatApi.reportUser({
+            reportedUserId: moderationTarget.creatorId,
+            postId: moderationTarget.postId,
+            contentType: 'post',
+            source: 'feed-block-action',
+            reason: `User blocked: ${reason}`,
+          });
+        } catch (reportError) {
+          // The block request already carries notifyDeveloper and content
+          // context. Keep the user's safety action successful if the
+          // secondary moderation-report request needs a backend retry.
+          console.error('Secondary block report failed:', reportError);
+        }
+
+        showToast(
+          `${moderationTarget.creatorName} was blocked and removed from your feed.`,
+          3000
+        );
+      }
+
+      setModerationTarget(null);
+      setModerationReason('');
+      setModerationDetails('');
+    } catch (moderationError) {
+      console.error('Moderation action failed:', moderationError);
+      showToast(
+        moderationError?.message || 'Could not complete that safety action.',
+        2600
+      );
+    } finally {
+      if (mountedRef.current) {
+        setModerationSubmitting(false);
+      }
+    }
+  }, [
+    blockCreator,
+    moderationDetails,
+    moderationReason,
+    moderationSubmitting,
+    moderationTarget,
+    showToast,
+  ]);
+
 useEffect(() => {
   const canvas = topicCanvasRef.current;
 
@@ -2854,6 +3039,11 @@ const handleTopicCanvasScroll =
   onComments={handleComments}
   onExplain={handleExplain}
   onTranslateChange={handleTranslateChange}
+  onModerate={openModerationDialog}
+  canModerate={
+    Boolean(creatorId) &&
+    String(creatorId) !== currentUserId
+  }
 />
       );
     }),
@@ -2865,10 +3055,12 @@ const handleTopicCanvasScroll =
 handleOpenPost,
 handleOpenCreator,
 handleComments,
+      currentUserId,
       handleExplain,
       handleSave,
       handleTopicClick,
       handleTranslateChange,
+      openModerationDialog,
       showTranslated,
       simpleExplanations,
       translating,
@@ -2887,6 +3079,105 @@ handleComments,
 
 
       {toast && <div className="success-toast">{toast}</div>}
+
+      {moderationTarget && (
+        <div
+          className="moderation-dialog-backdrop"
+          role="presentation"
+          onClick={closeModerationDialog}
+        >
+          <section
+            className="moderation-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="moderation-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <span>Safety action</span>
+                <h2 id="moderation-dialog-title">
+                  {moderationTarget.mode === 'report'
+                    ? 'Report this post'
+                    : `Block ${moderationTarget.creatorName}`}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="moderation-dialog-close"
+                aria-label="Close"
+                disabled={moderationSubmitting}
+                onClick={closeModerationDialog}
+              >
+                <X size={18} strokeWidth={2} />
+              </button>
+            </header>
+
+            <p>
+              {moderationTarget.mode === 'report'
+                ? 'Tell us what is wrong. The post and its creator will be sent to Smarty for moderation review.'
+                : 'This user and all of their posts will disappear from your feed immediately. The selected post will also be sent to Smarty for review.'}
+            </p>
+
+            <fieldset>
+              <legend>Reason</legend>
+              <div className="moderation-reasons">
+                {MODERATION_REASONS.map((reason) => (
+                  <label key={reason}>
+                    <input
+                      type="radio"
+                      name="moderation-reason"
+                      value={reason}
+                      checked={moderationReason === reason}
+                      disabled={moderationSubmitting}
+                      onChange={() => setModerationReason(reason)}
+                    />
+                    <span>{reason}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <label className="moderation-details">
+              Additional details <span>Optional</span>
+              <textarea
+                value={moderationDetails}
+                maxLength={500}
+                disabled={moderationSubmitting}
+                placeholder="Add context for the moderation team"
+                onChange={(event) => setModerationDetails(event.target.value)}
+              />
+            </label>
+
+            <div className="moderation-dialog-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={moderationSubmitting}
+                onClick={closeModerationDialog}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={
+                  moderationTarget.mode === 'block'
+                    ? 'danger'
+                    : 'primary'
+                }
+                disabled={!moderationReason || moderationSubmitting}
+                onClick={submitModerationAction}
+              >
+                {moderationSubmitting
+                  ? 'Submitting...'
+                  : moderationTarget.mode === 'report'
+                    ? 'Submit report'
+                    : 'Block and remove'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
 {!selectedTopic && (
   <section

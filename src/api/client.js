@@ -1912,8 +1912,17 @@ export const chatApi = {
     };
   },
 
-blockUser: async (blockedId) => {
-  const res = await api.post('/users/block', { blockedId });
+blockUser: async (blockedId, context = {}) => {
+  const res = await api.post('/users/block', {
+    blockedId,
+    notifyDeveloper: true,
+    source: context.source || 'user-action',
+    contentType: context.contentType || '',
+    contentId: context.contentId || context.postId || '',
+    postId: context.postId || '',
+    chatId: context.chatId || '',
+    reason: context.reason || '',
+  });
   return res.data;
 },
 
@@ -1937,6 +1946,11 @@ async reportUser(payload) {
     reportedUserId: payload.reportedUserId,
     chatId: payload.chatId,
     reason: payload.reason,
+    contentType: payload.contentType || '',
+    contentId: payload.contentId || payload.postId || payload.commentId || '',
+    postId: payload.postId || '',
+    commentId: payload.commentId || '',
+    source: payload.source || 'user-report',
   });
 
   return data;

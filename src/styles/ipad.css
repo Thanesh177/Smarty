@@ -1,0 +1,549 @@
+/*
+ * iPad composition layer
+ * Loaded after all route styles so 768–1180px layouts share one predictable
+ * gutter, content rhythm, touch target size, and portrait/landscape behavior.
+ */
+
+@media (min-width: 768px) and (max-width: 1180px) {
+  :root {
+    --ipad-gutter: clamp(24px, 4vw, 44px);
+    --ipad-section-gap: clamp(20px, 3vw, 32px);
+    --ipad-radius: clamp(18px, 2vw, 24px);
+    --ipad-nav-clearance: calc(78px + env(safe-area-inset-bottom));
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 0;
+    min-height: 100%;
+  }
+
+  body {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  .content {
+    width: 100%;
+    min-width: 0;
+  }
+
+  :where(
+    .books-page,
+    .read-books-page,
+    .news-page,
+    .feed-topics-page,
+    .saved-page,
+    .profile-page,
+    .creator-profile-container,
+    .follow-requests-page,
+    .comments-page,
+    .reel-detail-page,
+    .post-ai-page,
+    .create-page,
+    .creator-dashboard-page,
+    .quiz-page,
+    .progress-page,
+    .legal-page,
+    .login-page,
+    .register-page,
+    .auth-shell,
+    .room-invite-page
+  ) {
+    width: min(100%, 1120px) !important;
+    max-width: 1120px;
+    margin-right: auto !important;
+    margin-left: auto !important;
+    padding-right: var(--ipad-gutter) !important;
+    padding-left: var(--ipad-gutter) !important;
+  }
+
+  :where(
+    .books-page,
+    .read-books-page,
+    .news-page,
+    .feed-topics-page,
+    .saved-page,
+    .profile-page,
+    .creator-profile-container,
+    .follow-requests-page,
+    .comments-page,
+    .reel-detail-page,
+    .post-ai-page,
+    .create-page,
+    .creator-dashboard-page,
+    .quiz-page,
+    .progress-page
+  ) {
+    padding-bottom: calc(var(--ipad-nav-clearance) + 20px) !important;
+  }
+
+  :where(
+    .books-page,
+    .read-books-page,
+    .news-page,
+    .feed-topics-page,
+    .saved-page,
+    .profile-page,
+    .creator-profile-container,
+    .follow-requests-page,
+    .reel-detail-page,
+    .post-ai-page,
+    .create-page,
+    .creator-dashboard-page,
+    .quiz-page,
+    .progress-page
+  ) :where(h1) {
+    font-size: clamp(2.25rem, 5vw, 4rem);
+    line-height: 0.98;
+  }
+
+  :where(button, [role="button"], input, select, textarea) {
+    touch-action: manipulation;
+  }
+
+  :where(
+    .books-page,
+    .read-books-page,
+    .news-page,
+    .feed-topics-page,
+    .saved-page,
+    .profile-page,
+    .creator-profile-container,
+    .follow-requests-page,
+    .comments-page,
+    .reel-detail-page,
+    .post-ai-page,
+    .create-page,
+    .creator-dashboard-page,
+    .quiz-page,
+    .progress-page,
+    .login-page,
+    .register-page
+  ) :where(button, input, select) {
+    min-height: 44px;
+  }
+
+  /* Bottom navigation is easier to reach and no longer masks right-side UI. */
+  .topbar {
+    top: auto !important;
+    right: 50% !important;
+    bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+    left: auto !important;
+    transform: translateX(50%) !important;
+  }
+
+  .topbar-row {
+    width: auto !important;
+    min-height: 0 !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .brand-actions {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 7px !important;
+  }
+
+  .quick-icon-link,
+  button.quick-icon-link,
+  a.quick-icon-link,
+  .hamburger-btn {
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    border-radius: 14px !important;
+  }
+
+  .menu-panel {
+    right: 0 !important;
+    bottom: calc(100% + 12px) !important;
+    width: min(272px, calc(100vw - 32px)) !important;
+    max-height: min(620px, calc(100dvh - 116px)) !important;
+  }
+
+  /* Shared content grids */
+  .books-grid,
+  .news-grid,
+  .feed-topics-grid,
+  .saved-grid,
+  .topic-grid,
+  .profile-overview-grid {
+    gap: var(--ipad-section-gap) !important;
+  }
+
+  .books-grid,
+  .news-grid,
+  .saved-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .feed-topics-grid,
+  .topic-grid,
+  .profile-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .news-card.featured {
+    grid-column: span 2;
+  }
+
+  .saved-card {
+    min-width: 0;
+    grid-template-columns: 118px minmax(0, 1fr) !important;
+  }
+
+  /* Profile */
+  .profile-page {
+    padding-top: clamp(26px, 4vw, 44px) !important;
+  }
+
+  .profile-hero {
+    gap: var(--ipad-section-gap) !important;
+  }
+
+  .profile-left {
+    min-width: 0;
+    padding: clamp(22px, 3vw, 32px) !important;
+    border-radius: var(--ipad-radius) !important;
+  }
+
+  .profile-content {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 18px !important;
+  }
+
+  .profile-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .profile-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Create/edit and dashboards */
+  .create-page,
+  .creator-dashboard-page {
+    padding-top: 28px !important;
+  }
+
+  .create-layout {
+    width: 100%;
+    max-width: 1040px;
+    margin-inline: auto;
+    gap: 20px !important;
+  }
+
+  .create-form,
+  .create-side,
+  .dashboard-panel {
+    min-width: 0;
+    border-radius: var(--ipad-radius) !important;
+  }
+
+  .create-form {
+    padding: clamp(20px, 3vw, 28px) !important;
+  }
+
+  .dashboard-grid,
+  .dashboard-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 18px !important;
+  }
+
+  /* Detail, comments, AI and reading */
+  .reel-detail-layout {
+    min-width: 0;
+    gap: clamp(22px, 3vw, 32px) !important;
+  }
+
+  .reel-media-panel {
+    min-width: 0;
+    min-height: clamp(420px, 58vh, 620px) !important;
+    border-radius: var(--ipad-radius) !important;
+  }
+
+  .comments-page,
+  .post-ai-shell,
+  .reader-shell,
+  .reader-content {
+    min-width: 0;
+  }
+
+  .comments-list {
+    width: min(100%, 820px);
+  }
+
+  .post-ai-shell {
+    width: min(100%, 940px) !important;
+  }
+
+  .reader-content {
+    width: min(100%, 760px) !important;
+    margin-inline: auto;
+    padding-inline: clamp(30px, 6vw, 68px) !important;
+  }
+
+  /* Authentication */
+  .login-page,
+  .register-page,
+  .auth-shell {
+    min-height: 100dvh;
+    align-content: center;
+  }
+
+  .login-page {
+    width: min(100%, 1080px) !important;
+  }
+
+  .login-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .login-side {
+    display: none !important;
+  }
+
+  .register-card,
+  .auth-card,
+  .room-invite-card {
+    width: min(100%, 560px) !important;
+    margin-inline: auto;
+    padding: clamp(28px, 4vw, 38px) !important;
+  }
+
+  /* Direct messages stay split-pane on iPad instead of inheriting phone UI. */
+  .chat-page {
+    width: 100% !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    display: grid !important;
+    grid-template-columns:
+      clamp(270px, 31vw, 330px)
+      minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    gap: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .chat-page .chat-sidebar,
+  .chat-page.mobile-chat-open .chat-sidebar {
+    display: flex !important;
+    width: auto !important;
+    height: 100% !important;
+    border-radius: 0 !important;
+  }
+
+  .chat-page .chat-window,
+  .chat-page:not(.mobile-chat-open) .chat-window,
+  .chat-page.mobile-chat-open .chat-window {
+    display: grid !important;
+    width: auto !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+  }
+
+  .chat-page .mobile-chat-back-btn {
+    display: none !important;
+  }
+
+  .chat-page .messages {
+    padding: 18px clamp(16px, 3vw, 30px) 118px !important;
+  }
+
+  .chat-page .message {
+    max-width: min(72%, 520px) !important;
+  }
+
+  .chat-page .composer-shell {
+    right: 14px !important;
+    bottom: max(12px, env(safe-area-inset-bottom)) !important;
+    left: calc(clamp(270px, 31vw, 330px) + 14px) !important;
+    width: auto !important;
+    transform: translateZ(0) !important;
+  }
+
+  .content:not(.nav-hidden-page) .chat-page .messages {
+    padding-bottom: calc(var(--ipad-nav-clearance) + 104px) !important;
+  }
+
+  .content:not(.nav-hidden-page) .chat-page .composer-shell {
+    bottom: var(--ipad-nav-clearance) !important;
+  }
+
+  /* Topic rooms already have a tablet split view; normalize its proportions. */
+  .rooms-page {
+    --rooms-sidebar-width-tablet: clamp(280px, 31vw, 330px);
+    width: 100% !important;
+    height: 100dvh !important;
+    grid-template-columns:
+      var(--rooms-sidebar-width-tablet)
+      minmax(0, 1fr) !important;
+  }
+
+  .rooms-page .sidebar,
+  .rooms-page.mobile-chat-open .sidebar {
+    display: flex !important;
+    width: auto !important;
+    min-width: 0;
+    padding: 16px !important;
+  }
+
+  .rooms-page .chat,
+  .rooms-page:not(.mobile-chat-open) .chat,
+  .rooms-page.mobile-chat-open .chat {
+    display: flex !important;
+    width: auto !important;
+    min-width: 0;
+  }
+
+  .rooms-page .input {
+    left: var(--rooms-sidebar-width-tablet) !important;
+    width: calc(100% - var(--rooms-sidebar-width-tablet)) !important;
+  }
+
+  .content:not(.nav-hidden-page) .rooms-page .input {
+    bottom: var(--ipad-nav-clearance) !important;
+  }
+
+  /* Topic canvas header and controls */
+  .topic-canvas-navbar {
+    min-height: 60px;
+    padding:
+      max(12px, env(safe-area-inset-top))
+      var(--ipad-gutter)
+      10px !important;
+  }
+
+  .topic-scroll-hint {
+    bottom: calc(var(--ipad-nav-clearance) + 8px) !important;
+  }
+
+  .snap-feed {
+    padding-bottom: calc(var(--ipad-nav-clearance) + 28px) !important;
+  }
+
+  .snap-post,
+  .snap-post:not(.no-media),
+  .snap-post.no-media {
+    width: min(760px, calc(100% - 64px)) !important;
+    margin-inline: auto !important;
+  }
+}
+
+/* iPad portrait */
+@media (min-width: 768px) and (max-width: 900px) {
+  .books-hero,
+  .profile-hero,
+  .reel-detail-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .profile-left {
+    min-height: 0 !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    text-align: left !important;
+  }
+
+  .profile-edit-box {
+    margin-right: 0 !important;
+    margin-left: 0 !important;
+  }
+
+  .profile-stats {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .create-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .create-side {
+    position: static !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px !important;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .reel-media-panel {
+    width: min(100%, 680px);
+    margin-inline: auto;
+  }
+}
+
+/* iPad landscape and larger split-screen sizes */
+@media (min-width: 901px) and (max-width: 1180px) {
+  :where(
+    .books-page,
+    .read-books-page,
+    .news-page,
+    .feed-topics-page,
+    .saved-page,
+    .profile-page,
+    .creator-profile-container,
+    .follow-requests-page,
+    .reel-detail-page,
+    .post-ai-page,
+    .create-page,
+    .creator-dashboard-page,
+    .quiz-page,
+    .progress-page
+  ) {
+    max-width: 1160px;
+  }
+
+  .books-hero {
+    grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr) !important;
+  }
+
+  .books-grid,
+  .news-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .profile-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 330px) !important;
+  }
+
+  .profile-left {
+    flex-direction: row !important;
+    align-items: center !important;
+    text-align: left !important;
+  }
+
+  .profile-content {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+
+  .create-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 300px) !important;
+  }
+
+  .reel-detail-layout {
+    grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.1fr) !important;
+  }
+}

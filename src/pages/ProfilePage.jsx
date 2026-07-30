@@ -956,42 +956,41 @@ const handleDeleteAccount = useCallback(async () => {
             <p>Manage your content, update your profile, and explore creators.</p>
           </div>
 
-<div className="profile-card">
-  <h3>Account</h3>
+          <div className="profile-card">
+            <h3>Account</h3>
 
-  <div className="detail-row">
-    <span>Username</span>
-    <strong>{displayName}</strong>
-  </div>
+            <div className="detail-row">
+              <span>Username</span>
+              <strong>{displayName}</strong>
+            </div>
 
-  <div className="detail-row">
-    <span>Email</span>
-    <strong>{profile?.email || 'Not set'}</strong>
-  </div>
-
-  <div className="profile-danger-zone">
-    <div>
-      <strong>Delete account</strong>
-      <p>
-        Permanently remove your Smarty account and associated account data.
-      </p>
-    </div>
-
-<button
-  type="button"
-  className="profile-delete-account-btn"
-  onClick={openDeleteAccountConfirm}
-  disabled={deleteAccountLoading}
-  aria-busy={deleteAccountLoading}
->
-  {deleteAccountLoading ? 'Deleting...' : 'Delete account'}
-</button>
-  </div>
-</div>
+            <div className="detail-row">
+              <span>Email</span>
+              <strong>{profile?.email || 'Not set'}</strong>
+            </div>
+          </div>
 
           <div className="profile-card">
             <h3>Tips</h3>
             <p>Strong titles + clean visuals = better engagement.</p>
+          </div>
+
+          <div className="profile-card profile-delete-card">
+            <span className="profile-delete-card-kicker">Danger zone</span>
+            <h3>Delete account</h3>
+            <p>
+              Permanently remove your Smarty account and associated account data.
+            </p>
+
+            <button
+              type="button"
+              className="profile-delete-account-btn"
+              onClick={openDeleteAccountConfirm}
+              disabled={deleteAccountLoading}
+              aria-busy={deleteAccountLoading}
+            >
+              {deleteAccountLoading ? 'Deleting...' : 'Delete account'}
+            </button>
           </div>
         </section>
       )}

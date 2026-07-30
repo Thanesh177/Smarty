@@ -567,6 +567,10 @@ export default function ChatPage() {
   const [status, setStatus] = useState('');
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
+  const [blockSubmitting, setBlockSubmitting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [openReactionMenuId, setOpenReactionMenuId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingText, setEditingText] = useState('');
@@ -2112,32 +2116,51 @@ const deleteMessage = async (msg) => {
 const handleBlockUser = async () => {
   if (!activeChat) return;
 
-  try {
-    if (isBlocked) {
+  if (isBlocked) {
+    try {
       await withTimeout(chatApi.unblockUser(activeChat.receiverId), 9000, 'Unblock took too long.');
       if (!mountedRef.current) return;
       setIsBlocked(false);
       setStatus('User unblocked.');
       refreshChatsSoon();
-      return;
+    } catch (err) {
+      console.error('Unblock failed:', err);
+      if (mountedRef.current) setStatus(err?.message || 'Unblock failed.');
     }
+    return;
+  }
 
-    const confirmBlock = window.confirm(
-      `Block ${activeChat.receiverName || activeChat.receiverEmail || 'this user'}?`
+  setBlockConfirmOpen(true);
+};
+
+const confirmBlockUser = async () => {
+  if (!activeChat?.receiverId || blockSubmitting) return;
+
+  setBlockSubmitting(true);
+
+  try {
+    await withTimeout(
+      chatApi.blockUser(activeChat.receiverId, {
+        chatId: activeChat.chatId,
+        contentType: 'chat',
+        source: 'chat-block-dialog',
+        reason: 'Blocked from a private conversation',
+      }),
+      9000,
+      'Block took too long.'
     );
-
-    if (!confirmBlock) return;
-
-    await withTimeout(chatApi.blockUser(activeChat.receiverId), 9000, 'Block took too long.');
     if (!mountedRef.current) return;
     setIsBlocked(true);
     setStatus('User blocked.');
     setMessages([]);
     setCachedMessages(activeChat.chatId, []);
+    setBlockConfirmOpen(false);
     refreshChatsSoon();
   } catch (err) {
-    console.error('Block toggle failed:', err);
+    console.error('Block failed:', err);
     if (mountedRef.current) setStatus(err?.message || 'Block action failed.');
+  } finally {
+    if (mountedRef.current) setBlockSubmitting(false);
   }
 };
 
@@ -2166,22 +2189,16 @@ const handleBlockUser = async () => {
     }
   };
 
-  const handleDeleteChat = async () => {
+  const handleDeleteChat = () => {
     if (!activeChat?.chatId) return;
+    setDeleteConfirmOpen(true);
+  };
 
-    const confirmDelete = window.confirm(
-      `Delete chat with ${
-        getUserDisplayName({
-          username: activeChat.receiverUsername,
-          name: activeChat.receiverName,
-          email: activeChat.receiverEmail,
-        })
-      }? This will remove the conversation from your chat list.`
-    );
-
-    if (!confirmDelete) return;
+  const confirmDeleteChat = async () => {
+    if (!activeChat?.chatId || deleteSubmitting) return;
 
     try {
+      setDeleteSubmitting(true);
       setActionsOpen(false);
       setStatus('Deleting chat...');
 
@@ -2212,6 +2229,7 @@ const handleBlockUser = async () => {
       setOpenReactionMenuId(null);
       setEditingMessageId(null);
       setEditingText('');
+      setDeleteConfirmOpen(false);
       localStorage.removeItem(activeChatStorageKey);
       setStatus('Chat deleted.');
 
@@ -2227,6 +2245,8 @@ const handleBlockUser = async () => {
       if (mountedRef.current) {
         setStatus(err?.message || 'Could not delete chat.');
       }
+    } finally {
+      if (mountedRef.current) setDeleteSubmitting(false);
     }
   };
 
@@ -2709,6 +2729,95 @@ const runDeleteChat = useCallback(() => {
             alt="Expanded preview"
             className="image-lightbox-img"
           />
+        </div>
+      )}
+      {blockConfirmOpen && activeChat && (
+        <div
+          className="chat-block-dialog-backdrop"
+          role="presentation"
+          onClick={() => {
+            if (!blockSubmitting) setBlockConfirmOpen(false);
+          }}
+        >
+          <section
+            className="chat-block-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chat-block-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="chat-block-dialog-kicker">Safety action</span>
+            <h2 id="chat-block-dialog-title">
+              Block {getUserDisplayName(activeChat)}?
+            </h2>
+            <p>
+              They will no longer be able to message you. This conversation
+              will be cleared immediately, further messaging will be disabled,
+              and Smarty will receive the account context for safety review.
+            </p>
+            <div className="chat-block-dialog-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={blockSubmitting}
+                onClick={() => setBlockConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={blockSubmitting}
+                onClick={confirmBlockUser}
+              >
+                {blockSubmitting ? 'Blocking...' : 'Block user'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {deleteConfirmOpen && activeChat && (
+        <div
+          className="chat-block-dialog-backdrop"
+          role="presentation"
+          onClick={() => {
+            if (!deleteSubmitting) setDeleteConfirmOpen(false);
+          }}
+        >
+          <section
+            className="chat-block-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="chat-delete-dialog-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="chat-block-dialog-kicker">Conversation</span>
+            <h2 id="chat-delete-dialog-title">
+              Delete chat with {getUserDisplayName(activeChat)}?
+            </h2>
+            <p>
+              This conversation will be removed from your chat list. This
+              action cannot be undone.
+            </p>
+            <div className="chat-block-dialog-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={deleteSubmitting}
+                onClick={() => setDeleteConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={deleteSubmitting}
+                onClick={confirmDeleteChat}
+              >
+                {deleteSubmitting ? 'Deleting...' : 'Delete chat'}
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </main>
