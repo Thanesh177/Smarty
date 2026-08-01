@@ -61,7 +61,9 @@ Resources:
                   - amplify:StartDeployment
                 Resource:
                   - !Sub "arn:${AWS::Partition}:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}/branches/staging"
+                  - !Sub "arn:${AWS::Partition}:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}/branches/staging/deployments/*"
                   - !Sub "arn:${AWS::Partition}:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}/branches/production"
+                  - !Sub "arn:${AWS::Partition}:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}/branches/production/deployments/*"
               - Sid: ReadDeploymentStatus
                 Effect: Allow
                 Action:
