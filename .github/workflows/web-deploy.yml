@@ -1,0 +1,114 @@
+name: Web deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "docs/**"
+      - "smarty-terraform/**"
+      - "services/**"
+      - "k8s/**"
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Git branch, tag, or full commit SHA to deploy
+        required: true
+        default: main
+        type: string
+      target:
+        description: Amplify environment
+        required: true
+        default: production
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  AMPLIFY_APP_ID: dgss25qxft1o4
+  AWS_DEPLOY_ROLE_ARN: arn:aws:iam::147179611217:role/GitHubActionsSmartyWebRole
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event_name == 'push' && 'staging' || inputs.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: smarty-web-${{ github.event_name == 'push' && 'staging' || inputs.target }}
+      cancel-in-progress: false
+    environment: ${{ github.event_name == 'push' && 'staging' || inputs.target }}
+
+    steps:
+      - name: Checkout trusted deployment helper
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: .pipeline
+          sparse-checkout: scripts
+
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && github.sha || inputs.git_ref }}
+          path: release
+
+      - name: Resolve release metadata
+        shell: bash
+        run: |
+          echo "RELEASE_SHA=$(git -C release rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "TARGET_BRANCH=${{ github.event_name == 'push' && 'staging' || inputs.target }}" >> "$GITHUB_ENV"
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: release/package-lock.json
+
+      - name: Install dependencies
+        working-directory: release
+        run: npm ci
+
+      - name: Build release
+        working-directory: release
+        run: npm run build
+
+      - name: Add release identity
+        shell: bash
+        run: |
+          node -e 'const fs=require("fs"); fs.writeFileSync("release/dist/release.json", JSON.stringify({commit:process.env.RELEASE_SHA,builtAt:new Date().toISOString()},null,2)+"\n")'
+          (cd release/dist && zip -qr ../../smarty-web.zip .)
+
+      - name: Preserve release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smarty-web-${{ env.RELEASE_SHA }}
+          path: smarty-web.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy immutable artifact
+        shell: bash
+        run: ./.pipeline/scripts/deploy-amplify.sh "$AMPLIFY_APP_ID" "$TARGET_BRANCH" smarty-web.zip
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          {
+            echo "### Smarty web release"
+            echo "- Environment: \`$TARGET_BRANCH\`"
+            echo "- Commit: \`$RELEASE_SHA\`"
+            echo "- URL: https://$TARGET_BRANCH.$AMPLIFY_APP_ID.amplifyapp.com"
+          } >> "$GITHUB_STEP_SUMMARY"

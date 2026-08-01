@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Least-privilege GitHub Actions deployment access and the Smarty production hosting branch.
+
+Parameters:
+  AmplifyAppId:
+    Type: String
+    Default: dgss25qxft1o4
+    AllowedPattern: "^[a-z0-9]+$"
+    Description: Existing Smarty Amplify Hosting app ID.
+  GitHubOwner:
+    Type: String
+    Default: Thanesh177
+    AllowedPattern: "^[A-Za-z0-9-]+$"
+    Description: GitHub account that owns the Smarty repository.
+  GitHubRepository:
+    Type: String
+    Default: Smarty
+    AllowedPattern: "^[A-Za-z0-9._-]+$"
+    Description: GitHub repository allowed to request deployment credentials.
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      Tags:
+        - Key: Application
+          Value: Smarty
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  GitHubActionsWebRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: GitHubActionsSmartyWebRole
+      Description: Deploys versioned Smarty web artifacts from GitHub Actions to Amplify Hosting.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}/${GitHubRepository}:*"
+      Policies:
+        - PolicyName: AmplifyManualDeployment
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CreateAndStartDeployments
+                Effect: Allow
+                Action:
+                  - amplify:CreateDeployment
+                  - amplify:StartDeployment
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}/branches/staging"
+                  - !Sub "arn:${AWS::Partition}:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}/branches/production"
+              - Sid: ReadDeploymentStatus
+                Effect: Allow
+                Action:
+                  - amplify:GetJob
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}/branches/staging/jobs/*"
+                  - !Sub "arn:${AWS::Partition}:amplify:${AWS::Region}:${AWS::AccountId}:apps/${AmplifyAppId}/branches/production/jobs/*"
+      Tags:
+        - Key: Application
+          Value: Smarty
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  ProductionBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !Ref AmplifyAppId
+      BranchName: production
+      Description: Stable Smarty web release promoted from a tested Git commit.
+      EnableAutoBuild: false
+      EnablePullRequestPreview: false
+      Stage: PRODUCTION
+      Tags:
+        - Key: Application
+          Value: Smarty
+        - Key: Environment
+          Value: production
+
+Outputs:
+  DeploymentRoleArn:
+    Description: IAM role assumed by the Smarty GitHub Actions deployment workflow.
+    Value: !GetAtt GitHubActionsWebRole.Arn
+  ProductionUrl:
+    Description: Amplify URL for the stable production branch.
+    Value: !Sub "https://production.${AmplifyAppId}.amplifyapp.com"
+  StagingUrl:
+    Description: Amplify URL for the existing staging branch.
+    Value: !Sub "https://staging.${AmplifyAppId}.amplifyapp.com"
