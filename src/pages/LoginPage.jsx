@@ -216,6 +216,20 @@ const handleAppleLogin = async () => {
 
         <section className="login-layout">
           <form className="login-card" onSubmit={handleSubmit}>
+          <nav className="auth-mode-switch" aria-label="Authentication options">
+            <span className="auth-mode-option active" aria-current="page">
+              Sign in
+            </span>
+            <Link
+              className="auth-mode-option"
+              to="/register"
+              state={{ from }}
+              viewTransition
+            >
+              Sign up
+            </Link>
+          </nav>
+
           <div className="login-card-header">
             <h2>Sign in</h2>
             <p>Use your email or a connected account.</p>
@@ -286,12 +300,6 @@ const handleAppleLogin = async () => {
                 {socialProvider === 'google' ? 'Opening...' : 'Google'}
               </button>
             </div>
-
-          <div className="login-links">
-            <Link className="text-btn" to="/register" state={{ from }}>
-              New to Smarty? Create an account
-            </Link>
-          </div>
           </form>
         </section>
       </div>

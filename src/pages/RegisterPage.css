@@ -15,6 +15,10 @@
   box-shadow: 0 35px 100px rgba(0, 0, 0, 0.22);
 }
 
+.register-card .auth-mode-switch {
+  margin: 2px 0 4px;
+}
+
 .register-logo {
   color: #9ff6ff;
   font-weight: 800;

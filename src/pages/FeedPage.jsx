@@ -1061,8 +1061,6 @@ const updateTopicCardDepth = useCallback(() => {
 
   if (!canvas) return;
 
-  const cards = canvas.querySelectorAll('.topic-launch-card');
-
   const viewportCenterX =
     canvas.scrollLeft + canvas.clientWidth / 2;
 
@@ -1076,15 +1074,13 @@ const updateTopicCardDepth = useCallback(() => {
 
   let cardMetrics = topicCardMetricsRef.current;
 
-  const metricsAreStale =
-    cardMetrics.length !== cards.length ||
-    cardMetrics.some((metric, index) => metric.card !== cards[index]);
-
-  if (metricsAreStale) {
+  if (cardMetrics.length === 0) {
+    const cards = canvas.querySelectorAll('.topic-launch-card');
     const canvasRect = canvas.getBoundingClientRect();
 
     cardMetrics = Array.from(cards, (card) => {
       const cardRect = card.getBoundingClientRect();
+      card.style.removeProperty('--topic-focus');
 
       return {
         card,
@@ -1104,9 +1100,48 @@ const updateTopicCardDepth = useCallback(() => {
     topicCardMetricsRef.current = cardMetrics;
   }
 
+  const liveHorizontalRange = canvas.clientWidth / 2 + 240;
+  const liveVerticalRange = canvas.clientHeight / 2 + 220;
+
   cardMetrics.forEach(({ card, centerX, centerY }) => {
     const deltaX = centerX - viewportCenterX;
     const deltaY = centerY - viewportCenterY;
+    const isNearViewport =
+      Math.abs(deltaX) <= liveHorizontalRange &&
+      Math.abs(deltaY) <= liveVerticalRange;
+
+    if (!isNearViewport) {
+      if (card.dataset.topicDepthSignature === 'distant') return;
+
+      card.dataset.topicDepthSignature = 'distant';
+      card.dataset.topicDetail = 'low';
+      card.dataset.topicCentered = 'false';
+      card.style.setProperty('--topic-center-scale', '0.86');
+      card.style.setProperty('--topic-center-opacity', '0.42');
+      card.style.setProperty('--topic-center-lift', '0px');
+      card.style.setProperty('--topic-edge-depth', '0px');
+      card.style.setProperty('--topic-edge-tilt', '0deg');
+      return;
+    }
+
+    if (card.dataset.topicDetail !== 'high') {
+      card.dataset.topicDetail = 'high';
+    }
+    const horizontalDistance = Math.min(
+      Math.abs(deltaX) / Math.max(canvas.clientWidth / 2, 1),
+      1
+    );
+    const isWideDesktop = canvas.clientWidth >= 1100;
+    const isTabletCanvas = canvas.clientWidth >= 700;
+    const edgeCurveStart = isWideDesktop ? 0.34 : 0.5;
+    const rawEdgeCurve = isTabletCanvas
+      ? Math.max(
+          0,
+          (horizontalDistance - edgeCurveStart) / (1 - edgeCurveStart)
+        )
+      : 0;
+    const easedEdgeCurve =
+      rawEdgeCurve * rawEdgeCurve * (3 - 2 * rawEdgeCurve);
     const outsideFocusArea =
       Math.abs(deltaX) >= focusRadius ||
       Math.abs(deltaY) >= focusRadius;
@@ -1124,21 +1159,32 @@ const updateTopicCardDepth = useCallback(() => {
 
     // Fine-grained steps keep the depth response smooth without forcing
     // imperceptible style writes on every fractional pixel of movement.
-    const focusStep = Math.round(easedFocus * 48);
+    const focusStep = Math.round(easedFocus * 16);
+    const edgeStep = Math.round(easedEdgeCurve * 8);
+    const edgeSide = deltaX === 0 ? 0 : deltaX > 0 ? 1 : -1;
+    const depthSignature = `${focusStep}:${edgeStep}:${edgeSide}`;
 
-    if (card.dataset.topicFocusStep === String(focusStep)) return;
+    if (card.dataset.topicDepthSignature === depthSignature) return;
 
+    card.dataset.topicDepthSignature = depthSignature;
     card.dataset.topicFocusStep = String(focusStep);
 
-    const focus = focusStep / 48;
+    const focus = focusStep / 16;
+    const edgeCurve = edgeStep / 8;
     const scale = 0.88 + focus * 0.22;
     const opacity = 0.64 + focus * 0.36;
     const lift = focus * -16;
+    const edgeDepth = edgeCurve * (isWideDesktop ? -78 : -30);
+    const edgeTilt = edgeSide * edgeCurve * (isWideDesktop ? -10 : -4);
     card.style.setProperty('--topic-center-scale', scale.toFixed(3));
     card.style.setProperty('--topic-center-opacity', opacity.toFixed(3));
     card.style.setProperty('--topic-center-lift', `${lift.toFixed(1)}px`);
-    card.style.setProperty('--topic-focus', focus.toFixed(3));
-    card.dataset.topicCentered = focus >= 0.66 ? 'true' : 'false';
+    card.style.setProperty('--topic-edge-depth', `${edgeDepth.toFixed(1)}px`);
+    card.style.setProperty('--topic-edge-tilt', `${edgeTilt.toFixed(1)}deg`);
+    const isCentered = focus >= 0.66 ? 'true' : 'false';
+    if (card.dataset.topicCentered !== isCentered) {
+      card.dataset.topicCentered = isCentered;
+    }
   });
 }, []);
 const wrapTopicCanvasPosition =
@@ -1490,7 +1536,7 @@ if (Math.hypot(deltaX, deltaY) > 6) {
   suppressTopicClickRef.current = true;
 }
 
-const DRAG_SPEED = 0.58;
+const DRAG_SPEED = 0.82;
 const maxLeft = Math.max(
   0,
   canvas.scrollWidth -
@@ -1632,6 +1678,11 @@ useEffect(() => {
     if (canvasAnimationFrameRef.current) {
       cancelAnimationFrame(canvasAnimationFrameRef.current);
       canvasAnimationFrameRef.current = null;
+    }
+
+    if (topicSnapTimerRef.current) {
+      clearTimeout(topicSnapTimerRef.current);
+      topicSnapTimerRef.current = null;
     }
 
   };
@@ -1867,9 +1918,10 @@ useEffect(() => {
 const topicCanvasLayout = useMemo(
   () =>
     getTopicCanvasLayout(
-      visibleLaunchTopics.length
+      visibleLaunchTopics.length,
+      canvasViewportWidth
     ),
-  [visibleLaunchTopics.length]
+  [visibleLaunchTopics.length, canvasViewportWidth]
 );
 
 const topicCanvasSurfaceStyle = useMemo(
@@ -2887,7 +2939,10 @@ const renderedTopicCanvasTiles = useMemo(
         >
           <div className="topic-canvas-tile-content">
             {visibleLaunchTopics.map((item, index) => {
-              const position = getTopicCanvasPosition(index);
+              const position = getTopicCanvasPosition(
+                index,
+                canvasViewportWidth
+              );
               const isOnlyTopic = visibleLaunchTopics.length === 1;
               const cardLeft = position.x + topicCanvasLayout.offsetX;
               const cardTop = position.y + topicCanvasLayout.offsetY;
@@ -2973,6 +3028,17 @@ const handleTopicCanvasScroll =
       topicCanvasRef.current;
 
     if (!canvas) return;
+
+    canvas.classList.add('topic-canvas-scrolling');
+
+    if (topicSnapTimerRef.current) {
+      clearTimeout(topicSnapTimerRef.current);
+    }
+
+    topicSnapTimerRef.current = window.setTimeout(() => {
+      canvas.classList.remove('topic-canvas-scrolling');
+      topicSnapTimerRef.current = null;
+    }, 110);
 
     if (!topicRevealFrameRef.current) {
       topicRevealFrameRef.current =
@@ -3454,15 +3520,20 @@ style={topicCanvasSurfaceStyle}
   );
 }
 
-function getTopicCanvasPosition(index) {
-const isDesktop =
-  typeof window !== 'undefined' &&
-  window.innerWidth >= 760;
-const columns = isDesktop ? 4 : 3;
+function getTopicCanvasPosition(index, viewportWidth) {
+const resolvedViewportWidth =
+  Number.isFinite(viewportWidth)
+    ? viewportWidth
+    : typeof window !== 'undefined'
+      ? window.innerWidth
+      : 1280;
+const isDesktop = resolvedViewportWidth >= 760;
+const isWideDesktop = resolvedViewportWidth >= 1100;
+const columns = isWideDesktop ? 5 : isDesktop ? 4 : 3;
 const width = isDesktop ? 168 : 146;
 const height = isDesktop ? 132 : 120;
-const gapX = isDesktop ? 88 : 76;
-const gapY = isDesktop ? 78 : 74;
+const gapX = isWideDesktop ? 232 : isDesktop ? 64 : 44;
+const gapY = isWideDesktop ? 178 : isDesktop ? 58 : 46;
 const column = index % columns;
 const row = Math.floor(index / columns);
 
@@ -3476,18 +3547,23 @@ return {
 
 
 
-function getTopicCanvasLayout(topicCount) {
-  const isDesktop =
-    typeof window !== 'undefined' &&
-    window.innerWidth >= 760;
-  const edgePaddingX = isDesktop ? 44 : 38;
-  const edgePaddingY = isDesktop ? 39 : 37;
+function getTopicCanvasLayout(topicCount, viewportWidth) {
+  const resolvedViewportWidth =
+    Number.isFinite(viewportWidth)
+      ? viewportWidth
+      : typeof window !== 'undefined'
+        ? window.innerWidth
+        : 1280;
+  const isDesktop = resolvedViewportWidth >= 760;
+  const isWideDesktop = resolvedViewportWidth >= 1100;
+  const edgePaddingX = isWideDesktop ? 116 : isDesktop ? 32 : 22;
+  const edgePaddingY = isWideDesktop ? 89 : isDesktop ? 29 : 23;
 
   const cards = Array.from(
     { length: topicCount },
     (_, index) => ({
       index,
-      ...getTopicCanvasPosition(index),
+      ...getTopicCanvasPosition(index, resolvedViewportWidth),
     })
   );
 

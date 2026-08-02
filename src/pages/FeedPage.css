@@ -1553,6 +1553,61 @@
   line-height: 1.72;
 }
 
+/* Let desktop posts use the canvas while keeping the text comfortably readable. */
+@media (min-width: 1100px) {
+  .has-inner-feed .snap-feed {
+    padding-inline: clamp(32px, 4vw, 72px);
+  }
+
+  .has-inner-feed .snap-post,
+  .has-inner-feed .snap-post:not(.no-media),
+  .has-inner-feed .snap-post.no-media {
+    width: 100%;
+    max-width: 1680px;
+    min-height: calc(100vh - 204px);
+  }
+
+  .has-inner-feed .snap-post:not(.no-media) {
+    grid-template-columns: minmax(420px, 48%) minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .has-inner-feed .snap-post:not(.no-media) .post-content {
+    width: 100%;
+    padding: clamp(42px, 4vw, 76px) clamp(44px, 4.5vw, 84px);
+    justify-content: center;
+  }
+
+  .has-inner-feed .snap-post.no-media {
+    max-width: 1400px;
+  }
+
+  .has-inner-feed .snap-post.no-media .post-content {
+    width: 100%;
+    max-width: 1180px;
+    padding: clamp(52px, 6vw, 100px);
+  }
+
+  .has-inner-feed .post-content h1,
+  .has-inner-feed .snap-post.no-media h1 {
+    max-width: 900px;
+    font-size: clamp(2.4rem, 3.7vw, 4.5rem);
+    line-height: 1;
+  }
+
+  .has-inner-feed .post-content p,
+  .has-inner-feed .snap-post.no-media p {
+    max-width: 820px;
+    margin-top: clamp(20px, 2vw, 30px);
+    font-size: clamp(1rem, 1.05vw, 1.14rem);
+    line-height: 1.76;
+  }
+
+  .has-inner-feed .snap-post .post-actions {
+    margin-top: clamp(24px, 2.5vw, 36px);
+  }
+}
+
 .has-inner-feed .post-actions {
   margin-top: 24px;
   gap: 8px;
@@ -3499,12 +3554,12 @@
 .topic-canvas-surface {
   position: relative;
   /*
-   * The surface contains three repeated tiles on each axis. Each tile must
-   * remain at least as large as the viewport or the wrap threshold can sit
-   * beyond the browser's real scroll edge, leaving the gallery stuck.
+   * JavaScript sizes this surface to exactly three repeated content tiles.
+   * A viewport-relative minimum would stretch the tile boxes independently
+   * from their cards and introduce uneven seams on responsive layouts.
    */
-  min-width: 300%;
-  min-height: 300%;
+  min-width: 0;
+  min-height: 0;
   overflow: visible;
   contain: layout paint;
   transform: translateZ(0);
@@ -3783,6 +3838,227 @@
     background-color 150ms ease,
     border-color 150ms ease,
     box-shadow 150ms ease;
+}
+
+@media (max-width: 1099px) {
+  .topic-launch-screen {
+    background: #010409;
+  }
+
+  .topic-launch-backdrop {
+    display: block;
+    background:
+      radial-gradient(
+        ellipse 72% 58% at 50% 48%,
+        rgba(20, 76, 98, 0.12) 0%,
+        rgba(5, 19, 29, 0.055) 48%,
+        transparent 78%
+      ),
+      linear-gradient(180deg, #02070d 0%, #010409 58%, #000205 100%);
+  }
+
+  .topic-launch-backdrop::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.23;
+    background-image:
+      radial-gradient(circle, rgba(186, 230, 253, 0.34) 0 0.65px, transparent 0.9px),
+      radial-gradient(circle, rgba(125, 211, 252, 0.22) 0 0.55px, transparent 0.8px);
+    background-position: 17px 29px, 53px 71px;
+    background-size: 137px 139px, 211px 199px;
+  }
+
+  .topic-launch-backdrop::after {
+    width: min(116vw, 900px);
+    background:
+      radial-gradient(
+        ellipse,
+        rgba(56, 189, 248, 0.034) 0%,
+        rgba(14, 54, 75, 0.016) 44%,
+        transparent 74%
+      );
+  }
+
+  .topic-launch-content::after {
+    background:
+      radial-gradient(
+        ellipse 66% 62% at 50% 48%,
+        transparent 0%,
+        rgba(0, 3, 8, 0.035) 56%,
+        rgba(0, 2, 6, 0.3) 100%
+      );
+  }
+
+  .topic-canvas-surface {
+    background-image:
+      radial-gradient(circle, rgba(143, 199, 218, 0.08) 0 0.55px, transparent 0.8px),
+      radial-gradient(circle, rgba(70, 120, 142, 0.065) 0 0.45px, transparent 0.7px);
+    background-position: 13px 23px, 67px 79px;
+    background-size: 163px 157px, 229px 223px;
+  }
+
+  .topic-canvas-surface .topic-launch-card,
+  .topic-canvas-surface .topic-launch-card:hover,
+  .topic-canvas-surface .topic-launch-card:focus-visible {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow:
+      0 12px 28px rgba(0, 0, 0, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    transition:
+      transform 125ms cubic-bezier(0.2, 0.72, 0.2, 1),
+      opacity 110ms linear,
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+}
+
+@media (min-width: 700px) and (max-width: 1099px) {
+  .topic-canvas-viewport {
+    perspective: 1080px;
+    perspective-origin: 50% 50%;
+  }
+
+  .topic-canvas-surface,
+  .topic-canvas-tile-content {
+    transform-style: preserve-3d;
+  }
+
+  .topic-canvas-surface .topic-launch-card,
+  .topic-canvas-surface .topic-launch-card:hover,
+  .topic-canvas-surface .topic-launch-card:focus-visible {
+    transform:
+      translate3d(
+        0,
+        var(--topic-center-lift, 0px),
+        var(--topic-edge-depth, 0px)
+      )
+      rotateY(var(--topic-edge-tilt, 0deg))
+      scale(var(--topic-center-scale, 1)) !important;
+    backface-visibility: hidden;
+  }
+}
+
+@media (min-width: 1100px) {
+  .topic-launch-screen {
+    background: #010308;
+  }
+
+  .topic-launch-backdrop {
+    display: block;
+    background:
+      radial-gradient(
+        ellipse 42% 52% at 50% 50%,
+        rgba(20, 80, 104, 0.16) 0%,
+        rgba(5, 20, 31, 0.08) 42%,
+        transparent 72%
+      ),
+      linear-gradient(180deg, #02060c 0%, #010308 52%, #000205 100%);
+  }
+
+  .topic-launch-backdrop::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.34;
+    background-image:
+      radial-gradient(circle, rgba(186, 230, 253, 0.4) 0 0.7px, transparent 0.9px),
+      radial-gradient(circle, rgba(148, 163, 184, 0.3) 0 0.55px, transparent 0.8px),
+      radial-gradient(circle, rgba(125, 211, 252, 0.24) 0 0.8px, transparent 1px);
+    background-position: 17px 29px, 71px 43px, 23px 89px;
+    background-size: 127px 131px, 173px 181px, 239px 227px;
+    mask-image: radial-gradient(ellipse at center, #000 18%, rgba(0, 0, 0, 0.72) 58%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse at center, #000 18%, rgba(0, 0, 0, 0.72) 58%, transparent 100%);
+  }
+
+  .topic-launch-backdrop::after {
+    width: min(84vw, 1440px);
+    background:
+      radial-gradient(
+        ellipse,
+        rgba(56, 189, 248, 0.045) 0%,
+        rgba(14, 54, 75, 0.022) 42%,
+        transparent 72%
+      );
+  }
+
+  .topic-launch-content::after {
+    background:
+      radial-gradient(
+        ellipse 43% 56% at 50% 50%,
+        transparent 0%,
+        rgba(0, 4, 9, 0.03) 52%,
+        rgba(0, 2, 6, 0.34) 100%
+      ),
+      linear-gradient(
+        90deg,
+        rgba(0, 2, 6, 0.36) 0%,
+        transparent 18%,
+        transparent 82%,
+        rgba(0, 2, 6, 0.36) 100%
+      );
+  }
+
+  .topic-canvas-viewport {
+    perspective: 920px;
+    perspective-origin: 50% 50%;
+  }
+
+  .topic-canvas-surface,
+  .topic-canvas-tile-content {
+    transform-style: preserve-3d;
+  }
+
+  .topic-canvas-surface {
+    background-image:
+      radial-gradient(circle, rgba(148, 210, 230, 0.1) 0 0.65px, transparent 0.9px),
+      radial-gradient(circle, rgba(80, 132, 154, 0.09) 0 0.5px, transparent 0.75px);
+    background-position: 11px 19px, 61px 73px;
+    background-size: 151px 149px, 223px 211px;
+  }
+
+  .topic-canvas-surface .topic-launch-card,
+  .topic-canvas-surface .topic-launch-card:hover,
+  .topic-canvas-surface .topic-launch-card:focus-visible {
+    transform:
+      translate3d(
+        0,
+        var(--topic-center-lift, 0px),
+        var(--topic-edge-depth, 0px)
+      )
+      rotateY(var(--topic-edge-tilt, 0deg))
+      scale(var(--topic-center-scale, 1)) !important;
+    backface-visibility: hidden;
+  }
+
+  .topic-canvas-surface .topic-launch-card[data-topic-centered="true"] {
+    border-color: rgba(153, 224, 246, 0.26);
+    box-shadow:
+      0 28px 64px rgba(0, 0, 0, 0.5),
+      0 0 42px rgba(56, 189, 248, 0.085),
+      inset 0 1px 0 rgba(255, 255, 255, 0.075);
+  }
+}
+
+.topic-canvas-viewport:is(
+    .topic-canvas-dragging,
+    .topic-canvas-scrolling,
+    .topic-canvas-wrapping
+  )
+  .topic-launch-card {
+  transition: none !important;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+}
+
+.topic-canvas-surface .topic-launch-card[data-topic-detail="low"] {
+  content-visibility: auto;
+  contain-intrinsic-size: 168px 132px;
+  box-shadow: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

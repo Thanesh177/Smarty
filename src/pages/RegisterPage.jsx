@@ -97,6 +97,15 @@ export default function RegisterPage() {
       <form className="register-card" onSubmit={handleSubmit}>
         <SmartyBrand compact tagline="Create your account" />
 
+        <nav className="auth-mode-switch" aria-label="Authentication options">
+          <Link className="auth-mode-option" to="/login" viewTransition>
+            Sign in
+          </Link>
+          <span className="auth-mode-option active" aria-current="page">
+            Sign up
+          </span>
+        </nav>
+
         <h1>
           {step === 'register' && 'Create account'}
           {step === 'confirm' && 'Verify email'}
@@ -179,12 +188,12 @@ export default function RegisterPage() {
               : 'Confirm'}
           </button>
         ) : (
-          <Link className="primary-btn" to="/login">
+          <Link className="primary-btn" to="/login" viewTransition>
             Go to login
           </Link>
         )}
 
-        <Link className="text-btn" to="/login">
+        <Link className="text-btn" to="/login" viewTransition>
           Already have an account?
         </Link>
       </form>
