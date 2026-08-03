@@ -749,19 +749,53 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         const frameStyle = window.getComputedStyle(frame);
         const stickyTop = Number.parseFloat(frameStyle.top);
         const configuredGap = Number.parseFloat(frameStyle.getPropertyValue('--story-card-gap'));
+        const configuredRowGap = Number.parseFloat(frameStyle.getPropertyValue('--story-row-gap'));
         const cardWidth = cards[0]?.getBoundingClientRect().width || 0;
-        const spacing = cardWidth + (Number.isFinite(configuredGap) ? configuredGap : 20);
+        const cardHeight = cards[0]?.getBoundingClientRect().height || 0;
+        const isMobile = window.innerWidth <= 600;
+        const isTablet = window.innerWidth <= 900;
+        const columns = isMobile ? 1 : (isTablet ? 2 : 3);
+        const rows = isMobile ? 3 : (isTablet ? 2 : 3);
+        const minimumSpacing = cardWidth + (Number.isFinite(configuredGap) ? configuredGap : 20);
+        const minimumRowSpacing = cardHeight + (Number.isFinite(configuredRowGap) ? configuredRowGap : 22);
+        const desktopHorizontalPadding = 112;
+        const desktopVerticalPadding = 82;
+        const distributedSpacing = columns > 1
+          ? (frame.clientWidth - cardWidth - desktopHorizontalPadding * 2) / (columns - 1)
+          : minimumSpacing;
+        const distributedRowSpacing = rows > 1
+          ? (frame.clientHeight - cardHeight - desktopVerticalPadding * 2) / (rows - 1)
+          : minimumRowSpacing;
+        const spacing = !isTablet ? Math.max(minimumSpacing, distributedSpacing) : minimumSpacing;
+        const rowSpacing = !isTablet ? Math.max(minimumRowSpacing, distributedRowSpacing) : minimumRowSpacing;
+        const cardsPerScene = columns * rows;
+        const scenes = Math.max(1, Math.ceil(cards.length / cardsPerScene));
         const chapterRect = chapter.getBoundingClientRect();
         const contentTop = scroller.scrollTop + chapterRect.top - scrollerRect.top;
         const startScroll = contentTop - (Number.isFinite(stickyTop) ? stickyTop : 64);
         const travel = Math.max(1, chapter.offsetHeight - frame.offsetHeight);
 
         cards.forEach((card, index) => {
-          card.style.left = `calc(50% + ${index * spacing}px)`;
-          card.style.opacity = '0';
-          card.style.visibility = 'hidden';
-          card.style.pointerEvents = 'none';
+          const slot = index % cardsPerScene;
+          const column = slot % columns;
+          const row = Math.floor(slot / columns);
+          const rowOffset = (row - (rows - 1) / 2) * rowSpacing;
+          const columnOffset = (column - (columns - 1) / 2) * spacing;
+          const rowStagger = (row - (rows - 1) / 2) * Math.min(spacing * 0.055, 24);
+          const columnStagger = (column - (columns - 1) / 2) * Math.min(rowSpacing * 0.045, 8);
+          const baseTilt = isMobile ? -2.4 : -4.6;
+          const tilt = baseTilt + (((column + row) % 3) - 1) * 0.4;
+
+          card.style.left = `calc(50% + ${columnOffset + rowStagger}px)`;
+          card.style.top = `calc(50% + ${rowOffset + columnStagger}px)`;
+          card.style.opacity = '';
+          card.style.visibility = 'visible';
+          card.style.pointerEvents = '';
           card.style.willChange = 'auto';
+          card.style.transform = '';
+          card.style.setProperty('--wall-card-tilt', `${tilt}deg`);
+          card.style.setProperty('--wall-card-delay', `${slot * 48}ms`);
+          card.dataset.wallScene = String(Math.floor(index / cardsPerScene));
         });
 
         stack.style.transform = 'translate3d(0, 0, 0)';
@@ -770,15 +804,14 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
 
         const item = {
           cards,
+          cardsPerScene,
           chapter,
           counter,
           displayedIndex: -1,
           frame,
-          lastIndex: Math.max(0, cards.length - 1),
-          previousVisible: new Set(),
-          spacing,
+          lastIndex: Math.max(0, scenes - 1),
+          rows,
           stack,
-          stackX: gsap.quickSetter(stack, 'x', 'px'),
           startScroll,
           travel,
           playhead: { position: 0 },
@@ -788,49 +821,76 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           duration: window.innerWidth <= 900 ? 0.72 : 1.08,
           ease: 'power3.out',
           overwrite: true,
-          onUpdate: () => renderItem(item, item.playhead.position),
+          onUpdate: () => renderItem(item, item.playhead.position, false),
         });
 
         return item;
       });
     };
 
-    const renderItem = (item, cardPosition) => {
-        const nearestIndex = Math.round(cardPosition);
-        const nextVisible = new Set();
+    const renderItem = (item, cardPosition, immediate = false) => {
+        const nearestScene = Math.round(cardPosition);
 
-        item.stackX(-cardPosition * item.spacing);
+        if (item.displayedIndex !== nearestScene) {
+          const outgoingCards = item.cards.filter((card) => card.classList.contains('is-wall-visible'));
+          const incomingCards = [];
+          item.displayedIndex = nearestScene;
+          item.cards.forEach((card, index) => {
+            const scene = Number(card.dataset.wallScene || 0);
+            const isCurrent = scene === nearestScene;
+            if (isCurrent) incomingCards.push(card);
+            card.classList.toggle('is-wall-visible', isCurrent);
+            card.classList.toggle('is-wall-past', scene < nearestScene);
+            card.classList.toggle('is-wall-future', scene > nearestScene);
+            card.classList.toggle('is-wall-focus', isCurrent && index % item.cardsPerScene === Math.floor(item.cardsPerScene / 2));
+          });
 
-        for (let index = Math.floor(cardPosition) - 4; index <= Math.ceil(cardPosition) + 4; index += 1) {
-          if (index >= 0 && index <= item.lastIndex) nextVisible.add(index);
-        }
+          gsap.killTweensOf([...outgoingCards, ...incomingCards]);
+          if (immediate) {
+            gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,filter' });
+          } else {
+            if (outgoingCards.length > 0) {
+              gsap.fromTo(outgoingCards, {
+                autoAlpha: 1,
+                y: 0,
+                scale: 1,
+                filter: 'blur(0px)',
+              }, {
+                autoAlpha: 0,
+                y: -46,
+                scale: 0.9,
+                filter: 'blur(7px)',
+                duration: 0.52,
+                stagger: { each: 0.035, from: 'end' },
+                ease: 'power3.in',
+                overwrite: true,
+                onComplete: () => gsap.set(outgoingCards, { clearProps: 'opacity,visibility,transform,filter' }),
+              });
+            }
 
-        const affected = new Set([...item.previousVisible, ...nextVisible]);
-        affected.forEach((index) => {
-          const card = item.cards[index];
-          if (!card) return;
+            gsap.fromTo(incomingCards, {
+              autoAlpha: 0,
+              y: 54,
+              scale: 0.88,
+              filter: 'blur(9px)',
+            }, {
+              autoAlpha: 1,
+              y: 0,
+              scale: 1,
+              filter: 'blur(0px)',
+              duration: 0.92,
+              stagger: 0.085,
+              delay: outgoingCards.length > 0 ? 0.1 : 0,
+              ease: 'power4.out',
+              overwrite: true,
+              onComplete: () => gsap.set(incomingCards, { clearProps: 'opacity,visibility,transform,filter' }),
+            });
+          }
 
-          const signedDistance = index - cardPosition;
-          const distance = Math.abs(signedDistance);
-          const isVisible = distance < 2.7;
-          const opacity = distance <= 1
-            ? 1 - distance * 0.42
-            : Math.max(0, 0.58 * ((2.7 - distance) / 1.7));
-          const scale = 1.035 - Math.min(distance, 2.7) * 0.075;
-          const rise = -14 + Math.min(distance, 2.5) * 14;
-          const rotation = Math.max(-2, Math.min(2, signedDistance)) * -2.2;
-
-          card.style.opacity = isVisible ? String(opacity) : '0';
-          card.style.visibility = isVisible ? 'visible' : 'hidden';
-          card.style.pointerEvents = isVisible ? 'auto' : 'none';
-          card.style.willChange = isVisible ? 'transform, opacity' : 'auto';
-          card.style.transform = `translate3d(0, ${rise}px, 0) rotate(${rotation}deg) scale(${scale})`;
-        });
-
-        item.previousVisible = nextVisible;
-        if (item.counter && item.displayedIndex !== nearestIndex) {
-          item.displayedIndex = nearestIndex;
-          item.counter.textContent = `${String(nearestIndex + 1).padStart(2, '0')} / ${String(item.cards.length).padStart(2, '0')}`;
+          if (item.counter) {
+            const visibleTopic = Math.min(item.cards.length, nearestScene * item.cardsPerScene + 1);
+            item.counter.textContent = `${String(visibleTopic).padStart(2, '0')} / ${String(item.cards.length).padStart(2, '0')}`;
+          }
         }
     };
 
@@ -846,7 +906,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         item.frame.classList.toggle('is-scroll-active', rawProgress >= 0 && rawProgress <= 1);
         if (immediate) {
           item.playhead.position = targetPosition;
-          renderItem(item, targetPosition);
+          renderItem(item, targetPosition, true);
         } else {
           item.moveTo(targetPosition);
         }
@@ -1323,7 +1383,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
                 <article
                   className="topic-catalog-story-chapter"
                   key={`catalog-story-${groupIndex}`}
-                  style={{ '--catalog-story-height': `${Math.max(300, 160 + group.length * 18)}vh` }}
+                  style={{ '--catalog-story-height': `${Math.max(520, 180 + Math.ceil(group.length / 3) * 22)}vh` }}
                 >
                   <div className="topic-catalog-story-frame">
                     <span className="topic-catalog-story-orbit" aria-hidden="true" />
