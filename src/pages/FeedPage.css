@@ -258,7 +258,7 @@
 }
 
 .post-content p {
-  margin-top: 24px;
+  margin-top: 23px;
   color: rgba(255, 255, 255, 0.82);
   font-size: clamp(1rem, 1.45vw, 1.2rem);
   line-height: 1.9;
