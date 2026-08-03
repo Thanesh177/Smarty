@@ -1,5 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,7 +27,12 @@ import {
   MoreHorizontal,
   Flag,
   UserX,
+  Search,
   X,
+  Gamepad2,
+  Newspaper,
+  BookOpen,
+  UsersRound,
 } from 'lucide-react';
 import SmartyBrand from '../components/SmartyBrand';
 import { postApi, creatorApi, chatApi } from '../api/client';
@@ -33,6 +40,7 @@ import FeedSkeleton from '../components/FeedSkeleton';
 import useFeed from '../hooks/useFeed';
 import { useAuth } from '../contexts/AuthContext';
 import './FeedPage.css';
+import './FeedPageFinal.css';
 
 const normalizeTopic = (value) =>
   String(value || '')
@@ -283,6 +291,146 @@ const getCachedExplanation = (post) => {
     : '';
 };
 
+const TOPIC_DESCRIPTIONS = {
+  all: 'Explore every idea, story, and discovery across Smarty.',
+  finance: 'Understand money, markets, risk, and long-term wealth.',
+  investing: 'Learn how assets grow and how thoughtful investors decide.',
+  'personal-finance': 'Build practical habits for saving, spending, and financial freedom.',
+  'stock-market': 'Follow the forces, companies, and psychology moving markets.',
+  trading: 'Explore price action, strategy, discipline, and risk management.',
+  'trading-stock-market': 'Connect market movements with practical trading and risk concepts.',
+  psychology: 'Understand how people think, feel, decide, and connect.',
+  'human-behavior': 'Discover the hidden patterns behind everyday choices and actions.',
+  'decision-making': 'Make clearer choices by understanding bias, evidence, and uncertainty.',
+  'cognitive-psychology': 'Explore attention, perception, memory, language, and human thought.',
+  habits: 'See how small repeated actions reshape behaviour and identity.',
+  motivation: 'Explore what creates momentum and helps meaningful effort last.',
+  neuroscience: 'Journey through the brain, nervous system, and nature of thought.',
+  memory: 'Learn how experiences are encoded, recalled, and sometimes distorted.',
+  learning: 'Study how knowledge sticks and how skills improve with practice.',
+  'brain-function': 'Explore the biological systems behind perception, emotion, and action.',
+  technology: 'Understand the tools and systems reshaping modern life.',
+  'artificial-intelligence': 'Explore intelligent machines, models, ethics, and possibility.',
+  cybersecurity: 'Learn how digital systems are protected, tested, and attacked.',
+  'software-systems': 'See how reliable applications are designed, scaled, and maintained.',
+  coding: 'Turn ideas into working software through logic, craft, and iteration.',
+  engineering: 'Learn how scientific ideas become useful, resilient real-world systems.',
+  business: 'Explore strategy, leadership, operations, and sustainable growth.',
+  startups: 'Follow the journey from an early insight to a growing company.',
+  entrepreneurship: 'Learn how builders identify opportunities and create lasting value.',
+  marketing: 'Understand attention, positioning, storytelling, and customer behaviour.',
+  economics: 'See how incentives, scarcity, and policy shape everyday life.',
+  'global-economy': 'Connect trade, policy, currencies, and events across the world.',
+  'consumer-behavior': 'Discover why people choose, trust, buy, and remain loyal.',
+  health: 'Explore evidence-based ideas for a stronger body and better life.',
+  'health-and-wellbeing': 'Build a balanced understanding of physical, mental, and social health.',
+  'human-body': 'Journey through the organs and systems that keep us alive.',
+  'mental-health': 'Understand emotional wellbeing, resilience, care, and recovery.',
+  nutrition: 'Learn how food, energy, and habits support lifelong health.',
+  sleep: 'Discover the science of rest, recovery, dreams, and performance.',
+  fitness: 'Build strength, movement, endurance, and sustainable routines.',
+  space: 'Travel through planets, missions, stars, and the scale of the cosmos.',
+  cosmos: 'Discover the immense structures, origins, and mysteries of the universe.',
+  astronomy: 'Observe the objects, forces, and mysteries beyond our world.',
+  physics: 'Explore the fundamental rules governing matter, energy, space, and time.',
+  gravity: 'Understand the force that shapes falling objects, planets, and galaxies.',
+  'black-holes': 'Enter the extreme physics of horizons, gravity, and spacetime.',
+  science: 'Follow evidence, experiments, and discoveries that explain our world.',
+  'climate-change': 'Understand a changing climate, its causes, impacts, and responses.',
+  environment: 'Explore the living systems connecting people, places, and nature.',
+  sustainability: 'Discover practical ways to create resilient, lower-impact futures.',
+  nature: 'Explore the patterns, organisms, and landscapes of the living world.',
+  history: 'Connect the people, choices, and events that shaped the present.',
+  'ancient-civilizations': 'Meet the cultures, cities, and ideas that built the ancient world.',
+  'ancient-empires': 'Trace the ambition, power, and legacies of early empires.',
+  'borders-and-empires': 'Trace how borders, conquest, and diplomacy reshaped nations.',
+  'diplomatic-history': 'Follow the negotiations, alliances, and rivalries between nations.',
+  'economic-history': 'See how trade, industry, money, and crises transformed societies.',
+  'geopolitical-history': 'Understand how geography, resources, and power shaped world affairs.',
+  'history-between-nations': 'Explore the relationships and events connecting countries over time.',
+  'medieval-history': 'Enter a world of kingdoms, faith, trade, conflict, and invention.',
+  'military-history': 'Study strategy, conflict, technology, and the human cost of war.',
+  'modern-history': 'Understand the turning points that formed today’s connected world.',
+  revolutions: 'Explore the ideas and pressures that transformed entire societies.',
+  society: 'Examine the systems, norms, and relationships that hold communities together.',
+  culture: 'Discover how belief, art, language, and tradition shape identity.',
+  'political-history': 'Follow the movements, leaders, and institutions behind political change.',
+  war: 'Examine the causes, strategies, consequences, and human realities of war.',
+  'wars-and-conflicts': 'Understand why conflicts begin, evolve, and reshape communities.',
+  'world-history': 'Connect civilizations and events across regions, eras, and cultures.',
+  productivity: 'Design calmer systems for focused, meaningful, consistent work.',
+  focus: 'Train attention and protect it from distraction and overload.',
+  'self-improvement': 'Develop practical ways to grow without chasing perfection.',
+  discipline: 'Build the consistency that carries goals beyond motivation.',
+  education: 'Explore better ways to teach, learn, remember, and grow.',
+  law: 'Understand rights, rules, institutions, and the reasoning behind them.',
+  poems: 'Experience language shaped into rhythm, image, emotion, and meaning.',
+  poetry: 'Experience language shaped into rhythm, image, emotion, and meaning.',
+  blog: 'Browse thoughtful perspectives, useful lessons, and fresh observations.',
+};
+
+const HERO_FALLBACK_TOPICS = [
+  'Technology',
+  'Health',
+  'Psychology',
+  'Science',
+  'Finance',
+  'History',
+  'Nature',
+];
+
+const getTopicDescription = (topicName) => {
+  const normalized = normalizeTopic(topicName);
+  return TOPIC_DESCRIPTIONS[normalized]
+    || `Discover the essential ideas, stories, and questions behind ${String(topicName || 'this topic').trim()}.`;
+};
+
+const SMARTY_FEATURES = [
+  {
+    icon: Gamepad2,
+    eyebrow: 'Play and progress',
+    title: 'Games that make practice feel rewarding.',
+    description: 'Take on learning challenges, build momentum, and see your progress grow.',
+    to: '/game-profile',
+    featured: true,
+  },
+  {
+    icon: Bot,
+    eyebrow: 'AI assistance',
+    title: 'Explain and translate without losing your place.',
+    description: 'Make difficult posts clearer and move between languages directly inside the feed.',
+    featured: true,
+  },
+  {
+    icon: Brain,
+    eyebrow: 'Smart quizzes',
+    title: 'Turn curiosity into recall.',
+    description: 'Test what you know with focused questions and useful feedback.',
+    to: '/quiz',
+  },
+  {
+    icon: Newspaper,
+    eyebrow: 'News',
+    title: 'Keep learning from what is happening now.',
+    description: 'Browse current stories through a learning-first lens.',
+    to: '/news',
+  },
+  {
+    icon: BookOpen,
+    eyebrow: 'Read and return',
+    title: 'Books and saved ideas, ready when you are.',
+    description: 'Read longer material and keep worthwhile discoveries close.',
+    to: '/read-books',
+  },
+  {
+    icon: UsersRound,
+    eyebrow: 'Learn together',
+    title: 'Topic rooms and chat built around shared interests.',
+    description: 'Move from discovering an idea to discussing it with real people.',
+    to: '/rooms',
+  },
+];
+
 const getTopicVisualMeta = (topicName, index = 0) => {
   const normalized = normalizeTopic(topicName);
 
@@ -365,10 +513,11 @@ const getTopicVisualMeta = (topicName, index = 0) => {
     },
   ];
 
-  return (
-    topicPalettes[normalized] ||
-    fallbackTopics[index % fallbackTopics.length]
-  );
+  const visual = topicPalettes[normalized] || fallbackTopics[index % fallbackTopics.length];
+  return {
+    ...visual,
+    description: getTopicDescription(topicName),
+  };
 };
 
 const uniqueTopicList = (values = []) => {
@@ -495,6 +644,771 @@ style={{
     </button>
   );
 });
+
+const TopicProductCard = memo(function TopicProductCard({ item, index, onSelect }) {
+  const { icon: TopicIcon, label, description } = getTopicVisualMeta(item, index);
+  const isAllTopics = normalizeTopic(item) === 'all';
+  const accentHue = [194, 216, 264, 168, 32, 338][index % 6];
+
+  return (
+    <button
+      type="button"
+      className={`topic-product-card ${isAllTopics ? 'is-featured' : ''}`}
+      style={{
+        '--topic-card-hue': accentHue,
+        '--topic-card-delay': `${(index % 4) * 55}ms`,
+      }}
+      onClick={() => onSelect(item)}
+      aria-label={`Explore ${isAllTopics ? 'all topics' : item}`}
+    >
+      <span className="topic-product-card-art" aria-hidden="true">
+        <i /><i /><i />
+      </span>
+      <span className="topic-product-card-index" aria-hidden="true">
+        {String(index + 1).padStart(2, '0')}
+      </span>
+      <span className="topic-product-card-icon" aria-hidden="true">
+        <TopicIcon size={24} strokeWidth={1.7} />
+      </span>
+      <span className="topic-product-card-copy">
+        <small>{label}</small>
+        <strong>{isAllTopics ? 'Explore everything' : item}</strong>
+        <em>{description}</em>
+      </span>
+      <ArrowRight className="topic-product-card-arrow" size={17} strokeWidth={2} aria-hidden="true" />
+    </button>
+  );
+});
+
+function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
+  const rootRef = useRef(null);
+  const [topicQuery, setTopicQuery] = useState('');
+  const [catalogMode, setCatalogMode] = useState('story');
+  const showcaseTopics = useMemo(() => {
+    const resolvedTopics = [];
+    const seenTopics = new Set();
+
+    [...topics, ...HERO_FALLBACK_TOPICS].forEach((topicName) => {
+      const canonicalTopic = getCanonicalTopic(topicName);
+      if (!canonicalTopic || seenTopics.has(canonicalTopic) || resolvedTopics.length >= 7) return;
+      seenTopics.add(canonicalTopic);
+      resolvedTopics.push(topicName);
+    });
+
+    return resolvedTopics;
+  }, [topics]);
+  const showcaseTopicKey = useMemo(
+    () => showcaseTopics.map((topicName) => getCanonicalTopic(topicName)).join('|'),
+    [showcaseTopics],
+  );
+  const filteredCatalogTopics = useMemo(() => {
+    const query = topicQuery.trim().toLowerCase();
+    if (!query) return topics;
+    return topics.filter((topic) => String(topic).toLowerCase().includes(query));
+  }, [topicQuery, topics]);
+  const catalogStoryGroups = useMemo(() => {
+    return filteredCatalogTopics.length > 0 ? [filteredCatalogTopics] : [];
+  }, [filteredCatalogTopics]);
+
+  const showCatalog = useCallback((mode) => {
+    setCatalogMode(mode);
+    window.requestAnimationFrame(() => {
+      const target = mode === 'grid'
+        ? rootRef.current?.querySelector('#topic-catalog')
+        : rootRef.current;
+      target?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
+  }, []);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || filteredCatalogTopics.length === 0) return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+
+    gsap.registerPlugin(ScrollTrigger);
+
+    const scroller = root.closest('.snap-feed-page');
+    const chapters = Array.from(root.querySelectorAll('.topic-catalog-story-chapter'));
+    if (!scroller || chapters.length === 0) return undefined;
+
+    let animationFrame = 0;
+    let resizeFrame = 0;
+    let measurements = [];
+
+    const measure = () => {
+      measurements.forEach((item) => gsap.killTweensOf(item.playhead));
+      const scrollerRect = scroller.getBoundingClientRect();
+      measurements = chapters.map((chapter) => {
+        const frame = chapter.querySelector('.topic-catalog-story-frame');
+        const stack = chapter.querySelector('.topic-catalog-story-stack');
+        const cards = Array.from(chapter.querySelectorAll('.topic-product-card'));
+        const counter = chapter.querySelector('.topic-catalog-story-index');
+        const frameStyle = window.getComputedStyle(frame);
+        const stickyTop = Number.parseFloat(frameStyle.top);
+        const configuredGap = Number.parseFloat(frameStyle.getPropertyValue('--story-card-gap'));
+        const cardWidth = cards[0]?.getBoundingClientRect().width || 0;
+        const spacing = cardWidth + (Number.isFinite(configuredGap) ? configuredGap : 20);
+        const chapterRect = chapter.getBoundingClientRect();
+        const contentTop = scroller.scrollTop + chapterRect.top - scrollerRect.top;
+        const startScroll = contentTop - (Number.isFinite(stickyTop) ? stickyTop : 64);
+        const travel = Math.max(1, chapter.offsetHeight - frame.offsetHeight);
+
+        cards.forEach((card, index) => {
+          card.style.left = `calc(50% + ${index * spacing}px)`;
+          card.style.opacity = '0';
+          card.style.visibility = 'hidden';
+          card.style.pointerEvents = 'none';
+          card.style.willChange = 'auto';
+        });
+
+        stack.style.transform = 'translate3d(0, 0, 0)';
+        frame.style.opacity = '1';
+        frame.style.transform = 'none';
+
+        const item = {
+          cards,
+          chapter,
+          counter,
+          displayedIndex: -1,
+          frame,
+          lastIndex: Math.max(0, cards.length - 1),
+          previousVisible: new Set(),
+          spacing,
+          stack,
+          stackX: gsap.quickSetter(stack, 'x', 'px'),
+          startScroll,
+          travel,
+          playhead: { position: 0 },
+        };
+
+        item.moveTo = gsap.quickTo(item.playhead, 'position', {
+          duration: window.innerWidth <= 900 ? 0.72 : 1.08,
+          ease: 'power3.out',
+          overwrite: true,
+          onUpdate: () => renderItem(item, item.playhead.position),
+        });
+
+        return item;
+      });
+    };
+
+    const renderItem = (item, cardPosition) => {
+        const nearestIndex = Math.round(cardPosition);
+        const nextVisible = new Set();
+
+        item.stackX(-cardPosition * item.spacing);
+
+        for (let index = Math.floor(cardPosition) - 4; index <= Math.ceil(cardPosition) + 4; index += 1) {
+          if (index >= 0 && index <= item.lastIndex) nextVisible.add(index);
+        }
+
+        const affected = new Set([...item.previousVisible, ...nextVisible]);
+        affected.forEach((index) => {
+          const card = item.cards[index];
+          if (!card) return;
+
+          const signedDistance = index - cardPosition;
+          const distance = Math.abs(signedDistance);
+          const isVisible = distance < 2.7;
+          const opacity = distance <= 1
+            ? 1 - distance * 0.42
+            : Math.max(0, 0.58 * ((2.7 - distance) / 1.7));
+          const scale = 1.035 - Math.min(distance, 2.7) * 0.075;
+          const rise = -14 + Math.min(distance, 2.5) * 14;
+          const rotation = Math.max(-2, Math.min(2, signedDistance)) * -2.2;
+
+          card.style.opacity = isVisible ? String(opacity) : '0';
+          card.style.visibility = isVisible ? 'visible' : 'hidden';
+          card.style.pointerEvents = isVisible ? 'auto' : 'none';
+          card.style.willChange = isVisible ? 'transform, opacity' : 'auto';
+          card.style.transform = `translate3d(0, ${rise}px, 0) rotate(${rotation}deg) scale(${scale})`;
+        });
+
+        item.previousVisible = nextVisible;
+        if (item.counter && item.displayedIndex !== nearestIndex) {
+          item.displayedIndex = nearestIndex;
+          item.counter.textContent = `${String(nearestIndex + 1).padStart(2, '0')} / ${String(item.cards.length).padStart(2, '0')}`;
+        }
+    };
+
+    const render = (immediate = false) => {
+      animationFrame = 0;
+      const scrollTop = scroller.scrollTop;
+
+      measurements.forEach((item) => {
+        const rawProgress = (scrollTop - item.startScroll) / item.travel;
+        const railProgress = Math.max(0, Math.min(1, rawProgress));
+        const targetPosition = railProgress * item.lastIndex;
+
+        item.frame.classList.toggle('is-scroll-active', rawProgress >= 0 && rawProgress <= 1);
+        if (immediate) {
+          item.playhead.position = targetPosition;
+          renderItem(item, targetPosition);
+        } else {
+          item.moveTo(targetPosition);
+        }
+      });
+    };
+
+    const scheduleRender = () => {
+      if (animationFrame) return;
+      animationFrame = window.requestAnimationFrame(render);
+    };
+
+    const handleResize = () => {
+      if (resizeFrame) return;
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = 0;
+        measure();
+        render(true);
+      });
+    };
+
+    measure();
+    render(true);
+    scroller.addEventListener('scroll', scheduleRender, { passive: true });
+    window.addEventListener('resize', handleResize, { passive: true });
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(handleResize);
+    measurements.forEach((item) => {
+      resizeObserver?.observe(item.chapter);
+      resizeObserver?.observe(item.frame);
+    });
+
+    return () => {
+      scroller.removeEventListener('scroll', scheduleRender);
+      window.removeEventListener('resize', handleResize);
+      resizeObserver?.disconnect();
+      measurements.forEach((item) => gsap.killTweensOf(item.playhead));
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+    };
+  }, [catalogMode, catalogStoryGroups.length, filteredCatalogTopics.length, topicQuery]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || showcaseTopics.length === 0) return undefined;
+
+    const story = root.querySelector('.topic-product-story');
+    const stage = root.querySelector('.topic-product-stage');
+    const assembly = root.querySelector('.topic-product-assembly');
+    const core = root.querySelector('.topic-product-core');
+    const cards = Array.from(root.querySelectorAll('.topic-product-part'));
+    const chapters = Array.from(root.querySelectorAll('.topic-product-chapter'));
+    const scrollCue = root.querySelector('.topic-product-scroll-cue');
+    const catalogCue = root.querySelector('.topic-product-catalog-cue');
+    const scroller = root.closest('.snap-feed-page');
+    if (!story || !stage || !assembly || !core || !scroller || cards.length === 0) return undefined;
+
+    gsap.registerPlugin(ScrollTrigger);
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isMobile = () => window.innerWidth <= 760;
+    const radii = () => ({
+      x: isMobile()
+        ? Math.min(assembly.clientWidth * 0.39, 154)
+        : Math.min(assembly.clientWidth * 0.42, 254),
+      y: isMobile()
+        ? Math.min(assembly.clientHeight * 0.36, 122)
+        : Math.min(assembly.clientHeight * 0.39, 172),
+    });
+    const orbitState = (index, turn = 0, radius = 1) => {
+      const { x: orbitX, y: orbitY } = radii();
+      const angle = ((Math.PI * 2 * index) / cards.length) - (Math.PI / 2) + turn;
+      const depth = (Math.sin(angle) + 1) / 2;
+
+      return {
+        x: Math.cos(angle) * orbitX * radius,
+        y: Math.sin(angle) * orbitY * radius,
+        z: -44 + depth * 96,
+        rotation: Math.cos(angle) * 4.5,
+        scale: 0.82 + depth * 0.17,
+        autoAlpha: 0.58 + depth * 0.42,
+      };
+    };
+    const setOrbit = (turn = 0, radius = 1) => {
+      cards.forEach((card, index) => {
+        gsap.set(card, {
+          ...orbitState(index, turn, radius),
+          pointerEvents: 'auto',
+          transformOrigin: '50% 50%',
+          force3D: true,
+        });
+      });
+    };
+    const orbitTween = (index, turn, radius) => ({
+      x: () => orbitState(index, turn, radius).x,
+      y: () => orbitState(index, turn, radius).y,
+      z: () => orbitState(index, turn, radius).z,
+      rotation: () => orbitState(index, turn, radius).rotation,
+      scale: () => orbitState(index, turn, radius).scale,
+      autoAlpha: () => orbitState(index, turn, radius).autoAlpha,
+    });
+
+    assembly.classList.add('is-ready');
+    setOrbit(0, 1.08);
+
+    if (reduceMotion) {
+      gsap.set(core, { rotation: 0, scale: 1 });
+      chapters.forEach((chapter, index) => gsap.set(chapter, {
+        autoAlpha: index === 0 ? 1 : 0,
+        yPercent: isMobile() ? 0 : -50,
+        y: 0,
+        pointerEvents: index === 0 ? 'auto' : 'none',
+      }));
+      return () => {
+        gsap.set([...cards, core, ...chapters], { clearProps: 'all' });
+        assembly.classList.remove('is-ready');
+      };
+    }
+
+    const context = gsap.context(() => {
+      const timeline = gsap.timeline({
+        defaults: { ease: 'sine.inOut' },
+        scrollTrigger: {
+          trigger: story,
+          scroller,
+          start: 'top top+=64',
+          end: 'bottom bottom',
+          scrub: 1.65,
+          invalidateOnRefresh: true,
+          fastScrollEnd: false,
+        },
+      });
+
+      chapters.forEach((chapter, index) => gsap.set(chapter, {
+        autoAlpha: index === 0 ? 1 : 0,
+        yPercent: isMobile() ? 0 : -50,
+        y: 0,
+        pointerEvents: index === 0 ? 'auto' : 'none',
+      }));
+      gsap.set(scrollCue, { autoAlpha: 1 });
+      gsap.set(catalogCue, { autoAlpha: 0, y: 16 });
+
+      cards.forEach((card, index) => {
+        timeline.to(card, {
+          ...orbitTween(index, 0.26, 0.96),
+          duration: 0.34,
+        }, index * 0.012);
+      });
+      timeline.to(core, {
+        rotation: 118,
+        scale: 1.07,
+        duration: 0.34,
+      }, 0);
+      timeline.to(scrollCue, { autoAlpha: 0, y: -8, duration: 0.12 }, 0.04);
+
+      timeline
+        .to(chapters[0], { autoAlpha: 0, y: -22, pointerEvents: 'none', duration: 0.13 }, 0.2)
+        .fromTo(chapters[1],
+          { autoAlpha: 0, y: 24 },
+          { autoAlpha: 1, y: 0, pointerEvents: 'auto', duration: 0.15 },
+          0.27)
+        .to(chapters[1], { autoAlpha: 0, y: -22, pointerEvents: 'none', duration: 0.14 }, 0.52)
+        .fromTo(chapters[2],
+          { autoAlpha: 0, y: 24 },
+          { autoAlpha: 1, y: 0, pointerEvents: 'auto', duration: 0.16 },
+          0.6);
+
+      cards.forEach((card, index) => {
+        timeline.to(card, {
+          ...orbitTween(index, 0.84, 1.03),
+          duration: 0.4,
+        }, 0.35 + index * 0.012);
+      });
+      timeline.to(core, {
+        rotation: 286,
+        scale: 0.98,
+        duration: 0.4,
+      }, 0.35);
+
+      cards.forEach((card, index) => {
+        timeline.to(card, {
+          ...orbitTween(index, 1.12, 1.12),
+          duration: 0.24,
+        }, 0.75 + index * 0.01);
+      });
+      timeline
+        .to(core, { rotation: 352, scale: 0.94, duration: 0.24 }, 0.75)
+        .to(catalogCue, { autoAlpha: 1, y: 0, duration: 0.12 }, 0.86);
+    }, root);
+
+    ScrollTrigger.refresh();
+
+    return () => {
+      context.revert();
+      assembly.classList.remove('is-ready');
+    };
+  }, [showcaseTopicKey]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+
+    const section = root.querySelector('.smarty-feature-showcase');
+    if (!section) return undefined;
+
+    gsap.registerPlugin(ScrollTrigger);
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) return undefined;
+
+    const context = gsap.context(() => {
+      const scroller = root.closest('.snap-feed-page');
+      const stage = section.querySelector('.smarty-feature-stage');
+      const heading = section.querySelector('.smarty-feature-heading');
+      const rail = section.querySelector('.smarty-feature-grid');
+      const cards = gsap.utils.toArray('.smarty-feature-card', section);
+
+      gsap.set(rail, { x: 0 });
+      cards.forEach((card, index) => gsap.set(card, {
+        autoAlpha: index === 0 ? 1 : index === 1 ? 0.32 : 0.14,
+        z: index === 0 ? 42 : -70,
+        scale: index === 0 ? 1 : 0.92,
+        pointerEvents: 'auto',
+        transformOrigin: '50% 50%',
+      }));
+
+      const featureTimeline = gsap.timeline({
+        scrollTrigger: {
+          trigger: section,
+          scroller,
+          start: 'top top',
+          end: 'bottom bottom',
+          scrub: 0.85,
+          invalidateOnRefresh: true,
+        },
+      });
+
+      featureTimeline
+        .fromTo(stage, { autoAlpha: 0.35, scale: 0.975 }, { autoAlpha: 1, scale: 1, duration: 0.1, ease: 'none' })
+        .fromTo(heading, { autoAlpha: 0, x: -24 }, { autoAlpha: 1, x: 0, duration: 0.13, ease: 'none' }, 0.02);
+
+      cards.forEach((card, index) => {
+        const focusStart = 0.14 + index * 0.125;
+        const previousCard = cards[index - 1];
+        const nextCard = cards[index + 1];
+
+        featureTimeline
+          .to(rail, {
+            x: () => {
+              const firstCard = cards[0];
+              const gap = Number.parseFloat(window.getComputedStyle(rail).columnGap || '0');
+              const step = firstCard?.getBoundingClientRect().width + gap;
+              return -index * step;
+            },
+            duration: 0.115,
+            ease: 'sine.inOut',
+          }, focusStart)
+          .to(cards, {
+            autoAlpha: 0.16,
+            z: -70,
+            scale: 0.92,
+            duration: 0.085,
+            ease: 'sine.inOut',
+          }, focusStart);
+
+        if (previousCard) {
+          featureTimeline.to(previousCard, {
+            autoAlpha: 0.28,
+            z: -30,
+            scale: 0.94,
+            duration: 0.085,
+            ease: 'sine.inOut',
+          }, focusStart);
+        }
+
+        featureTimeline.to(card, {
+          autoAlpha: 1,
+          z: 42,
+          scale: 1,
+          duration: 0.105,
+          ease: 'sine.inOut',
+        }, focusStart);
+
+        if (nextCard) {
+          featureTimeline.to(nextCard, {
+            autoAlpha: 0.32,
+            z: -30,
+            scale: 0.94,
+            duration: 0.085,
+            ease: 'sine.inOut',
+          }, focusStart);
+        }
+      });
+
+      featureTimeline
+        .to(heading, { autoAlpha: 0.22, x: -20, duration: 0.08, ease: 'none' }, 0.89)
+        .to(stage, { autoAlpha: 0.18, scale: 1.012, duration: 0.09, ease: 'none' }, 0.91);
+
+      ScrollTrigger.refresh();
+    }, root);
+
+    return () => context.revert();
+  }, [catalogMode]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+
+    const cards = Array.from(root.querySelectorAll('.topic-product-card'));
+    if (cards.length === 0) return undefined;
+
+    if (
+      typeof IntersectionObserver === 'undefined' ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      cards.forEach((card) => card.classList.add('is-in-view'));
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('is-in-view');
+          observer.unobserve(entry.target);
+        });
+      },
+      {
+        root: root.closest('.snap-feed-page'),
+        rootMargin: '0px 0px -6% 0px',
+        threshold: 0.08,
+      }
+    );
+
+    cards.forEach((card) => observer.observe(card));
+    return () => observer.disconnect();
+  }, [catalogMode, topics.length, loading, error]);
+
+  return (
+    <section
+      ref={rootRef}
+      className={`topic-product-experience ${catalogMode === 'grid' ? 'is-catalog-grid' : ''}`}
+      aria-label="Explore learning topics"
+    >
+      <nav className="topic-product-nav" aria-label="Smarty topic navigation">
+        <SmartyBrand className="topic-canvas-brand" tagline="Learn · Share · Grow" />
+        <a
+          href="#topic-catalog"
+          onClick={(event) => {
+            event.preventDefault();
+            showCatalog('grid');
+          }}
+        >
+          Browse all topics
+        </a>
+      </nav>
+
+      <div className="topic-product-story">
+        <div className="topic-product-stage">
+          <div className="topic-product-space" aria-hidden="true" />
+          <div className="topic-product-copy">
+            <div className="topic-product-chapter">
+              <span>Knowledge, assembled around you</span>
+              <h1>Scroll into something worth knowing.</h1>
+              <p>Move through the ideas, then choose the direction that pulls you in.</p>
+            </div>
+            <div className="topic-product-chapter">
+              <span>Every subject, connected</span>
+              <h2>One learning universe. Your pace.</h2>
+              <p>Topics respond to your exact scroll position. Nothing auto-plays or rushes ahead.</p>
+            </div>
+            <div className="topic-product-chapter">
+              <span>Choose your next discovery</span>
+              <h2>Go deeper when you are ready.</h2>
+              <p>Every card is selectable. Continue scrolling for the complete catalog.</p>
+            </div>
+          </div>
+
+          <div className="topic-product-assembly">
+            <div className="topic-product-core" aria-hidden="true"><span>S</span></div>
+            {showcaseTopics.map((item, index) => {
+              const { icon: TopicIcon } = getTopicVisualMeta(item, index);
+              return (
+                <button
+                  type="button"
+                  className="topic-product-part"
+                  key={getCanonicalTopic(item)}
+                  onClick={() => onSelect(item)}
+                  aria-label={`Explore ${item}`}
+                >
+                  <TopicIcon size={22} strokeWidth={1.7} />
+                  <span>{normalizeTopic(item) === 'all' ? 'All topics' : item}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="topic-product-scroll-cue" aria-hidden="true">
+            <span>Scroll to assemble</span><i />
+          </div>
+          <div className="topic-product-catalog-cue" aria-hidden="true">Continue to the catalog</div>
+        </div>
+      </div>
+
+      <section
+        id="topic-catalog"
+        className={`topic-product-catalog ${catalogMode === 'grid' ? 'is-grid-mode' : ''}`}
+      >
+        {catalogMode === 'grid' ? (
+          <header className="topic-catalog-section-title">
+            <h2>Topic catalog</h2>
+          </header>
+        ) : (
+          <header className="topic-catalog-intro">
+            <span>Topic catalog</span>
+            <h2>Find it. Open it. Keep moving.</h2>
+            <p>Search instantly or scan the complete collection without leaving the page.</p>
+          </header>
+        )}
+
+        <div className="topic-quick-toolbar">
+          <label className="topic-quick-search">
+            <Search size={18} strokeWidth={1.9} aria-hidden="true" />
+            <input
+              type="search"
+              value={topicQuery}
+              placeholder="Search topics"
+              aria-label="Search topics"
+              onChange={(event) => {
+                setTopicQuery(event.target.value);
+                if (event.target.value) setCatalogMode('grid');
+              }}
+            />
+            <span>{filteredCatalogTopics.length} topics</span>
+          </label>
+          <button
+            type="button"
+            className="topic-catalog-mode-toggle"
+            onClick={() => showCatalog(catalogMode === 'grid' ? 'story' : 'grid')}
+          >
+            {catalogMode === 'grid' ? 'Story view' : 'Grid view'}
+          </button>
+          {topicQuery && (
+            <button type="button" className="topic-quick-clear" onClick={() => setTopicQuery('')}>
+              Clear
+            </button>
+          )}
+        </div>
+
+        {loading && topics.length <= 1 ? (
+          <div className="topic-product-loading" role="status"><Loader2 className="spin-icon" size={20} /> Loading topics...</div>
+        ) : error ? (
+          <div className="topic-product-error" role="alert">
+            <p>{error}</p><button type="button" onClick={onRetry}>Try again</button>
+          </div>
+        ) : (
+          filteredCatalogTopics.length > 0 ? (
+            catalogMode === 'grid' ? (
+              <div className="topic-quick-grid">
+                {filteredCatalogTopics.map((item) => {
+                  const originalIndex = topics.indexOf(item);
+                  return (
+                    <TopicProductCard
+                      key={getCanonicalTopic(item)}
+                      item={item}
+                      index={Math.max(0, originalIndex)}
+                      onSelect={onSelect}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+            <div className="topic-catalog-story">
+              {catalogStoryGroups.map((group, groupIndex) => (
+                <article
+                  className="topic-catalog-story-chapter"
+                  key={`catalog-story-${groupIndex}`}
+                  style={{ '--catalog-story-height': `${Math.max(300, 160 + group.length * 18)}vh` }}
+                >
+                  <div className="topic-catalog-story-frame">
+                    <span className="topic-catalog-story-orbit" aria-hidden="true" />
+                    <span className="topic-catalog-story-index" aria-hidden="true">
+                      {String(group.length).padStart(2, '0')} topics · one continuous row
+                    </span>
+                    <div className="topic-catalog-story-stack">
+                      {group.map((item) => {
+                        const originalIndex = topics.indexOf(item);
+                        return (
+                          <TopicProductCard
+                            key={getCanonicalTopic(item)}
+                            item={item}
+                            index={Math.max(0, originalIndex)}
+                            onSelect={onSelect}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+            )
+          ) : (
+            <div className="topic-quick-empty">
+              <Search size={22} strokeWidth={1.7} aria-hidden="true" />
+              <h3>No matching topics</h3>
+              <p>Try a shorter or broader search.</p>
+              <button type="button" onClick={() => setTopicQuery('')}>Show every topic</button>
+            </div>
+          )
+        )}
+      </section>
+
+      <section className="smarty-feature-showcase" aria-labelledby="smarty-feature-title">
+        <div className="smarty-feature-stage">
+          <header className="smarty-feature-heading">
+            <span>More than a feed</span>
+            <h2 id="smarty-feature-title">Everything you need to keep learning.</h2>
+            <p>Discover an idea, understand it, test it, save it, and share it without leaving Smarty.</p>
+          </header>
+
+          <div className="smarty-feature-window">
+            <div className="smarty-feature-grid">
+              {SMARTY_FEATURES.map((feature) => {
+              const FeatureIcon = feature.icon;
+              const featureContent = (
+                <>
+                  <span className="smarty-feature-icon" aria-hidden="true">
+                    <FeatureIcon size={23} strokeWidth={1.65} />
+                  </span>
+                  <span className="smarty-feature-copy">
+                    <small>{feature.eyebrow}</small>
+                    <strong>{feature.title}</strong>
+                    <em>{feature.description}</em>
+                  </span>
+                  {feature.to && <ArrowRight className="smarty-feature-arrow" size={18} strokeWidth={1.8} aria-hidden="true" />}
+                </>
+              );
+
+              return feature.to ? (
+                <Link
+                  className={`smarty-feature-card ${feature.featured ? 'is-featured' : ''}`}
+                  to={feature.to}
+                  key={feature.eyebrow}
+                >
+                  {featureContent}
+                </Link>
+              ) : (
+                <article
+                  className={`smarty-feature-card ${feature.featured ? 'is-featured' : ''}`}
+                  key={feature.eyebrow}
+                >
+                  {featureContent}
+                </article>
+              );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+  );
+}
 
 const TopicPill = memo(function TopicPill({
   item,
@@ -1749,6 +2663,7 @@ useEffect(() => {
   async function loadTopics() {
     try {
       setTopicsLoading(true);
+      setTopicsError('');
 
       const data = await postApi.getTopics();
 
@@ -1763,6 +2678,9 @@ useEffect(() => {
       }
     } catch (err) {
       console.error('Could not load topics:', err);
+      if (!cancelled) {
+        setTopicsError('We could not load the topic catalog. Please try again.');
+      }
     } finally {
       if (!cancelled) setTopicsLoading(false);
     }
@@ -1773,7 +2691,7 @@ useEffect(() => {
   return () => {
     cancelled = true;
   };
-}, []);
+}, [topicsReloadKey]);
 
 
   const handleTranslate = useCallback(async (post, lang = 'Hindi') => {
@@ -3246,6 +4164,16 @@ handleComments,
       )}
 
 {!selectedTopic && (
+  <TopicScrollExperience
+    topics={launchTopics}
+    loading={loading || topicsLoading}
+    error={topicsError}
+    onRetry={() => setTopicsReloadKey((value) => value + 1)}
+    onSelect={handleTopicSelect}
+  />
+)}
+
+{false && !selectedTopic && (
   <section
     className="topic-launch-screen"
     aria-label="Choose a learning topic"

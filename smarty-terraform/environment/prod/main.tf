@@ -720,6 +720,9 @@ module "http_api" {
       "https://smarty.wiki",
       "https://www.smarty.wiki",
       "https://main.d3qiuefonbp8n9.amplifyapp.com",
+      "https://staging.dgss25qxft1o4.amplifyapp.com",
+      "https://production.dgss25qxft1o4.amplifyapp.com",
+      "http://localhost:5173",
     ]
 
     allow_methods = [
