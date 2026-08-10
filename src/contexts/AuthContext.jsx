@@ -297,6 +297,26 @@ function getVerifiedNativeCachedUser() {
   }
 }
 
+async function waitForCognitoSession(attempts = 1) {
+  let lastError;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const currentUser = await getCurrentUser();
+      const session = await fetchAuthSession();
+      return { currentUser, session };
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 220));
+      }
+    }
+  }
+
+  throw lastError || new Error('Authentication session was not available.');
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -316,6 +336,9 @@ export function AuthProvider({ children }) {
           params.get('native_oauth') === 'ios' ||
           params.get('redirect_uri')?.startsWith('smarty://callback') ||
           isRunningInsideNativeApp();
+        const isWebOAuthReturn = Boolean(
+          !isNativeReturn && nativeCode && hasOAuthState
+        );
 
         if (isNativeReturn && nativeCode && hasOAuthState) {
           try {
@@ -381,13 +404,18 @@ export function AuthProvider({ children }) {
           }
         }
 
-        const currentUser = await getCurrentUser();
-        const session = await fetchAuthSession();
+        const { currentUser, session } = await waitForCognitoSession(
+          isWebOAuthReturn ? 14 : 1
+        );
 
         const authUser = mapCognitoUser(currentUser, session);
 
         saveAuthUser(authUser);
         setUser(authUser);
+
+        if (isWebOAuthReturn) {
+          redirectAfterLogin();
+        }
       } catch (err) {
         const message = err?.name || err?.message || '';
 

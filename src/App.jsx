@@ -110,6 +110,47 @@ function PageLoader() {
   );
 }
 
+function OAuthCompletionPage() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setTimedOut(true), 9000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (user) {
+    const storedTarget =
+      sessionStorage.getItem('smarty-post-login-redirect') ||
+      localStorage.getItem('smarty-post-login-redirect') ||
+      '/feed?topic=All';
+    const target = String(storedTarget).startsWith('/')
+      ? storedTarget
+      : '/feed?topic=All';
+
+    return <Navigate to={target} replace />;
+  }
+
+  if (!loading && timedOut) {
+    return (
+      <div className="app-page-loader" role="alert">
+        <div className="app-page-loader-card">
+          <div>
+            <strong>Sign-in could not finish</strong>
+            <p>Please try again. Your account was not changed.</p>
+          </div>
+          <button type="button" onClick={() => navigate('/login', { replace: true })}>
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return <PageLoader />;
+}
+
 function TopicRoomsRouteWrapper() {
   const location = useLocation();
 
@@ -1098,7 +1139,7 @@ useEffect(() => {
                   path="/"
                   element={
                     location.search.includes('code=')
-                      ? <p className="status">Completing login...</p>
+                      ? <OAuthCompletionPage />
                       : <Navigate to="/feed" replace />
                   }
                 />
