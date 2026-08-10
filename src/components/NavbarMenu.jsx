@@ -132,7 +132,14 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
             }}
           >
             <div className="menu-header">
-              <SmartyBrand compact tagline="Explore" />
+              <NavLink
+                to="/feed?topic=All"
+                onClick={closeMenu}
+                className="menu-brand-link"
+                aria-label="Smarty — view all posts"
+              >
+                <SmartyBrand compact tagline="Explore" />
+              </NavLink>
 
               <button
                 type="button"

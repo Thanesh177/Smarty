@@ -5,6 +5,18 @@
   contain: layout style;
 }
 
+.menu-brand-link {
+  display: inline-flex;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.menu-brand-link:focus-visible {
+  outline: 2px solid rgba(125, 211, 252, 0.58);
+  outline-offset: 4px;
+}
+
 
 
 .hamburger-btn {

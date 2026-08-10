@@ -4571,6 +4571,21 @@
   color: #e7f8ff;
 }
 
+.topic-product-brand-button {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.topic-product-brand-button:focus-visible {
+  outline: 2px solid rgba(125, 211, 252, 0.58);
+  outline-offset: 5px;
+}
+
 .topic-product-story {
   position: relative;
   height: 350vh;

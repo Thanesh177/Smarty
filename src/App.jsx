@@ -979,14 +979,9 @@ useEffect(() => {
           <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
-              to="/feed"
+              to="/feed?topic=All"
               className="brand-logo fancy-brand"
-              onClick={(event) => {
-                if (window.location.pathname === '/feed') {
-                  event.preventDefault();
-                  window.location.reload();
-                }
-              }}
+              aria-label="Smarty — view all posts"
             >
               <SmartyBrand compact tagline="Learn with intent" />
             </NavLink>

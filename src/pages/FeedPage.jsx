@@ -1321,7 +1321,14 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
       aria-label="Explore learning topics"
     >
       <nav className="topic-product-nav" aria-label="Smarty topic navigation">
-        <SmartyBrand className="topic-canvas-brand" tagline="Learn · Share · Grow" />
+        <button
+          type="button"
+          className="topic-product-brand-button"
+          onClick={() => onSelect('All')}
+          aria-label="Smarty — view all posts"
+        >
+          <SmartyBrand className="topic-canvas-brand" tagline="Learn · Share · Grow" />
+        </button>
         <a
           href="#topic-catalog"
           onClick={(event) => {
@@ -1967,9 +1974,7 @@ const previousTopicCanvasLayoutRef = useRef({
     error,
     nextCursor,
     loadMore,
-    refetch,
-    refresh,
-    reload,
+    refreshFeed,
     savePost,
     blockCreator,
   } = useFeed();
@@ -3823,12 +3828,8 @@ const handleBackToTopics = useCallback(() => {
 }, [navigate]);
 
 const handleFeedRetry = useCallback(() => {
-  const retry = refetch || refresh || reload;
-
-  if (typeof retry === 'function') {
-    retry();
-  }
-}, [refetch, refresh, reload]);
+  refreshFeed();
+}, [refreshFeed]);
 
 const handleTopicClick = useCallback(
   (postTopic) => {

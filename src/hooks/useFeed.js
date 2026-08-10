@@ -56,6 +56,7 @@ export default function useFeed() {
   );
   const blockedCreatorIdsRef = useRef(new Set());
   const hasFetched = useRef(false);
+  const lastFetchedScopeRef = useRef('');
   const preloadingRef = useRef(false);
   const activeCacheScopeRef = useRef(userId);
 
@@ -260,11 +261,19 @@ export default function useFeed() {
   ]);
 
   useEffect(() => {
-    if (hasFetched.current) return;
+    const currentScope = userId || 'guest';
+
+    if (
+      hasFetched.current &&
+      lastFetchedScopeRef.current === currentScope
+    ) {
+      return;
+    }
 
     hasFetched.current = true;
+    lastFetchedScopeRef.current = currentScope;
     refreshFeed();
-  }, [refreshFeed]);
+  }, [refreshFeed, userId]);
 
   const likePost = async (postId) => {
     setPosts((current) => {
