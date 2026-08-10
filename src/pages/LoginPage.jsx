@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
-import { signInWithRedirect } from 'aws-amplify/auth';
 import { useAuth } from '../contexts/AuthContext';
 import SmartyBrand from '../components/SmartyBrand';
 import './LoginPage.css';
 
 import {
-  isNativeCognitoLogin,
-  startNativeAppleLogin,
-  startAndroidGoogleLogin,
+  startSocialLogin,
 } from '../lib/cognito';
 
 export default function LoginPage() {
@@ -41,14 +38,7 @@ const [socialProvider, setSocialProvider] = useState('');
         sessionStorage.setItem('smarty-post-login-redirect', redirectTarget);
         localStorage.setItem('smarty-post-login-redirect', redirectTarget);
 
-        if (isNativeCognitoLogin()) {
-          startAndroidGoogleLogin();
-          return;
-        }
-
-        await signInWithRedirect({
-          provider: 'Google',
-        });
+        await startSocialLogin('Google', redirectTarget);
       } catch (error) {
         console.error('Automatic Google login failed:', error);
       }
@@ -74,14 +64,7 @@ const handleGoogleLogin = async () => {
       sessionStorage.setItem('smarty-post-login-redirect', redirectTarget);
       localStorage.setItem('smarty-post-login-redirect', redirectTarget);
 
-     if (isNativeCognitoLogin()) {
-        startAndroidGoogleLogin();
-        return;
-      }
-
-      await signInWithRedirect({
-        provider: 'Google',
-      });
+      await startSocialLogin('Google', redirectTarget);
 } catch (err) {
   setSocialProvider('');
   setError(
@@ -119,14 +102,7 @@ const handleAppleLogin = async () => {
       redirectTarget
     );
 
-    if (isNativeCognitoLogin()) {
-      startNativeAppleLogin();
-      return;
-    }
-
-    await signInWithRedirect({
-      provider: 'Apple',
-    });
+    await startSocialLogin('Apple', redirectTarget);
   } catch (err) {
     console.error('Apple login failed:', err);
 

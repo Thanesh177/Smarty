@@ -9,8 +9,8 @@ import {
   LogIn,
 } from 'lucide-react';
 import './NavbarMenu.css';
-import { signInWithRedirect } from 'aws-amplify/auth';
 import SmartyBrand from './SmartyBrand';
+import { startSocialLogin } from '../lib/cognito';
 
 function hasStoredAuthToken() {
   return Boolean(
@@ -31,9 +31,7 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
       sessionStorage.setItem('smarty-post-login-redirect', '/profile');
       localStorage.setItem('smarty-post-login-redirect', '/profile');
 
-      await signInWithRedirect({
-        provider: 'Google',
-      });
+      await startSocialLogin('Google', '/profile');
     } catch (error) {
       console.error('Google sign-in failed:', error);
     }

@@ -1,5 +1,6 @@
 import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
+import { signInWithRedirect } from 'aws-amplify/auth';
 
 
 const COGNITO_DOMAIN = (
@@ -152,21 +153,85 @@ export const startNativeSocialLogin = (
 
   saveCurrentRedirectPath();
 
+  const redirectPath =
+    sessionStorage.getItem(
+      'smarty-post-login-redirect'
+    ) || fallbackPath;
+  const stateBytes = new Uint8Array(24);
+  crypto.getRandomValues(stateBytes);
+  const oauthState = Array.from(
+    stateBytes,
+    (byte) => byte.toString(16).padStart(2, '0')
+  ).join('');
+
+  sessionStorage.setItem(
+    'smarty-native-oauth-state',
+    oauthState
+  );
+  localStorage.setItem(
+    'smarty-native-oauth-state',
+    oauthState
+  );
+  sessionStorage.setItem(
+    'smarty-post-login-redirect',
+    redirectPath
+  );
+  localStorage.setItem(
+    'smarty-post-login-redirect',
+    redirectPath
+  );
+
   const query = new URLSearchParams({
-    identity_provider: provider,
+    identity_provider:
+      provider === 'Apple'
+        ? 'SignInWithApple'
+        : provider,
     redirect_uri: NATIVE_REDIRECT_URI,
     response_type: 'code',
     client_id: COGNITO_CLIENT_ID,
     scope: 'openid email profile',
-    state:
-      sessionStorage.getItem(
-        'smarty-post-login-redirect'
-      ) || fallbackPath,
+    state: oauthState,
   });
 
   window.location.href =
     `https://${COGNITO_DOMAIN}` +
     `/oauth2/authorize?${query.toString()}`;
+};
+
+export const startSocialLogin = async (
+  provider,
+  redirectPath = '/feed'
+) => {
+  const normalizedProvider =
+    provider === 'Apple' ? 'Apple' : 'Google';
+
+  if (isBrowser) {
+    const safeRedirectPath =
+      String(redirectPath || '').startsWith('/')
+        ? redirectPath
+        : '/feed';
+
+    sessionStorage.setItem(
+      'smarty-post-login-redirect',
+      safeRedirectPath
+    );
+    localStorage.setItem(
+      'smarty-post-login-redirect',
+      safeRedirectPath
+    );
+  }
+
+  if (isNativeApp()) {
+    startNativeSocialLogin(
+      normalizedProvider,
+      redirectPath
+    );
+    return;
+  }
+
+  await signInWithRedirect({
+    provider: normalizedProvider,
+  });
 };
 
 
@@ -175,7 +240,7 @@ export const startAndroidGoogleLogin = () =>
 export const startNativeAppleLogin = () =>
   startNativeSocialLogin('Apple');
 
-export const exchangeAndroidCodeForTokens = async (
+export const exchangeNativeCodeForTokens = async (
   code,
   options = {}
 ) => {
@@ -200,14 +265,6 @@ export const exchangeAndroidCodeForTokens = async (
     client_id: COGNITO_CLIENT_ID,
     code,
     redirect_uri: redirectUri,
-  });
-
-  console.log('Native Cognito token request:', {
-    tokenUrl:
-      `https://${COGNITO_DOMAIN}/oauth2/token`,
-    clientId: COGNITO_CLIENT_ID,
-    redirectUri,
-    hasCode: Boolean(code),
   });
 
   const response = await fetch(
@@ -236,15 +293,6 @@ export const exchangeAndroidCodeForTokens = async (
   }
 
   if (!response.ok) {
-    console.error(
-      'Native Cognito token exchange failed:',
-      {
-        status: response.status,
-        statusText: response.statusText,
-        data,
-      }
-    );
-
     throw new Error(
       data?.error_description ||
       data?.error ||
@@ -253,17 +301,12 @@ export const exchangeAndroidCodeForTokens = async (
     );
   }
 
-  console.log(
-    'Native Cognito token exchange succeeded:',
-    {
-      hasIdToken: Boolean(data.id_token),
-      hasAccessToken: Boolean(data.access_token),
-      hasRefreshToken: Boolean(data.refresh_token),
-    }
-  );
-
   return data;
 };
+
+// Retained for older imports while native clients update.
+export const exchangeAndroidCodeForTokens =
+  exchangeNativeCodeForTokens;
 
 if (
   !COGNITO_DOMAIN ||

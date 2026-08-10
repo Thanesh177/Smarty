@@ -1,7 +1,6 @@
 import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef, Component, useMemo } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { signInWithRedirect } from 'aws-amplify/auth';
 import SupportPage from './pages/SupportPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
@@ -25,6 +24,7 @@ import {
   subscribeChatSocket,
 } from './api/chatSocket';
 import { getUserScopedStorageKey } from './lib/userScopedStorage';
+import { startSocialLogin } from './lib/cognito';
 
 import JoinRoomPage from './pages/JoinRoomPage';
 import Booksinfo from './pages/Booksinfo';
@@ -90,9 +90,7 @@ async function startGoogleProfileSignIn(redirectPath = '') {
       localStorage.setItem('smarty-resume-room-invite', 'true');
     }
 
-    await signInWithRedirect({
-      provider: 'Google',
-    });
+    await startSocialLogin('Google', finalRedirectPath);
   } catch (error) {
     console.error('Google sign-in failed:', error);
   }

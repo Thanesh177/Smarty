@@ -8,7 +8,7 @@ import {
   confirmSignUp,
 } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
-import { exchangeAndroidCodeForTokens } from '../lib/cognito';
+import { exchangeNativeCodeForTokens } from '../lib/cognito';
 import { removeLegacyAccountCacheKeys } from '../lib/userScopedStorage';
 
 const AuthContext = createContext(null);
@@ -168,10 +168,6 @@ function getCognitoLogoutUrl() {
   return `https://${cognitoDomain}/logout?${params.toString()}`;
 }
 
-function isRunningInsideAndroidApp() {
-  return Boolean(window.AndroidBridge || window.SmartyAndroid || navigator.userAgent.includes('SmartyAndroid'));
-}
-
 function normalizeRedirectPath(value) {
   const fallback = '/feed';
   const text = String(value || '').trim();
@@ -311,18 +307,29 @@ export function AuthProvider({ children }) {
       try {
         sessionStorage.removeItem('smarty-auth-redirecting');
         const params = new URLSearchParams(window.location.search);
-        const androidCode = params.get('code');
+        const nativeCode = params.get('code');
         const hasOAuthState = params.has('state');
-        const isAndroidReturn =
+        const isNativeReturn =
           params.get('platform') === 'android' ||
+          params.get('platform') === 'ios' ||
+          params.get('native_oauth') === 'android' ||
+          params.get('native_oauth') === 'ios' ||
           params.get('redirect_uri')?.startsWith('smarty://callback') ||
-          isRunningInsideAndroidApp();
+          isRunningInsideNativeApp();
 
-        if (isAndroidReturn && androidCode && hasOAuthState) {
+        if (isNativeReturn && nativeCode && hasOAuthState) {
           try {
-            console.log('Android OAuth callback detected. Exchanging code with Cognito...');
+            const returnedState = params.get('state') || '';
+            const expectedState =
+              sessionStorage.getItem('smarty-native-oauth-state') ||
+              localStorage.getItem('smarty-native-oauth-state') ||
+              '';
 
-            const tokens = await exchangeAndroidCodeForTokens(androidCode, {
+            if (!expectedState || returnedState !== expectedState) {
+              throw new Error('The sign-in response could not be verified. Please try again.');
+            }
+
+            const tokens = await exchangeNativeCodeForTokens(nativeCode, {
               redirectUri: 'smarty://callback',
             });
             const payload = decodeJwtPayload(tokens.id_token);
@@ -346,16 +353,27 @@ export function AuthProvider({ children }) {
 
             saveAuthUser(authUser);
 
-            const stateRedirect = normalizeRedirectPath(params.get('state'));
-            const redirectPath = stateRedirect.startsWith('/login') ? '/feed' : stateRedirect;
+            sessionStorage.removeItem('smarty-native-oauth-state');
+            localStorage.removeItem('smarty-native-oauth-state');
+
+            const storedRedirect =
+              sessionStorage.getItem('smarty-post-login-redirect') ||
+              localStorage.getItem('smarty-post-login-redirect') ||
+              '/feed';
+            const normalizedRedirect = normalizeRedirectPath(storedRedirect);
+            const redirectPath = normalizedRedirect.startsWith('/login')
+              ? '/feed'
+              : normalizedRedirect;
 
             window.history.replaceState({}, document.title, redirectPath);
+            sessionStorage.removeItem('smarty-post-login-redirect');
+            localStorage.removeItem('smarty-post-login-redirect');
             setUser(authUser);
             setLoading(false);
             sessionStorage.removeItem('smarty-auth-redirecting');
             return;
-          } catch (androidOAuthError) {
-            console.error('Android OAuth token exchange failed:', androidOAuthError);
+          } catch (nativeOAuthError) {
+            console.error('Native OAuth token exchange failed:', nativeOAuthError);
             clearAuthStorage();
             setUser(null);
             setLoading(false);
