@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import imageCompression from 'browser-image-compression';
+import {
+  Globe2,
+  ImagePlus,
+  Lock,
+  Send,
+  X,
+} from 'lucide-react';
 import { postApi } from '../api/client';
 import './CreatePostPage.css';
 const MAX_IMAGE_SIZE_MB = 12;
 const MAX_VIDEO_SIZE_MB = 250;
 const BYTES_PER_MB = 1024 * 1024;
-const STAGES = [
-  'Preparing files',
-  'Compressing image',
-  'Uploading image',
-  'Uploading video',
-  'Publishing post',
-  'Success',
-];
-
 const createSafeId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -150,6 +148,7 @@ export default function CreatePostPage() {
   const mountedRef = useRef(true);
   const activeUploadRef = useRef(null);
   const resetTimerRef = useRef(null);
+  const mediaInputRef = useRef(null);
 
   const [topics, setTopics] = useState([]);
   const [topicMode, setTopicMode] = useState('existing');
@@ -389,10 +388,6 @@ export default function CreatePostPage() {
     }
   }, [form, imageFile, resetForm, selectedTopic, submitting, uploadFile, videoFile]);
 
-  const handleTopicModeChange = useCallback((event) => {
-    setTopicMode(event.target.value);
-  }, []);
-
   const handleTopicChange = useCallback((event) => {
     setForm((current) => ({ ...current, topic: event.target.value }));
   }, []);
@@ -458,55 +453,15 @@ const chooseCustomTopic = useCallback(() => {
   setTopicMode('custom');
 }, []);
 
-const handleImageFileChange = useCallback((event) => {
-  const file = event.target.files?.[0] || null;
-
-  if (!file) {
+  const removeMedia = useCallback(() => {
     setImageFile(null);
-    return;
-  }
-
-  if (!String(file.type || '').startsWith('image/')) {
-    setStatus('Please select a valid image file.');
-    event.target.value = '';
-    return;
-  }
-
-  if (file.size > MAX_IMAGE_SIZE_MB * BYTES_PER_MB) {
-    setStatus(`Image must be smaller than ${MAX_IMAGE_SIZE_MB} MB.`);
-    event.target.value = '';
-    return;
-  }
-
-  setStatus('');
-  setImageFile(file);
-  setVideoFile(null);
-}, []);
-
-const handleVideoFileChange = useCallback((event) => {
-  const file = event.target.files?.[0] || null;
-
-  if (!file) {
     setVideoFile(null);
-    return;
-  }
+    setStatus('');
 
-  if (!String(file.type || '').startsWith('video/')) {
-    setStatus('Please select a valid video file.');
-    event.target.value = '';
-    return;
-  }
-
-  if (file.size > MAX_VIDEO_SIZE_MB * BYTES_PER_MB) {
-    setStatus(`Video must be smaller than ${MAX_VIDEO_SIZE_MB} MB.`);
-    event.target.value = '';
-    return;
-  }
-
-  setStatus('');
-  setVideoFile(file);
-  setImageFile(null);
-}, []);
+    if (mediaInputRef.current) {
+      mediaInputRef.current.value = '';
+    }
+  }, []);
 
   const setPublicVisibility = useCallback(() => {
     setForm((current) => ({ ...current, visibility: 'public' }));
@@ -534,195 +489,184 @@ const handleVideoFileChange = useCallback((event) => {
   );
 
   return (
-    <main className="create-page">
+    <main className="create-page post-create-page">
       {submitting && (
-        <div className="upload-loader">
-          <div className="upload-orb-wrap">
-            <div className="upload-orb">
-              <span>{uploadStage === 'Success' ? '✓' : '↑'}</span>
+        <div className="upload-loader post-publish-overlay" role="dialog" aria-modal="true" aria-label="Publishing post">
+          <div className="post-publish-card">
+            <div className="post-publish-mark" aria-hidden="true">
+              {uploadStage === 'Success' ? '✓' : <Send size={20} />}
             </div>
-
-            <div className="orbit orbit-one"></div>
-            <div className="orbit orbit-two"></div>
-            <div className="spark spark-1"></div>
-            <div className="spark spark-2"></div>
-            <div className="spark spark-3"></div>
-          </div>
-
-          <h3>{uploadStage || 'Working...'}</h3>
-
-          <div className="progress-track">
-            <div style={{ width: `${uploadProgress}%` }} />
-          </div>
-
-          <p className="progress-text">{uploadProgress}%</p>
-
-          <div className="current-stage-card">
-            <span>{uploadStage === 'Success' ? '✓' : '•'}</span>
-            <strong>{uploadStage || 'Working...'}</strong>
+            <div className="post-publish-copy">
+              <span>Publishing</span>
+              <h3>{uploadStage || 'Preparing your post'}</h3>
+            </div>
+            <div className="progress-track" aria-hidden="true">
+              <div style={{ width: `${uploadProgress}%` }} />
+            </div>
+            <p className="progress-text">{uploadProgress}% complete</p>
           </div>
         </div>
       )}
 
-      <section className="create-hero create-hero-minimal">
-        <div>
-          <span className="create-pill">Create</span>
-          <h1>Share a useful idea.</h1>
-          <p>
-            Post a short educational reel with optional image or video.
-          </p>
-        </div>
-      </section>
+      <section className="post-studio">
+        <header className="post-studio-header">
+          <div>
+            <span className="post-studio-eyebrow">New post</span>
+            <h1>Create something worth saving.</h1>
+            <p>Share one clear idea with the people who want to learn it.</p>
+          </div>
+          <span className="post-draft-state"><i aria-hidden="true" /> Draft</span>
+        </header>
 
-      <section className="create-layout">
-        <form className="create-form" onSubmit={submit}>
-          <div className="form-section compact-section">
-            <div className="section-title-row">
-              <label>Topic</label>
-              <span>Choose or create one</span>
-            </div>
+        <form className="create-form post-studio-form" onSubmit={submit}>
+          <div className="post-settings-grid">
+            <section className="post-setting-card">
+              <div className="post-field-heading">
+                <label>Topic</label>
+                <span>Where it belongs</span>
+              </div>
+              <div className="topic-mode-toggle post-segmented" role="group" aria-label="Topic source">
+                <button
+                  type="button"
+                  className={topicMode === 'existing' ? 'active' : ''}
+                  aria-pressed={topicMode === 'existing'}
+                  disabled={submitting}
+                  onClick={chooseExistingTopic}
+                >
+                  Browse
+                </button>
+                <button
+                  type="button"
+                  className={topicMode === 'custom' ? 'active' : ''}
+                  aria-pressed={topicMode === 'custom'}
+                  disabled={submitting}
+                  onClick={chooseCustomTopic}
+                >
+                  Custom
+                </button>
+              </div>
+              <div className="topic-input-row">
+                {topicMode === 'existing' ? (
+                  <select value={form.topic} disabled={submitting} onChange={handleTopicChange} aria-label="Choose topic">
+                    {renderedTopicOptions}
+                  </select>
+                ) : (
+                  <input
+                    placeholder="Name your topic"
+                    value={form.customTopic}
+                    maxLength={60}
+                    disabled={submitting}
+                    onChange={handleCustomTopicChange}
+                  />
+                )}
+              </div>
+            </section>
 
-<div className="topic-mode-toggle" role="group" aria-label="Topic mode">
-  <button
-    type="button"
-    className={topicMode === 'existing' ? 'active' : ''}
-    disabled={submitting}
-    onClick={chooseExistingTopic}
-  >
-    Choose topic
-  </button>
-
-  <button
-    type="button"
-    className={topicMode === 'custom' ? 'active' : ''}
-    disabled={submitting}
-    onClick={chooseCustomTopic}
-  >
-    Custom topic
-  </button>
-</div>
-
-<div className="topic-input-row">
-  {topicMode === 'existing' ? (
-    <select
-      value={form.topic}
-      disabled={submitting}
-      onChange={handleTopicChange}
-    >
-      {renderedTopicOptions}
-    </select>
-  ) : (
-    <input
-      placeholder="Example: Neuroscience, Space, Finance..."
-      value={form.customTopic}
-      disabled={submitting}
-      onChange={handleCustomTopicChange}
-    />
-  )}
-</div>
+            <section className="post-setting-card">
+              <div className="post-field-heading">
+                <label>Audience</label>
+                <span>Who can view it</span>
+              </div>
+              <div className="visibility-toggle post-visibility-toggle">
+                <button type="button" className={form.visibility === 'public' ? 'active' : ''} aria-pressed={form.visibility === 'public'} disabled={submitting} onClick={setPublicVisibility}>
+                  <Globe2 size={16} /> Public
+                </button>
+                <button type="button" className={form.visibility === 'private' ? 'active' : ''} aria-pressed={form.visibility === 'private'} disabled={submitting} onClick={setPrivateVisibility}>
+                  <Lock size={15} /> Private
+                </button>
+              </div>
+              <p className="post-setting-note">
+                {form.visibility === 'public'
+                  ? 'Anyone in Smarty can discover this post.'
+                  : 'Only you can view this post.'}
+              </p>
+            </section>
           </div>
 
-          <div className="form-section compact-section">
-            <label>Headline</label>
+          <section className="post-editor">
+            <div className="post-field-heading">
+              <label htmlFor="post-headline">Headline</label>
+              <span>{form.title.length}/140</span>
+            </div>
             <input
-              placeholder="Write a short, clear title"
+              id="post-headline"
+              className="post-title-input"
+              placeholder="A clear headline for your idea"
               value={form.title}
+              maxLength={140}
               disabled={submitting}
               onChange={handleTitleChange}
             />
-          </div>
 
-          <div className="form-section compact-section">
-            <label>Content</label>
+            <div className="post-editor-divider" />
+
+            <div className="post-field-heading">
+              <label htmlFor="post-content">Your idea</label>
+              <span>{form.body.length}/5000</span>
+            </div>
             <textarea
-              rows="8"
-              placeholder="Explain the idea in a simple, engaging way..."
+              id="post-content"
+              rows="9"
+              placeholder="Explain it naturally. Start with what makes it useful, then add the detail people should remember."
               value={form.body}
+              maxLength={5000}
               disabled={submitting}
               onChange={handleBodyChange}
             />
-          </div>
+          </section>
 
-          <div className="form-section compact-section">
-            <div className="section-title-row">
+          <section className="post-media-section">
+            <div className="post-field-heading">
               <label>Media</label>
-              <span>Optional</span>
+              <span>Optional · image or video</span>
             </div>
+            <input
+              ref={mediaInputRef}
+              id="post-media-input"
+              className="post-media-input"
+              type="file"
+              accept="image/*,video/*"
+              disabled={submitting}
+              onChange={handleMediaFileChange}
+            />
 
-            <div className="media-upload-grid compact-media-grid">
-<label className="upload-card single-media-card">
-  <div>
-    <span>Upload media</span>
-    <em>Image or video · optional</em>
-  </div>
-
-  <input
-    type="file"
-    accept="image/*,video/*"
-    disabled={submitting}
-    onChange={handleMediaFileChange}
-  />
-
-  {imageFile ? (
-    <>
-      <small>{imageFile.name}</small>
-      <img
-        src={imagePreviewUrl}
-        alt="Selected preview"
-        className="image-preview"
-        loading="lazy"
-        decoding="async"
-        fetchPriority="low"
-        sizes="(max-width: 768px) 92vw, 640px"
-      />
-    </>
-  ) : videoFile ? (
-    <small>{videoFile.name}</small>
-  ) : (
-    <small>Tap to add image or video</small>
-  )}
-</label>
-            </div>
-          </div>
-
-          <div className="bottom-row">
-            <div className="form-section visibility-box">
-              <label>Visibility</label>
-
-              <div className="visibility-toggle">
-                <button
-                  type="button"
-                  className={form.visibility === 'public' ? 'active' : ''}
-                  disabled={submitting}
-                  onClick={setPublicVisibility}
-                >
-                   Public
-                </button>
-
-                <button
-                  type="button"
-                  className={form.visibility === 'private' ? 'active' : ''}
-                  disabled={submitting}
-                  onClick={setPrivateVisibility}
-                >
-                   Private
+            {!imageFile && !videoFile ? (
+              <label className="post-media-empty" htmlFor="post-media-input">
+                <span className="post-media-icon"><ImagePlus size={20} /></span>
+                <span>
+                  <strong>Add a visual</strong>
+                  <small>Choose one image or video</small>
+                </span>
+                <b>Choose file</b>
+              </label>
+            ) : (
+              <div className="post-media-selected">
+                {imageFile ? (
+                  <img src={imagePreviewUrl} alt="Selected media preview" className="post-media-preview" />
+                ) : (
+                  <span className="post-video-preview"><ImagePlus size={22} /></span>
+                )}
+                <div className="post-media-meta">
+                  <strong>{imageFile?.name || videoFile?.name}</strong>
+                  <small>{imageFile ? 'Image ready' : 'Video ready'}</small>
+                </div>
+                <button type="button" className="post-media-remove" onClick={removeMedia} disabled={submitting} aria-label="Remove selected media">
+                  <X size={17} />
                 </button>
               </div>
+            )}
+          </section>
+
+          <footer className="post-studio-footer">
+            <div className="post-footer-message" aria-live="polite">
+              {status ? <p className="status">{status}</p> : <p>Your post saves as soon as it is published.</p>}
             </div>
-
-            <button
-              className="primary-btn publish-btn"
-              disabled={!canSubmit}
-              type="submit"
-            >
-              {submitting ? 'Publishing...' : 'Publish'}
+            <button className="primary-btn publish-btn post-publish-button" disabled={!canSubmit} type="submit">
+              <Send size={16} />
+              {submitting ? 'Publishing' : 'Publish post'}
             </button>
-          </div>
-
-          {status && <p className="status">{status}</p>}
+          </footer>
         </form>
-
-
       </section>
     </main>
   );
