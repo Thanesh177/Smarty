@@ -354,6 +354,8 @@ function Layout() {
     '/preview-books',
     '/read-book',
     '/login',
+    '/register',
+    '/confirm',
     '/JoinRoomPage',
  
 

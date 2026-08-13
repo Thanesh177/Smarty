@@ -40,6 +40,10 @@ export default function LoginPage() {
 const [submitting, setSubmitting] = useState(false);
 const [socialProvider, setSocialProvider] = useState('');
 
+  const prepareSignUpTransition = () => {
+    document.documentElement.dataset.authDirection = 'forward';
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
@@ -216,6 +220,7 @@ const handleAppleLogin = async () => {
               to="/register"
               state={{ from }}
               viewTransition
+              onClick={prepareSignUpTransition}
             >
               Sign up
             </Link>

@@ -1,69 +1,70 @@
-.register-page {
-  min-height: calc(100vh - 90px);
-  display: grid;
-  place-items: center;
-  padding: 40px 20px;
+.register-page .register-card {
+  gap: 15px;
 }
 
-.register-card {
-  width: min(100%, 440px);
-  display: grid;
-  gap: 18px;
-  padding: 36px;
-  border-radius: 32px;
-  background: rgba(255, 255, 255, 0.075);
-  box-shadow: 0 35px 100px rgba(0, 0, 0, 0.22);
-}
-
-.register-card .auth-mode-switch {
-  margin: 2px 0 4px;
-}
-
-.register-logo {
-  color: #9ff6ff;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.register-card > .smarty-brand-lockup {
+.register-page .register-card .auth-mode-switch {
   margin-bottom: 2px;
 }
 
-.register-card h1 {
-  margin: 0;
-  color: white;
-  font-size: 2.2rem;
-  letter-spacing: -0.04em;
+.register-page .register-card label:not(.terms-agreement) {
+  display: grid;
+  gap: 8px;
+  color: rgba(226, 232, 240, 0.76);
+  font-size: 0.78rem;
+  font-weight: 760;
+  letter-spacing: 0.01em;
 }
 
-.register-card p {
-  margin: 0 0 6px;
-  color: rgba(255, 255, 255, 0.68);
-}
-
-.register-card input {
+.register-page .register-card input:not([type='checkbox']) {
   width: 100%;
-  border: 0;
+  min-height: 50px;
+  border: 1px solid transparent;
   outline: none;
-  border-radius: 18px;
-  padding: 16px 17px;
+  border-radius: 15px;
+  padding: 0 16px;
   background: rgba(238, 244, 255, 0.95);
   color: #07111f;
-  font-size: 1rem;
+  font-size: 0.95rem;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
 }
 
-.register-card input:focus {
-  box-shadow: 0 0 0 4px rgba(147, 197, 253, 0.22);
+.register-page .register-card input:not([type='checkbox']):focus {
+  border-color: rgba(125, 211, 252, 0.65);
+  background: #f8fbff;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.13);
 }
 
-.register-card .primary-btn {
-  min-height: 54px;
-  text-decoration: none;
+.register-page .register-card input:not([type='checkbox'])::placeholder {
+  color: rgba(15, 23, 42, 0.48);
 }
 
-.register-card .text-btn {
+.register-page .register-card input:not([type='checkbox']):disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.register-card .register-submit {
+  display: inline-flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   text-decoration: none;
+}
+
+.register-card .register-signin-link {
+  justify-self: center;
+  min-height: 36px;
+  padding: 8px 12px;
+  text-align: center;
+  text-decoration: none;
+}
+
+.register-card .terms-agreement {
+  margin: 1px 0;
 }
 
 .status {
@@ -77,4 +78,10 @@
 
 .status.error {
   color: #fca5a5;
+}
+
+@media (max-width: 520px) {
+  .register-page .register-card {
+    gap: 14px;
+  }
 }

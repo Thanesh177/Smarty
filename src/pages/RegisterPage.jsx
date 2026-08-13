@@ -1,15 +1,22 @@
 import { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SmartyBrand from '../components/SmartyBrand';
 import TermsAgreement, {
   recordTermsAcceptance,
 } from '../components/TermsAgreement';
 import { userApi } from '../api/client';
+import './LoginPage.css';
 import './RegisterPage.css';
 
 export default function RegisterPage() {
   const { user, register, confirmRegistration } = useAuth();
+  const location = useLocation();
+  const fromState = location.state?.from;
+  const from =
+    (typeof fromState === 'string'
+      ? fromState
+      : fromState?.pathname) || '/feed';
 
   const [step, setStep] = useState('register');
   const [form, setForm] = useState({
@@ -22,6 +29,10 @@ export default function RegisterPage() {
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+
+  const prepareSignInTransition = () => {
+    document.documentElement.dataset.authDirection = 'backward';
+  };
 
   if (user) return <Navigate to="/feed" replace />;
 
@@ -93,110 +104,184 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="register-page">
-      <form className="register-card" onSubmit={handleSubmit}>
-        <SmartyBrand compact tagline="Create your account" />
-
-        <nav className="auth-mode-switch" aria-label="Authentication options">
-          <Link className="auth-mode-option" to="/login" viewTransition>
-            Sign in
-          </Link>
-          <span className="auth-mode-option active" aria-current="page">
-            Sign up
-          </span>
-        </nav>
-
-        <h1>
-          {step === 'register' && 'Create account'}
-          {step === 'confirm' && 'Verify email'}
-          {step === 'done' && 'Account ready'}
-        </h1>
-
-        <p>
-          {step === 'register' && 'Start sharing educational content.'}
-          {step === 'confirm' && 'Enter the code sent to your email.'}
-          {step === 'done' && 'Your email has been confirmed.'}
-        </p>
-
-        {step === 'register' && (
-          <>
-            <input
-              placeholder="Name"
-              value={form.name}
-              onChange={(e) => updateField('name', e.target.value)}
+    <main className="login-page register-page">
+      <div className="login-shell">
+        <section className="login-hero">
+          <div>
+            <SmartyBrand
+              className="login-brand"
+              tagline="Learn something worth keeping"
             />
+            <h1>Make learning yours.</h1>
+            <p>
+              Create one account for your feed, saved ideas, conversations,
+              quizzes, and everything you publish.
+            </p>
+          </div>
 
-            <input
-              placeholder="Email"
-              type="email"
-              autoComplete="email"
-              value={form.email}
-              onChange={(e) => updateField('email', e.target.value)}
-            />
+          <div className="login-highlights">
+            <div>
+              <strong>01</strong>
+              <span>Follow your interests</span>
+            </div>
+            <div>
+              <strong>02</strong>
+              <span>Learn at your pace</span>
+            </div>
+            <div>
+              <strong>03</strong>
+              <span>Share what matters</span>
+            </div>
+          </div>
+        </section>
 
-            <input
-              placeholder="Password"
-              type="password"
-              autoComplete="new-password"
-              value={form.password}
-              onChange={(e) => updateField('password', e.target.value)}
-            />
+        <section className="login-layout">
+          <form className="login-card register-card" onSubmit={handleSubmit}>
+            <nav className="auth-mode-switch" aria-label="Authentication options">
+              <Link
+                className="auth-mode-option"
+                to="/login"
+                state={{ from }}
+                viewTransition
+                onClick={prepareSignInTransition}
+              >
+                Sign in
+              </Link>
+              <span className="auth-mode-option active" aria-current="page">
+                Sign up
+              </span>
+            </nav>
 
-            <TermsAgreement
-              checked={termsAccepted}
-              disabled={submitting}
-              onChange={setTermsAccepted}
-            />
-          </>
-        )}
+            <div className="login-card-header">
+              <h2>
+                {step === 'register' && 'Create account'}
+                {step === 'confirm' && 'Verify email'}
+                {step === 'done' && 'Account ready'}
+              </h2>
+              <p>
+                {step === 'register' && 'A few details, then you’re in.'}
+                {step === 'confirm' && 'Enter the code sent to your email.'}
+                {step === 'done' && 'Your email has been confirmed.'}
+              </p>
+            </div>
 
-        {step === 'confirm' && (
-          <>
-            <input
-              placeholder="Email"
-              type="email"
-              value={form.email}
-              onChange={(e) => updateField('email', e.target.value)}
-            />
+            {step === 'register' && (
+              <>
+                <label>
+                  Name
+                  <input
+                    placeholder="Your name"
+                    autoComplete="name"
+                    value={form.name}
+                    disabled={submitting}
+                    onChange={(e) => updateField('name', e.target.value)}
+                  />
+                </label>
 
-            <input
-              placeholder="Verification code"
-              value={form.code}
-              onChange={(e) => updateField('code', e.target.value)}
-            />
-          </>
-        )}
+                <label>
+                  Email
+                  <input
+                    placeholder="you@example.com"
+                    type="email"
+                    autoComplete="email"
+                    value={form.email}
+                    disabled={submitting}
+                    onChange={(e) => updateField('email', e.target.value)}
+                  />
+                </label>
 
-        {error && <p className="status error">{error}</p>}
-        {message && <p className="status success">{message}</p>}
+                <label>
+                  Password
+                  <input
+                    placeholder="Create a password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={form.password}
+                    disabled={submitting}
+                    onChange={(e) => updateField('password', e.target.value)}
+                  />
+                </label>
 
-        {step !== 'done' ? (
-          <button
-            className="primary-btn"
-            disabled={
-              submitting ||
-              (step === 'register' &&
-                (!form.email.trim() || !form.password || !termsAccepted)) ||
-              (step === 'confirm' && !form.code.trim())
-            }
-            type="submit"
-          >
-            {submitting
-              ? 'Please wait...'
-              : step === 'register'
-              ? 'Register'
-              : 'Confirm'}
-          </button>
-        ) : (
-          <Link className="primary-btn" to="/login" viewTransition>
-            Go to login
-          </Link>
-        )}
+                <TermsAgreement
+                  checked={termsAccepted}
+                  disabled={submitting}
+                  onChange={setTermsAccepted}
+                />
+              </>
+            )}
 
-        <Link className="text-btn" to="/login" viewTransition>
-          Already have an account?
-        </Link>
-      </form>
+            {step === 'confirm' && (
+              <>
+                <label>
+                  Email
+                  <input
+                    placeholder="you@example.com"
+                    type="email"
+                    autoComplete="email"
+                    value={form.email}
+                    disabled={submitting}
+                    onChange={(e) => updateField('email', e.target.value)}
+                  />
+                </label>
+
+                <label>
+                  Verification code
+                  <input
+                    placeholder="Enter your code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={form.code}
+                    disabled={submitting}
+                    onChange={(e) => updateField('code', e.target.value)}
+                  />
+                </label>
+              </>
+            )}
+
+            {error && <p className="status error">{error}</p>}
+            {message && <p className="status success">{message}</p>}
+
+            {step !== 'done' ? (
+              <button
+                className="primary-btn register-submit"
+                disabled={
+                  submitting ||
+                  (step === 'register' &&
+                    (!form.email.trim() || !form.password || !termsAccepted)) ||
+                  (step === 'confirm' && !form.code.trim())
+                }
+                type="submit"
+              >
+                {submitting
+                  ? 'Please wait...'
+                  : step === 'register'
+                  ? 'Create account'
+                  : 'Confirm email'}
+              </button>
+            ) : (
+              <Link
+                className="primary-btn register-submit"
+                to="/login"
+                state={{ from }}
+                viewTransition
+                onClick={prepareSignInTransition}
+              >
+                Continue to sign in
+              </Link>
+            )}
+
+            <Link
+              className="text-btn register-signin-link"
+              to="/login"
+              state={{ from }}
+              viewTransition
+              onClick={prepareSignInTransition}
+            >
+              Already have an account? Sign in
+            </Link>
+          </form>
+        </section>
+      </div>
     </main>
   );
 }
