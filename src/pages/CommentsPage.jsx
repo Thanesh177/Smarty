@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { postApi } from '../api/client';
+import { chatApi, postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { getUserScopedStorageKey } from '../lib/userScopedStorage';
 import './CommentsPage.css';
 
 const displayName = (item) => {
@@ -60,6 +61,8 @@ const CommentRow = memo(function CommentRow({
   onReply,
   onStartEdit,
   onDelete,
+  onReport,
+  onBlock,
 }) {
   const ownerId = item.userId || item.authorId || item.senderId;
   const disabledCreator = mine || !ownerId;
@@ -151,6 +154,24 @@ const CommentRow = memo(function CommentRow({
               </button>
             </>
           )}
+
+          {!mine && ownerId && (
+            <>
+              <button
+                type="button"
+                onClick={() => onReport(item, index)}
+              >
+                Report
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onBlock(item, index)}
+              >
+                Block
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -189,6 +210,11 @@ export default function CommentsPage() {
     [user]
   );
 
+  const blockedCreatorsKey = useMemo(
+    () => getUserScopedStorageKey('smarty_blocked_creators_v1', currentUserId),
+    [currentUserId]
+  );
+
   const [comments, setComments] = useState([]);
   const [text, setText] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
@@ -198,6 +224,9 @@ export default function CommentsPage() {
   const [posting, setPosting] = useState(false);
   const [processingCommentId, setProcessingCommentId] = useState('');
   const [toast, setToast] = useState('');
+  const [moderationTarget, setModerationTarget] = useState(null);
+  const [moderationReason, setModerationReason] = useState('');
+  const [moderationSubmitting, setModerationSubmitting] = useState(false);
 
   const scrollToBottom = useCallback((smooth = true) => {
     if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
@@ -249,14 +278,29 @@ export default function CommentsPage() {
         (a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0)
       );
 
-      setComments(sorted);
+      let blockedIds = new Set();
+
+      try {
+        blockedIds = new Set(
+          JSON.parse(localStorage.getItem(blockedCreatorsKey) || '[]')
+        );
+      } catch {
+        blockedIds = new Set();
+      }
+
+      setComments(sorted.filter((comment) => {
+        const ownerId = String(
+          comment.userId || comment.authorId || comment.senderId || ''
+        ).trim();
+        return !ownerId || !blockedIds.has(ownerId);
+      }));
     } catch (err) {
       console.error(err);
       showToast('Failed to load comments');
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [reelId, showToast]);
+  }, [blockedCreatorsKey, reelId, showToast]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -397,6 +441,93 @@ export default function CommentsPage() {
     }
   }, [getCommentId, processingCommentId, reelId, showToast]);
 
+  const openModerationDialog = useCallback((mode, item, index) => {
+    const ownerId = String(
+      item.userId || item.authorId || item.senderId || ''
+    ).trim();
+
+    if (!ownerId) {
+      showToast('This user could not be identified');
+      return;
+    }
+
+    setModerationReason('');
+    setModerationTarget({
+      mode,
+      ownerId,
+      commentId: getCommentId(item, index),
+      name: displayName(item),
+      text: item.text || item.comment || item.body || '',
+    });
+  }, [getCommentId, showToast]);
+
+  const closeModerationDialog = useCallback(() => {
+    if (moderationSubmitting) return;
+    setModerationTarget(null);
+    setModerationReason('');
+  }, [moderationSubmitting]);
+
+  const submitModerationAction = useCallback(async () => {
+    if (!moderationTarget || !moderationReason || moderationSubmitting) return;
+
+    setModerationSubmitting(true);
+
+    const context = {
+      reportedUserId: moderationTarget.ownerId,
+      postId: reelId,
+      commentId: moderationTarget.commentId,
+      contentId: moderationTarget.commentId,
+      contentType: 'comment',
+      source: moderationTarget.mode === 'block'
+        ? 'comment-block-action'
+        : 'comment-report-action',
+      reason: moderationReason,
+    };
+
+    try {
+      if (moderationTarget.mode === 'report') {
+        await chatApi.reportUser(context);
+        showToast('Comment reported. Thank you for helping keep Smarty safe.');
+      } else {
+        await chatApi.blockUser(moderationTarget.ownerId, context);
+
+        try {
+          const blockedIds = new Set(
+            JSON.parse(localStorage.getItem(blockedCreatorsKey) || '[]')
+          );
+          blockedIds.add(moderationTarget.ownerId);
+          localStorage.setItem(blockedCreatorsKey, JSON.stringify([...blockedIds]));
+        } catch {
+          // The current discussion still updates when storage is unavailable.
+        }
+
+        setComments((current) => current.filter((comment) => {
+          const ownerId = String(
+            comment.userId || comment.authorId || comment.senderId || ''
+          ).trim();
+          return ownerId !== moderationTarget.ownerId;
+        }));
+
+        showToast(`${moderationTarget.name} was blocked and removed.`);
+      }
+
+      setModerationTarget(null);
+      setModerationReason('');
+    } catch (error) {
+      console.error('Comment moderation failed:', error);
+      showToast(error?.message || 'Could not complete that safety action.');
+    } finally {
+      if (mountedRef.current) setModerationSubmitting(false);
+    }
+  }, [
+    blockedCreatorsKey,
+    moderationReason,
+    moderationSubmitting,
+    moderationTarget,
+    reelId,
+    showToast,
+  ]);
+
   const startReply = useCallback((item, index) => {
     const name = displayName(item);
 
@@ -491,6 +622,12 @@ export default function CommentsPage() {
           onReply={startReply}
           onStartEdit={startEdit}
           onDelete={deleteComment}
+          onReport={(comment, commentIndex) =>
+            openModerationDialog('report', comment, commentIndex)
+          }
+          onBlock={(comment, commentIndex) =>
+            openModerationDialog('block', comment, commentIndex)
+          }
         />
       );
     }),
@@ -504,6 +641,7 @@ export default function CommentsPage() {
       getCommentId,
       handleEditingTextChange,
       isMine,
+      openModerationDialog,
       openCreator,
       processingCommentId,
       startEdit,
@@ -605,6 +743,72 @@ export default function CommentsPage() {
           {posting ? '...' : replyingTo ? 'Reply' : 'Post'}
         </button>
       </footer>
+
+      {moderationTarget && (
+        <div
+          className="comment-moderation-backdrop"
+          role="presentation"
+          onClick={closeModerationDialog}
+        >
+          <section
+            className="comment-moderation-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="comment-moderation-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="comment-moderation-kicker">Safety action</span>
+            <h2 id="comment-moderation-title">
+              {moderationTarget.mode === 'report'
+                ? 'Report this comment?'
+                : `Block ${moderationTarget.name}?`}
+            </h2>
+            <p>
+              {moderationTarget.mode === 'report'
+                ? 'Tell us why this comment should be reviewed.'
+                : 'Their comments and posts will be removed from your view immediately.'}
+            </p>
+
+            <label>
+              Reason
+              <select
+                value={moderationReason}
+                disabled={moderationSubmitting}
+                onChange={(event) => setModerationReason(event.target.value)}
+              >
+                <option value="">Choose a reason</option>
+                <option value="Harassment or bullying">Harassment or bullying</option>
+                <option value="Hate or abusive content">Hate or abusive content</option>
+                <option value="Sexual or violent content">Sexual or violent content</option>
+                <option value="Spam or misleading content">Spam or misleading content</option>
+                <option value="Other objectionable content">Other objectionable content</option>
+              </select>
+            </label>
+
+            <div className="comment-moderation-actions">
+              <button
+                type="button"
+                disabled={moderationSubmitting}
+                onClick={closeModerationDialog}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary"
+                disabled={!moderationReason || moderationSubmitting}
+                onClick={submitModerationAction}
+              >
+                {moderationSubmitting
+                  ? 'Please wait...'
+                  : moderationTarget.mode === 'report'
+                    ? 'Submit report'
+                    : 'Block user'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

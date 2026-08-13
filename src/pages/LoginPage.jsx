@@ -18,9 +18,24 @@ export default function LoginPage() {
       : fromState?.pathname) || '/feed';
 
   const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState(
-    () => location.state?.oauthError || ''
-  );
+  const [error, setError] = useState(() => {
+    const oauthError = new URLSearchParams(window.location.search)
+      .get('oauth_error');
+
+    if (oauthError === 'apple') {
+      return 'Apple sign-in could not be completed. Please try again.';
+    }
+
+    if (oauthError === 'google') {
+      return 'Google sign-in could not be completed. Please try again.';
+    }
+
+    if (oauthError) {
+      return 'Sign-in could not be completed. Please try again.';
+    }
+
+    return location.state?.oauthError || '';
+  });
   const [message, setMessage] = useState('');
 const [submitting, setSubmitting] = useState(false);
 const [socialProvider, setSocialProvider] = useState('');
@@ -276,6 +291,19 @@ const handleAppleLogin = async () => {
                 {socialProvider === 'google' ? 'Opening...' : 'Google'}
               </button>
             </div>
+
+            <p className="login-legal-note">
+              By creating an account, you agree to Smarty&apos;s{' '}
+              <Link to="/terms" target="_blank" rel="noreferrer">
+                Terms of Use and EULA
+              </Link>{' '}
+              and acknowledge the{' '}
+              <Link to="/privacy" target="_blank" rel="noreferrer">
+                Privacy Policy
+              </Link>
+              . Smarty has zero tolerance for objectionable content or abusive
+              behavior.
+            </p>
           </form>
         </section>
       </div>

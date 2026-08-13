@@ -339,6 +339,29 @@ export function AuthProvider({ children }) {
         const isWebOAuthReturn = Boolean(
           !isNativeReturn && nativeCode && hasOAuthState
         );
+        const nativeProviderError = params.get('error');
+        const nativeProvider =
+          sessionStorage.getItem('smarty-native-oauth-provider') ||
+          localStorage.getItem('smarty-native-oauth-provider') ||
+          'social';
+
+        if (isNativeReturn && nativeProviderError) {
+          console.error(
+            'Native OAuth provider returned an error:',
+            nativeProviderError
+          );
+          sessionStorage.removeItem('smarty-native-oauth-state');
+          localStorage.removeItem('smarty-native-oauth-state');
+          sessionStorage.removeItem('smarty-native-oauth-provider');
+          localStorage.removeItem('smarty-native-oauth-provider');
+          clearAuthStorage();
+          setUser(null);
+          setLoading(false);
+          window.location.replace(
+            `/login?oauth_error=${encodeURIComponent(nativeProvider)}`
+          );
+          return;
+        }
 
         if (isNativeReturn && nativeCode && hasOAuthState) {
           try {
@@ -378,6 +401,8 @@ export function AuthProvider({ children }) {
 
             sessionStorage.removeItem('smarty-native-oauth-state');
             localStorage.removeItem('smarty-native-oauth-state');
+            sessionStorage.removeItem('smarty-native-oauth-provider');
+            localStorage.removeItem('smarty-native-oauth-provider');
 
             const storedRedirect =
               sessionStorage.getItem('smarty-post-login-redirect') ||
@@ -400,6 +425,13 @@ export function AuthProvider({ children }) {
             clearAuthStorage();
             setUser(null);
             setLoading(false);
+            sessionStorage.removeItem('smarty-native-oauth-state');
+            localStorage.removeItem('smarty-native-oauth-state');
+            sessionStorage.removeItem('smarty-native-oauth-provider');
+            localStorage.removeItem('smarty-native-oauth-provider');
+            window.location.replace(
+              `/login?oauth_error=${encodeURIComponent(nativeProvider)}`
+            );
             return;
           }
         }

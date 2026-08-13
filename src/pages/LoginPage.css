@@ -819,6 +819,28 @@ a.auth-mode-option:focus-visible {
   min-height: 48px;
 }
 
+.login-page .login-legal-note {
+  margin: 2px auto 0;
+  max-width: 46ch;
+  color: rgba(204, 216, 229, 0.62);
+  font-size: 0.72rem;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.login-page .login-legal-note a {
+  color: rgba(222, 239, 248, 0.9);
+  text-decoration: underline;
+  text-decoration-color: rgba(119, 210, 237, 0.42);
+  text-underline-offset: 3px;
+}
+
+.login-page .login-legal-note a:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid rgba(102, 218, 244, 0.84);
+  outline-offset: 3px;
+}
+
 .login-page .login-links {
   justify-content: center;
   margin-top: 2px;

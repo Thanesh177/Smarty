@@ -173,6 +173,14 @@ export const startNativeSocialLogin = (
     oauthState
   );
   sessionStorage.setItem(
+    'smarty-native-oauth-provider',
+    provider.toLowerCase()
+  );
+  localStorage.setItem(
+    'smarty-native-oauth-provider',
+    provider.toLowerCase()
+  );
+  sessionStorage.setItem(
     'smarty-post-login-redirect',
     redirectPath
   );
