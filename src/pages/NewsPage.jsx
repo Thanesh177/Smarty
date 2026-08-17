@@ -1,8 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { newsApi } from '../api/client';
 import './NewsPage.css';
+import './LibraryNewsTheme.css';
 
-const CACHE_PREFIX = 'bbc_latest_news_';
+const CACHE_PREFIX = 'smarty_multi_source_news_v2_';
 const CACHE_TTL = 1000 * 60 * 15;
 const PAGE_SIZE = 9;
 const LANGUAGES = ['english'];
@@ -67,17 +68,21 @@ const NewsCard = memo(function NewsCard({
       {article.image_link ? (
         <img
           src={article.image_link}
-          alt={article.title || 'BBC News'}
+          alt={article.title || 'News article'}
           loading={index < 2 ? 'eager' : 'lazy'}
           decoding="async"
           fetchpriority={index < 2 ? 'high' : 'auto'}
         />
       ) : (
-        <div className="missing-news-image">BBC News</div>
+        <div className="missing-news-image">
+          {article.source || article.section || 'Latest News'}
+        </div>
       )}
 
       <div className="news-card-body">
-        <span className="section-label">{article.section}</span>
+        <span className="section-label">
+          {article.source || article.section}
+        </span>
 
         <h3>{article.title || 'Untitled news'}</h3>
 
@@ -106,7 +111,9 @@ const NewsCard = memo(function NewsCard({
 const SectionTab = memo(function SectionTab({ section, active, onSelect }) {
   return (
     <button
+      type="button"
       className={active ? 'active' : ''}
+      aria-pressed={active}
       onClick={() => onSelect(section)}
     >
       {section}
@@ -208,7 +215,7 @@ export default function NewsPage() {
             setError(
               fallbackErr.message ||
                 err.message ||
-                'Failed to load BBC news. Please try again later.'
+                'Failed to load news. Please try again later.'
             );
           }
           return;
@@ -216,7 +223,7 @@ export default function NewsPage() {
       }
 
       if (mountedRef.current) {
-        setError(err.message || 'Failed to load BBC news. Please try again later.');
+        setError(err.message || 'Failed to load news. Please try again later.');
       }
     } finally {
       if (mountedRef.current && requestId === requestIdRef.current) {
@@ -360,8 +367,8 @@ export default function NewsPage() {
       <div className="news-hero">
         <div>
           <span className="news-kicker">News</span>
-          <h1>Daily Headlines</h1>
-          <p>Latest updates from all around the world</p>
+          <h1>News, without the noise.</h1>
+          <p>Fresh stories across technology, science, world events, and more.</p>
 
           {lastUpdated && (
             <span className="last-updated">Last updated: {lastUpdated}</span>
@@ -369,9 +376,11 @@ export default function NewsPage() {
         </div>
 
         <button
+          type="button"
           className="refresh-news-btn"
           onClick={handleRefreshNews}
           disabled={loading}
+          aria-label="Refresh news"
         >
           Refresh
         </button>
@@ -380,12 +389,14 @@ export default function NewsPage() {
       <div className="news-controls">
         <input
           type="search"
+          aria-label="Search news"
           placeholder="Search news..."
           value={search}
           onChange={handleSearchChange}
         />
 
         <select
+          aria-label="News language"
           value={language}
           onChange={handleLanguageChange}
         >

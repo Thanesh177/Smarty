@@ -144,6 +144,17 @@ const NEWS_API_BASE_URL =
 const OPENLIBRARY_BASE_URL =
   import.meta.env.VITE_OPENLIBRARY_BASE_URL || 'https://openlibrary.org';
 
+const GUTENDEX_BASE_URL =
+  import.meta.env.VITE_GUTENDEX_BASE_URL || 'https://gutendex.com';
+
+const HACKER_NEWS_BASE_URL =
+  import.meta.env.VITE_HACKER_NEWS_BASE_URL ||
+  'https://hacker-news.firebaseio.com/v0';
+
+const SPACEFLIGHT_NEWS_BASE_URL =
+  import.meta.env.VITE_SPACEFLIGHT_NEWS_BASE_URL ||
+  'https://api.spaceflightnewsapi.net/v4';
+
 const getStoredToken = () => {
   try {
     return localStorage.getItem('eduscroll_token') || '';
@@ -320,17 +331,140 @@ const hasLiveAuthSession = async () => {
 };
 
 export const newsApi = {
-  async getLatestNews(lang = 'english') {
-    const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
-      params: { lang },
-      timeout: API_TIMEOUT,
-    });
+  async getHackerNews(limit = 12) {
+    const { data: storyIds } = await axios.get(
+      `${HACKER_NEWS_BASE_URL}/topstories.json`,
+      { timeout: API_TIMEOUT }
+    );
 
-    if (data?.status && data.status !== 200) {
-      throw new Error(data?.message || 'Failed to load BBC news.');
+    const ids = Array.isArray(storyIds) ? storyIds.slice(0, limit) : [];
+    const results = await Promise.allSettled(
+      ids.map((id) =>
+        axios.get(`${HACKER_NEWS_BASE_URL}/item/${id}.json`, {
+          timeout: API_TIMEOUT,
+        })
+      )
+    );
+
+    return results
+      .filter((result) => result.status === 'fulfilled')
+      .map((result) => result.value.data)
+      .filter((item) => item?.type === 'story' && item?.title)
+      .map((item) => ({
+        id: `hn-${item.id}`,
+        title: item.title,
+        summary: [
+          item.score ? `${item.score} points` : '',
+          item.descendants != null ? `${item.descendants} comments` : '',
+          item.by ? `shared by ${item.by}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        news_link:
+          item.url || `https://news.ycombinator.com/item?id=${item.id}`,
+        image_link: '',
+        published_at: item.time
+          ? new Date(item.time * 1000).toISOString()
+          : '',
+        source: 'Hacker News',
+      }));
+  },
+
+  async getSpaceflightNews(limit = 12) {
+    const { data } = await axios.get(
+      `${SPACEFLIGHT_NEWS_BASE_URL}/articles/`,
+      {
+        params: { limit },
+        timeout: API_TIMEOUT,
+      }
+    );
+
+    return (Array.isArray(data?.results) ? data.results : [])
+      .filter((item) => item?.title && item?.url)
+      .map((item) => ({
+        id: `space-${item.id}`,
+        title: item.title,
+        summary: item.summary || '',
+        news_link: item.url,
+        image_link: item.image_url || '',
+        published_at: item.published_at || item.updated_at || '',
+        source: item.news_site || 'Spaceflight News',
+      }));
+  },
+
+  async getLatestNews(lang = 'english') {
+    const [bbcResult, hackerNewsResult, spaceflightResult] =
+      await Promise.allSettled([
+        axios.get(`${NEWS_API_BASE_URL}/latest`, {
+          params: { lang },
+          timeout: API_TIMEOUT,
+        }),
+        this.getHackerNews(),
+        this.getSpaceflightNews(),
+      ]);
+
+    const combined = {};
+
+    if (bbcResult.status === 'fulfilled') {
+      const bbcData = bbcResult.value.data;
+
+      if (!bbcData?.status || bbcData.status === 200) {
+        Object.entries(bbcData || {}).forEach(([section, items]) => {
+          if (!Array.isArray(items)) return;
+
+          combined[section] = items.map((item) => ({
+            ...item,
+            source: item.source || 'BBC News',
+          }));
+        });
+      }
     }
 
-    return data;
+    if (hackerNewsResult.status === 'fulfilled' && hackerNewsResult.value.length) {
+      combined.Technology = [
+        ...(combined.Technology || []),
+        ...hackerNewsResult.value,
+      ];
+    }
+
+    if (spaceflightResult.status === 'fulfilled' && spaceflightResult.value.length) {
+      combined.Space = [
+        ...(combined.Space || []),
+        ...spaceflightResult.value,
+      ];
+    }
+
+    const seen = new Set();
+
+    Object.keys(combined).forEach((section) => {
+      combined[section] = combined[section].filter((article) => {
+        const key = String(
+          article.news_link || article.title || ''
+        ).trim().toLowerCase();
+
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    });
+
+    if (!Object.values(combined).some((items) => items.length > 0)) {
+      const providerErrors = [
+        bbcResult,
+        hackerNewsResult,
+        spaceflightResult,
+      ]
+        .filter((result) => result.status === 'rejected')
+        .map((result) => result.reason?.message)
+        .filter(Boolean);
+
+      throw new Error(
+        providerErrors[0] ||
+          'News providers are temporarily unavailable. Please try again.'
+      );
+    }
+
+    return combined;
   },
 };
 
@@ -1208,6 +1342,88 @@ async rejectFollowRequest(followerId) {
 
 
 export const readBooksApi = {
+  normalizeOpenLibraryBooks(docs = []) {
+    return docs.map((book) => {
+      const workId = book.key?.replace('/works/', '') || '';
+      const cover = book.cover_i
+        ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg`
+        : '';
+      const editionKey = Array.isArray(book.edition_key) ? book.edition_key[0] : '';
+      const iaId = Array.isArray(book.ia) ? book.ia[0] : '';
+
+      return {
+        id: workId,
+        key: book.key,
+        title: book.title || 'Untitled Book',
+        authors: book.author_name || [],
+        author_name: book.author_name || [],
+        author: Array.isArray(book.author_name) && book.author_name.length
+          ? book.author_name.join(', ')
+          : 'Unknown author',
+        first_publish_year: book.first_publish_year || '',
+        year: book.first_publish_year || '',
+        subjects: book.subject || [],
+        subject: book.subject || [],
+        cover_i: book.cover_i || null,
+        cover,
+        coverUrl: cover,
+        editionKey,
+        ia: iaId,
+        hasFullText: Boolean(book.has_fulltext),
+        ebookAccess: book.ebook_access || '',
+        publicScan: Boolean(book.public_scan_b),
+        language: book.language || [],
+        readable: Boolean(
+          iaId &&
+          (book.ebook_access === 'public' || book.public_scan_b === true)
+        ),
+        source: 'Open Library',
+        openLibraryUrl: workId ? `https://openlibrary.org/works/${workId}` : '',
+        previewUrl: workId ? `https://openlibrary.org/works/${workId}` : '',
+      };
+    });
+  },
+
+  normalizeGutendexBooks(books = []) {
+    return books.map((book) => {
+      const authors = (Array.isArray(book.authors) ? book.authors : [])
+        .map((author) => author?.name)
+        .filter(Boolean);
+      const formats = book.formats || {};
+      const cover = formats['image/jpeg'] || '';
+      const textUrl =
+        formats['text/plain; charset=utf-8'] ||
+        formats['text/plain; charset=us-ascii'] ||
+        formats['text/plain'] ||
+        '';
+
+      return {
+        id: String(book.id),
+        gutenberg_id: String(book.id),
+        book_id: String(book.id),
+        title: book.title || 'Untitled Book',
+        authors,
+        author_name: authors,
+        author: authors.join(', ') || 'Unknown author',
+        subjects: book.subjects || [],
+        subject: book.subjects || [],
+        bookshelves: book.bookshelves || [],
+        description: book.summaries?.[0] || '',
+        language: book.languages || [],
+        cover,
+        coverUrl: cover,
+        formats,
+        textUrl,
+        downloadCount: Number(book.download_count || 0),
+        hasFullText: Boolean(textUrl),
+        readable: Boolean(textUrl),
+        source: 'Project Gutenberg',
+        previewUrl: `https://www.gutenberg.org/ebooks/${book.id}`,
+        openLibraryUrl: '',
+      };
+    });
+  },
+
   async getBooks(params = {}, options = {}) {
     const {
       search = '',
@@ -1246,53 +1462,77 @@ export const readBooksApi = {
     if (subjectSearch) queryParams.set('subject', subjectSearch);
     if (yearSearch) queryParams.set('first_publish_year', yearSearch);
 
-    const { data } = await axios.get(
-      `${OPENLIBRARY_BASE_URL}/search.json?${queryParams.toString()}`,
-      {
-        signal: options.signal,
-        timeout: API_TIMEOUT,
-      }
-    );
+    const gutendexParams = new URLSearchParams({
+      page: String(page),
+      languages: 'en',
+      mime_type: 'text/',
+      sort: 'popular',
+    });
 
-    const docs = Array.isArray(data?.docs) ? data.docs : [];
+    if (mainSearch) {
+      gutendexParams.set('search', mainSearch);
+    } else if (subjectSearch) {
+      gutendexParams.set('topic', subjectSearch);
+    }
 
-    return docs.map((book) => {
-      const workId = book.key?.replace('/works/', '') || '';
-      const cover = book.cover_i
-        ? `https://covers.openlibrary.org/b/id/${book.cover_i}-M.jpg`
-        : '';
-      const editionKey = Array.isArray(book.edition_key) ? book.edition_key[0] : '';
-      const iaId = Array.isArray(book.ia) ? book.ia[0] : '';
+    if (authorSearch) {
+      gutendexParams.set(
+        'search',
+        [mainSearch, authorSearch].filter(Boolean).join(' ')
+      );
+    }
 
-      return {
-        id: workId,
-        key: book.key,
-        title: book.title || 'Untitled Book',
-        authors: book.author_name || [],
-        author_name: book.author_name || [],
-        author: Array.isArray(book.author_name) && book.author_name.length
-          ? book.author_name.join(', ')
-          : 'Unknown author',
-        first_publish_year: book.first_publish_year || '',
-        year: book.first_publish_year || '',
-        subjects: book.subject || [],
-        subject: book.subject || [],
-        cover_i: book.cover_i || null,
-        cover,
-        coverUrl: cover,
-        editionKey,
-        ia: iaId,
-        hasFullText: Boolean(book.has_fulltext),
-        ebookAccess: book.ebook_access || '',
-        publicScan: Boolean(book.public_scan_b),
-        language: book.language || [],
-readable: Boolean(
-  iaId &&
-  (book.ebook_access === 'public' || book.public_scan_b === true)
-),
-        openLibraryUrl: workId ? `https://openlibrary.org/works/${workId}` : '',
-        previewUrl: workId ? `https://openlibrary.org/works/${workId}` : '',
-      };
+    const [openLibraryResult, gutendexResult] = await Promise.allSettled([
+      axios.get(
+        `${OPENLIBRARY_BASE_URL}/search.json?${queryParams.toString()}`,
+        {
+          signal: options.signal,
+          timeout: API_TIMEOUT,
+        }
+      ),
+      axios.get(
+        `${GUTENDEX_BASE_URL}/books/?${gutendexParams.toString()}`,
+        {
+          signal: options.signal,
+          timeout: API_TIMEOUT,
+        }
+      ),
+    ]);
+
+    if (
+      openLibraryResult.status === 'rejected' &&
+      gutendexResult.status === 'rejected'
+    ) {
+      throw openLibraryResult.reason || gutendexResult.reason;
+    }
+
+    const openLibraryBooks =
+      openLibraryResult.status === 'fulfilled'
+        ? this.normalizeOpenLibraryBooks(
+            Array.isArray(openLibraryResult.value.data?.docs)
+              ? openLibraryResult.value.data.docs
+              : []
+          )
+        : [];
+    const gutendexBooks =
+      gutendexResult.status === 'fulfilled'
+        ? this.normalizeGutendexBooks(
+            Array.isArray(gutendexResult.value.data?.results)
+              ? gutendexResult.value.data.results
+              : []
+          )
+        : [];
+
+    const seen = new Set();
+
+    return [...gutendexBooks, ...openLibraryBooks].filter((book) => {
+      const titleKey = String(book.title || '').trim().toLowerCase();
+      const authorKey = String(book.author || '').trim().toLowerCase();
+      const key = `${titleKey}::${authorKey}`;
+
+      if (!titleKey || seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
   },
 
@@ -1326,6 +1566,15 @@ readable: Boolean(
 
     if (!bookId) {
       throw new Error('Book ID is missing.');
+    }
+
+    if (/^\d+$/.test(bookId)) {
+      const { data } = await axios.get(
+        `${GUTENDEX_BASE_URL}/books/${encodeURIComponent(bookId)}/`,
+        { timeout: API_TIMEOUT }
+      );
+
+      return this.normalizeGutendexBooks([data])[0] || data;
     }
 
     const { data } = await axios.get(

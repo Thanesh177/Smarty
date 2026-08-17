@@ -1,0 +1,772 @@
+/* Shared discovery theme for Books and News. */
+.read-books-page.read-books-page,
+.news-page.news-page {
+  --discover-bg: #02070d;
+  --discover-surface: #08111b;
+  --discover-surface-hover: #0b1622;
+  --discover-text: #f5f7fa;
+  --discover-muted: #91a0b2;
+  --discover-subtle: #647386;
+  --discover-accent: #8bdcf7;
+  --discover-line: rgba(148, 163, 184, 0.12);
+  width: 100%;
+  min-height: 100vh;
+  box-sizing: border-box;
+  color: var(--discover-text);
+  background: var(--discover-bg);
+  padding: clamp(20px, 3vw, 42px) clamp(16px, 4vw, 64px) 96px;
+  overflow-x: clip;
+}
+
+.read-books-page::before {
+  display: none;
+}
+
+:where(.read-books-page, .news-page) :where(button, input, select, a) {
+  font: inherit;
+}
+
+:where(.read-books-page, .news-page) :where(button, a) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:where(.read-books-page, .news-page) :where(button, input, select, a):focus-visible {
+  outline: 2px solid var(--discover-accent);
+  outline-offset: 3px;
+}
+
+/* Compact page introductions */
+.read-books-page .read-books-hero,
+.news-page .news-hero {
+  width: min(1280px, 100%);
+  min-height: 0;
+  margin: 0 auto clamp(18px, 2.5vw, 30px);
+  padding: clamp(10px, 2vw, 24px) 0;
+  border: 0;
+  border-bottom: 1px solid var(--discover-line);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  overflow: visible;
+}
+
+.read-books-page .read-books-hero::after {
+  display: none;
+}
+
+.read-books-page .read-books-kicker,
+.news-page .news-kicker {
+  display: block;
+  width: auto;
+  margin: 0 0 9px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--discover-accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.read-books-page .read-books-hero h1,
+.news-page .news-hero h1 {
+  max-width: 760px;
+  margin: 0;
+  color: var(--discover-text);
+  font-size: clamp(2rem, 4vw, 3.7rem);
+  font-weight: 780;
+  line-height: 1;
+  letter-spacing: -0.055em;
+}
+
+.read-books-page .read-books-hero p,
+.news-page .news-hero p {
+  max-width: 650px;
+  margin: 12px 0 0;
+  color: var(--discover-muted);
+  font-size: clamp(0.9rem, 1.2vw, 1rem);
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.news-page .news-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.news-page .last-updated {
+  margin-top: 10px;
+  color: var(--discover-subtle);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.news-page .refresh-news-btn {
+  min-height: 40px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--discover-text);
+  font-size: 0.82rem;
+  font-weight: 750;
+  box-shadow: none;
+}
+
+.news-page .refresh-news-btn:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.17);
+  transform: none;
+}
+
+/* Search and filters */
+.read-books-page .read-books-search,
+.news-page .news-controls {
+  width: min(1280px, 100%);
+  margin: 0 auto 18px;
+  box-sizing: border-box;
+}
+
+.read-books-page .read-books-search {
+  position: sticky;
+  top: 72px;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(170px, 220px) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 0;
+  border-radius: 18px;
+  background: rgba(8, 17, 27, 0.94);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(14px);
+}
+
+.read-books-page .read-books-search-box {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px 0 13px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.09);
+}
+
+.read-books-page .read-books-search-box > span {
+  filter: grayscale(1);
+  opacity: 0.62;
+  font-size: 0.85rem;
+}
+
+.read-books-page .read-books-search-box input {
+  min-width: 0;
+  padding: 0;
+  color: var(--discover-text);
+  font-size: 0.9rem;
+  font-weight: 550;
+}
+
+.read-books-page .read-books-search-box input::placeholder {
+  color: var(--discover-subtle);
+}
+
+.read-books-page .search-clear-btn {
+  border: 0;
+  background: transparent;
+  color: var(--discover-muted);
+  padding: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.read-books-page .book-filters {
+  display: block;
+  margin: 0;
+}
+
+.read-books-page .book-filters select {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.09);
+  color: var(--discover-text);
+  padding: 0 13px;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.read-books-page .access-filter-bar {
+  width: auto;
+  min-width: 300px;
+  margin: 0;
+  padding: 3px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.07);
+  box-shadow: none;
+}
+
+.read-books-page .access-filter-btn {
+  min-height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--discover-muted);
+  padding: 0 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.read-books-page .access-filter-btn:hover {
+  background: rgba(148, 163, 184, 0.09);
+  color: var(--discover-text);
+  transform: none;
+}
+
+.read-books-page .access-filter-btn.active {
+  background: #eaf7fc;
+  color: #07111a;
+  box-shadow: none;
+}
+
+.news-page .news-controls {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 150px;
+  gap: 10px;
+}
+
+.news-page .news-controls input,
+.news-page .news-controls select {
+  min-height: 46px;
+  border: 0;
+  border-radius: 13px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--discover-text);
+  padding: 0 15px;
+  font-size: 0.88rem;
+  font-weight: 550;
+}
+
+.news-page .news-controls input::placeholder {
+  color: var(--discover-subtle);
+}
+
+.news-page .section-tabs {
+  width: min(1280px, 100%);
+  margin: 0 auto 24px;
+  padding: 0 0 7px;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.news-page .section-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.news-page .section-tabs button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--discover-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.news-page .section-tabs button:hover {
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--discover-text);
+  transform: none;
+}
+
+.news-page .section-tabs button.active {
+  background: #eaf7fc;
+  color: #07111a;
+}
+
+.news-page .cache-note {
+  width: min(1280px, 100%);
+  margin: -8px auto 14px;
+  color: var(--discover-subtle);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* Book shelves */
+.read-books-page .book-row,
+.read-books-page .read-books-status,
+.read-books-page .book-load-sentinel {
+  width: min(1280px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.read-books-page .book-row {
+  margin-bottom: clamp(28px, 4vw, 46px);
+}
+
+.read-books-page .book-row h2 {
+  margin: 0 0 14px;
+  color: var(--discover-text);
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+  font-weight: 730;
+  letter-spacing: -0.03em;
+}
+
+.read-books-page .book-row-scroll {
+  gap: clamp(14px, 1.8vw, 22px);
+  padding: 2px 1px 12px;
+  scrollbar-width: none;
+}
+
+.read-books-page .book-row-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.read-books-page .book-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: clamp(16px, 2.2vw, 26px);
+}
+
+.read-books-page .read-book-card {
+  min-width: clamp(188px, 17vw, 220px);
+  max-width: clamp(188px, 17vw, 220px);
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--discover-surface);
+  box-shadow: none;
+  backdrop-filter: none;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.read-books-page .book-results-grid .read-book-card {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+
+.read-books-page .read-book-card:hover {
+  transform: translateY(-3px);
+  background: var(--discover-surface-hover);
+  box-shadow: none;
+}
+
+.read-books-page .book-cover-placeholder {
+  height: clamp(220px, 25vw, 290px);
+  background: #0c1621;
+}
+
+.read-books-page .book-cover-placeholder img,
+.read-books-page .book-cover-placeholder .book-cover-img {
+  z-index: 1;
+  padding: 0;
+  object-fit: cover;
+  background: #0c1621;
+}
+
+.read-books-page .book-cover-placeholder::after {
+  display: none;
+}
+
+.read-books-page .book-cover-placeholder span {
+  position: absolute;
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  background: #142331;
+  color: var(--discover-accent);
+  font-size: 1.4rem;
+  box-shadow: none;
+}
+
+.read-books-page .read-book-body {
+  min-height: 164px;
+  padding: 15px;
+  gap: 4px;
+}
+
+.read-books-page .read-book-body h3 {
+  min-height: 2.7em;
+  margin: 0;
+  color: var(--discover-text);
+  font-size: 0.94rem;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.read-books-page .read-book-body p {
+  margin: 3px 0 0;
+  color: var(--discover-muted);
+  font-size: 0.78rem;
+  font-weight: 520;
+  line-height: 1.4;
+  -webkit-line-clamp: 1;
+}
+
+.read-books-page .read-book-body small {
+  margin: 7px 0 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--discover-subtle);
+  font-size: 0.66rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.read-books-page .read-book-actions {
+  grid-template-columns: 1fr auto;
+  gap: 7px;
+  padding-top: 12px;
+}
+
+.read-books-page .read-book-actions a,
+.read-books-page .read-book-actions button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 0.75rem;
+  font-weight: 720;
+  box-shadow: none;
+}
+
+.read-books-page .read-book-actions a {
+  display: grid;
+  place-items: center;
+  background: #eaf7fc;
+  color: #07111a;
+}
+
+.read-books-page .read-book-actions button {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--discover-text);
+}
+
+.read-books-page .read-book-actions :where(a, button):hover {
+  transform: none;
+  filter: brightness(1.06);
+  box-shadow: none;
+}
+
+/* News cards */
+.news-page .news-grid {
+  width: min(1280px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(16px, 2vw, 24px);
+}
+
+.news-page .news-card {
+  min-width: 0;
+  border: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--discover-surface);
+  box-shadow: none;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.news-page .news-card:hover {
+  transform: translateY(-3px);
+  background: var(--discover-surface-hover);
+  box-shadow: none;
+}
+
+.news-page .news-card.featured {
+  grid-column: span 2;
+}
+
+.news-page .news-card img,
+.news-page .missing-news-image,
+.news-page .skeleton-image {
+  width: 100%;
+  height: clamp(180px, 19vw, 250px);
+  object-fit: cover;
+  background: #0c1621;
+}
+
+.news-page .news-card.featured img,
+.news-page .news-card.featured .missing-news-image {
+  height: clamp(220px, 27vw, 350px);
+}
+
+.news-page .news-card:hover img {
+  transform: none;
+}
+
+.news-page .missing-news-image {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 18px;
+  box-sizing: border-box;
+  color: var(--discover-subtle);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.news-page .news-card-body {
+  padding: 16px;
+}
+
+.news-page .section-label {
+  margin: 0 0 8px;
+  color: var(--discover-accent);
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.news-page .news-card h3,
+.news-page .news-card.featured h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--discover-text);
+  font-size: clamp(1rem, 1.4vw, 1.22rem);
+  font-weight: 720;
+  line-height: 1.35;
+  letter-spacing: -0.025em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.news-page .news-card p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 9px 0 0;
+  color: var(--discover-muted);
+  font-size: 0.82rem;
+  font-weight: 480;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.news-page .news-actions {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 7px;
+  margin-top: 15px;
+}
+
+.news-page .news-actions a,
+.news-page .news-actions button {
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 0.74rem;
+  font-weight: 720;
+  box-shadow: none;
+}
+
+.news-page .news-actions a {
+  background: #eaf7fc;
+  color: #07111a;
+}
+
+.news-page .news-actions button {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--discover-text);
+}
+
+.news-page .news-actions :where(a, button):hover {
+  transform: none;
+  filter: brightness(1.06);
+}
+
+/* Feedback states */
+:where(.read-books-page, .news-page) :where(.read-books-status, .news-status, .scroll-loader) {
+  color: var(--discover-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.read-books-page .books-loading-card {
+  border: 0;
+  border-radius: 16px;
+  background: var(--discover-surface);
+  box-shadow: none;
+}
+
+.read-books-page .premium-book-loader {
+  background: #dff5fc;
+  box-shadow: none;
+}
+
+.news-page .skeleton-image,
+.news-page .skeleton-line {
+  background: #101b27;
+}
+
+/* Tablet */
+@media (max-width: 980px) {
+  .read-books-page .read-books-search {
+    grid-template-columns: minmax(220px, 1fr) 180px;
+  }
+
+  .read-books-page .access-filter-bar {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .news-page .news-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phone */
+@media (max-width: 680px) {
+  .read-books-page.read-books-page,
+  .news-page.news-page {
+    padding: 14px 12px 84px;
+  }
+
+  .read-books-page .read-books-hero,
+  .news-page .news-hero {
+    margin-bottom: 14px;
+    padding: 10px 2px 18px;
+  }
+
+  .read-books-page .read-books-hero h1,
+  .news-page .news-hero h1 {
+    font-size: clamp(1.8rem, 9vw, 2.5rem);
+  }
+
+  .news-page .news-hero {
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .news-page .refresh-news-btn {
+    min-height: 36px;
+  }
+
+  .read-books-page .read-books-search {
+    top: 66px;
+    grid-template-columns: 1fr;
+    gap: 7px;
+    padding: 8px;
+    border-radius: 15px;
+  }
+
+  .read-books-page .access-filter-bar {
+    min-width: 0;
+  }
+
+  .news-page .news-controls {
+    grid-template-columns: 1fr 112px;
+    gap: 7px;
+  }
+
+  .news-page .news-controls input,
+  .news-page .news-controls select {
+    min-width: 0;
+    padding: 0 11px;
+  }
+
+  .read-books-page .book-results-grid,
+  .news-page .news-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .news-page .news-card.featured {
+    grid-column: span 2;
+  }
+
+  .read-books-page .read-book-card {
+    min-width: 164px;
+    max-width: 164px;
+    border-radius: 14px;
+  }
+
+  .read-books-page .book-results-grid .read-book-card {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .read-books-page .book-cover-placeholder {
+    height: clamp(195px, 62vw, 245px);
+  }
+
+  .read-books-page .read-book-body {
+    min-height: 154px;
+    padding: 12px;
+  }
+
+  .read-books-page .read-book-actions,
+  .news-page .news-actions {
+    grid-template-columns: 1fr auto;
+  }
+
+  .news-page .news-actions button:last-child {
+    display: none;
+  }
+
+  .news-page .news-card img,
+  .news-page .missing-news-image,
+  .news-page .skeleton-image {
+    height: 150px;
+  }
+
+  .news-page .news-card.featured img,
+  .news-page .news-card.featured .missing-news-image {
+    height: 210px;
+  }
+
+  .news-page .news-card-body {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 390px) {
+  .read-books-page .book-results-grid,
+  .news-page .news-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .news-page .news-card.featured {
+    grid-column: span 1;
+  }
+
+  .read-books-page .book-results-grid .book-cover-placeholder {
+    height: 290px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.read-books-page, .news-page) *,
+  :where(.read-books-page, .news-page) *::before,
+  :where(.read-books-page, .news-page) *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -2,11 +2,12 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { readBooksApi } from '../api/client';
 import './ReadBookPage.css';
+import './LibraryNewsTheme.css';
 
 const PAGE_SIZE = 12;
 const SEARCH_PAGE_SIZE = 24;
-const READ_BOOK_ROWS_CACHE_KEY = 'smarty_read_book_rows_cache_v1';
-const READ_BOOK_BROWSE_CACHE_KEY = 'smarty_read_book_browse_cache_v1';
+const READ_BOOK_ROWS_CACHE_KEY = 'smarty_read_book_rows_cache_v2';
+const READ_BOOK_BROWSE_CACHE_KEY = 'smarty_read_book_browse_cache_v2';
 const READ_BOOK_CACHE_MAX_AGE = 1000 * 60 * 5;
 
 const CATEGORIES = [
@@ -208,7 +209,7 @@ const BookCard = memo(function BookCard({ book, saved, onToggleSave }) {
         <p>{author}</p>
         <small>
           {readable
-            ? 'Readable text available'
+            ? `Read free · ${book.source || 'public domain'}`
             : 'Preview only · opens externally'}
         </small>
         <div className="read-book-actions">
@@ -703,11 +704,11 @@ useEffect(() => {
           <span className="read-books-kicker">
             {isPreviewPage ? 'External previews' : 'Books for everyone'}
           </span>
-          <h1>{isPreviewPage ? 'Preview Books' : 'Read Free Books'}</h1>
+          <h1>{isPreviewPage ? 'Preview the library.' : 'Find your next read.'}</h1>
           <p>
             {isPreviewPage
               ? 'These books cannot be fully read inside Smarty. Preview opens on OpenLibrary in a new tab.'
-              : 'Search readable public-domain books and keep scrolling for more.'}
+              : 'Explore free public-domain books, save favourites, and read without limits.'}
           </p>
         </div>
       </div>
@@ -717,6 +718,7 @@ useEffect(() => {
           <span aria-hidden="true">🔎</span>
           <input
             type="search"
+            aria-label="Search books"
             placeholder="Search by title, author, or subject..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -745,6 +747,7 @@ useEffect(() => {
           /> */}
 
           <select
+            aria-label="Book category"
             value={categoryFilter}
             onChange={(e) => applyCategoryFilter(e.target.value)}
           >

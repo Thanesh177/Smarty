@@ -131,16 +131,12 @@ export default function BookReaderPage() {
 
       let resolvedTitle = `Book #${bookId}`;
       let bookMeta = {};
-      const isOpenLibraryWork = String(bookId).startsWith('OL') && String(bookId).endsWith('W');
-
-      if (isOpenLibraryWork) {
-        try {
-          const data = await readBooksApi.getBookById(bookId);
-          bookMeta = data || {};
-          resolvedTitle = data?.title || resolvedTitle;
-        } catch {
-          // ignore title fetch errors
-        }
+      try {
+        const data = await readBooksApi.getBookById(bookId);
+        bookMeta = data || {};
+        resolvedTitle = data?.title || resolvedTitle;
+      } catch {
+        // The text reader can still work if optional metadata is unavailable.
       }
 
       if (!mountedRef.current) return;
