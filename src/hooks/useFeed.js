@@ -24,11 +24,23 @@ const getPostCreatorId = (post) =>
 const getPostTime = (post) =>
   Number(post?.createdAt || post?.updatedAt || post?.timestamp || 0);
 
+const getPostId = (post) =>
+  String(post?.reelId || post?.postId || post?.id || '').trim();
+
+const setPostSavedState = (post, saved) => ({
+  ...post,
+  saved,
+  isSaved: saved,
+  bookmarked: saved,
+  isBookmarked: saved,
+  savedByCurrentUser: saved,
+});
+
 const dedupePosts = (items) => {
   const seen = new Map();
 
   for (const post of items || []) {
-    const id = post?.reelId || post?.id;
+    const id = getPostId(post);
     if (!id) continue;
 
     if (!seen.has(id)) {
@@ -278,7 +290,7 @@ export default function useFeed() {
   const likePost = async (postId) => {
     setPosts((current) => {
       const updated = current.map((post) =>
-        post.id === postId || post.reelId === postId
+        getPostId(post) === String(postId)
           ? { ...post, likes: (post.likes || 0) + 1 }
           : post
       );
@@ -294,11 +306,13 @@ export default function useFeed() {
     }
   };
 
-  const savePost = async (postId) => {
+  const savePost = async (postId, isCurrentlySaved = false) => {
+    const optimisticSavedState = !Boolean(isCurrentlySaved);
+
     setPosts((current) => {
       const updated = current.map((post) =>
-        post.id === postId || post.reelId === postId
-          ? { ...post, saved: !post.saved }
+        getPostId(post) === String(postId)
+          ? setPostSavedState(post, optimisticSavedState)
           : post
       );
 
@@ -307,9 +321,47 @@ export default function useFeed() {
     });
 
     try {
-      await postApi.toggleSave(postId);
-    } catch {
-      setError('Could not update save.');
+      const data = await postApi.toggleSave(postId);
+      const serverSavedState = typeof data?.isSaved === 'boolean'
+        ? data.isSaved
+        : typeof data?.saved === 'boolean'
+          ? data.saved
+          : typeof data?.bookmarked === 'boolean'
+            ? data.bookmarked
+            : optimisticSavedState;
+
+      if (serverSavedState !== optimisticSavedState) {
+        setPosts((current) => {
+          const updated = current.map((post) =>
+            getPostId(post) === String(postId)
+              ? setPostSavedState(post, serverSavedState)
+              : post
+          );
+
+          saveCache(updated, nextCursor);
+          return updated;
+        });
+      }
+
+      return {
+        ...(data && typeof data === 'object' ? data : {}),
+        isSaved: serverSavedState,
+      };
+    } catch (saveError) {
+      setPosts((current) => {
+        const rolledBack = current.map((post) =>
+          getPostId(post) === String(postId)
+            ? setPostSavedState(post, Boolean(isCurrentlySaved))
+            : post
+        );
+
+        saveCache(rolledBack, nextCursor);
+        return rolledBack;
+      });
+
+      // Bookmark failures belong to the button action, not the feed loader.
+      // The caller presents a toast while the selected topic remains usable.
+      throw saveError;
     }
   };
 

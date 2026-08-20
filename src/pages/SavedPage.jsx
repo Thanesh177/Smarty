@@ -14,13 +14,26 @@ function getPostImage(post) {
     ''
   );
 }
+
+function getSavedPostId(post) {
+  return String(
+    post?.reelId ||
+      post?.postId ||
+      post?.id ||
+      post?.item?.reelId ||
+      post?.item?.postId ||
+      post?.item?.id ||
+      ''
+  ).trim();
+}
+
 const SavedCard = memo(function SavedCard({
   post,
   onOpen,
   onLike,
   onSave,
 }) {
-  const postId = post.id || post.reelId;
+  const postId = getSavedPostId(post);
   const image = getPostImage(post);
 
   return (
@@ -29,6 +42,7 @@ const SavedCard = memo(function SavedCard({
         className="saved-card-media"
         type="button"
         onClick={() => onOpen(postId)}
+        disabled={!postId}
       >
         {post.videoUrl ? (
           <video
@@ -56,6 +70,7 @@ const SavedCard = memo(function SavedCard({
           className="saved-title-btn"
           type="button"
           onClick={() => onOpen(postId)}
+          disabled={!postId}
         >
           {post.title || 'Untitled post'}
         </button>
@@ -71,7 +86,7 @@ const SavedCard = memo(function SavedCard({
             ✅ Saved
           </button>
 
-          <button type="button" onClick={() => onOpen(postId)}>
+          <button type="button" onClick={() => onOpen(postId)} disabled={!postId}>
             Open →
           </button>
         </div>
@@ -200,6 +215,8 @@ export default function SavedPage() {
   }, [posts, activeTopic, query]);
 
   const handleLike = useCallback(async (postId) => {
+    if (!postId) return;
+
     try {
       await postApi.toggleLike(postId);
 
@@ -207,7 +224,7 @@ export default function SavedPage() {
 
       setPosts((prev) =>
         prev.map((post) => {
-          if ((post.id || post.reelId) !== postId) return post;
+          if (getSavedPostId(post) !== String(postId)) return post;
 
           const wasLiked = Boolean(post.liked);
           return {
@@ -226,12 +243,14 @@ export default function SavedPage() {
   }, []);
 
   const handleSave = useCallback(async (postId) => {
+    if (!postId) return;
+
     try {
       await postApi.toggleSave(postId);
       if (!mountedRef.current) return;
 
       setPosts((prev) =>
-        prev.filter((post) => (post.id || post.reelId) !== postId)
+        prev.filter((post) => getSavedPostId(post) !== String(postId))
       );
 
       showToast('Removed from saved');
@@ -243,7 +262,13 @@ export default function SavedPage() {
 
   const handleOpen = useCallback(
     (postId) => {
-      navigate(`/reel/${postId}`);
+      const normalizedPostId = String(postId || '').trim();
+      if (!normalizedPostId) {
+        showToast('This saved post is unavailable');
+        return;
+      }
+
+      navigate(`/reel/${encodeURIComponent(normalizedPostId)}`);
     },
     [navigate]
   );
@@ -318,7 +343,7 @@ export default function SavedPage() {
           <div className="saved-grid">
             {filteredPosts.map((post) => (
               <SavedCard
-                key={post.id || post.reelId}
+                key={getSavedPostId(post) || `${post.title || 'saved'}-${post.createdAt || ''}`}
                 post={post}
                 onOpen={handleOpen}
                 onLike={handleLike}

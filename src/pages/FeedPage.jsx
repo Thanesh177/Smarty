@@ -3656,7 +3656,7 @@ return () => {
     if (!postId) return;
 
     try {
-      const data = await savePost(postId);
+      const data = await savePost(postId, isCurrentlySaved);
       if (!mountedRef.current) return;
 
       const nextSavedState = typeof data?.isSaved === 'boolean'
