@@ -3652,8 +3652,31 @@ return () => {
     };
   }, []);
 
+  const sendToLoginForBookmark = useCallback((message) => {
+    const returnTo = `${location.pathname}${location.search}${location.hash || ''}`;
+
+    try {
+      sessionStorage.setItem('smarty-post-login-redirect', returnTo);
+      localStorage.setItem('smarty-post-login-redirect', returnTo);
+    } catch {
+      // Navigation still works when storage is unavailable.
+    }
+
+    showToast(message);
+    navigate('/login', { state: { from: returnTo } });
+  }, [location.hash, location.pathname, location.search, navigate, showToast]);
+
   const handleSave = useCallback(async (postId, isCurrentlySaved = false) => {
     if (!postId) return;
+
+    const signedInUserId = String(
+      user?.userId || user?.sub || user?.id || user?.username || ''
+    ).trim();
+
+    if (!signedInUserId) {
+      sendToLoginForBookmark('Sign in to save posts');
+      return;
+    }
 
     try {
       const data = await savePost(postId, isCurrentlySaved);
@@ -3673,9 +3696,16 @@ return () => {
       showToast(nextSavedState ? 'Saved successfully 🔖' : 'Removed from saved');
     } catch (err) {
       console.error('Save toggle failed:', err);
-      showToast('Bookmark update failed');
+
+      const status = Number(err?.response?.status || 0);
+      if (status === 401 || status === 403) {
+        sendToLoginForBookmark('Your session expired. Sign in again.');
+        return;
+      }
+
+      showToast('Could not update bookmark. Try again.');
     }
-  }, [savePost, showToast]);
+  }, [savePost, sendToLoginForBookmark, showToast, user]);
 
   const handleExplain = useCallback(async (post) => {
     const postId = getPostId(post);

@@ -130,6 +130,7 @@ export default function SavedPage() {
         setError('');
 
         const hasToken = Boolean(
+          localStorage.getItem('eduscroll_token') ||
           localStorage.getItem('eduscroll_access_token') ||
           localStorage.getItem('accessToken') ||
           localStorage.getItem('idToken') ||
@@ -256,9 +257,26 @@ export default function SavedPage() {
       showToast('Removed from saved');
     } catch (err) {
       console.error('Save failed:', err);
-      showToast('Save failed');
+
+      const status = Number(err?.response?.status || 0);
+      if (status === 401 || status === 403) {
+        const returnTo = '/saved';
+
+        try {
+          sessionStorage.setItem('smarty-post-login-redirect', returnTo);
+          localStorage.setItem('smarty-post-login-redirect', returnTo);
+        } catch {
+          // Navigation still works when storage is unavailable.
+        }
+
+        showToast('Your session expired. Sign in again.');
+        navigate('/login', { state: { from: returnTo } });
+        return;
+      }
+
+      showToast('Could not update bookmark. Try again.');
     }
-  }, []);
+  }, [navigate]);
 
   const handleOpen = useCallback(
     (postId) => {
