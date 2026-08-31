@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { chatApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,20 @@ import {
   subscribeChatSocket,
 } from '../api/chatSocket';
 import { getUserScopedStorageKey } from '../lib/userScopedStorage';
+import {
+  ArrowLeft,
+  FileText,
+  LoaderCircle,
+  Maximize2,
+  Mic,
+  Paperclip,
+  Pause,
+  Play,
+  SendHorizontal,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
 
 
 
@@ -388,11 +402,18 @@ function toggleReactionForUser(reactions, emoji, userId) {
   };
 }
 
-const AudioMiniPlayer = memo(function AudioMiniPlayer({ src, title = 'Voice note', onError }) {
+const AudioMiniPlayer = memo(function AudioMiniPlayer({ src, title = 'Voice note', onError, onMediaSettled }) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState(1);
+
+  useEffect(() => {
+    setPlaying(false);
+    setDuration(0);
+    setCurrentTime(0);
+  }, [src]);
 
   const togglePlay = async () => {
     const audio = audioRef.current;
@@ -406,21 +427,57 @@ const AudioMiniPlayer = memo(function AudioMiniPlayer({ src, title = 'Voice note
     }
   };
 
+  const seekAudio = (event) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const nextTime = Number(event.target.value);
+    audio.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  };
+
+  const cyclePlaybackRate = () => {
+    const nextRate = playbackRate === 1 ? 1.5 : playbackRate === 1.5 ? 2 : 1;
+    setPlaybackRate(nextRate);
+    if (audioRef.current) audioRef.current.playbackRate = nextRate;
+  };
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
   return (
-    <div className="audio-mini-card" title={title}>
-      <button type="button" className="audio-mini-play" onClick={togglePlay}>
-        {playing ? 'Pause' : 'Play'}
+    <div className="audio-mini-card">
+      <button
+        type="button"
+        className="audio-mini-play"
+        onClick={togglePlay}
+        aria-label={playing ? `Pause ${title}` : `Play ${title}`}
+      >
+        {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
       </button>
 
-      <div className={playing ? 'audio-mini-wave playing' : 'audio-mini-wave'}>
-        {Array.from({ length: 18 }).map((_, index) => (
-          <span key={index} />
-        ))}
+      <div className="audio-mini-content">
+        <div className="audio-mini-heading">
+          <span>{title}</span>
+          <button type="button" className="audio-mini-rate" onClick={cyclePlaybackRate} aria-label="Change playback speed">
+            {playbackRate}x
+          </button>
+        </div>
+        <input
+          className="audio-mini-seek"
+          type="range"
+          min="0"
+          max={duration || 0}
+          step="0.05"
+          value={Math.min(currentTime, duration || 0)}
+          onChange={seekAudio}
+          aria-label={`Seek ${title}`}
+          style={{ '--audio-progress': `${progress}%` }}
+        />
+        <div className="audio-mini-times" aria-hidden="true">
+          <span>{formatAudioTime(currentTime)}</span>
+          <span>{formatAudioTime(duration)}</span>
+        </div>
       </div>
-
-      <span className="audio-mini-time">
-        {playing ? formatAudioTime(currentTime) : formatAudioTime(duration)}
-      </span>
 
       <audio
         ref={audioRef}
@@ -431,6 +488,7 @@ const AudioMiniPlayer = memo(function AudioMiniPlayer({ src, title = 'Voice note
         onLoadedMetadata={(e) => {
           const nextDuration = e.currentTarget.duration || 0;
           setDuration(Number.isFinite(nextDuration) ? nextDuration : 0);
+          onMediaSettled?.();
         }}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime || 0)}
         onEnded={() => {
@@ -445,8 +503,137 @@ const AudioMiniPlayer = memo(function AudioMiniPlayer({ src, title = 'Voice note
   );
 });
 
+const VideoMiniPlayer = memo(function VideoMiniPlayer({ src, title = 'Shared video', onError, onMediaSettled }) {
+  const playerRef = useRef(null);
+  const videoRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [muted, setMuted] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  useEffect(() => {
+    setPlaying(false);
+    setLoading(true);
+    setDuration(0);
+    setCurrentTime(0);
+  }, [src]);
+
+  const togglePlay = async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    try {
+      if (video.paused) await video.play();
+      else video.pause();
+    } catch (err) {
+      console.error('Video play failed:', err);
+    }
+  };
+
+  const seekVideo = (event) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const nextTime = Number(event.target.value);
+    video.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  };
+
+  const toggleMuted = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.muted = !video.muted;
+    setMuted(video.muted);
+  };
+
+  const enterFullscreen = async () => {
+    const video = videoRef.current;
+    const player = playerRef.current;
+
+    try {
+      if (video?.webkitEnterFullscreen) {
+        video.webkitEnterFullscreen();
+        return;
+      }
+
+      await player?.requestFullscreen?.();
+    } catch (err) {
+      console.error('Could not open video fullscreen:', err);
+    }
+  };
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <div ref={playerRef} className={`chat-video-player ${playing ? 'is-playing' : ''}`}>
+      <video
+        ref={videoRef}
+        src={src}
+        playsInline
+        preload="metadata"
+        aria-label={title}
+        onClick={togglePlay}
+        onLoadedMetadata={(event) => {
+          const nextDuration = event.currentTarget.duration || 0;
+          setDuration(Number.isFinite(nextDuration) ? nextDuration : 0);
+          setLoading(false);
+          onMediaSettled?.();
+        }}
+        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime || 0)}
+        onWaiting={() => setLoading(true)}
+        onCanPlay={() => setLoading(false)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          setCurrentTime(0);
+        }}
+        onError={onError}
+      />
+
+      {loading && (
+        <span className="chat-video-loading" aria-label="Loading video">
+          <LoaderCircle size={24} aria-hidden="true" />
+        </span>
+      )}
+
+      {!playing && !loading && (
+        <button type="button" className="chat-video-center-play" onClick={togglePlay} aria-label={`Play ${title}`}>
+          <Play size={23} fill="currentColor" aria-hidden="true" />
+        </button>
+      )}
+
+      <div className="chat-video-controls">
+        <button type="button" onClick={togglePlay} aria-label={playing ? 'Pause video' : 'Play video'}>
+          {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+        </button>
+        <span className="chat-video-time">{formatAudioTime(currentTime)}</span>
+        <input
+          type="range"
+          min="0"
+          max={duration || 0}
+          step="0.05"
+          value={Math.min(currentTime, duration || 0)}
+          onChange={seekVideo}
+          aria-label="Seek video"
+          style={{ '--video-progress': `${progress}%` }}
+        />
+        <span className="chat-video-time">{formatAudioTime(duration)}</span>
+        <button type="button" onClick={toggleMuted} aria-label={muted ? 'Unmute video' : 'Mute video'}>
+          {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+        </button>
+        <button type="button" onClick={enterFullscreen} aria-label="Open video fullscreen">
+          <Maximize2 size={16} />
+        </button>
+      </div>
+    </div>
+  );
+});
+
 // ===== ChatMediaPreview component =====
-const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl, onOpenImage }) {
+const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl, onOpenImage, onMediaSettled }) {
   const [mediaSource, setMediaSource] = useState(msg.mediaUrl || msg.mediaPreview || '');
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -521,21 +708,29 @@ const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl
           decoding="async"
           fetchPriority="low"
           sizes="(max-width: 768px) 92vw, 520px"
+          onLoad={onMediaSettled}
           onError={refreshMedia}
           onClick={() => onOpenImage?.(mediaSource)}
           style={{ cursor: 'zoom-in' }}
         />
       ) : mediaKind === 'video' ? (
-        <video src={mediaSource} controls playsInline preload="metadata" onError={refreshMedia} />
+        <VideoMiniPlayer
+          src={mediaSource}
+          title={msg.mediaName || 'Shared video'}
+          onMediaSettled={onMediaSettled}
+          onError={refreshMedia}
+        />
       ) : mediaKind === 'audio' ? (
         <AudioMiniPlayer
           src={mediaSource}
           title={msg.mediaName || 'Voice note'}
+          onMediaSettled={onMediaSettled}
           onError={refreshMedia}
         />
       ) : (
-        <a href={mediaSource} target="_blank" rel="noreferrer">
-          {msg.mediaName || 'Open attachment'}
+        <a className="chat-file-attachment" href={mediaSource} target="_blank" rel="noreferrer">
+          <FileText size={18} aria-hidden="true" />
+          <span>{msg.mediaName || 'Open attachment'}</span>
         </a>
       )}
     </div>
@@ -584,6 +779,8 @@ export default function ChatPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState('');
+  const [visibleMessageLimit, setVisibleMessageLimit] = useState(40);
+  const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
 
   // Avatar fallback/cache state
   const [failedProfileAvatarIds, setFailedProfileAvatarIds] = useState({});
@@ -594,6 +791,11 @@ export default function ChatPage() {
   const activeChatIdRef = useRef(null);
   const scrollRafRef = useRef(null);
   const scrollTimerRef = useRef(null);
+  const shouldStickToBottomRef = useRef(true);
+  const initialScrollChatRef = useRef('');
+  const olderMessagesLoadingRef = useRef(false);
+  const prependScrollAnchorRef = useRef(null);
+  const previousMessageCountRef = useRef(0);
   const chatRequestSeqRef = useRef(0);
   const searchRequestSeqRef = useRef(0);
   const searchDebounceRef = useRef(null);
@@ -605,7 +807,8 @@ export default function ChatPage() {
   const messageCacheRef = useRef(new Map());
   const seenSocketMessageIdsRef = useRef(new Set());
   const lastChatsLoadRef = useRef(0);
-  const MAX_RENDERED_MESSAGES = 180;
+  const MAX_CACHED_MESSAGES = 600;
+  const MESSAGE_PAGE_SIZE = 40;
   const POLL_INTERVAL_VISIBLE = 12000;
   const POLL_INTERVAL_HIDDEN = 45000;
   const latestMessagesSignatureRef = useRef('');
@@ -625,6 +828,13 @@ export default function ChatPage() {
     activeChatIdRef.current = null;
     openedChatIdsRef.current.clear();
     latestMessagesSignatureRef.current = '';
+    shouldStickToBottomRef.current = true;
+    initialScrollChatRef.current = '';
+    olderMessagesLoadingRef.current = false;
+    prependScrollAnchorRef.current = null;
+    previousMessageCountRef.current = 0;
+    setVisibleMessageLimit(MESSAGE_PAGE_SIZE);
+    setOlderMessagesLoading(false);
     setActiveChat(null);
     setMessages([]);
     setMobileChatOpen(false);
@@ -638,12 +848,45 @@ function scrollMessagesToBottom(force = false) {
     if (!mountedRef.current || !scrollRef.current) return;
 
     const target = scrollRef.current;
-    const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (!force && !shouldStickToBottomRef.current) return;
 
-    if (!force && distanceFromBottom > 260) return;
-    target.scrollTop = target.scrollHeight;
+    target.scrollTop = Math.max(0, target.scrollHeight - target.clientHeight);
+    if (force) shouldStickToBottomRef.current = true;
   });
 }
+
+const loadOlderVisibleMessages = useCallback(() => {
+  const target = scrollRef.current;
+  if (
+    !target ||
+    olderMessagesLoadingRef.current ||
+    visibleMessageLimit >= messages.length
+  ) return;
+
+  olderMessagesLoadingRef.current = true;
+  prependScrollAnchorRef.current = {
+    scrollHeight: target.scrollHeight,
+    scrollTop: target.scrollTop,
+  };
+  setOlderMessagesLoading(true);
+
+  window.requestAnimationFrame(() => {
+    setVisibleMessageLimit((currentLimit) =>
+      Math.min(messages.length, currentLimit + MESSAGE_PAGE_SIZE)
+    );
+  });
+}, [messages.length, visibleMessageLimit]);
+
+const handleMessagesScroll = useCallback((event) => {
+  const target = event.currentTarget;
+  const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+
+  shouldStickToBottomRef.current = distanceFromBottom <= 110;
+
+  if (target.scrollTop <= 320) {
+    loadOlderVisibleMessages();
+  }
+}, [loadOlderVisibleMessages]);
 
   // =
 
@@ -678,7 +921,7 @@ try {
         ? data.messages
         : [];
 
-    return rawMessages.slice(-MAX_RENDERED_MESSAGES).map((msg) => ({
+    return rawMessages.slice(-MAX_CACHED_MESSAGES).map((msg) => ({
       ...msg,
       isMine: msg.senderId === userId,
       reactions: normalizeReactionMap(msg.reactions),
@@ -702,7 +945,7 @@ try {
   const setCachedMessages = useCallback((chatId, nextMessages) => {
     if (!chatId) return;
     const safeMessages = Array.isArray(nextMessages)
-      ? nextMessages.slice(-MAX_RENDERED_MESSAGES)
+      ? nextMessages.slice(-MAX_CACHED_MESSAGES)
       : [];
     messageCacheRef.current.set(chatId, safeMessages);
   }, []);
@@ -951,9 +1194,53 @@ try {
     };
   }, [activeChatStorageKey, userId, setCachedMessages]);
 
-useEffect(() => {
+useLayoutEffect(() => {
+  if (!activeChat?.chatId || messages.length === 0) return;
+
+  const isInitialPosition = initialScrollChatRef.current !== activeChat.chatId;
+  if (isInitialPosition) {
+    initialScrollChatRef.current = activeChat.chatId;
+    previousMessageCountRef.current = messages.length;
+    shouldStickToBottomRef.current = true;
+    scrollMessagesToBottom(true);
+    return;
+  }
+
+  const addedMessageCount = Math.max(0, messages.length - previousMessageCountRef.current);
+  previousMessageCountRef.current = messages.length;
+
+  if (addedMessageCount > 0 && !shouldStickToBottomRef.current) {
+    setVisibleMessageLimit((currentLimit) =>
+      Math.min(messages.length, currentLimit + addedMessageCount)
+    );
+    return;
+  }
+
   scrollMessagesToBottom();
-}, [messages.length]);
+}, [activeChat?.chatId, messages.length]);
+
+useLayoutEffect(() => {
+  const anchor = prependScrollAnchorRef.current;
+  const target = scrollRef.current;
+
+  if (!anchor || !target) return;
+
+  target.scrollTop = anchor.scrollTop + (target.scrollHeight - anchor.scrollHeight);
+  prependScrollAnchorRef.current = null;
+
+  window.requestAnimationFrame(() => {
+    olderMessagesLoadingRef.current = false;
+    if (mountedRef.current) setOlderMessagesLoading(false);
+  });
+}, [visibleMessageLimit]);
+
+useEffect(() => {
+  setVisibleMessageLimit(MESSAGE_PAGE_SIZE);
+  setOlderMessagesLoading(false);
+  olderMessagesLoadingRef.current = false;
+  prependScrollAnchorRef.current = null;
+  previousMessageCountRef.current = 0;
+}, [activeChat?.chatId]);
 
 useEffect(() => {
   if (!activeChat) return undefined;
@@ -1048,10 +1335,15 @@ useEffect(() => {
   autoStart();
 }, [location.state, userId]);
 
+  const visibleMessages = useMemo(
+    () => messages.slice(-visibleMessageLimit),
+    [messages, visibleMessageLimit]
+  );
+
   const groupedMessages = useMemo(() => {
     const groups = {};
 
-    messages.forEach((msg) => {
+    visibleMessages.forEach((msg) => {
       const label = getDayLabel(msg.createdAt);
       if (!groups[label]) groups[label] = [];
       groups[label].push(msg);
@@ -1061,7 +1353,7 @@ useEffect(() => {
       label,
       messages: groups[label],
     }));
-  }, [messages]);
+  }, [visibleMessages]);
 
   useEffect(() => {
     const closeSearchResults = (event) => {
@@ -1638,6 +1930,9 @@ const openMediaPicker = useCallback(() => {
 
 const handleTextChange = useCallback((event) => {
   setText(event.target.value);
+}, []);
+
+const handleMediaSettled = useCallback(() => {
   scrollMessagesToBottom();
 }, []);
 
@@ -2318,7 +2613,7 @@ const runDeleteChat = useCallback(() => {
   };
 
   return (
-<main className={`chat-page ${mobileChatOpen && activeChat ? 'mobile-chat-open' : ''}`}>
+<main className={`chat-page ${activeChat ? 'has-active-chat' : ''} ${mobileChatOpen && activeChat ? 'mobile-chat-open' : ''}`}>
       <section className="chat-sidebar">
         <header className="chat-sidebar-heading">
           <div>
@@ -2412,7 +2707,7 @@ const runDeleteChat = useCallback(() => {
                 className="mobile-chat-back-btn"
                 onClick={closeMobileChat}
               >
-                ←
+                <ArrowLeft size={19} aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -2468,7 +2763,18 @@ const runDeleteChat = useCallback(() => {
 </div>
             </div>
 
-            <div className="messages" ref={scrollRef} aria-live="polite">
+            <div
+              className="messages"
+              ref={scrollRef}
+              onScroll={handleMessagesScroll}
+              aria-live="polite"
+            >
+              {visibleMessageLimit < messages.length && (
+                <div className="chat-history-loader" role="status" aria-live="polite">
+                  <LoaderCircle size={15} className={olderMessagesLoading ? 'is-loading' : ''} aria-hidden="true" />
+                  <span>{olderMessagesLoading ? 'Loading earlier messages' : 'Scroll up for earlier messages'}</span>
+                </div>
+              )}
               {groupedMessages.length === 0 ? (
                 <p className="empty-chat">No messages yet. Say hello.</p>
               ) : (
@@ -2488,6 +2794,7 @@ const runDeleteChat = useCallback(() => {
                             msg={msg}
                             onRefreshMediaUrl={refreshMessageMediaUrl}
                             onOpenImage={setFullscreenImage}
+                            onMediaSettled={handleMediaSettled}
                           />
                         )}
 
@@ -2620,7 +2927,10 @@ const runDeleteChat = useCallback(() => {
               fetchPriority="low"
             />
           ) : selectedMedia?.type?.startsWith('video/') ? (
-            <video src={selectedMediaPreview} controls playsInline preload="metadata" />
+            <VideoMiniPlayer
+              src={selectedMediaPreview}
+              title={selectedMedia?.name || 'Video ready to send'}
+            />
           ) : selectedMedia?.type?.startsWith('audio/') ? (
             <div className="selected-audio-preview">
               <AudioMiniPlayer
@@ -2680,8 +2990,15 @@ const runDeleteChat = useCallback(() => {
       disabled={isBlocked || isUploading}
     />
 
-    <button type="button" className="composer-icon-btn" disabled={isBlocked || isUploading} onClick={openMediaPicker}>
-      +
+    <button
+      type="button"
+      className="composer-icon-btn"
+      disabled={isBlocked || isUploading}
+      onClick={openMediaPicker}
+      aria-label="Attach media"
+      title="Attach media"
+    >
+      <Paperclip size={17} aria-hidden="true" />
     </button>
 
     {/* <button type="button" className="composer-icon-btn" onClick={() => setShowComposerTools((prev) => !prev)}>
@@ -2702,7 +3019,8 @@ const runDeleteChat = useCallback(() => {
   onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
   disabled={isBlocked || isUploading}
 >
-  {isRecording ? `Stop ${recordingSeconds}s` : 'Voice'}
+  <Mic size={16} aria-hidden="true" />
+  <span>{isRecording ? `Stop ${recordingSeconds}s` : 'Voice'}</span>
 </button>
 {isRecording && (
   <button
@@ -2716,7 +3034,8 @@ const runDeleteChat = useCallback(() => {
 )}
     
 <button type="submit" disabled={isBlocked || isUploading || (!text.trim() && !selectedMedia)}>
-  Send
+  <SendHorizontal size={16} aria-hidden="true" />
+  <span>Send</span>
 </button>
   </form>
 </div>
@@ -2726,12 +3045,24 @@ const runDeleteChat = useCallback(() => {
       {fullscreenImage && (
         <div
           className="image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Expanded image preview"
           onClick={() => setFullscreenImage('')}
         >
+          <button
+            type="button"
+            className="image-lightbox-close"
+            aria-label="Close image preview"
+            onClick={() => setFullscreenImage('')}
+          >
+            <X size={20} aria-hidden="true" />
+          </button>
           <img
             src={fullscreenImage}
             alt="Expanded preview"
             className="image-lightbox-img"
+            onClick={(event) => event.stopPropagation()}
           />
         </div>
       )}

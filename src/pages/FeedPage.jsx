@@ -740,14 +740,20 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
 
     const measure = () => {
       measurements.forEach((item) => {
+        if (item.transitionTimer) window.clearTimeout(item.transitionTimer);
+        item.transition?.kill();
         gsap.killTweensOf(item.playhead);
         gsap.killTweensOf(item.cards);
+        gsap.killTweensOf(item.pieces);
       });
       const scrollerRect = scroller.getBoundingClientRect();
       measurements = chapters.map((chapter) => {
         const frame = chapter.querySelector('.topic-catalog-story-frame');
         const stack = chapter.querySelector('.topic-catalog-story-stack');
         const cards = Array.from(chapter.querySelectorAll('.topic-product-card'));
+        const pieces = cards.flatMap((card) => Array.from(card.querySelectorAll(
+          '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow, .topic-product-card-art i',
+        )));
         const counter = chapter.querySelector('.topic-catalog-story-index');
         const frameStyle = window.getComputedStyle(frame);
         const stickyTop = Number.parseFloat(frameStyle.top);
@@ -769,10 +775,21 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         const distributedRowSpacing = rows > 1
           ? (frame.clientHeight - cardHeight - desktopVerticalPadding * 2) / (rows - 1)
           : minimumRowSpacing;
-        const spacing = !isTablet ? Math.max(minimumSpacing, distributedSpacing) : minimumSpacing;
-        const rowSpacing = !isTablet ? Math.max(minimumRowSpacing, distributedRowSpacing) : minimumRowSpacing;
+        const maximumSpacing = minimumSpacing + (isTablet ? 28 : 76);
+        const maximumRowSpacing = minimumRowSpacing + (isTablet ? 22 : 54);
+        const spacing = !isTablet
+          ? Math.min(maximumSpacing, Math.max(minimumSpacing, distributedSpacing))
+          : minimumSpacing;
+        const rowSpacing = !isTablet
+          ? Math.min(maximumRowSpacing, Math.max(minimumRowSpacing, distributedRowSpacing))
+          : minimumRowSpacing;
         const cardsPerScene = columns * rows;
         const scenes = Math.max(1, Math.ceil(cards.length / cardsPerScene));
+        const sceneTravelVh = isMobile ? 48 : (isTablet ? 58 : 78);
+        chapter.style.setProperty(
+          '--catalog-story-height',
+          `${Math.max(420, 110 + scenes * sceneTravelVh)}vh`,
+        );
         const chapterRect = chapter.getBoundingClientRect();
         const contentTop = scroller.scrollTop + chapterRect.top - scrollerRect.top;
         const startScroll = contentTop - (Number.isFinite(stickyTop) ? stickyTop : 64);
@@ -784,13 +801,13 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           const row = Math.floor(slot / columns);
           const rowOffset = (row - (rows - 1) / 2) * rowSpacing;
           const columnOffset = (column - (columns - 1) / 2) * spacing;
-          const rowStagger = (row - (rows - 1) / 2) * Math.min(spacing * 0.055, 24);
-          const columnStagger = (column - (columns - 1) / 2) * Math.min(rowSpacing * 0.045, 8);
-          const baseTilt = isMobile ? -2.4 : -4.6;
-          const tilt = baseTilt + (((column + row) % 3) - 1) * 0.4;
+          const horizontalDepth = Math.abs(column - (columns - 1) / 2);
+          const verticalDepth = Math.abs(row - (rows - 1) / 2);
+          const depth = horizontalDepth + verticalDepth * 0.65;
+          const tilt = 0;
 
-          card.style.left = `calc(50% + ${columnOffset + rowStagger}px)`;
-          card.style.top = `calc(50% + ${rowOffset + columnStagger}px)`;
+          card.style.left = `calc(50% + ${columnOffset}px)`;
+          card.style.top = `calc(50% + ${rowOffset}px)`;
           card.style.opacity = '';
           card.style.visibility = 'visible';
           card.style.pointerEvents = '';
@@ -798,6 +815,9 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           card.style.transform = '';
           card.style.setProperty('--wall-card-tilt', `${tilt}deg`);
           card.style.setProperty('--wall-card-delay', `${slot * 48}ms`);
+          card.style.setProperty('--wall-card-depth', depth.toFixed(2));
+          card.style.setProperty('--wall-card-scale', '1');
+          card.style.setProperty('--wall-card-opacity', Math.max(0.82, 1 - depth * 0.055).toFixed(3));
           card.dataset.wallScene = String(Math.floor(index / cardsPerScene));
         });
 
@@ -807,6 +827,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
 
         const item = {
           cards,
+          pieces,
           cardsPerScene,
           chapter,
           counter,
@@ -819,10 +840,12 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           startScroll,
           travel,
           playhead: { position: 0 },
+          transition: null,
+          transitionTimer: 0,
         };
 
         item.moveTo = gsap.quickTo(item.playhead, 'position', {
-          duration: prefersReducedMotion ? 0 : (window.innerWidth <= 900 ? 0.72 : 1.08),
+          duration: prefersReducedMotion ? 0 : (window.innerWidth <= 900 ? 0.55 : 0.72),
           ease: 'power3.out',
           overwrite: true,
           onUpdate: () => renderItem(item, item.playhead.position, false),
@@ -836,10 +859,18 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         const nearestScene = Math.round(cardPosition);
 
         if (item.displayedIndex !== nearestScene) {
+          const hasRenderedScene = item.displayedIndex >= 0;
           const outgoingCards = item.cards.filter((card) => card.classList.contains('is-wall-visible'));
           const incomingCards = [];
+          item.transition?.kill();
+          item.transition = null;
+          if (item.transitionTimer) window.clearTimeout(item.transitionTimer);
+          item.transitionTimer = 0;
+          item.cards.forEach((card) => card.classList.remove('is-wall-entering', 'is-wall-exiting'));
           gsap.killTweensOf(item.cards);
-          gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,filter,willChange' });
+          gsap.killTweensOf(item.pieces);
+          gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,clipPath,filter,willChange' });
+          gsap.set(item.pieces, { clearProps: 'opacity,visibility,transform,filter,willChange' });
           item.displayedIndex = nearestScene;
           item.cards.forEach((card, index) => {
             const scene = Number(card.dataset.wallScene || 0);
@@ -851,47 +882,106 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
             card.classList.toggle('is-wall-focus', isCurrent && index % item.cardsPerScene === Math.floor(item.cardsPerScene / 2));
           });
 
-          if (immediate || prefersReducedMotion) {
-            gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,filter' });
+          if (!hasRenderedScene || prefersReducedMotion) {
+            outgoingCards.forEach((card) => card.classList.remove('is-wall-exiting'));
+            incomingCards.forEach((card) => card.classList.remove('is-wall-entering'));
+            gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,clipPath,filter' });
+            gsap.set(item.pieces, { clearProps: 'opacity,visibility,transform,filter' });
           } else {
+            outgoingCards.forEach((card) => card.classList.add('is-wall-exiting'));
+            incomingCards.forEach((card) => card.classList.add('is-wall-entering'));
+            item.transitionTimer = window.setTimeout(() => {
+              outgoingCards.forEach((card) => card.classList.remove('is-wall-exiting'));
+              incomingCards.forEach((card) => card.classList.remove('is-wall-entering'));
+              item.transitionTimer = 0;
+            }, 1500);
+            const outgoingPieces = outgoingCards.flatMap((card) => Array.from(card.querySelectorAll(
+              '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow, .topic-product-card-art i',
+            )));
+            const incomingPieces = incomingCards.flatMap((card) => Array.from(card.querySelectorAll(
+              '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow, .topic-product-card-art i',
+            )));
+            const fragmentOffset = (target, axis) => {
+              if (target.classList.contains('topic-product-card-icon')) return axis === 'x' ? -34 : -26;
+              if (target.classList.contains('topic-product-card-index')) return axis === 'x' ? 34 : -24;
+              if (target.classList.contains('topic-product-card-copy')) return axis === 'x' ? -28 : 30;
+              if (target.classList.contains('topic-product-card-arrow')) return axis === 'x' ? 32 : 28;
+              const artIndex = Array.from(target.parentElement?.children || []).indexOf(target);
+              return axis === 'x' ? (artIndex % 2 === 0 ? 30 : -30) : (artIndex % 2 === 0 ? -22 : 24);
+            };
+            const assemblyStart = outgoingCards.length > 0 ? 0.38 : 0;
+            const transition = gsap.timeline({
+              defaults: { overwrite: true },
+              onComplete: () => {
+                gsap.set(outgoingCards, { clearProps: 'opacity,visibility,transform,clipPath,filter,willChange' });
+                gsap.set(outgoingPieces, { clearProps: 'opacity,visibility,transform,filter,willChange' });
+                gsap.set(incomingCards, { clearProps: 'opacity,visibility,transform,clipPath,filter,willChange' });
+                gsap.set(incomingPieces, { clearProps: 'opacity,visibility,transform,filter,willChange' });
+                if (item.transition === transition) item.transition = null;
+              },
+            });
+            item.transition = transition;
+
             if (outgoingCards.length > 0) {
-              gsap.fromTo(outgoingCards, {
-                autoAlpha: 1,
-                y: 0,
-                scale: 1,
-                filter: 'blur(0px)',
-                willChange: 'transform,opacity,filter',
-              }, {
-                autoAlpha: 0,
-                y: -46,
-                scale: 0.9,
-                filter: 'blur(7px)',
-                duration: 0.52,
-                stagger: { each: 0.035, from: 'end' },
-                ease: 'power3.in',
-                overwrite: true,
-                onComplete: () => gsap.set(outgoingCards, { clearProps: 'opacity,visibility,transform,filter,willChange' }),
-              });
+              transition
+                .set(outgoingCards, { autoAlpha: 1, clipPath: 'inset(0% 0% 0% 0% round 18px)' }, 0)
+                .set(outgoingPieces, { autoAlpha: 1, x: 0, y: 0, scale: 1, rotation: 0 }, 0)
+                .to(outgoingPieces, {
+                  autoAlpha: 0,
+                  x: (_, target) => fragmentOffset(target, 'x'),
+                  y: (_, target) => fragmentOffset(target, 'y'),
+                  scale: 0.68,
+                  rotation: (_, target) => fragmentOffset(target, 'x') * 0.24,
+                  duration: 0.34,
+                  stagger: { each: 0.006, from: 'center' },
+                  ease: 'power2.in',
+                  willChange: 'transform,opacity',
+                }, 0)
+                .to(outgoingCards, {
+                  autoAlpha: 0,
+                  clipPath: 'inset(47% 48% 47% 48% round 18px)',
+                  filter: 'blur(2px) brightness(1.55)',
+                  scale: 0.92,
+                  duration: 0.42,
+                  stagger: { each: 0.018, from: 'edges' },
+                  ease: 'power3.inOut',
+                  willChange: 'clip-path,transform,opacity,filter',
+                }, 0.04);
             }
 
-            gsap.fromTo(incomingCards, {
-              autoAlpha: 0,
-              y: 54,
-              scale: 0.88,
-              filter: 'blur(9px)',
-              willChange: 'transform,opacity,filter',
-            }, {
-              autoAlpha: 1,
-              y: 0,
-              scale: 1,
-              filter: 'blur(0px)',
-              duration: 0.92,
-              stagger: 0.085,
-              delay: outgoingCards.length > 0 ? 0.1 : 0,
-              ease: 'power4.out',
-              overwrite: true,
-              onComplete: () => gsap.set(incomingCards, { clearProps: 'opacity,visibility,transform,filter,willChange' }),
-            });
+            transition
+              .fromTo(incomingCards, {
+                autoAlpha: 0,
+                clipPath: 'inset(47% 48% 47% 48% round 18px)',
+                filter: 'blur(2px) brightness(1.5)',
+                scale: 0.92,
+              }, {
+                autoAlpha: (_, target) => Number.parseFloat(getComputedStyle(target).getPropertyValue('--wall-card-opacity')) || 1,
+                clipPath: 'inset(0% 0% 0% 0% round 18px)',
+                filter: 'blur(0px) brightness(1)',
+                scale: 1,
+                duration: 0.66,
+                stagger: { each: 0.045, from: 'center' },
+                ease: 'expo.out',
+                willChange: 'clip-path,transform,opacity,filter',
+              }, assemblyStart)
+              .fromTo(incomingPieces, {
+                autoAlpha: 0,
+                x: (_, target) => fragmentOffset(target, 'x'),
+                y: (_, target) => fragmentOffset(target, 'y'),
+                scale: 0.68,
+                rotation: (_, target) => fragmentOffset(target, 'x') * 0.24,
+              }, {
+                autoAlpha: 1,
+                x: 0,
+                y: 0,
+                scale: 1,
+                rotation: 0,
+                duration: 0.58,
+                stagger: { each: 0.008, from: 'center' },
+                ease: 'power3.out',
+                willChange: 'transform,opacity',
+              }, assemblyStart + 0.08);
           }
 
           if (item.counter) {
@@ -953,23 +1043,18 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
     scroller.addEventListener('scroll', scheduleRender, { passive: true });
     window.addEventListener('resize', handleResize, { passive: true });
 
-    const resizeObserver = typeof ResizeObserver === 'undefined'
-      ? null
-      : new ResizeObserver(handleResize);
-    measurements.forEach((item) => {
-      resizeObserver?.observe(item.chapter);
-      resizeObserver?.observe(item.frame);
-    });
-
     return () => {
       scroller.removeEventListener('scroll', scheduleRender);
       window.removeEventListener('resize', handleResize);
-      resizeObserver?.disconnect();
       measurements.forEach((item) => {
+        if (item.transitionTimer) window.clearTimeout(item.transitionTimer);
+        item.transition?.kill();
         gsap.killTweensOf(item.playhead);
         gsap.killTweensOf(item.cards);
+        gsap.killTweensOf(item.pieces);
         gsap.killTweensOf(item.counter);
-        gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,filter,willChange' });
+        gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,clipPath,filter,willChange' });
+        gsap.set(item.pieces, { clearProps: 'opacity,visibility,transform,filter,willChange' });
       });
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
       if (resizeFrame) window.cancelAnimationFrame(resizeFrame);

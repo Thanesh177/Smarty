@@ -2,7 +2,16 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
-import { Download, Trash2, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowLeft,
+  Download,
+  Paperclip,
+  Search,
+  SendHorizontal,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import './TopicRoomsPage.css';
 import RoomMediaModal from './RoomMediaModal';
@@ -779,7 +788,7 @@ const jumpMessagesToBottomOnce = useCallback(() => {
   scrollMessagesToBottom({ behavior: 'auto' });
 }, [scrollMessagesToBottom]);
 
-const isMessagesNearBottom = useCallback((threshold = 320) => {
+const isMessagesNearBottom = useCallback((threshold = 110) => {
   const el = messagesRef.current;
   if (!el) return true;
 
@@ -1314,7 +1323,7 @@ const appendRoomMessage = useCallback((roomId, message, options = {}) => {
   const shouldFollowMessage =
     options.forceScroll ||
     normalizedMessage.senderId === userId ||
-    isMessagesNearBottom(360);
+    isMessagesNearBottom(110);
 
   const existing = roomMessagesCacheRef.current[roomId] || [];
   const existsInCache = existing.some(
@@ -1377,7 +1386,7 @@ const appendRoomMessage = useCallback((roomId, message, options = {}) => {
 
     window.requestAnimationFrame(() => {
       scrollMessagesToBottom({
-        behavior: options.behavior || 'smooth',
+        behavior: options.behavior || 'auto',
         restoreDelay: options.restoreDelay || 360,
       });
     });
@@ -2269,7 +2278,7 @@ async function approveJoinRequest(requestUserId) {
               failed: false,
             }, {
               forceScroll: true,
-              behavior: 'smooth',
+              behavior: 'auto',
               restoreDelay: 360,
             });
           }
@@ -2281,7 +2290,7 @@ async function approveJoinRequest(requestUserId) {
           setMediaUploadProgress(0);
           setMediaUploadLabel('');
 
-          if (current?.roomId && isMessagesNearBottom(420)) {
+          if (current?.roomId && isMessagesNearBottom(110)) {
             shouldAutoScrollToNewestRef.current = true;
 
             window.requestAnimationFrame(() => {
@@ -4025,25 +4034,12 @@ async function sendMessage(e) {
 }
 
 return (
-  <main className={`rooms-page ${mobileChatOpen && activeRoom ? 'mobile-chat-open' : ''}`}>
+  <main className={`rooms-page ${activeRoom ? 'has-active-room' : ''} ${mobileChatOpen && activeRoom ? 'mobile-chat-open' : ''}`}>
     <aside className="sidebar">
       <div className="rooms-title-row">
-        <div className="room-privacy-toggle room-privacy-toggle-title">
-          <button
-            type="button"
-            className={roomPrivacyFilter === 'private' ? 'active' : ''}
-            onClick={() => setRoomPrivacyFilter('private')}
-          >
-            Private
-          </button>
-
-          <button
-            type="button"
-            className={roomPrivacyFilter === 'public' ? 'active' : ''}
-            onClick={() => setRoomPrivacyFilter('public')}
-          >
-            Public
-          </button>
+        <div className="rooms-sidebar-heading">
+          <span>Community</span>
+          <h1>Rooms</h1>
         </div>
 
         <div
@@ -4123,6 +4119,41 @@ return (
           )}
         </div>
       </div>
+
+      <div className="rooms-sidebar-controls">
+        <div className="room-privacy-toggle room-privacy-toggle-title" aria-label="Room visibility">
+          <button
+            type="button"
+            className={roomPrivacyFilter === 'private' ? 'active' : ''}
+            aria-pressed={roomPrivacyFilter === 'private'}
+            onClick={() => setRoomPrivacyFilter('private')}
+          >
+            Private
+          </button>
+
+          <button
+            type="button"
+            className={roomPrivacyFilter === 'public' ? 'active' : ''}
+            aria-pressed={roomPrivacyFilter === 'public'}
+            onClick={() => setRoomPrivacyFilter('public')}
+          >
+            Public
+          </button>
+        </div>
+      </div>
+
+      <label className="room-search-wrap">
+        <Search size={17} aria-hidden="true" />
+        <input
+          type="search"
+          className="room-search"
+          value={roomSearch}
+          onChange={(event) => setRoomSearch(event.target.value)}
+          placeholder="Search rooms"
+          aria-label="Search rooms"
+          autoComplete="off"
+        />
+      </label>
 
       {status && <p className="room-status">{status}</p>}
 
@@ -4323,7 +4354,11 @@ return (
 
     <section className="chat">
       {!activeRoom && !mobileChatOpen ? (
-        <div className="empty">Select a room</div>
+        <div className="room-chat-empty">
+          <span aria-hidden="true">S</span>
+          <h2>Your rooms, one place.</h2>
+          <p>Select a conversation or create a room to start sharing.</p>
+        </div>
       ) : (
         <>
           <div className="chat-header">
@@ -4338,11 +4373,11 @@ return (
                 setShowActiveRoomMenu(false);
               }}
             >
-              ←
+              <ArrowLeft size={19} aria-hidden="true" />
             </button>
 
             <span className="active-room-title-wrap">
-              {activeRoomImageUrl && (
+              {activeRoomImageUrl ? (
                 <img
                   className="active-room-image"
                   src={activeRoomImageUrl}
@@ -4366,9 +4401,16 @@ return (
                     }
                   }}
                 />
+              ) : (
+                <span className="active-room-image active-room-image-fallback" aria-hidden="true">
+                  {(activeRoom?.name || 'R').trim().slice(0, 1).toUpperCase()}
+                </span>
               )}
 
-              <span>{activeRoom.name}</span>
+              <span className="active-room-heading">
+                <strong>{activeRoom.name}</strong>
+                <small>{activeRoom.privacy === 'private' ? 'Private room' : 'Public room'}</small>
+              </span>
             </span>
 
             <div
@@ -4426,6 +4468,7 @@ return (
     const distanceFromBottom =
       element.scrollHeight - element.scrollTop - element.clientHeight;
 
+    shouldAutoScrollToNewestRef.current = distanceFromBottom <= 110;
     setShowScrollToBottom(distanceFromBottom > 220);
 
 if (
@@ -4455,7 +4498,10 @@ if (
       <div className="room-loading-bubble short" />
     </div>
   ) : renderedMessages.length === 0 ? (
-    <p className="empty">No messages yet</p>
+    <div className="room-messages-empty">
+      <strong>No messages yet</strong>
+      <span>Start the conversation with a useful thought or file.</span>
+    </div>
   ) : (
     renderedMessages.map((msg) => {
       const messageKey = getStableRoomMessageKey(msg);
@@ -4557,6 +4603,7 @@ if (
 {showScrollToBottom && (
   <button
     type="button"
+    className="room-scroll-latest"
     aria-label="Scroll to latest message"
 onClick={() => {
   shouldAutoScrollToNewestRef.current = true;
@@ -4575,26 +4622,8 @@ onClick={() => {
     setShowScrollToBottom(false);
   }, 180);
 }}
-    style={{
-      position: 'absolute',
-      left: '18px',
-      bottom: '92px',
-      width: '42px',
-      height: '42px',
-      borderRadius: '999px',
-      border: '1px solid rgba(255,255,255,0.08)',
-      background: 'rgba(15, 23, 42, 0.92)',
-      color: '#fff',
-      fontSize: '20px',
-      fontWeight: 700,
-      zIndex: 40,
-      backdropFilter: 'blur(18px)',
-      WebkitBackdropFilter: 'blur(18px)',
-      boxShadow:
-        '0 8px 30px rgba(0,0,0,0.35)',
-    }}
   >
-    ↓
+    <ArrowDown size={19} aria-hidden="true" />
   </button>
 )}
 
@@ -4675,7 +4704,8 @@ onClick={() => {
 
   <input
     type="text"
-    placeholder="Type message..."
+    placeholder={`Message ${activeRoom?.name || 'room'}`}
+    aria-label={`Message ${activeRoom?.name || 'room'}`}
     disabled={!activeRoom}
     value={text}
     inputMode="text"
@@ -4702,8 +4732,8 @@ onClick={() => {
     }
   />
 
-  <label className="room-media-picker-btn">
-    ＋
+  <label className="room-media-picker-btn" aria-label="Attach files" title="Attach files">
+    <Paperclip size={18} aria-hidden="true" />
 
     <input
       type="file"
@@ -4724,9 +4754,11 @@ onClick={() => {
       uploadingMedia
     }
   >
-    {uploadingMedia
-      ? `${mediaUploadProgress || 0}%`
-      : 'Send'}
+    {uploadingMedia ? (
+      <span>{mediaUploadProgress || 0}%</span>
+    ) : (
+      <><SendHorizontal size={17} aria-hidden="true" /><span>Send</span></>
+    )}
   </button>
 </form>
         </>
