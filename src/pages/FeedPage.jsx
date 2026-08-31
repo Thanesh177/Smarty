@@ -1751,7 +1751,7 @@ useEffect(() => {
         index < FAST_IMAGE_LIMIT ? 'eager' : 'lazy'
       }
       decoding="async"
-      fetchPriority={
+      fetchpriority={
         index < FAST_IMAGE_LIMIT
           ? 'high'
           : shouldLoad
@@ -3559,6 +3559,18 @@ useEffect(() => {
   );
 
   useEffect(() => {
+    // Profile responses are session-scoped. Never carry enrichment from one
+    // account into another account or into the signed-out public feed.
+    requestedCreatorIdsRef.current.clear();
+    setCreatorProfiles({});
+  }, [currentUserId]);
+
+  useEffect(() => {
+    // The post payload already contains a public creator name/avatar fallback.
+    // The richer profile endpoint is protected, so signed-out feeds must not
+    // call it and turn an otherwise healthy public feed into a 401 error path.
+    if (!currentUserId) return undefined;
+
     const missingCreatorIds = visibleCreatorIds.filter(
       (id) => !creatorProfiles[id] && !requestedCreatorIdsRef.current.has(id)
     );
@@ -3578,8 +3590,12 @@ useEffect(() => {
             const profileResponse = await creatorApi.getProfile(creatorId);
             loadedProfiles[creatorId] = normalizeCreatorProfile(profileResponse);
           } catch (err) {
-            requestedCreatorIdsRef.current.delete(creatorId);
-            console.error('Could not load creator profile:', creatorId, err);
+            const status = Number(err?.response?.status || 0);
+            const isPermanentFallback = [401, 403, 404].includes(status);
+            if (!isPermanentFallback) {
+              requestedCreatorIdsRef.current.delete(creatorId);
+              console.warn('Creator profile enrichment unavailable:', creatorId, err);
+            }
           }
         })
       );
@@ -3594,7 +3610,7 @@ useEffect(() => {
     return () => {
       cancelled = true;
     };
-  }, [visibleCreatorIds, creatorProfiles]);
+  }, [visibleCreatorIds, creatorProfiles, currentUserId]);
 
   const showToast = useCallback((message, duration = 1200) => {
     if (toastTimerRef.current) {
@@ -3722,11 +3738,12 @@ useEffect(() => {
 
   useEffect(() => {
     const page = feedRef.current;
-    if (!page) return undefined;
+    // Post feeds already use native momentum plus vertical scroll snapping.
+    // Adding a second scroll interpolator makes the two systems fight and can
+    // leave short topic feeds parked between snap points.
+    if (!page || selectedTopic) return undefined;
 
-    const scroller = selectedTopic
-      ? page.querySelector('.snap-feed')
-      : page;
+    const scroller = page;
     const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
