@@ -429,13 +429,47 @@
 .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card.is-wall-exiting {
   z-index: 3;
   visibility: visible;
+  overflow: visible;
+  clip-path: none;
+  contain: layout style;
   pointer-events: none;
-  animation: topic-wall-shell-out 520ms cubic-bezier(0.65, 0, 0.35, 1) both;
 }
 
 .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card.is-wall-entering {
   visibility: visible;
-  animation: topic-wall-shell-in 760ms cubic-bezier(0.16, 1, 0.3, 1) 360ms both;
+  overflow: visible;
+  clip-path: none;
+  contain: layout style;
+}
+
+.topic-product-experience .topic-catalog-story .topic-product-card-surface {
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  display: none;
+  border: 1px solid rgba(177, 220, 230, 0.085);
+  border-radius: inherit;
+  background:
+    linear-gradient(115deg, hsl(var(--topic-card-hue) 65% 55% / 0.085), transparent 34%),
+    radial-gradient(circle at 90% 0%, hsl(var(--topic-card-hue) 62% 55% / 0.12), transparent 34%),
+    linear-gradient(145deg, rgba(16, 29, 37, 0.97), rgba(5, 12, 17, 0.985));
+  box-shadow:
+    0 22px 48px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(232, 248, 252, 0.055);
+  pointer-events: none;
+  transform-origin: center;
+}
+
+.topic-product-experience .topic-catalog-story .topic-product-card.is-wall-exiting .topic-product-card-surface {
+  display: block;
+  will-change: transform, opacity;
+  animation: none;
+}
+
+.topic-product-experience .topic-catalog-story .topic-product-card.is-wall-entering .topic-product-card-surface {
+  display: block;
+  will-change: transform, opacity;
+  animation: none;
 }
 
 .topic-product-experience .topic-catalog-story .topic-product-card-icon,
@@ -497,7 +531,8 @@
   .topic-product-card-arrow,
   .topic-product-card-art i
 ) {
-  animation: topic-wall-fragment-out 360ms cubic-bezier(0.55, 0, 1, 0.45) both;
+  will-change: transform, opacity;
+  animation: none;
 }
 
 .topic-product-experience .topic-catalog-story .topic-product-card.is-wall-entering :is(
@@ -507,36 +542,29 @@
   .topic-product-card-arrow,
   .topic-product-card-art i
 ) {
-  animation: topic-wall-fragment-in 580ms cubic-bezier(0.16, 1, 0.3, 1) 440ms both;
+  will-change: transform, opacity;
+  animation: none;
 }
 
 @keyframes topic-wall-shell-out {
   from {
     opacity: var(--wall-card-opacity, 1);
-    clip-path: inset(0 round 18px);
-    filter: blur(0) brightness(1);
-    transform: translate3d(-50%, -50%, 0) scale(1);
+    transform: translate3d(0, 0, 0) scale(1);
   }
   to {
     opacity: 0;
-    clip-path: inset(47% 48% round 18px);
-    filter: blur(2px) brightness(1.5);
-    transform: translate3d(-50%, -50%, 0) scale(0.92);
+    transform: translate3d(0, 0, 0) scale(0.94);
   }
 }
 
 @keyframes topic-wall-shell-in {
   from {
     opacity: 0;
-    clip-path: inset(47% 48% round 18px);
-    filter: blur(2px) brightness(1.5);
-    transform: translate3d(-50%, -50%, 0) scale(0.92);
+    transform: translate3d(0, 0, 0) scale(0.94);
   }
   to {
     opacity: var(--wall-card-opacity, 1);
-    clip-path: inset(0 round 18px);
-    filter: blur(0) brightness(1);
-    transform: translate3d(-50%, -50%, 0) scale(var(--wall-card-scale, 1));
+    transform: translate3d(0, 0, 0) scale(1);
   }
 }
 
@@ -566,6 +594,21 @@
 
 .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card.is-wall-future {
   transform: translate3d(-50%, -50%, 0) scale(0.97);
+}
+
+.topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card:is(.is-wall-entering, .is-wall-exiting) {
+  opacity: 1 !important;
+  visibility: visible;
+  border-color: transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transform: translate3d(-50%, -50%, 0) scale(1) !important;
+}
+
+.topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card:is(.is-wall-entering, .is-wall-exiting)::before,
+.topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card:is(.is-wall-entering, .is-wall-exiting)::after {
+  opacity: 0;
 }
 
 .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card::before {
@@ -796,9 +839,9 @@
 @media (max-width: 600px) {
   .topic-product-experience .topic-catalog-story .topic-catalog-story-frame {
     --story-card-gap: 0px;
-    --story-row-gap: clamp(17px, 2.5vh, 22px);
-    --story-card-width: min(82vw, 330px);
-    --story-card-height: clamp(128px, 15.5svh, 144px);
+    --story-row-gap: clamp(24px, 3.4svh, 30px);
+    --story-card-width: clamp(236px, 76vw, 292px);
+    --story-card-height: clamp(132px, 16svh, 148px);
     top: 58px;
     height: calc(100svh - 70px);
     min-height: 570px;
@@ -810,6 +853,12 @@
     padding: 13px 14px;
     border-radius: 15px;
     clip-path: inset(0 round 15px);
+  }
+
+  .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card.is-wall-visible.is-wall-focus,
+  .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card.is-wall-visible:hover,
+  .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card.is-wall-visible:focus-visible {
+    transform: translate3d(-50%, -50%, 0) scale(1);
   }
 
   .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card-icon {
@@ -864,6 +913,76 @@
     min-width: 132px;
     padding: 7px 11px 10px;
     font-size: 0.51rem;
+  }
+
+  .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card.is-wall-exiting .topic-product-card-surface {
+    animation: none;
+  }
+
+  .topic-product-experience .topic-catalog-story .topic-catalog-story-stack .topic-product-card.is-wall-entering .topic-product-card-surface {
+    animation: none;
+  }
+
+  .topic-product-experience .topic-catalog-story .topic-product-card-icon {
+    --fragment-x: -22px;
+    --fragment-y: -18px;
+  }
+
+  .topic-product-experience .topic-catalog-story .topic-product-card-index {
+    --fragment-x: 22px;
+    --fragment-y: -17px;
+  }
+
+  .topic-product-experience .topic-catalog-story .topic-product-card-copy {
+    --fragment-x: -19px;
+    --fragment-y: 21px;
+  }
+
+  .topic-product-experience .topic-catalog-story .topic-product-card-arrow {
+    --fragment-x: 21px;
+    --fragment-y: 20px;
+  }
+
+  .topic-product-experience .topic-catalog-story .topic-product-card.is-wall-exiting :is(
+    .topic-product-card-icon,
+    .topic-product-card-index,
+    .topic-product-card-copy,
+    .topic-product-card-arrow,
+    .topic-product-card-art i
+  ) {
+    animation: none;
+  }
+
+  .topic-product-experience .topic-catalog-story .topic-product-card.is-wall-entering :is(
+    .topic-product-card-icon,
+    .topic-product-card-index,
+    .topic-product-card-copy,
+    .topic-product-card-arrow,
+    .topic-product-card-art i
+  ) {
+    animation: none;
+  }
+}
+
+@keyframes topic-wall-shell-out-mobile {
+  from {
+    opacity: var(--wall-card-opacity, 1);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.94);
+  }
+}
+
+@keyframes topic-wall-shell-in-mobile {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(0.94);
+  }
+  to {
+    opacity: var(--wall-card-opacity, 1);
+    transform: translate3d(0, 0, 0) scale(1);
   }
 }
 

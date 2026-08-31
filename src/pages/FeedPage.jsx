@@ -661,6 +661,7 @@ const TopicProductCard = memo(function TopicProductCard({ item, index, onSelect 
       onClick={() => onSelect(item)}
       aria-label={`Explore ${isAllTopics ? 'all topics' : item}`}
     >
+      <span className="topic-product-card-surface" aria-hidden="true" />
       <span className="topic-product-card-art" aria-hidden="true">
         <i /><i /><i />
       </span>
@@ -741,7 +742,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
     const measure = () => {
       measurements.forEach((item) => {
         if (item.transitionTimer) window.clearTimeout(item.transitionTimer);
-        item.transition?.kill();
+        item.visualAnimations?.forEach((animation) => animation.cancel());
         gsap.killTweensOf(item.playhead);
         gsap.killTweensOf(item.cards);
         gsap.killTweensOf(item.pieces);
@@ -757,16 +758,26 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         const counter = chapter.querySelector('.topic-catalog-story-index');
         const frameStyle = window.getComputedStyle(frame);
         const stickyTop = Number.parseFloat(frameStyle.top);
-        const configuredGap = Number.parseFloat(frameStyle.getPropertyValue('--story-card-gap'));
-        const configuredRowGap = Number.parseFloat(frameStyle.getPropertyValue('--story-row-gap'));
+        const spacingProbe = document.createElement('span');
+        Object.assign(spacingProbe.style, {
+          position: 'absolute',
+          width: 'var(--story-card-gap)',
+          height: 'var(--story-row-gap)',
+          visibility: 'hidden',
+          pointerEvents: 'none',
+        });
+        frame.appendChild(spacingProbe);
+        const configuredGap = spacingProbe.offsetWidth;
+        const configuredRowGap = spacingProbe.offsetHeight;
+        spacingProbe.remove();
         const cardWidth = cards[0]?.getBoundingClientRect().width || 0;
         const cardHeight = cards[0]?.getBoundingClientRect().height || 0;
         const isMobile = window.innerWidth <= 600;
         const isTablet = window.innerWidth <= 900;
         const columns = isMobile ? 1 : (isTablet ? 2 : 3);
         const rows = isMobile ? 3 : (isTablet ? 2 : 3);
-        const minimumSpacing = cardWidth + (Number.isFinite(configuredGap) ? configuredGap : 20);
-        const minimumRowSpacing = cardHeight + (Number.isFinite(configuredRowGap) ? configuredRowGap : 22);
+        const minimumSpacing = cardWidth + (configuredGap > 0 ? configuredGap : 20);
+        const minimumRowSpacing = cardHeight + (configuredRowGap > 0 ? configuredRowGap : 22);
         const desktopHorizontalPadding = 112;
         const desktopVerticalPadding = 82;
         const distributedSpacing = columns > 1
@@ -785,7 +796,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           : minimumRowSpacing;
         const cardsPerScene = columns * rows;
         const scenes = Math.max(1, Math.ceil(cards.length / cardsPerScene));
-        const sceneTravelVh = isMobile ? 48 : (isTablet ? 58 : 78);
+        const sceneTravelVh = isMobile ? 58 : (isTablet ? 64 : 78);
         chapter.style.setProperty(
           '--catalog-story-height',
           `${Math.max(420, 110 + scenes * sceneTravelVh)}vh`,
@@ -815,6 +826,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           card.style.transform = '';
           card.style.setProperty('--wall-card-tilt', `${tilt}deg`);
           card.style.setProperty('--wall-card-delay', `${slot * 48}ms`);
+          card.style.setProperty('--wall-fragment-delay', `${slot * 14}ms`);
           card.style.setProperty('--wall-card-depth', depth.toFixed(2));
           card.style.setProperty('--wall-card-scale', '1');
           card.style.setProperty('--wall-card-opacity', Math.max(0.82, 1 - depth * 0.055).toFixed(3));
@@ -840,8 +852,8 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           startScroll,
           travel,
           playhead: { position: 0 },
-          transition: null,
           transitionTimer: 0,
+          visualAnimations: [],
         };
 
         item.moveTo = gsap.quickTo(item.playhead, 'position', {
@@ -862,10 +874,10 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           const hasRenderedScene = item.displayedIndex >= 0;
           const outgoingCards = item.cards.filter((card) => card.classList.contains('is-wall-visible'));
           const incomingCards = [];
-          item.transition?.kill();
-          item.transition = null;
           if (item.transitionTimer) window.clearTimeout(item.transitionTimer);
           item.transitionTimer = 0;
+          item.visualAnimations.forEach((animation) => animation.cancel());
+          item.visualAnimations = [];
           item.cards.forEach((card) => card.classList.remove('is-wall-entering', 'is-wall-exiting'));
           gsap.killTweensOf(item.cards);
           gsap.killTweensOf(item.pieces);
@@ -890,98 +902,123 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           } else {
             outgoingCards.forEach((card) => card.classList.add('is-wall-exiting'));
             incomingCards.forEach((card) => card.classList.add('is-wall-entering'));
+            const fragmentMotion = (element, pieceIndex) => {
+              if (element.classList.contains('topic-product-card-icon')) return { x: -38, y: -28, rotate: -8 };
+              if (element.classList.contains('topic-product-card-index')) return { x: 38, y: -26, rotate: 8 };
+              if (element.classList.contains('topic-product-card-copy')) return { x: -32, y: 34, rotate: -5 };
+              if (element.classList.contains('topic-product-card-arrow')) return { x: 35, y: 31, rotate: 7 };
+              return {
+                x: pieceIndex % 2 === 0 ? 32 : -32,
+                y: pieceIndex % 3 === 0 ? -24 : 26,
+                rotate: pieceIndex % 2 === 0 ? 9 : -9,
+              };
+            };
+            const playAnimation = (element, keyframes, options) => {
+              if (!element || keyframes.length < 2) return;
+              const startFrame = keyframes[0];
+              const endFrame = keyframes[keyframes.length - 1];
+              const duration = Math.max(0, Number(options.duration) || 0);
+              const delay = Math.max(0, Number(options.delay) || 0);
+              const easing = options.easing || 'ease';
+              const original = {
+                opacity: element.style.opacity,
+                transform: element.style.transform,
+                transition: element.style.transition,
+                willChange: element.style.willChange,
+              };
+              let firstFrame = 0;
+              let secondFrame = 0;
+              let cancelled = false;
+              const applyFrame = (frame) => {
+                if (frame.opacity !== undefined) element.style.opacity = String(frame.opacity);
+                if (frame.transform !== undefined) element.style.transform = frame.transform;
+              };
+              const animation = {
+                cancel: () => {
+                  if (cancelled) return;
+                  cancelled = true;
+                  if (firstFrame) window.cancelAnimationFrame(firstFrame);
+                  if (secondFrame) window.cancelAnimationFrame(secondFrame);
+                  element.style.opacity = original.opacity;
+                  element.style.transform = original.transform;
+                  element.style.transition = original.transition;
+                  element.style.willChange = original.willChange;
+                },
+              };
+
+              element.style.transition = 'none';
+              element.style.willChange = 'opacity, transform';
+              applyFrame(startFrame);
+              firstFrame = window.requestAnimationFrame(() => {
+                secondFrame = window.requestAnimationFrame(() => {
+                  if (cancelled) return;
+                  element.style.transition = [
+                    `opacity ${duration}ms ${easing} ${delay}ms`,
+                    `transform ${duration}ms ${easing} ${delay}ms`,
+                  ].join(', ');
+                  applyFrame(endFrame);
+                });
+              });
+              item.visualAnimations.push(animation);
+            };
+            const piecesFor = (card) => Array.from(card.querySelectorAll(
+              '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow, .topic-product-card-art i',
+            ));
+
+            outgoingCards.forEach((card, cardIndex) => {
+              const cardDelay = cardIndex * 16;
+              playAnimation(card.querySelector('.topic-product-card-surface'), [
+                { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' },
+                { opacity: 0, transform: 'translate3d(0, 0, 0) scale(0.94)' },
+              ], {
+                duration: 460,
+                delay: cardDelay,
+                easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+              });
+              piecesFor(card).forEach((piece, pieceIndex) => {
+                const { x, y, rotate } = fragmentMotion(piece, pieceIndex);
+                const baseTransform = window.getComputedStyle(piece).transform;
+                playAnimation(piece, [
+                  { opacity: 1, transform: baseTransform === 'none' ? 'none' : baseTransform },
+                  { opacity: 0, transform: `translate3d(${x}px, ${y}px, 0) rotate(${rotate}deg) scale(0.68)` },
+                ], {
+                  duration: 390,
+                  delay: cardDelay + pieceIndex * 12,
+                  easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
+                });
+              });
+            });
+
+            incomingCards.forEach((card, cardIndex) => {
+              const cardDelay = 220 + cardIndex * 18;
+              playAnimation(card.querySelector('.topic-product-card-surface'), [
+                { opacity: 0, transform: 'translate3d(0, 0, 0) scale(0.94)' },
+                { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' },
+              ], {
+                duration: 650,
+                delay: cardDelay,
+                easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+              });
+              piecesFor(card).forEach((piece, pieceIndex) => {
+                const { x, y, rotate } = fragmentMotion(piece, pieceIndex);
+                const baseTransform = window.getComputedStyle(piece).transform;
+                playAnimation(piece, [
+                  { opacity: 0, transform: `translate3d(${x}px, ${y}px, 0) rotate(${rotate}deg) scale(0.68)` },
+                  { opacity: 1, transform: baseTransform === 'none' ? 'none' : baseTransform },
+                ], {
+                  duration: 590,
+                  delay: cardDelay + 45 + pieceIndex * 12,
+                  easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                });
+              });
+            });
             item.transitionTimer = window.setTimeout(() => {
+              item.visualAnimations.forEach((animation) => animation.cancel());
+              item.visualAnimations = [];
               outgoingCards.forEach((card) => card.classList.remove('is-wall-exiting'));
               incomingCards.forEach((card) => card.classList.remove('is-wall-entering'));
               item.transitionTimer = 0;
-            }, 1500);
-            const outgoingPieces = outgoingCards.flatMap((card) => Array.from(card.querySelectorAll(
-              '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow, .topic-product-card-art i',
-            )));
-            const incomingPieces = incomingCards.flatMap((card) => Array.from(card.querySelectorAll(
-              '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow, .topic-product-card-art i',
-            )));
-            const fragmentOffset = (target, axis) => {
-              if (target.classList.contains('topic-product-card-icon')) return axis === 'x' ? -34 : -26;
-              if (target.classList.contains('topic-product-card-index')) return axis === 'x' ? 34 : -24;
-              if (target.classList.contains('topic-product-card-copy')) return axis === 'x' ? -28 : 30;
-              if (target.classList.contains('topic-product-card-arrow')) return axis === 'x' ? 32 : 28;
-              const artIndex = Array.from(target.parentElement?.children || []).indexOf(target);
-              return axis === 'x' ? (artIndex % 2 === 0 ? 30 : -30) : (artIndex % 2 === 0 ? -22 : 24);
-            };
-            const assemblyStart = outgoingCards.length > 0 ? 0.38 : 0;
-            const transition = gsap.timeline({
-              defaults: { overwrite: true },
-              onComplete: () => {
-                gsap.set(outgoingCards, { clearProps: 'opacity,visibility,transform,clipPath,filter,willChange' });
-                gsap.set(outgoingPieces, { clearProps: 'opacity,visibility,transform,filter,willChange' });
-                gsap.set(incomingCards, { clearProps: 'opacity,visibility,transform,clipPath,filter,willChange' });
-                gsap.set(incomingPieces, { clearProps: 'opacity,visibility,transform,filter,willChange' });
-                if (item.transition === transition) item.transition = null;
-              },
-            });
-            item.transition = transition;
-
-            if (outgoingCards.length > 0) {
-              transition
-                .set(outgoingCards, { autoAlpha: 1, clipPath: 'inset(0% 0% 0% 0% round 18px)' }, 0)
-                .set(outgoingPieces, { autoAlpha: 1, x: 0, y: 0, scale: 1, rotation: 0 }, 0)
-                .to(outgoingPieces, {
-                  autoAlpha: 0,
-                  x: (_, target) => fragmentOffset(target, 'x'),
-                  y: (_, target) => fragmentOffset(target, 'y'),
-                  scale: 0.68,
-                  rotation: (_, target) => fragmentOffset(target, 'x') * 0.24,
-                  duration: 0.34,
-                  stagger: { each: 0.006, from: 'center' },
-                  ease: 'power2.in',
-                  willChange: 'transform,opacity',
-                }, 0)
-                .to(outgoingCards, {
-                  autoAlpha: 0,
-                  clipPath: 'inset(47% 48% 47% 48% round 18px)',
-                  filter: 'blur(2px) brightness(1.55)',
-                  scale: 0.92,
-                  duration: 0.42,
-                  stagger: { each: 0.018, from: 'edges' },
-                  ease: 'power3.inOut',
-                  willChange: 'clip-path,transform,opacity,filter',
-                }, 0.04);
-            }
-
-            transition
-              .fromTo(incomingCards, {
-                autoAlpha: 0,
-                clipPath: 'inset(47% 48% 47% 48% round 18px)',
-                filter: 'blur(2px) brightness(1.5)',
-                scale: 0.92,
-              }, {
-                autoAlpha: (_, target) => Number.parseFloat(getComputedStyle(target).getPropertyValue('--wall-card-opacity')) || 1,
-                clipPath: 'inset(0% 0% 0% 0% round 18px)',
-                filter: 'blur(0px) brightness(1)',
-                scale: 1,
-                duration: 0.66,
-                stagger: { each: 0.045, from: 'center' },
-                ease: 'expo.out',
-                willChange: 'clip-path,transform,opacity,filter',
-              }, assemblyStart)
-              .fromTo(incomingPieces, {
-                autoAlpha: 0,
-                x: (_, target) => fragmentOffset(target, 'x'),
-                y: (_, target) => fragmentOffset(target, 'y'),
-                scale: 0.68,
-                rotation: (_, target) => fragmentOffset(target, 'x') * 0.24,
-              }, {
-                autoAlpha: 1,
-                x: 0,
-                y: 0,
-                scale: 1,
-                rotation: 0,
-                duration: 0.58,
-                stagger: { each: 0.008, from: 'center' },
-                ease: 'power3.out',
-                willChange: 'transform,opacity',
-              }, assemblyStart + 0.08);
+            }, 1200);
           }
 
           if (item.counter) {
@@ -1048,7 +1085,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
       window.removeEventListener('resize', handleResize);
       measurements.forEach((item) => {
         if (item.transitionTimer) window.clearTimeout(item.transitionTimer);
-        item.transition?.kill();
+        item.visualAnimations?.forEach((animation) => animation.cancel());
         gsap.killTweensOf(item.playhead);
         gsap.killTweensOf(item.cards);
         gsap.killTweensOf(item.pieces);
@@ -3682,6 +3719,108 @@ useEffect(() => {
     moderationTarget,
     showToast,
   ]);
+
+  useEffect(() => {
+    const page = feedRef.current;
+    if (!page) return undefined;
+
+    const scroller = selectedTopic
+      ? page.querySelector('.snap-feed')
+      : page;
+    const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    if (!scroller || !finePointer.matches || reduceMotion.matches) return undefined;
+
+    let frame = 0;
+    let targetY = scroller.scrollTop;
+    const maximumLead = Math.max(640, Math.min(1120, scroller.clientHeight * 1.35));
+
+    const stop = () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      frame = 0;
+      targetY = scroller.scrollTop;
+      scroller.classList.remove('is-premium-scrolling');
+    };
+
+    const animate = () => {
+      const currentY = scroller.scrollTop;
+      const distance = targetY - currentY;
+
+      // Browsers quantize element scroll positions differently. Finish before a
+      // sub-pixel remainder can keep the animation frame alive at rest.
+      if (Math.abs(distance) < 2.5) {
+        scroller.scrollTop = targetY;
+        frame = 0;
+        scroller.classList.remove('is-premium-scrolling');
+        return;
+      }
+
+      // A restrained ease-out keeps trackpads precise and mouse wheels cinematic.
+      scroller.scrollTop = currentY + distance * 0.115;
+      frame = window.requestAnimationFrame(animate);
+    };
+
+    const nestedScrollerCanMove = (origin, deltaY) => {
+      let node = origin instanceof Element ? origin : null;
+      while (node && node !== scroller) {
+        const style = window.getComputedStyle(node);
+        const canScroll = /(auto|scroll)/.test(style.overflowY)
+          && node.scrollHeight > node.clientHeight + 1;
+        if (canScroll) {
+          const hasRoom = deltaY < 0
+            ? node.scrollTop > 0
+            : node.scrollTop + node.clientHeight < node.scrollHeight - 1;
+          if (hasRoom) return true;
+        }
+        node = node.parentElement;
+      }
+      return false;
+    };
+
+    const handleWheel = (event) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey) return;
+      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+
+      const modeScale = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? 16
+        : (event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? scroller.clientHeight : 1);
+      const deltaY = event.deltaY * modeScale;
+      if (!Number.isFinite(deltaY) || Math.abs(deltaY) < 0.1) return;
+      if (nestedScrollerCanMove(event.target, deltaY)) return;
+
+      const maximumY = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const baseY = frame ? targetY : scroller.scrollTop;
+      const requestedY = baseY + deltaY * 0.78;
+      targetY = Math.max(
+        scroller.scrollTop - maximumLead,
+        Math.min(scroller.scrollTop + maximumLead, requestedY),
+      );
+      targetY = Math.max(0, Math.min(maximumY, targetY));
+
+      if (Math.abs(targetY - scroller.scrollTop) < 0.35) return;
+      event.preventDefault();
+      scroller.classList.add('is-premium-scrolling');
+      if (!frame) frame = window.requestAnimationFrame(animate);
+    };
+
+    const syncNativePosition = () => {
+      if (!frame) targetY = scroller.scrollTop;
+    };
+
+    scroller.addEventListener('wheel', handleWheel, { passive: false });
+    scroller.addEventListener('scroll', syncNativePosition, { passive: true });
+    scroller.addEventListener('pointerdown', stop, { passive: true });
+    scroller.addEventListener('touchstart', stop, { passive: true });
+
+    return () => {
+      stop();
+      scroller.removeEventListener('wheel', handleWheel);
+      scroller.removeEventListener('scroll', syncNativePosition);
+      scroller.removeEventListener('pointerdown', stop);
+      scroller.removeEventListener('touchstart', stop);
+    };
+  }, [selectedTopic]);
 
 useEffect(() => {
   const canvas = topicCanvasRef.current;
