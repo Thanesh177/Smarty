@@ -857,7 +857,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         };
 
         item.moveTo = gsap.quickTo(item.playhead, 'position', {
-          duration: prefersReducedMotion ? 0 : (window.innerWidth <= 900 ? 0.55 : 0.72),
+          duration: prefersReducedMotion ? 0 : (window.innerWidth <= 900 ? 0.28 : 0.34),
           ease: 'power3.out',
           overwrite: true,
           onUpdate: () => renderItem(item, item.playhead.position, false),
@@ -1182,9 +1182,9 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           scroller,
           start: 'top top+=64',
           end: 'bottom bottom',
-          scrub: 1.65,
+          scrub: 0.78,
           invalidateOnRefresh: true,
-          fastScrollEnd: false,
+          fastScrollEnd: true,
         },
       });
 
@@ -1273,7 +1273,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           scroller,
           start: 'top 84%',
           end: 'bottom 48%',
-          scrub: 0.9,
+          scrub: 0.48,
           invalidateOnRefresh: true,
         },
       });
@@ -1330,9 +1330,9 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           scroller,
           start: 'top top+=64',
           end: 'bottom bottom',
-          scrub: 1.15,
+          scrub: 0.62,
           invalidateOnRefresh: true,
-          fastScrollEnd: false,
+          fastScrollEnd: true,
         },
       });
 
@@ -3751,7 +3751,7 @@ useEffect(() => {
 
     let frame = 0;
     let targetY = scroller.scrollTop;
-    const maximumLead = Math.max(640, Math.min(1120, scroller.clientHeight * 1.35));
+    const maximumLead = Math.max(560, Math.min(860, scroller.clientHeight * 1.08));
 
     const stop = () => {
       if (frame) window.cancelAnimationFrame(frame);
@@ -3773,8 +3773,9 @@ useEffect(() => {
         return;
       }
 
-      // A restrained ease-out keeps trackpads precise and mouse wheels cinematic.
-      scroller.scrollTop = currentY + distance * 0.115;
+      // Keep the ease-out short so scroll-driven scenes do not chase stale input.
+      const response = Math.abs(distance) > scroller.clientHeight * 0.55 ? 0.21 : 0.175;
+      scroller.scrollTop = currentY + distance * response;
       frame = window.requestAnimationFrame(animate);
     };
 
@@ -3808,7 +3809,7 @@ useEffect(() => {
 
       const maximumY = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       const baseY = frame ? targetY : scroller.scrollTop;
-      const requestedY = baseY + deltaY * 0.78;
+      const requestedY = baseY + deltaY * 0.9;
       targetY = Math.max(
         scroller.scrollTop - maximumLead,
         Math.min(scroller.scrollTop + maximumLead, requestedY),
