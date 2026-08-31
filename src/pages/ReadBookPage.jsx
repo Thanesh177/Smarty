@@ -315,6 +315,7 @@ export default function ReadBookPage() {
   const cleanAuthorFilter = authorFilter.trim();
   const cleanYearFilter = yearFilter.trim();
   const activeSearchText = cleanQuery;
+  const activeLookupText = activeSearchText || categoryFilter;
   const hasActiveFilters = Boolean(activeSearchText || cleanAuthorFilter || cleanYearFilter || categoryFilter);
   const savedBookIds = useMemo(
     () => new Set(savedBooks.map((book) => String(getBookId(book)))),
@@ -354,9 +355,9 @@ export default function ReadBookPage() {
   }, [browseBooks, readingHistory, rows, savedBooks]);
 
   const instantMatches = useMemo(() => {
-    if (!cleanQuery) return [];
+    if (!activeLookupText) return [];
 
-    const words = cleanQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = activeLookupText.toLowerCase().split(/\s+/).filter(Boolean);
 
     return allLoadedBooks
       .filter((book) => {
@@ -364,7 +365,7 @@ export default function ReadBookPage() {
         return words.every((word) => searchText.includes(word));
       })
       .slice(0, 8);
-  }, [allLoadedBooks, cleanQuery]);
+  }, [activeLookupText, allLoadedBooks]);
 
   const visibleInstantMatches = useMemo(
     () => instantMatches.filter((book) => matchesAccessFilter(book, accessFilter)),
@@ -377,9 +378,9 @@ export default function ReadBookPage() {
   );
 
   const suggestedBooks = useMemo(() => {
-    if (!cleanQuery) return [];
+    if (!activeLookupText) return [];
 
-    const words = cleanQuery.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = activeLookupText.toLowerCase().split(/\s+/).filter(Boolean);
 
     let pool = allLoadedBooks.length > 0 ? allLoadedBooks : browseBooks;
 
@@ -404,7 +405,7 @@ export default function ReadBookPage() {
     }
 
     return scored.slice(0, 6).map((item) => item.book);
-  }, [allLoadedBooks, browseBooks, cleanQuery]);
+  }, [activeLookupText, allLoadedBooks, browseBooks]);
 
   const visibleBrowseBooks = useMemo(
     () => browseBooks.filter((book) => matchesAccessFilter(book, accessFilter)),
@@ -490,7 +491,14 @@ export default function ReadBookPage() {
   }, [categoryFilter, cleanAuthorFilter, cleanYearFilter, loadingMore]);
 
   const loadSearchPage = useCallback(async (searchText, pageToLoad = 1) => {
-    if (!searchText) return;
+    const normalizedSearchText = String(searchText || '').trim();
+
+    if (
+      !normalizedSearchText &&
+      !categoryFilter &&
+      !cleanAuthorFilter &&
+      !cleanYearFilter
+    ) return;
 
     searchAbort.current?.abort();
     searchAbort.current = new AbortController();
@@ -502,7 +510,7 @@ export default function ReadBookPage() {
     try {
       const books = await readBooksApi.getBooks(
         {
-          search: searchText,
+          search: normalizedSearchText,
           author: cleanAuthorFilter,
           year: cleanYearFilter,
           category: categoryFilter,
@@ -596,7 +604,7 @@ useEffect(() => {
   }
 
   const timer = window.setTimeout(() => {
-    loadSearchPage(activeSearchText || categoryFilter || 'books', 1);
+    loadSearchPage(activeSearchText, 1);
   }, 260);
 
   return () => window.clearTimeout(timer);
@@ -613,7 +621,7 @@ useEffect(() => {
         if (!isVisible || loadingMore || searching) return;
 
         if (hasActiveFilters && hasMoreSearch) {
-          loadSearchPage(activeSearchText || 'books', searchPage + 1);
+          loadSearchPage(activeSearchText, searchPage + 1);
         }
 
         if (!hasActiveFilters && hasMoreBrowse) {
@@ -629,6 +637,7 @@ useEffect(() => {
   }, [
     browsePage,
     activeSearchText,
+    categoryFilter,
     hasActiveFilters,
     hasMoreBrowse,
     hasMoreSearch,
@@ -645,7 +654,7 @@ useEffect(() => {
     event.preventDefault();
 
     if (hasActiveFilters) {
-      loadSearchPage(activeSearchText || categoryFilter || 'books', 1);
+      loadSearchPage(activeSearchText, 1);
     }
   }, [activeSearchText, categoryFilter, hasActiveFilters, loadSearchPage]);
 
@@ -689,11 +698,16 @@ useEffect(() => {
 
 
   const applyCategoryFilter = useCallback((value) => {
+    searchAbort.current?.abort();
     setCategoryFilter(value);
     setQuery('');
     setAccessFilter(isPreviewPage ? 'preview' : 'read');
     setAuthorFilter('');
     setYearFilter('');
+    setSearchResults([]);
+    setSearchPage(1);
+    setHasMoreSearch(false);
+    setError('');
   }, [isPreviewPage]);
 
 
@@ -816,13 +830,15 @@ useEffect(() => {
         />
       )}
 
-      {hasActiveFilters && (
+      {hasActiveFilters && searching && (
+        <BooksLoading
+          message={categoryFilter ? `Exploring ${categoryFilter}...` : 'Searching the full library...'}
+        />
+      )}
+
+      {hasActiveFilters && !searching && (
         <BookGrid
-          title={
-            searching
-              ? 'Searching the full library...'
-              : `${visibleSearchResults.length} result${visibleSearchResults.length === 1 ? '' : 's'} found`
-          }
+          title={`${visibleSearchResults.length} result${visibleSearchResults.length === 1 ? '' : 's'} found`}
           books={visibleSearchResults}
           savedBookIds={savedBookIds}
           onToggleSave={toggleSave}
@@ -864,7 +880,9 @@ useEffect(() => {
         />
       )}
 
-      {loadingRows && <BooksLoading message="Building your book shelves..." />}
+      {loadingRows && !hasActiveFilters && (
+        <BooksLoading message="Building your book shelves..." />
+      )}
 
       {!loadingRows &&
         !hasActiveFilters &&

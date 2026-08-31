@@ -5,12 +5,14 @@ import {
   Newspaper,
   BrainCircuit,
   Users,
+  ShieldCheck,
   LogOut,
   LogIn,
 } from 'lucide-react';
 import './NavbarMenu.css';
 import SmartyBrand from './SmartyBrand';
 import { startSocialLogin } from '../lib/cognito';
+import { isAdminUser } from '../lib/adminAccess';
 
 function hasStoredAuthToken() {
   return Boolean(
@@ -179,6 +181,19 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
                   <span>Rooms</span>
                 </span>
               </NavLink>
+
+              {isAdminUser(user) && (
+                <NavLink
+                  to="/admin"
+                  onClick={closeMenu}
+                  className="menu-icon-link"
+                >
+                  <span className="menu-link-left">
+                    <ShieldCheck size={18} strokeWidth={2.2} />
+                    <span>Admin control</span>
+                  </span>
+                </NavLink>
+              )}
             </div>
 
             <div className="menu-footer">

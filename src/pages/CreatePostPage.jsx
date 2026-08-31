@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import imageCompression from 'browser-image-compression';
 import {
+  Check,
   Globe2,
   ImagePlus,
   Lock,
+  Plus,
+  Search,
   Send,
   X,
 } from 'lucide-react';
@@ -144,18 +147,27 @@ const normalizeTopicsResponse = (data) => {
   return topicList.length ? topicList : DEFAULT_TOPICS;
 };
 
+const cleanTopic = (value) => String(value || '')
+  .replace(/[\u0000-\u001f\u007f]/g, '')
+  .replace(/\s+/g, ' ')
+  .trim()
+  .slice(0, 60);
+
+const topicKey = (value) => cleanTopic(value).toLocaleLowerCase();
+
 export default function CreatePostPage() {
   const mountedRef = useRef(true);
   const activeUploadRef = useRef(null);
   const resetTimerRef = useRef(null);
   const mediaInputRef = useRef(null);
+  const topicSearchRef = useRef(null);
 
   const [topics, setTopics] = useState([]);
-  const [topicMode, setTopicMode] = useState('existing');
+  const [topicSearchOpen, setTopicSearchOpen] = useState(false);
+  const [activeTopicIndex, setActiveTopicIndex] = useState(-1);
 
   const [form, setForm] = useState({
     topic: '',
-    customTopic: '',
     title: '',
     body: '',
     visibility: 'public',
@@ -185,14 +197,10 @@ export default function CreatePostPage() {
 
         setTopics(topicList);
 
-        if (topicList.length > 0) {
-          setForm((prev) => ({ ...prev, topic: prev.topic || topicList[0] }));
-        }
       } catch (err) {
         console.error('Failed to load topics:', err);
         if (mountedRef.current) {
           setTopics(DEFAULT_TOPICS);
-          setForm((prev) => ({ ...prev, topic: prev.topic || DEFAULT_TOPICS[0] }));
           setStatus('Could not load topics from server. Showing default topics.');
         }
       }
@@ -213,9 +221,51 @@ export default function CreatePostPage() {
     };
   }, [imagePreviewUrl]);
 
+  useEffect(() => {
+    const closeTopicSearch = (event) => {
+      if (!topicSearchRef.current?.contains(event.target)) {
+        setTopicSearchOpen(false);
+        setActiveTopicIndex(-1);
+      }
+    };
+
+    document.addEventListener('pointerdown', closeTopicSearch);
+    return () => document.removeEventListener('pointerdown', closeTopicSearch);
+  }, []);
+
   const selectedTopic = useMemo(() => {
-    return topicMode === 'custom' ? form.customTopic.trim() : form.topic;
-  }, [topicMode, form.customTopic, form.topic]);
+    const enteredTopic = cleanTopic(form.topic);
+    const existingTopic = topics.find((topic) => topicKey(topic) === topicKey(enteredTopic));
+    return existingTopic || enteredTopic;
+  }, [form.topic, topics]);
+
+  const matchingTopics = useMemo(() => {
+    const query = topicKey(form.topic);
+    const matches = query
+      ? topics.filter((topic) => topicKey(topic).includes(query))
+      : [...topics];
+
+    return matches
+      .sort((a, b) => {
+        if (!query) return a.localeCompare(b);
+        const aStarts = topicKey(a).startsWith(query);
+        const bStarts = topicKey(b).startsWith(query);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+        return a.localeCompare(b);
+      })
+      .slice(0, 8);
+  }, [form.topic, topics]);
+
+  const hasExactTopic = useMemo(
+    () => topics.some((topic) => topicKey(topic) === topicKey(form.topic)),
+    [form.topic, topics]
+  );
+
+  const canCreateTopic = selectedTopic.length >= 2 && !hasExactTopic;
+  const topicChoices = useMemo(
+    () => canCreateTopic ? [...matchingTopics, selectedTopic] : matchingTopics,
+    [canCreateTopic, matchingTopics, selectedTopic]
+  );
 
   const uploadFile = useCallback(async (file, onProgress) => {
     if (!file) return { url: '', key: '' };
@@ -271,8 +321,7 @@ export default function CreatePostPage() {
 
   const resetForm = useCallback(() => {
     setForm({
-      topic: topics[0] || '',
-      customTopic: '',
+      topic: '',
       title: '',
       body: '',
       visibility: 'public',
@@ -280,9 +329,10 @@ export default function CreatePostPage() {
 
     setImageFile(null);
     setVideoFile(null);
-    setTopicMode('existing');
+    setTopicSearchOpen(false);
+    setActiveTopicIndex(-1);
     setStatus('');
-  }, [topics]);
+  }, []);
 
   const submit = useCallback(async (event) => {
     event.preventDefault();
@@ -389,12 +439,45 @@ export default function CreatePostPage() {
   }, [form, imageFile, resetForm, selectedTopic, submitting, uploadFile, videoFile]);
 
   const handleTopicChange = useCallback((event) => {
-    setForm((current) => ({ ...current, topic: event.target.value }));
+    const nextTopic = event.target.value
+      .replace(/[\u0000-\u001f\u007f]/g, '')
+      .slice(0, 60);
+    setForm((current) => ({ ...current, topic: nextTopic }));
+    setTopicSearchOpen(true);
+    setActiveTopicIndex(-1);
   }, []);
 
-  const handleCustomTopicChange = useCallback((event) => {
-    setForm((current) => ({ ...current, customTopic: event.target.value }));
+  const chooseTopic = useCallback((topic) => {
+    const nextTopic = cleanTopic(topic);
+    if (!nextTopic) return;
+    setForm((current) => ({ ...current, topic: nextTopic }));
+    setTopicSearchOpen(false);
+    setActiveTopicIndex(-1);
   }, []);
+
+  const handleTopicKeyDown = useCallback((event) => {
+    if (event.key === 'Escape') {
+      setTopicSearchOpen(false);
+      setActiveTopicIndex(-1);
+      return;
+    }
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setTopicSearchOpen(true);
+      setActiveTopicIndex((current) => {
+        if (!topicChoices.length) return -1;
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        return (current + direction + topicChoices.length) % topicChoices.length;
+      });
+      return;
+    }
+
+    if (event.key === 'Enter' && topicSearchOpen && activeTopicIndex >= 0) {
+      event.preventDefault();
+      chooseTopic(topicChoices[activeTopicIndex]);
+    }
+  }, [activeTopicIndex, chooseTopic, topicChoices, topicSearchOpen]);
 
   const handleTitleChange = useCallback((event) => {
     setForm((current) => ({ ...current, title: event.target.value }));
@@ -445,14 +528,6 @@ export default function CreatePostPage() {
   event.target.value = '';
 }, []);
 
-const chooseExistingTopic = useCallback(() => {
-  setTopicMode('existing');
-}, []);
-
-const chooseCustomTopic = useCallback(() => {
-  setTopicMode('custom');
-}, []);
-
   const removeMedia = useCallback(() => {
     setImageFile(null);
     setVideoFile(null);
@@ -471,20 +546,8 @@ const chooseCustomTopic = useCallback(() => {
     setForm((current) => ({ ...current, visibility: 'private' }));
   }, []);
 
-  const renderedTopicOptions = useMemo(() => {
-    if (topics.length === 0) {
-      return <option value="">No topics found</option>;
-    }
-
-    return topics.map((topic) => (
-      <option key={topic} value={topic}>
-        {topic}
-      </option>
-    ));
-  }, [topics]);
-
   const canSubmit = useMemo(
-    () => Boolean(!submitting && selectedTopic && form.title.trim() && form.body.trim()),
+    () => Boolean(!submitting && selectedTopic.length >= 2 && form.title.trim() && form.body.trim()),
     [form.body, form.title, selectedTopic, submitting]
   );
 
@@ -525,41 +588,71 @@ const chooseCustomTopic = useCallback(() => {
                 <label>Topic</label>
                 <span>Where it belongs</span>
               </div>
-              <div className="topic-mode-toggle post-segmented" role="group" aria-label="Topic source">
-                <button
-                  type="button"
-                  className={topicMode === 'existing' ? 'active' : ''}
-                  aria-pressed={topicMode === 'existing'}
-                  disabled={submitting}
-                  onClick={chooseExistingTopic}
-                >
-                  Browse
-                </button>
-                <button
-                  type="button"
-                  className={topicMode === 'custom' ? 'active' : ''}
-                  aria-pressed={topicMode === 'custom'}
-                  disabled={submitting}
-                  onClick={chooseCustomTopic}
-                >
-                  Custom
-                </button>
-              </div>
-              <div className="topic-input-row">
-                {topicMode === 'existing' ? (
-                  <select value={form.topic} disabled={submitting} onChange={handleTopicChange} aria-label="Choose topic">
-                    {renderedTopicOptions}
-                  </select>
-                ) : (
+              <div className="topic-search-shell" ref={topicSearchRef}>
+                <div className={`topic-search-input ${topicSearchOpen ? 'is-open' : ''}`}>
+                  <Search size={17} aria-hidden="true" />
                   <input
-                    placeholder="Name your topic"
-                    value={form.customTopic}
+                    id="post-topic"
+                    role="combobox"
+                    aria-label="Search or create a topic"
+                    aria-autocomplete="list"
+                    aria-expanded={topicSearchOpen}
+                    aria-controls="post-topic-results"
+                    aria-activedescendant={activeTopicIndex >= 0 ? `post-topic-option-${activeTopicIndex}` : undefined}
+                    autoComplete="off"
+                    placeholder="Search topics or type a new one"
+                    value={form.topic}
                     maxLength={60}
                     disabled={submitting}
-                    onChange={handleCustomTopicChange}
+                    onChange={handleTopicChange}
+                    onFocus={() => setTopicSearchOpen(true)}
+                    onKeyDown={handleTopicKeyDown}
                   />
+                  {hasExactTopic && <Check className="topic-match-check" size={17} aria-label="Available topic" />}
+                </div>
+
+                {topicSearchOpen && (
+                  <div className="topic-search-menu" id="post-topic-results" role="listbox">
+                    {matchingTopics.map((topic, index) => (
+                      <button
+                        type="button"
+                        id={`post-topic-option-${index}`}
+                        role="option"
+                        aria-selected={activeTopicIndex === index}
+                        className={`topic-search-option ${activeTopicIndex === index ? 'is-active' : ''}`}
+                        key={topic}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => chooseTopic(topic)}
+                      >
+                        <span><Search size={14} aria-hidden="true" />{topic}</span>
+                        <small>Available</small>
+                      </button>
+                    ))}
+
+                    {canCreateTopic && (
+                      <button
+                        type="button"
+                        id={`post-topic-option-${matchingTopics.length}`}
+                        role="option"
+                        aria-selected={activeTopicIndex === matchingTopics.length}
+                        className={`topic-search-option is-create ${activeTopicIndex === matchingTopics.length ? 'is-active' : ''}`}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => chooseTopic(selectedTopic)}
+                      >
+                        <span><Plus size={14} aria-hidden="true" />Add “{selectedTopic}”</span>
+                        <small>New topic</small>
+                      </button>
+                    )}
+
+                    {!matchingTopics.length && !canCreateTopic && (
+                      <p className="topic-search-empty">Type at least two characters to add a topic.</p>
+                    )}
+                  </div>
                 )}
               </div>
+              <p className="post-setting-note topic-field-note">
+                {hasExactTopic ? 'Ready to publish in this topic.' : 'Choose a match or keep typing to create a new topic.'}
+              </p>
             </section>
 
             <section className="post-setting-card">

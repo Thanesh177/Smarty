@@ -5,31 +5,73 @@
  */
 
 :root {
-  --page-bg: #02070d;
-  --page-bg-raised: #08111b;
+  --page-bg: #06111f;
+  --page-bg-raised: #0a1725;
   --page-text: #f6f8fb;
-  --page-muted: #94a3b8;
-  --page-subtle: #64748b;
+  --page-muted: #a1afc2;
+  --page-subtle: #718096;
   --page-accent: #7dd3fc;
   --page-line: rgba(148, 163, 184, 0.12);
   --page-hover: rgba(148, 163, 184, 0.07);
+  --page-glass: rgba(7, 17, 31, 0.7);
+  --page-glass-strong: rgba(5, 13, 24, 0.9);
   --page-gutter: clamp(16px, 3vw, 42px);
   --page-section-gap: clamp(24px, 4vw, 48px);
   --page-radius: clamp(14px, 1.4vw, 20px);
 }
 
-:where(
-  .books-page, .reader-page, .read-books-page, .news-page,
-  .feed-topics-page, .saved-page, .profile-page,
-  .creator-profile-container, .follow-requests-page, .chat-page,
-  .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
-  .create-page, .creator-dashboard-page, .quiz-page,
-  .legal-page, .login-page, .register-page, .auth-shell,
-  .room-invite-page
-) {
+body,
+#root,
+.app-shell,
+.content {
   color: var(--page-text);
   background-color: var(--page-bg);
-  background-image: none;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(0, 0, 0, 0.13), transparent 30%),
+    radial-gradient(circle at 88% 20%, rgba(139, 92, 246, 0.11), transparent 34%),
+    radial-gradient(circle at 50% 100%, rgba(34, 197, 94, 0.08), transparent 34%),
+    var(--page-bg);
+}
+
+.app-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 54px 54px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent 82%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent 82%);
+}
+
+.content {
+  z-index: 1;
+  background: transparent !important;
+}
+
+.topbar.glass-topbar {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.topbar.glass-topbar .brand-actions {
+  background:
+    linear-gradient(180deg, rgba(9, 20, 34, 0.76), rgba(3, 10, 20, 0.82));
+  border-color: rgba(148, 197, 211, 0.14);
+  box-shadow:
+    0 22px 56px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(22px) saturate(145%);
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
 }
 
 :where(
@@ -39,7 +81,21 @@
   .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
   .create-page, .creator-dashboard-page, .quiz-page,
   .legal-page, .login-page, .register-page, .auth-shell,
-  .room-invite-page
+  .room-invite-page, .admin-moderation-page
+) {
+  color: var(--page-text);
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+:where(
+  .books-page, .reader-page, .read-books-page, .news-page,
+  .feed-topics-page, .saved-page, .profile-page,
+  .creator-profile-container, .follow-requests-page, .chat-page,
+  .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
+  .create-page, .creator-dashboard-page, .quiz-page,
+  .legal-page, .login-page, .register-page, .auth-shell,
+  .room-invite-page, .admin-moderation-page
 ) :where(button, a, input, textarea, select):focus-visible {
   outline: 2px solid var(--page-accent);
   outline-offset: 3px;
@@ -50,7 +106,7 @@
   .saved-page, .profile-page, .creator-profile-container,
   .follow-requests-page, .comments-page, .reel-detail-page,
   .post-ai-page, .create-page, .creator-dashboard-page,
-  .quiz-page, .legal-page
+  .quiz-page, .legal-page, .admin-moderation-page
 ) :where(button, a) {
   transition-duration: 160ms;
 }
@@ -725,5 +781,402 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* =========================================================
+   Premium discovery pages: Books, News and Quiz
+   ========================================================= */
+
+:where(.books-page, .read-books-page, .news-page, .quiz-page) {
+  --discovery-surface: linear-gradient(145deg, rgba(13, 25, 39, 0.82), rgba(5, 13, 24, 0.7));
+  --discovery-surface-strong: linear-gradient(145deg, rgba(16, 31, 47, 0.94), rgba(5, 14, 25, 0.88));
+  --discovery-border: rgba(156, 207, 220, 0.12);
+  --discovery-border-hover: rgba(125, 211, 252, 0.27);
+  --discovery-shadow: 0 24px 70px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+/* Books home */
+.books-page {
+  width: min(1500px, 100%);
+  margin-inline: auto;
+  padding-top: clamp(22px, 4vw, 54px);
+}
+
+.books-page .books-hero {
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+  gap: clamp(16px, 2vw, 26px);
+  align-items: stretch;
+}
+
+.books-page .books-hero > div:first-child,
+.books-page .books-hero-card,
+.books-page .books-discover-panel,
+.books-page .books-card,
+.books-page .books-quick-strip button {
+  border: 1px solid var(--discovery-border);
+  background: var(--discovery-surface);
+  box-shadow: var(--discovery-shadow);
+  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+}
+
+.books-page .books-hero > div:first-child {
+  min-height: clamp(340px, 46vh, 500px);
+  padding: clamp(28px, 5vw, 70px);
+  border-radius: clamp(24px, 3vw, 38px);
+}
+
+.books-page .books-hero-card {
+  min-height: 100%;
+  padding: clamp(22px, 3vw, 34px);
+  border-radius: clamp(24px, 3vw, 38px);
+}
+
+.books-page .books-hero h1 {
+  max-width: 760px;
+  font-size: clamp(3rem, 6vw, 6.4rem);
+  line-height: 0.88;
+  letter-spacing: -0.075em;
+}
+
+.books-page .books-hero p {
+  max-width: 610px;
+  font-size: clamp(0.92rem, 1.15vw, 1.05rem);
+}
+
+.books-page .books-actions button:first-child,
+.books-page .books-empty-state button,
+.books-page .books-discover-actions button:first-child {
+  border-color: rgba(169, 225, 237, 0.34);
+  background: #e8f7fa;
+  color: #06111f;
+  text-shadow: none;
+  box-shadow: 0 14px 34px rgba(86, 185, 207, 0.12);
+}
+
+.books-page .books-quick-strip {
+  gap: clamp(10px, 1.5vw, 18px);
+  margin-block: clamp(16px, 2vw, 24px);
+}
+
+.books-page .books-quick-strip button {
+  min-height: 100px;
+  padding: 20px;
+  border-radius: 20px;
+}
+
+.books-page .books-quick-strip button:hover,
+.books-page .books-card:hover,
+.books-page .books-hero-card:hover {
+  border-color: var(--discovery-border-hover);
+  background: var(--discovery-surface-strong);
+  transform: translateY(-2px);
+}
+
+.books-page .books-discover-panel {
+  margin-block: clamp(18px, 3vw, 32px);
+  border-radius: clamp(22px, 2.5vw, 32px);
+}
+
+.books-page .books-grid { gap: clamp(18px, 2.4vw, 30px); }
+
+.books-page .books-card {
+  min-height: 330px;
+  padding: clamp(22px, 3vw, 34px);
+  border-radius: clamp(22px, 2.5vw, 30px);
+}
+
+/* Reading library */
+.read-books-page .read-books-search {
+  border: 1px solid var(--discovery-border);
+  background: rgba(5, 14, 25, 0.88);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.3);
+}
+
+.read-books-page .read-book-card {
+  border: 1px solid var(--discovery-border);
+  background: var(--discovery-surface);
+  box-shadow: var(--discovery-shadow);
+}
+
+.read-books-page .read-book-card:hover {
+  border-color: var(--discovery-border-hover);
+  background: var(--discovery-surface-strong);
+}
+
+/* Newsroom */
+.news-page {
+  width: min(1500px, 100%);
+  margin-inline: auto;
+  padding-top: clamp(22px, 4vw, 52px);
+}
+
+.news-page .news-hero {
+  min-height: clamp(230px, 30vh, 340px);
+  align-items: center;
+  padding: clamp(28px, 4vw, 54px);
+  border: 1px solid var(--discovery-border);
+  border-radius: clamp(24px, 3vw, 38px);
+  background: radial-gradient(circle at 82% 20%, rgba(125, 211, 252, 0.11), transparent 30%), var(--discovery-surface);
+  box-shadow: var(--discovery-shadow);
+}
+
+.news-page .news-hero h1 {
+  max-width: 820px;
+  font-size: clamp(3rem, 6vw, 6.2rem);
+  line-height: 0.9;
+  letter-spacing: -0.075em;
+}
+
+.news-page .refresh-news-btn {
+  min-height: 44px;
+  border: 1px solid rgba(152, 205, 219, 0.16);
+  background: rgba(151, 205, 218, 0.1);
+}
+
+.news-page .news-controls {
+  position: sticky;
+  top: 12px;
+  z-index: 12;
+  margin-block: 18px;
+  padding: 8px;
+  border: 1px solid var(--discovery-border);
+  border-radius: 18px;
+  background: rgba(5, 14, 25, 0.88);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+}
+
+.news-page .news-controls input,
+.news-page .news-controls select { background: rgba(155, 193, 203, 0.075); }
+
+.news-page .section-tabs button.active {
+  background: #e8f7fa;
+  color: #06111f;
+}
+
+.news-page .news-grid { gap: clamp(16px, 2vw, 26px); }
+
+.news-page .news-card {
+  border: 1px solid var(--discovery-border);
+  border-radius: clamp(18px, 2vw, 24px);
+  background: var(--discovery-surface);
+  box-shadow: var(--discovery-shadow);
+}
+
+.news-page .news-card:hover {
+  border-color: var(--discovery-border-hover);
+  background: var(--discovery-surface-strong);
+  transform: translateY(-3px);
+}
+
+.news-page .news-card.featured {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  min-height: clamp(340px, 42vw, 510px);
+}
+
+.news-page .news-card.featured img,
+.news-page .news-card.featured .missing-news-image {
+  height: 100%;
+  min-height: 340px;
+}
+
+.news-page .news-card.featured .news-card-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: clamp(24px, 4vw, 48px);
+}
+
+.news-page .news-card.featured h3 {
+  font-size: clamp(1.6rem, 3vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.05em;
+}
+
+.news-page .news-card.featured .news-actions { margin-top: 22px; }
+
+/* Quiz hub and challenge states */
+.quiz-page {
+  width: min(1500px, 100%);
+  margin-inline: auto;
+  padding: clamp(22px, 4vw, 52px) var(--page-gutter) 100px;
+}
+
+.quiz-page .quiz-page-back { margin-bottom: clamp(20px, 3vw, 38px); }
+
+.quiz-page .quiz-hero {
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  min-height: clamp(390px, 52vh, 590px);
+  gap: clamp(22px, 4vw, 58px);
+  align-items: center;
+  margin-bottom: clamp(30px, 5vw, 62px);
+  padding: clamp(30px, 5vw, 70px);
+  border: 1px solid var(--discovery-border);
+  border-radius: clamp(26px, 3vw, 42px);
+  background: radial-gradient(circle at 80% 18%, rgba(139, 92, 246, 0.12), transparent 30%), radial-gradient(circle at 10% 100%, rgba(34, 197, 94, 0.07), transparent 32%), var(--discovery-surface);
+  box-shadow: var(--discovery-shadow);
+}
+
+.quiz-page .quiz-hero-copy { min-width: 0; }
+
+.quiz-page .quiz-hero-copy h1 {
+  max-width: 820px;
+  margin: 0;
+  font-size: clamp(3.1rem, 6vw, 6.5rem);
+  line-height: 0.88;
+  letter-spacing: -0.075em;
+}
+
+.quiz-page .quiz-hero-copy > p {
+  max-width: 650px;
+  margin-top: 20px;
+}
+
+.quiz-hero-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 26px;
+}
+
+.quiz-hero-metrics span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid rgba(152, 205, 219, 0.1);
+  border-radius: 999px;
+  background: rgba(148, 192, 204, 0.06);
+  color: rgba(201, 214, 222, 0.62);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.quiz-hero-metrics strong { color: #edf8fa; font-size: 0.9rem; }
+.quiz-page .hero-actions { margin-top: 22px; }
+
+.quiz-page .profile-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid rgba(169, 225, 237, 0.28);
+  border-radius: 999px;
+  background: #e8f7fa;
+  color: #06111f;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.quiz-page .streak-card {
+  padding: clamp(22px, 3vw, 32px);
+  border: 1px solid rgba(163, 212, 224, 0.13);
+  background: rgba(5, 14, 25, 0.68);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.quiz-page .topic-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(16px, 2vw, 26px) !important;
+}
+
+.quiz-page .topic-card,
+.quiz-page .question-card,
+.quiz-page .result-card {
+  border: 1px solid var(--discovery-border);
+  background: var(--discovery-surface);
+  box-shadow: var(--discovery-shadow);
+}
+
+.quiz-page .topic-card {
+  min-height: 300px;
+  padding: clamp(20px, 2.3vw, 30px);
+  border-radius: clamp(20px, 2vw, 27px);
+}
+
+.quiz-page .topic-card:hover {
+  border-color: var(--discovery-border-hover);
+  background: var(--discovery-surface-strong);
+  transform: translateY(-3px);
+}
+
+.quiz-page .topic-card h3 {
+  margin-top: 28px;
+  font-size: clamp(1.15rem, 1.5vw, 1.4rem);
+}
+
+.quiz-page .topic-card > strong { margin-top: 20px; color: #92dcec; }
+
+.quiz-page .question-card,
+.quiz-page .result-card { border-radius: clamp(22px, 3vw, 34px); }
+
+@media (max-width: 980px) {
+  .books-page .books-hero,
+  .quiz-page .quiz-hero { grid-template-columns: 1fr; }
+
+  .books-page .books-hero-card,
+  .quiz-page .streak-card,
+  .quiz-page .quiz-hero { min-height: 0; }
+
+  .news-page .news-card.featured { grid-template-columns: 1fr; }
+
+  .news-page .news-card.featured img,
+  .news-page .news-card.featured .missing-news-image {
+    height: clamp(240px, 48vw, 380px);
+    min-height: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .books-page,
+  .news-page,
+  .quiz-page { padding: 16px 12px 94px; }
+
+  .books-page .books-hero > div:first-child,
+  .news-page .news-hero,
+  .quiz-page .quiz-hero {
+    min-height: 0;
+    padding: 24px 18px;
+    border-radius: 24px;
+  }
+
+  .books-page .books-hero h1,
+  .news-page .news-hero h1,
+  .quiz-page .quiz-hero-copy h1 {
+    font-size: clamp(2.45rem, 13vw, 4rem);
+    line-height: 0.92;
+  }
+
+  .books-page .books-quick-strip { grid-template-columns: 1fr; }
+  .books-page .books-quick-strip button { min-height: 78px; }
+
+  .news-page .news-hero { align-items: flex-start; }
+  .news-page .news-controls { top: 8px; }
+
+  .news-page .news-grid,
+  .quiz-page .topic-grid { grid-template-columns: 1fr !important; }
+
+  .news-page .news-card.featured { grid-column: auto; }
+  .news-page .news-card.featured .news-card-body { padding: 18px; }
+  .news-page .news-card.featured h3 { font-size: 1.35rem; }
+  .quiz-page .topic-card { min-height: 270px; }
+
+  .quiz-hero-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .quiz-hero-metrics span {
+    min-width: 0;
+    min-height: 58px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1px;
+    border-radius: 14px;
   }
 }

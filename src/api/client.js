@@ -1452,9 +1452,7 @@ export const readBooksApi = {
 
     if (mainSearch) {
       queryParams.set('q', mainSearch);
-    } else if (subjectSearch) {
-      queryParams.set('q', subjectSearch);
-    } else {
+    } else if (!subjectSearch && !authorSearch && !yearSearch) {
       queryParams.set('q', 'classic literature');
     }
 
@@ -2162,17 +2160,18 @@ export const chatApi = {
   },
 
 blockUser: async (blockedId, context = {}) => {
-  const res = await api.post('/users/block', {
-    blockedId,
-    notifyDeveloper: true,
+  const res = await api.post('/moderation/block', {
+    reportedUserId: blockedId,
     source: context.source || 'user-action',
-    contentType: context.contentType || '',
-    contentId: context.contentId || context.postId || '',
+    contentType: context.contentType || 'user',
+    contentId: context.contentId || context.postId || blockedId,
     postId: context.postId || '',
     chatId: context.chatId || '',
-    reason: context.reason || '',
+    commentId: context.commentId || '',
+    reason: context.reason || 'User blocked',
+    contentSnapshot: context.contentSnapshot || {},
   });
-  return res.data;
+  return parseApiBody(res.data);
 },
 
 unblockUser: async (blockedId) => {
@@ -2191,7 +2190,7 @@ markAsRead: async (chatId) => {
 },
 
 async reportUser(payload) {
-  const { data } = await api.post('/users/report', {
+  const { data } = await api.post('/moderation/report', {
     reportedUserId: payload.reportedUserId,
     chatId: payload.chatId,
     reason: payload.reason,
@@ -2200,9 +2199,10 @@ async reportUser(payload) {
     postId: payload.postId || '',
     commentId: payload.commentId || '',
     source: payload.source || 'user-report',
+    contentSnapshot: payload.contentSnapshot || {},
   });
 
-  return data;
+  return parseApiBody(data);
 },
 
   async startChat(user) {
@@ -2370,6 +2370,54 @@ async reportUser(payload) {
   },
 
   
+};
+
+export const moderationApi = {
+  async getOverview() {
+    const { data } = await api.get('/admin/moderation/overview');
+    return parseApiBody(data);
+  },
+
+  async findUsers(query) {
+    const { data } = await api.get('/admin/moderation/users', {
+      params: { query: String(query || '').trim() },
+    });
+    return parseApiBody(data);
+  },
+
+  async setUserStatus(userId, { action, reason }) {
+    const normalizedUserId = String(userId || '').trim();
+    if (!normalizedUserId) throw new Error('User ID is missing.');
+    const { data } = await api.post(
+      `/admin/moderation/users/${encodeURIComponent(normalizedUserId)}/status`,
+      { action, reason }
+    );
+    return parseApiBody(data);
+  },
+
+  async getCases({ status = 'pending', limit = 25, cursor = '' } = {}) {
+    const { data } = await api.get('/admin/moderation/cases', {
+      params: {
+        status,
+        limit,
+        ...(cursor ? { cursor } : {}),
+      },
+    });
+
+    return parseApiBody(data);
+  },
+
+  async decideCase(caseId, { decision, notes = '' }) {
+    const normalizedCaseId = String(caseId || '').trim();
+    if (!normalizedCaseId) throw new Error('Moderation case ID is missing.');
+
+    const { data } = await api.post(
+      `/admin/moderation/cases/${encodeURIComponent(normalizedCaseId)}/decision`,
+      { decision, notes }
+    );
+
+    return parseApiBody(data);
+  },
 };
 
 export const notificationApi = {

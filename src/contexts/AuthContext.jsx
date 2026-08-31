@@ -10,6 +10,7 @@ import {
 import { Hub } from 'aws-amplify/utils';
 import { exchangeNativeCodeForTokens } from '../lib/cognito';
 import { removeLegacyAccountCacheKeys } from '../lib/userScopedStorage';
+import { normalizeGroups } from '../lib/adminAccess';
 
 const AuthContext = createContext(null);
 
@@ -268,6 +269,7 @@ function mapCognitoUser(currentUser, session) {
     username,
     email,
     name,
+    groups: normalizeGroups(payload['cognito:groups']),
     token: idToken,
     accessToken,
   };
@@ -393,6 +395,7 @@ export function AuthProvider({ children }) {
               username: getSafeUsername(null, payload, email),
               email,
               name: getSafeName(payload, email),
+              groups: normalizeGroups(payload['cognito:groups']),
               token: tokens.id_token,
               accessToken: tokens.access_token,
             };

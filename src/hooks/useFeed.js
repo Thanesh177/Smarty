@@ -365,6 +365,33 @@ export default function useFeed() {
     }
   };
 
+  const hidePost = useCallback(
+    (postId) => {
+      const normalizedId = String(postId || '').trim();
+      if (!normalizedId) return;
+
+      setPreloadedPage((current) => (
+        current
+          ? {
+              ...current,
+              items: (current.items || []).filter(
+                (post) => getPostId(post) !== normalizedId
+              ),
+            }
+          : current
+      ));
+
+      setPosts((current) => {
+        const updated = current.filter(
+          (post) => getPostId(post) !== normalizedId
+        );
+        saveCache(updated, nextCursor);
+        return updated;
+      });
+    },
+    [nextCursor, saveCache]
+  );
+
   const blockCreator = useCallback(
     (creatorId) => {
       const normalizedId = String(creatorId || '').trim();
@@ -409,6 +436,7 @@ export default function useFeed() {
     refreshFeed,
     likePost,
     savePost,
+    hidePost,
     blockCreator,
   };
 }

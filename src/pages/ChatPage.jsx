@@ -2149,6 +2149,7 @@ const confirmBlockUser = async () => {
       9000,
       'Block took too long.'
     );
+
     if (!mountedRef.current) return;
     setIsBlocked(true);
     setStatus('User blocked.');
@@ -2176,6 +2177,9 @@ const confirmBlockUser = async () => {
         chatApi.reportUser({
           reportedUserId: activeChat.receiverId,
           chatId: activeChat.chatId,
+          contentId: activeChat.chatId,
+          contentType: 'chat',
+          source: 'chat-report-action',
           reason: reason.trim(),
         }),
         9000,

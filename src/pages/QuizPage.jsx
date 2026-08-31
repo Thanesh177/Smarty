@@ -1033,11 +1033,30 @@ if (topic && bossMode && !finished) {
   </button>
 
   <section className="quiz-hero">
-    <div>
+    <div className="quiz-hero-copy">
+      <span className="quiz-kicker">Play · learn · improve</span>
+      <h1>Turn curiosity into momentum.</h1>
+      <p>
+        Choose a subject and sharpen your knowledge through quick challenges,
+        practical questions, and progress you can see.
+      </p>
 
+      <div className="quiz-hero-metrics" aria-label="Quiz progress summary">
+        <span><strong>{TOPICS.length}</strong> subjects</span>
+        <span><strong>{overallLevel}</strong> current level</span>
+        <span><strong>{totalXP}</strong> total XP</span>
+      </div>
 
-
-          </div>
+      <div className="hero-actions">
+        <button
+          type="button"
+          className="profile-btn"
+          onClick={() => window.location.href = "/game-profile"}
+        >
+          View Game Profile
+        </button>
+      </div>
+    </div>
 
 <div className="streak-card streak-game-card">
   <div className="streak-card-top">
@@ -1080,15 +1099,6 @@ if (topic && bossMode && !finished) {
 <p>Open Smarty every day, earn XP, and keep the flame alive.</p>
 </div>
 
-            <div className="hero-actions">
-              <button
-                type="button"
-                className="profile-btn"
-                onClick={() => window.location.href = "/game-profile"}
-              >
-                View Game Profile
-              </button>
-            </div>
         </section>
 
         <section className="topic-grid">

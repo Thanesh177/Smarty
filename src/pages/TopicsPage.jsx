@@ -1,21 +1,52 @@
-import { memo, useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import useFeed from "../hooks/useFeed";
+import { postApi } from "../api/client";
 import "./TopicsPage.css";
 
-const slugify = (value) =>
-  encodeURIComponent(
-    String(value || "")
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "")
-  );
+const normalizeTopic = (value) =>
+  String(value || "")
+    .normalize("NFKD")
+    .toLowerCase()
+    .trim()
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const getTopicValue = (value) => {
+  if (value && typeof value === "object") {
+    return String(
+      value.name ||
+        value.label ||
+        value.title ||
+        value.topic ||
+        value.topicName ||
+        value.slug ||
+        ""
+    ).trim();
+  }
+
+  return String(value || "").trim();
+};
 
 const topicSorter = new Intl.Collator(undefined, {
   sensitivity: "base",
   numeric: true,
 });
+
+const uniqueTopicList = (values = []) => {
+  const topicsByKey = new Map();
+
+  values.forEach((value) => {
+    const topic = getTopicValue(value);
+    const key = normalizeTopic(topic);
+
+    if (!topic || !key || topicsByKey.has(key)) return;
+    topicsByKey.set(key, topic);
+  });
+
+  return Array.from(topicsByKey.values()).sort(topicSorter.compare);
+};
 
 const DEFAULT_TOPICS = [
   "Finance", "Investing", "Personal Finance", "Stock Market", "Trading",
@@ -53,26 +84,61 @@ const TopicCard = memo(function TopicCard({ topic, onNavigate }) {
 export default function TopicsPage() {
   const navigate = useNavigate();
   const { posts, loading, error } = useFeed();
+  const [catalogTopics, setCatalogTopics] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
 
-  const topics = useMemo(() => {
-    const uniqueTopics = new Set(DEFAULT_TOPICS);
+  useEffect(() => {
+    let cancelled = false;
 
-    if (Array.isArray(posts)) {
-      for (const post of posts) {
-        const topic = String(post?.topic || "").trim();
-        if (!topic) continue;
-        uniqueTopics.add(topic);
+    async function loadTopicCatalog() {
+      try {
+        setCatalogLoading(true);
+        setCatalogError("");
+
+        const data = await postApi.getTopics();
+        if (!cancelled) setCatalogTopics(uniqueTopicList(data));
+      } catch (catalogLoadError) {
+        console.error("Could not load topic catalog:", catalogLoadError);
+        if (!cancelled) setCatalogError("Live topics are temporarily unavailable.");
+      } finally {
+        if (!cancelled) setCatalogLoading(false);
       }
     }
 
-    return Array.from(uniqueTopics).sort(topicSorter.compare);
-  }, [posts]);
+    loadTopicCatalog();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const topics = useMemo(() => {
+    const postTopics = [];
+
+    if (Array.isArray(posts)) {
+      for (const post of posts) {
+        const rawTopics = [post?.topic, post?.topics, post?.category, post?.categories];
+
+        rawTopics.flat().forEach((value) => {
+          if (typeof value === "string" && value.includes(",")) {
+            postTopics.push(...value.split(","));
+          } else {
+            postTopics.push(value);
+          }
+        });
+      }
+    }
+
+    const liveTopics = uniqueTopicList([...catalogTopics, ...postTopics]);
+    return liveTopics.length > 0 ? liveTopics : DEFAULT_TOPICS;
+  }, [catalogTopics, posts]);
 
   const handleNavigate = useCallback(
     (topic) => {
-      const slug = slugify(topic);
-      if (!slug) return;
-      navigate(`/feed/${slug}`);
+      const topicValue = getTopicValue(topic);
+      if (!topicValue) return;
+      navigate(`/feed?topic=${encodeURIComponent(topicValue)}`);
     },
     [navigate]
   );
@@ -85,8 +151,14 @@ export default function TopicsPage() {
         <p>Choose a topic to see only posts from that category.</p>
       </section>
 
-      {loading && <p className="feed-topics-status">Loading topics...</p>}
-      {error && <p className="feed-topics-status error">{error}</p>}
+      {(loading || catalogLoading) && catalogTopics.length === 0 && (
+        <p className="feed-topics-status">Loading topics...</p>
+      )}
+      {catalogError && error && catalogTopics.length === 0 && (
+        <p className="feed-topics-status error">
+          We could not refresh topics. Showing the available collection.
+        </p>
+      )}
 
 
       <section className="feed-topics-grid">

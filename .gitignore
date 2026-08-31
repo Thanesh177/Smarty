@@ -83,6 +83,8 @@ check-email-config.json
 import-*.sh
 
 lambda-zips/
+infrastructure/moderation/packaged.yaml
+infrastructure/moderation/__pycache__/
 
 # Terraform local files
 

@@ -1,0 +1,277 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Smarty production moderation quarantine and admin review service
+
+Parameters:
+  ExistingHttpApiId:
+    Type: String
+    Default: po2hwyb2c6
+  ExistingJwtAuthorizerId:
+    Type: String
+    Default: rgx4g0
+  ExistingUserPoolId:
+    Type: String
+    Default: us-east-1_URSwWqOE0
+  ExistingReelsTableName:
+    Type: String
+    Default: TextReels
+  ExistingReelIdIndex:
+    Type: String
+    Default: reelId-index
+  ExistingBlocksTableName:
+    Type: String
+    Default: UserBlocks
+  AdminGroupName:
+    Type: String
+    Default: SmartyAdmins
+  AllowedOrigin:
+    Type: String
+    Default: https://smarty.wiki
+
+Resources:
+  ModerationCasesTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: SmartyModerationCases
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: caseId
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: contentId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: N
+      KeySchema:
+        - AttributeName: caseId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusCreatedAtIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ContentCreatedAtIndex
+          KeySchema:
+            - AttributeName: contentId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Application
+          Value: Smarty
+        - Key: Purpose
+          Value: ContentModeration
+
+  SmartyAdminsGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: !Ref AdminGroupName
+      Description: Smarty staff authorized to review moderation cases
+      Precedence: 10
+      UserPoolId: !Ref ExistingUserPoolId
+
+  ModerationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: smarty-moderation-service
+      Description: Quarantines reported Smarty content and provides admin-only review actions
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      CodeUri: ./
+      Architectures:
+        - arm64
+      MemorySize: 256
+      Timeout: 10
+      Tracing: Active
+      Environment:
+        Variables:
+          CASES_TABLE: !Ref ModerationCasesTable
+          REELS_TABLE: !Ref ExistingReelsTableName
+          REEL_ID_INDEX: !Ref ExistingReelIdIndex
+          BLOCKS_TABLE: !Ref ExistingBlocksTableName
+          ADMIN_GROUP: !Ref AdminGroupName
+          USER_POOL_ID: !Ref ExistingUserPoolId
+          ALLOWED_ORIGIN: !Ref AllowedOrigin
+          LOG_LEVEL: INFO
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ModerationCasesTable
+        - Statement:
+            - Sid: QueryAndModerateReels
+              Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:Query
+                - dynamodb:UpdateItem
+              Resource:
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingReelsTableName}
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingReelsTableName}/index/${ExistingReelIdIndex}
+            - Sid: TransactModerationWrites
+              Effect: Allow
+              Action:
+                - dynamodb:TransactWriteItems
+              Resource:
+                - !GetAtt ModerationCasesTable.Arn
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingReelsTableName}
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingBlocksTableName}
+            - Sid: PersistUserBlock
+              Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource:
+                - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingBlocksTableName}
+            - Sid: AdministerReportedUsers
+              Effect: Allow
+              Action:
+                - cognito-idp:AdminDisableUser
+                - cognito-idp:AdminEnableUser
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminListGroupsForUser
+                - cognito-idp:AdminUserGlobalSignOut
+                - cognito-idp:ListUsers
+              Resource:
+                - !Sub arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${ExistingUserPoolId}
+
+  ModerationLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ModerationFunction}
+      RetentionInDays: 90
+
+  ModerationIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      IntegrationType: AWS_PROXY
+      IntegrationMethod: POST
+      IntegrationUri: !GetAtt ModerationFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 10000
+
+  ReportRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: POST /moderation/report
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub integrations/${ModerationIntegration}
+
+  BlockRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: POST /moderation/block
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub integrations/${ModerationIntegration}
+
+  AdminCasesRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: GET /admin/moderation/cases
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub integrations/${ModerationIntegration}
+
+  AdminOverviewRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: GET /admin/moderation/overview
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub integrations/${ModerationIntegration}
+
+  AdminUsersRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: GET /admin/moderation/users
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub integrations/${ModerationIntegration}
+
+  AdminUserStatusRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: POST /admin/moderation/users/{userId}/status
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub integrations/${ModerationIntegration}
+
+  AdminDecisionRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: POST /admin/moderation/cases/{caseId}/decision
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub integrations/${ModerationIntegration}
+
+  ModerationInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ModerationFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingHttpApiId}/*
+
+  ModerationErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Smarty moderation Lambda errors detected
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ModerationFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  ModerationThrottlesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Smarty moderation Lambda throttles detected
+      Namespace: AWS/Lambda
+      MetricName: Throttles
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ModerationFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+Outputs:
+  ModerationCasesTableName:
+    Value: !Ref ModerationCasesTable
+  ModerationFunctionName:
+    Value: !Ref ModerationFunction
+  AdminGroupName:
+    Value: !Ref SmartyAdminsGroup

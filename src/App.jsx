@@ -51,6 +51,8 @@ import NewsPage from './pages/NewsPage';
 import ReadBookPage from './pages/ReadBookPage';
 import BookReaderPage from './pages/BookReaderPage';
 import PostAiPage from './pages/PostAiPage';
+import AdminModerationPage from './pages/AdminModerationPage';
+import { isAdminUser } from './lib/adminAccess';
 import './styles/production-pages.css';
 import './styles/ipad.css';
 
@@ -237,6 +239,17 @@ startGoogleProfileSignIn(
   return isReallyAuthenticated ? children : <Navigate to="/login" replace state={{ from: location }} />;
 }
 
+function AdminRoute({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) return <PageLoader />;
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (!isAdminUser(user)) return <Navigate to="/feed" replace />;
+
+  return children;
+}
+
 function getUserSocketId(user) {
   return (
     user?.userId ||
@@ -344,46 +357,6 @@ function Layout() {
       return 0;
     }
   }, [unreadStorageKey]);
-
-  const hideNavPaths = [
-    '/quiz',
-    '/booksinfo',
-    '/bookinfo',
-    '/news',
-    '/read-books',
-    '/preview-books',
-    '/read-book',
-    '/login',
-    '/register',
-    '/confirm',
-    '/JoinRoomPage',
- 
-
-  ];
-
-  const isSpecificChatRoute =
-    location.pathname.startsWith('/chat/') ||
-    location.pathname.includes('/messages/') ||
-    location.pathname.includes('/conversation/');
-
-  const isSpecificTopicRoomRoute =
-    location.pathname.includes('/topic-room/') ||
-    location.pathname.includes('/topicrooms/') ||
-    (
-      location.pathname.startsWith('/rooms/') &&
-      !location.pathname.startsWith('/rooms/invite/') &&
-      !location.pathname.startsWith('/rooms/join/')
-    );
-
-  const shouldHideAppNav =
-    hideNavPaths.some(
-      (path) =>
-        location.pathname === path ||
-        location.pathname.startsWith(`${path}/`)
-    ) ||
-    isSpecificChatRoute ||
-    isSpecificTopicRoomRoute;
-
 
   useEffect(() => {
     const handleUnhandledError = (event) => {
@@ -1018,7 +991,6 @@ useEffect(() => {
       {!isAuthPage && <InstallPrompt />}
 
       <div className="app-shell">
-        {!shouldHideAppNav && (
           <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
@@ -1103,10 +1075,9 @@ useEffect(() => {
             </div>
           </div>
           </header>
-        )}
 
         <main
-          className={`content ${shouldHideAppNav ? 'nav-hidden-page' : ''}`}
+          className="content"
           onTouchStart={handleGlobalPullStart}
           onTouchMove={handleGlobalPullMove}
           onTouchEnd={handleGlobalPullEnd}
@@ -1159,6 +1130,16 @@ useEffect(() => {
                 <Route path="/support" element={<SupportPage/>} />
                 <Route path="/terms" element={<TermsPage/>} />
                 <Route path="/privacy" element={<PrivacyPage/>} />
+
+                <Route
+                  path="/admin"
+                  element={
+                    <AdminRoute>
+                      <AdminModerationPage />
+                    </AdminRoute>
+                  }
+                />
+                <Route path="/admin/moderation" element={<Navigate to="/admin" replace />} />
 
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
@@ -1316,13 +1297,6 @@ useEffect(() => {
 function ReminderPopupStyles() {
   return (
     <style>{`
-      body:has(.chat-page.mobile-chat-open) .topbar,
-      body:has(.rooms-page.mobile-chat-open) .topbar,
-      body:has(.chat-page.mobile-chat-open) .glass-topbar,
-      body:has(.rooms-page.mobile-chat-open) .glass-topbar {
-        display: none !important;
-        pointer-events: none !important;
-      }
       .app-page-loader {
         width: 100%;
         min-height: calc(100dvh - 96px);

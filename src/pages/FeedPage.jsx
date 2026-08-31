@@ -59,7 +59,7 @@ const TOPIC_ALIASES = new Map([
   ['programming', 'coding'],
   ['software-development', 'coding'],
   ['coding', 'coding'],
-  ['mental-health', 'psychology'],
+  ['mental-health', 'mental-health'],
 ]);
 
 const getCanonicalTopic = (value) => {
@@ -1093,12 +1093,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         .fromTo(chapters[1],
           { autoAlpha: 0, y: 24 },
           { autoAlpha: 1, y: 0, pointerEvents: 'auto', duration: 0.15 },
-          0.27)
-        .to(chapters[1], { autoAlpha: 0, y: -22, pointerEvents: 'none', duration: 0.14 }, 0.52)
-        .fromTo(chapters[2],
-          { autoAlpha: 0, y: 24 },
-          { autoAlpha: 1, y: 0, pointerEvents: 'auto', duration: 0.16 },
-          0.6);
+          0.27);
 
       cards.forEach((card, index) => {
         timeline.to(card, {
@@ -1349,20 +1344,24 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
               <h1>Scroll into something worth knowing.</h1>
               <p>Move through the ideas, then choose the direction that pulls you in.</p>
             </div>
-            <div className="topic-product-chapter">
-              <span>Every subject, connected</span>
-              <h2>One learning universe. Your pace.</h2>
-              <p>Topics respond to your exact scroll position. Nothing auto-plays or rushes ahead.</p>
-            </div>
+
             <div className="topic-product-chapter">
               <span>Choose your next discovery</span>
               <h2>Go deeper when you are ready.</h2>
               <p>Every card is selectable. Continue scrolling for the complete catalog.</p>
             </div>
+
           </div>
 
           <div className="topic-product-assembly">
-            <div className="topic-product-core" aria-hidden="true"><span>S</span></div>
+            <button
+              type="button"
+              className="topic-product-core"
+              onClick={() => onSelect('All')}
+              aria-label="Open the complete Smarty feed"
+            >
+              <span aria-hidden="true">S</span>
+            </button>
             {showcaseTopics.map((item, index) => {
               const { icon: TopicIcon } = getTopicVisualMeta(item, index);
               return (
@@ -1572,7 +1571,8 @@ const TopicPill = memo(function TopicPill({
     onSelect(topicName);
   }}
   title={topicName}
-  aria-pressed={active}
+  aria-selected={active}
+  role="tab"
   aria-label={`Show ${topicName} posts`}
 >
       <span>
@@ -1976,6 +1976,7 @@ const previousTopicCanvasLayoutRef = useRef({
     loadMore,
     refreshFeed,
     savePost,
+    hidePost,
     blockCreator,
   } = useFeed();
   const currentUserId = String(
@@ -1994,6 +1995,7 @@ const lastCanvasMoveTimeRef = useRef(0);
 const loadMoreRef = useRef(null);
 const feedLoadLockRef = useRef(false);
 const topicCanvasRef = useRef(null);
+const innerTopicsRef = useRef(null);
 const topicCardMetricsRef = useRef([]);
 const feedRef = useRef(null);
 const topicSearchLoadRef = useRef({
@@ -3533,39 +3535,38 @@ useEffect(() => {
         await chatApi.reportUser({
           reportedUserId: moderationTarget.creatorId,
           postId: moderationTarget.postId,
+          contentId: moderationTarget.postId,
           contentType: 'post',
           source: 'feed-post-menu',
           reason,
+          contentSnapshot: {
+            title: moderationTarget.post?.title,
+            body: moderationTarget.post?.body,
+            topic: moderationTarget.post?.topic || moderationTarget.post?.category,
+            creatorName: moderationTarget.creatorName,
+            imageUrl: moderationTarget.post?.imageUrl || moderationTarget.post?.thumbnail,
+          },
         });
 
-        showToast('Post reported. Thank you for helping keep Smarty safe.', 2600);
+        hidePost(moderationTarget.postId);
+        showToast('Post reported and hidden while it is reviewed.', 2800);
       } else {
         await chatApi.blockUser(moderationTarget.creatorId, {
           postId: moderationTarget.postId,
           contentType: 'post',
           source: 'feed-post-menu',
           reason,
+          contentSnapshot: {
+            title: moderationTarget.post?.title,
+            body: moderationTarget.post?.body,
+            topic: moderationTarget.post?.topic || moderationTarget.post?.category,
+            creatorName: moderationTarget.creatorName,
+            imageUrl: moderationTarget.post?.imageUrl || moderationTarget.post?.thumbnail,
+          },
         });
 
         // Remove all cached and rendered posts immediately, before any refresh.
         blockCreator(moderationTarget.creatorId);
-
-        // Blocking from objectionable content also creates a moderation report,
-        // so the developer receives the content and reason for review.
-        try {
-          await chatApi.reportUser({
-            reportedUserId: moderationTarget.creatorId,
-            postId: moderationTarget.postId,
-            contentType: 'post',
-            source: 'feed-block-action',
-            reason: `User blocked: ${reason}`,
-          });
-        } catch (reportError) {
-          // The block request already carries notifyDeveloper and content
-          // context. Keep the user's safety action successful if the
-          // secondary moderation-report request needs a backend retry.
-          console.error('Secondary block report failed:', reportError);
-        }
 
         showToast(
           `${moderationTarget.creatorName} was blocked and removed from your feed.`,
@@ -3589,6 +3590,7 @@ useEffect(() => {
     }
   }, [
     blockCreator,
+    hidePost,
     moderationDetails,
     moderationReason,
     moderationSubmitting,
@@ -3982,6 +3984,54 @@ const renderedTopics = useMemo(
     launchTopics,
   ]
 );
+
+useEffect(() => {
+  const strip = innerTopicsRef.current;
+  if (!strip || !selectedTopic) return undefined;
+
+  const frame = window.requestAnimationFrame(() => {
+    const activePill = strip.querySelector('.topic-pill.active');
+    if (!activePill) return;
+
+    const left = Math.max(
+      0,
+      activePill.offsetLeft - (strip.clientWidth - activePill.offsetWidth) / 2
+    );
+    strip.scrollTo({
+      left,
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth',
+    });
+  });
+
+  return () => window.cancelAnimationFrame(frame);
+}, [selectedTopic, launchTopics.length]);
+
+const handleInnerTopicKeyDown = useCallback((event) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+
+  const pills = Array.from(
+    innerTopicsRef.current?.querySelectorAll('.topic-pill') || []
+  );
+  if (pills.length === 0) return;
+
+  const activeIndex = Math.max(
+    0,
+    pills.findIndex((pill) => pill.classList.contains('active'))
+  );
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? pills.length - 1
+      : event.key === 'ArrowRight'
+        ? (activeIndex + 1) % pills.length
+        : (activeIndex - 1 + pills.length) % pills.length;
+
+  event.preventDefault();
+  pills[nextIndex]?.focus({ preventScroll: true });
+  pills[nextIndex]?.click();
+}, []);
 
 const renderedTopicCanvasTiles = useMemo(
   () =>
@@ -4515,9 +4565,11 @@ style={topicCanvasSurfaceStyle}
           </div>
 
           <nav
+            ref={innerTopicsRef}
             className="feed-inner-topics mobile-topic-scroll"
             role="tablist"
             aria-label="Select feed topic"
+            onKeyDown={handleInnerTopicKeyDown}
           >
             {renderedTopics}
           </nav>

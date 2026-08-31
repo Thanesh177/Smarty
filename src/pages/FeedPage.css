@@ -1809,6 +1809,9 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  scroll-behavior: smooth;
+  scroll-padding-inline: 42%;
+  touch-action: pan-x;
 }
 
 .feed-inner-topics::-webkit-scrollbar {
@@ -4698,6 +4701,21 @@
   background: linear-gradient(145deg, #e9faff, #80cae4);
   box-shadow: 0 28px 90px rgba(26, 137, 174, 0.24), inset 0 1px 0 #fff;
   transform-style: preserve-3d;
+  z-index: 4;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.topic-product-core:hover {
+  border-color: rgba(210, 246, 255, 0.48);
+  box-shadow: 0 32px 104px rgba(33, 158, 198, 0.33), inset 0 1px 0 #fff;
+}
+
+.topic-product-core:focus-visible {
+  outline: 3px solid rgba(125, 211, 252, 0.68);
+  outline-offset: 8px;
 }
 
 .topic-product-core::before,
