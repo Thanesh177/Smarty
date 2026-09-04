@@ -4,7 +4,10 @@ import { endpoints } from './endpoints';
 import '../lib/cognito';
 import { requestNotificationToken } from '../firebase';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.DEV
+  ? '/smarty-api'
+  : CONFIGURED_API_BASE_URL;
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT || 20000);
 const AUTH_TOKEN_CACHE_MS = 45 * 1000;
@@ -13,8 +16,10 @@ const PRODUCTION_ORIGIN = 'https://smarty.wiki';
 const APP_ORIGIN =
   typeof window !== 'undefined' && window.location?.origin
     ? window.location.origin
-    : PRODUCTION_ORIGIN;const ROOM_INVITE_API_BASE_URL =
-  import.meta.env.VITE_ROOM_INVITE_API_BASE_URL || API_BASE_URL;
+    : PRODUCTION_ORIGIN;
+const ROOM_INVITE_API_BASE_URL = import.meta.env.DEV
+  ? '/smarty-api'
+  : import.meta.env.VITE_ROOM_INVITE_API_BASE_URL || API_BASE_URL;
 
 const PENDING_ROOM_INVITE_CODE_KEY = 'smarty_pending_room_invite_code';
 const PENDING_ROOM_INVITE_PATH_KEY = 'smarty_pending_room_invite_path';

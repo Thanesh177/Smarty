@@ -1,4 +1,5 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import confetti from "canvas-confetti";
 import { saveWrongQuestion, getWrongQuestions } from "../lib/progressStore";
 import "./QuizPage.css";
@@ -12,6 +13,9 @@ const BrainGameEngine = lazy(() => import("../components/games/BrainGameEngine")
 const BossChallenge = lazy(() => import("../components/boss/BossChallenge"));
 
 const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const CAN_USE_REMOTE_QUIZ_API = Boolean(API_BASE_URL) && (
+  typeof window === "undefined" || window.location.protocol !== "file:"
+);
 
 const buildApiUrl = (path) => {
   if (!API_BASE_URL) return '';
@@ -179,7 +183,119 @@ const TOPICS = [
 
 ];
 
-const QUESTIONS = {};
+const SHARED_FOUNDATION_QUESTIONS = [
+  ["What is the strongest way to verify an unfamiliar claim?", "Compare several independent, credible sources", "Trust the first search result", "Rely on how confident it sounds", "Choose the most shared post", "Independent evidence is more reliable than popularity or confident wording."],
+  ["What does correlation between two things prove by itself?", "They are related, but not necessarily causal", "One definitely causes the other", "The data must be false", "Both have the same cause", "Correlation can suggest a relationship, but additional evidence is needed to establish causation."],
+  ["Which study method usually strengthens long-term recall most effectively?", "Active retrieval over spaced sessions", "Rereading once without testing", "Highlighting every sentence", "Studying only immediately before a test", "Retrieving information and spacing practice strengthens durable memory."],
+];
+
+const TOPIC_QUESTION_DATA = {
+  memory: [
+    ["Which practice most directly strengthens recall?", "Trying to retrieve the answer before checking", "Copying the answer repeatedly", "Reading faster", "Avoiding all mistakes", "Retrieval practice makes the memory easier to access later."],
+    ["Why is sleep important after learning?", "It supports memory consolidation", "It deletes older memories", "It prevents all forgetting", "It replaces practice", "Sleep helps stabilize and integrate recently learned information."],
+  ],
+  politics: [
+    ["Why do democracies separate government powers?", "To limit concentrated power through checks and balances", "To eliminate elections", "To make laws secret", "To remove courts", "Separated powers allow institutions to check one another."],
+    ["What does the rule of law require?", "Laws apply consistently, including to public officials", "Leaders may ignore courts", "Only voters must follow laws", "Every decision requires a referendum", "The rule of law constrains both citizens and government."],
+  ],
+  animals: [
+    ["What is echolocation?", "Using reflected sound to locate objects", "Seeing ultraviolet heat", "Following Earth's magnetic field only", "Communicating through color", "Animals such as bats can interpret returning sound echoes."],
+    ["Why does biodiversity often improve ecosystem resilience?", "Different species can support overlapping ecological roles", "Every species uses identical resources", "It prevents environmental change", "It removes competition completely", "Diverse systems have more pathways for maintaining important functions."],
+  ],
+  physics: [
+    ["According to Newton's second law, acceleration depends on what?", "Net force and mass", "Temperature only", "Object color", "Volume without mass", "Acceleration increases with net force and decreases as mass increases."],
+    ["What does conservation of energy mean?", "Energy changes form but is not created or destroyed in an isolated system", "Energy always becomes motion", "Stored energy has no value", "Energy disappears after use", "Total energy remains constant while moving between forms."],
+  ],
+  trading: [
+    ["What is the primary purpose of a stop-loss plan?", "Limit the damage from an adverse move", "Guarantee a profitable trade", "Predict the exact market bottom", "Increase leverage automatically", "Defined exits help keep a single loss from becoming destructive."],
+    ["Why do investors diversify?", "To reduce dependence on one asset or risk", "To remove every possible loss", "To maximize trading frequency", "To guarantee market-beating returns", "Diversification spreads exposure instead of concentrating it."],
+  ],
+  critical_thinking: [
+    ["What is an ad hominem fallacy?", "Attacking the person instead of addressing the argument", "Using numerical evidence", "Revising a conclusion", "Comparing two hypotheses", "A person's traits do not by themselves refute their reasoning."],
+    ["What is confirmation bias?", "Favoring information that supports an existing belief", "Changing a belief after new evidence", "Checking opposing explanations", "Using a random sample", "Confirmation bias makes supportive evidence easier to notice and accept."],
+  ],
+  personal_finance: [
+    ["What is an emergency fund designed to cover?", "Unexpected essential expenses", "Guaranteed investment returns", "Routine luxury purchases", "Only retirement costs", "Accessible savings reduce the need for expensive debt during surprises."],
+    ["What makes compound growth powerful over time?", "Returns can earn additional returns", "Interest rates never change", "All investments are risk free", "Taxes disappear automatically", "Compounding builds on both the original amount and prior growth."],
+  ],
+  health_fitness: [
+    ["What is progressive overload?", "Gradually increasing a training demand", "Exercising at maximum effort daily", "Changing exercises every session", "Avoiding recovery", "Adaptation requires a manageable increase in challenge over time."],
+    ["How much sleep do most healthy adults generally need?", "About seven to nine hours", "Two to three hours", "Exactly five hours", "More than fourteen hours", "Most adults function best with roughly seven to nine hours of regular sleep."],
+  ],
+  psychology: [
+    ["What is classical conditioning?", "Learning an association between stimuli", "Learning only through punishment", "Remembering a list in order", "Making a decision with no experience", "A previously neutral cue can acquire meaning through repeated association."],
+    ["What is working memory used for?", "Holding and manipulating a small amount of current information", "Storing every lifetime memory", "Controlling reflexes only", "Preventing emotional responses", "Working memory supports tasks such as reasoning and mental calculation."],
+  ],
+  law_rights: [
+    ["What is the usual burden of proof in a criminal trial?", "Beyond a reasonable doubt", "A simple possibility", "The balance of convenience", "No evidence is required", "Criminal conviction generally requires the highest common legal standard of proof."],
+    ["Why is due process important?", "It requires fair procedures before government deprives a person of protected interests", "It guarantees every lawsuit succeeds", "It removes judicial review", "It applies only to contracts", "Due process protects people through notice, fairness, and an opportunity to be heard."],
+  ],
+  ai_technology: [
+    ["What does a machine-learning model learn from training data?", "Patterns useful for making predictions or generating outputs", "Perfect certainty about the future", "Human consciousness", "A permanent internet connection", "Models adjust internal parameters to capture statistical patterns."],
+    ["What does encryption primarily protect?", "Data confidentiality by making content unreadable without a key", "Battery life", "Screen resolution", "File compression only", "Encryption transforms readable data into protected ciphertext."],
+  ],
+  cybersecurity: [
+    ["What is phishing?", "A deceptive attempt to steal information or access", "A method of compressing files", "A secure backup protocol", "A type of hardware repair", "Phishing impersonates trusted sources to manipulate a target."],
+    ["Why does multi-factor authentication improve account security?", "It requires more than one kind of proof", "It makes passwords public", "It disables encryption", "It removes account recovery", "A stolen password alone is less likely to be enough for access."],
+  ],
+  world_history: [
+    ["What is a primary historical source?", "Evidence created during the period being studied", "Any modern textbook", "A fictional retelling", "A search result summary", "Letters, records, artifacts, and contemporary accounts are primary evidence."],
+    ["What major change characterized the Industrial Revolution?", "Production shifted toward mechanized factories", "International trade ended", "Cities disappeared", "Agriculture was abandoned everywhere", "Mechanization transformed production, labor, transport, and urban life."],
+  ],
+  geography_world: [
+    ["What does latitude measure?", "Distance north or south of the equator", "Elevation above sea level", "Distance east or west of Greenwich", "Annual rainfall", "Latitude lines describe angular position north or south."],
+    ["How does climate differ from weather?", "Climate describes long-term patterns; weather describes short-term conditions", "Climate changes hourly", "Weather is global only", "They mean exactly the same thing", "Weather is immediate; climate summarizes patterns over longer periods."],
+  ],
+  communication: [
+    ["What is active listening?", "Listening to understand and confirming what was heard", "Waiting silently to speak", "Agreeing with every statement", "Repeating the same argument", "Reflection and clarification reduce misunderstanding."],
+    ["In negotiation, what is a BATNA?", "The best alternative if no agreement is reached", "The opening demand", "A legally binding offer", "A shared concession", "Knowing the best alternative helps evaluate whether an agreement is worthwhile."],
+  ],
+  media_literacy: [
+    ["What is a useful first step for checking a suspicious image?", "Use reverse-image search and inspect its original context", "Trust the caption", "Count how many likes it has", "Increase its brightness", "Older or unrelated images are often reused with false captions."],
+    ["How can a truncated graph axis mislead viewers?", "It can exaggerate small differences", "It always removes the data labels", "It proves the sample is random", "It converts correlation into causation", "A narrow scale can make modest changes look visually dramatic."],
+  ],
+  career_skills: [
+    ["What does STAR help structure in an interview answer?", "Situation, task, action, and result", "Salary, title, availability, and references", "Skills, training, awards, and rank", "Strategy, timing, accuracy, and review", "STAR turns an example into a clear, outcome-focused story."],
+    ["What makes workplace feedback most useful?", "It is specific, timely, and actionable", "It focuses on personality", "It is saved for annual reviews only", "It avoids examples", "Clear observations and next steps make feedback easier to use."],
+  ],
+};
+
+const createLocalQuestions = (topicId) => {
+  const rows = [...(TOPIC_QUESTION_DATA[topicId] || []), ...SHARED_FOUNDATION_QUESTIONS];
+
+  return rows.slice(0, 5).map(([q, answer, ...rest], index) => {
+    const explanation = rest.pop();
+    const distractors = rest;
+    const choices = [answer, ...distractors];
+    const shift = index % choices.length;
+    const options = [...choices.slice(shift), ...choices.slice(0, shift)];
+
+    return {
+      id: `local-${topicId}-${index + 1}`,
+      q,
+      options,
+      answer,
+      explanation,
+      difficulty: index < 2 ? "Easy" : index < 3 ? "Medium" : "Hard",
+      source: "local",
+    };
+  });
+};
+
+const QUESTIONS = Object.fromEntries(
+  TOPICS.map((topic) => [topic.id, createLocalQuestions(topic.id)]),
+);
+
+function shuffleItems(items) {
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
 
 const TopicCard = memo(function TopicCard({ item, progress, onStart }) {
   return (
@@ -312,16 +428,78 @@ function getDifficultyForTopic(topicId, progressMap) {
 }
 
 function getAdaptiveQuestions(topicId, progressMap) {
-  const all = QUESTIONS[topicId] || [];
+  const all = (QUESTIONS[topicId] || []).map((question) => ({
+    ...question,
+    options: shuffleItems(question.options),
+  }));
   const level = getDifficultyForTopic(topicId, progressMap);
 
-  const filtered = all.filter((q) => {
-    if (level === "Hard") return q.difficulty !== "Easy";
-    if (level === "Medium") return q.difficulty !== "Hard";
-    return q.difficulty !== "Hard";
+  const preferred = all.filter((question) => {
+    if (level === "Hard") return question.difficulty === "Hard" || question.difficulty === "Medium";
+    if (level === "Medium") return question.difficulty === "Medium";
+    return question.difficulty === "Easy";
   });
+  const remaining = all.filter((question) => !preferred.includes(question));
 
-  return filtered.length >= 5 ? filtered.slice(0, 5) : all.slice(0, 5);
+  return [...shuffleItems(preferred), ...shuffleItems(remaining)].slice(0, 5);
+}
+
+function getAnswerXP(question, comboCount) {
+  const difficultyXP = {
+    Easy: 8,
+    Medium: 10,
+    Hard: 14,
+    Adaptive: 12,
+  };
+  const baseXP = difficultyXP[question?.difficulty] || 10;
+  const comboBonus = Math.min(Math.max(comboCount - 1, 0), 3) * 2;
+  return baseXP + comboBonus;
+}
+
+function normalizeGeneratedQuestions(payload, topicId) {
+  let parsed = payload;
+
+  if (typeof parsed?.body === "string") {
+    try {
+      parsed = JSON.parse(parsed.body);
+    } catch {
+      parsed = payload;
+    }
+  }
+
+  const values = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.questions)
+      ? parsed.questions
+      : Array.isArray(parsed?.items)
+        ? parsed.items
+        : [];
+
+  return values.map((question, questionIndex) => {
+    const q = String(question?.q || question?.question || question?.prompt || "").trim();
+    const rawOptions = question?.options || question?.choices || question?.answers || [];
+    const options = Array.isArray(rawOptions)
+      ? rawOptions.map((option) => String(option?.text || option?.label || option || "").trim()).filter(Boolean)
+      : [];
+    const rawAnswer = question?.answer ?? question?.correctAnswer ?? question?.correct ?? question?.correctOption;
+    const answer = Number.isInteger(rawAnswer)
+      ? options[rawAnswer]
+      : String(rawAnswer || "").trim();
+
+    if (!q || options.length < 2 || !answer || !options.includes(answer)) return null;
+
+    return {
+      id: question?.id || `generated-${topicId}-${questionIndex + 1}`,
+      q,
+      options,
+      answer,
+      explanation: String(
+        question?.explanation || question?.reason || `The correct answer is ${answer}.`,
+      ).trim(),
+      difficulty: question?.difficulty || "Adaptive",
+      source: "generated",
+    };
+  }).filter(Boolean).slice(0, 5);
 }
 
 function getStoredGuestId() {
@@ -457,6 +635,7 @@ function getTotalXP(progressMap) {
 
 
 export default function QuizPage() {
+const navigate = useNavigate();
 const [comboCount, setComboCount] = useState(1);
 const SURVIVAL_TIME = 12;
 const [survivalTimeLeft, setSurvivalTimeLeft] = useState(SURVIVAL_TIME);
@@ -465,6 +644,7 @@ const sounds = useSoundFeedback();
 const survivalMode = useMemo(() => localStorage.getItem("smarty-game-mode") === "survival", []);
 const [bossMode, setBossMode] = useState(false);
 const [xpGained, setXpGained] = useState(0);
+const transitionLockRef = useRef(false);
 
 const showXPGain = useCallback((xp) => {
   setXpGained(0);
@@ -474,6 +654,7 @@ const showXPGain = useCallback((xp) => {
 }, []);
 
   const [topic, setTopic] = useState(null);
+  const [reviewMode, setReviewMode] = useState(false);
 
   const [index, setIndex] = useState(0);
 
@@ -490,6 +671,8 @@ const showXPGain = useCallback((xp) => {
   const [saving, setSaving] = useState(false);
 
   const [saveError, setSaveError] = useState("");
+  const [quizNotice, setQuizNotice] = useState("");
+  const [answerFeedback, setAnswerFeedback] = useState(null);
   const [locked, setLocked] = useState(false);
   const [aiQuestions, setAiQuestions] = useState({});
   const [loadingAI, setLoadingAI] = useState(false);
@@ -504,6 +687,9 @@ const overallXpPercent = totalXP % 250 ? ((totalXP % 250) / 250) * 100 : totalXP
 
 const quizQuestions = aiQuestions[topic.id] || [];
 const games = GAME_STEPS[topic.id] || [];
+  if (reviewMode) {
+    return quizQuestions.map((question) => ({ type: "mcq", ...question }));
+  }
   return [
     quizQuestions[0] && { type: "mcq", ...quizQuestions[0] },
     games[0],
@@ -513,7 +699,7 @@ const games = GAME_STEPS[topic.id] || [];
     quizQuestions[3] && { type: "mcq", ...quizQuestions[3] },
     quizQuestions[4] && { type: "mcq", ...quizQuestions[4] },
   ].filter(Boolean);
-}, [topic, aiQuestions]);
+}, [topic, aiQuestions, reviewMode]);
 const streakGoal = 7;
 const streakPercent = Math.min((visitProgress.streak / streakGoal) * 100, 100);
 
@@ -547,6 +733,10 @@ const renderedReviewItems = useMemo(
     Array.isArray(current?.options) ? current.options : []
   ), [current]);
 
+  useEffect(() => {
+    transitionLockRef.current = false;
+  }, [index, topic?.id]);
+
   const quizShellExtras = useMemo(() => (
     <>
       <AchievementToast achievements={newAchievements} />
@@ -555,20 +745,32 @@ const renderedReviewItems = useMemo(
   ), [comboCount, newAchievements, xpGained]);
 
   const loadAIQuestions = useCallback(async (topicId) => {
-  if (!API_BASE_URL) {
+  const useLocalQuestions = (notice = "") => {
+    const localQuestions = getAdaptiveQuestions(topicId, topicProgressMap);
+    setAiQuestions((prev) => ({ ...prev, [topicId]: localQuestions }));
+    setQuizNotice(notice);
     setLoadingAI(false);
-    setSaveError("AI API is not configured. Add VITE_API_BASE_URL to your .env file.");
+  };
+
+  if (!CAN_USE_REMOTE_QUIZ_API) {
+    useLocalQuestions("Offline-ready questions are active.");
     return;
   }
   const activeQuiz = getStoredActiveQuiz(topicId);
 
 if (Array.isArray(activeQuiz) && activeQuiz.length > 0) {
+  const normalizedActiveQuiz = normalizeGeneratedQuestions(activeQuiz, topicId);
+  if (normalizedActiveQuiz.length === 0) {
+    clearActiveQuiz(topicId);
+  } else {
   setAiQuestions((prev) => ({
     ...prev,
-    [topicId]: activeQuiz,
+    [topicId]: normalizedActiveQuiz,
   }));
+  setQuizNotice("");
   setLoadingAI(false);
   return;
+  }
 }
 
   setLoadingAI(true);
@@ -577,6 +779,8 @@ if (Array.isArray(activeQuiz) && activeQuiz.length > 0) {
     ...prev,
     [topicId]: [],
   }));
+
+  let requestTimeout = 0;
 
   try {
     const difficulty = getDifficultyForTopic(topicId, topicProgressMap);
@@ -587,6 +791,8 @@ if (Array.isArray(activeQuiz) && activeQuiz.length > 0) {
       .slice(-3)
       .map((item) => item.q);
 
+    const controller = new AbortController();
+    requestTimeout = window.setTimeout(() => controller.abort(), 9000);
     const res = await fetch(buildApiUrl('/quiz/generate'), {
       method: "POST",
       headers: {
@@ -598,27 +804,31 @@ if (Array.isArray(activeQuiz) && activeQuiz.length > 0) {
         difficulty,
         weakAreas,
       }),
+      signal: controller.signal,
     });
-
     if (!res.ok) {
       throw new Error("AI generation failed.");
     }
 
     const data = await res.json();
+    const questions = normalizeGeneratedQuestions(data, topicId);
 
-    if (!Array.isArray(data.questions) || data.questions.length === 0) {
+    if (questions.length === 0) {
       throw new Error("AI returned no questions.");
     }
 
-saveActiveQuiz(topicId, data.questions);
+saveActiveQuiz(topicId, questions);
 
 setAiQuestions((prev) => ({
   ...prev,
-  [topicId]: data.questions,
+  [topicId]: questions,
 }));
+setQuizNotice("");
   } catch (error) {
-    setSaveError(error.message || "AI questions could not be loaded.");
+    console.warn("Generated quiz unavailable; using local questions.", error);
+    useLocalQuestions("Fresh questions are unavailable, so Smarty loaded the built-in challenge.");
   } finally {
+    if (requestTimeout) window.clearTimeout(requestTimeout);
     setLoadingAI(false);
   }
 }, [topicProgressMap]);
@@ -634,6 +844,8 @@ setAiQuestions((prev) => ({
     }
 
     setTopic(item);
+    setReviewMode(false);
+    transitionLockRef.current = false;
     setIndex(0);
     setScore(0);
     setAnswers([]);
@@ -641,6 +853,8 @@ setAiQuestions((prev) => ({
     setFinished(false);
     setProgress(null);
     setSaveError("");
+    setQuizNotice("");
+    setAnswerFeedback(null);
     setLocked(false);
     setXpGained(0);
     setComboCount(1);
@@ -662,12 +876,14 @@ const renderedTopics = useMemo(
 const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
   setSaving(true);
   setSaveError("");
+  setQuizNotice("");
+  setAnswerFeedback(null);
 
   const userId = getStoredGuestId();
 
   const percentage = mixedSteps.length ? Math.round((finalScore / mixedSteps.length) * 100) : 0;
 
-  if (!API_BASE_URL) {
+  if (!CAN_USE_REMOTE_QUIZ_API) {
     const xpEarnedLocal = finalAnswers.reduce(
       (total, answer) => total + (answer.xp || 0),
       0
@@ -684,7 +900,7 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
 
     setTopicProgressMap(updatedProgress);
     clearActiveQuiz(topic.id);
-    setSaveError("Progress saved locally. API is not configured.");
+    setSaveError("");
     setSaving(false);
     return;
   }
@@ -778,7 +994,7 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
   }, [mixedSteps.length, overallLevel, sounds, topic, topicProgressMap, visitProgress.streak]);
 
 useEffect(() => {
-  if (!topic || finished || !current || !survivalMode) return;
+  if (!topic || finished || !current || !survivalMode || locked || bossMode) return;
 
   setSurvivalTimeLeft(SURVIVAL_TIME);
 
@@ -786,6 +1002,8 @@ useEffect(() => {
     setSurvivalTimeLeft((prev) => {
       if (prev <= 1) {
         clearInterval(timer);
+        if (transitionLockRef.current) return 0;
+        transitionLockRef.current = true;
 
         const timeoutAnswer = {
           id: current.id || `timeout-${topic.id}-${index}`,
@@ -817,19 +1035,22 @@ useEffect(() => {
   }, 1000);
 
   return () => clearInterval(timer);
-}, [answers, current, finished, index, mixedSteps.length, saveQuizProgress, score, survivalMode, topic]);
+}, [answers, bossMode, current, finished, index, locked, mixedSteps.length, saveQuizProgress, score, survivalMode, topic]);
 
 const submitAnswer = useCallback(() => {
-  if (locked || !selected || !current) return;
+  if (locked || transitionLockRef.current || !selected || !current) return;
 
+  transitionLockRef.current = true;
   setLocked(true);
 
   const isCorrect = selected === current.answer;
 
+  const earnedXP = isCorrect ? getAnswerXP(current, comboCount) : 0;
+
   if (isCorrect) {
     sounds.correct();
     setComboCount((prev) => prev + 1);
-    showXPGain(10);
+    showXPGain(earnedXP);
   } else {
     sounds.wrong();
     setComboCount(1);
@@ -852,22 +1073,72 @@ const submitAnswer = useCallback(() => {
       explanation: current.explanation,
       difficulty: current.difficulty,
       isCorrect,
-      xp: isCorrect ? 10 : 0,
+      xp: earnedXP,
+      options: currentOptions,
     },
   ];
 
   setAnswers(nextAnswers);
   setScore(nextScore);
+  setAnswerFeedback({
+    isCorrect,
+    correctAnswer: current.answer,
+    explanation: current.explanation,
+    xp: earnedXP,
+    nextScore,
+    nextAnswers,
+  });
+}, [answers, comboCount, current, currentOptions, locked, score, selected, showXPGain, sounds, topic]);
+
+const advanceAfterAnswer = useCallback(() => {
+  if (!answerFeedback || transitionLockRef.current === "advancing") return;
+  transitionLockRef.current = "advancing";
 
   if (index + 1 < mixedSteps.length) {
     setIndex((prev) => prev + 1);
     setSelected("");
     setLocked(false);
+    setAnswerFeedback(null);
   } else {
     setFinished(true);
-    saveQuizProgress(nextScore, nextAnswers);
+    saveQuizProgress(answerFeedback.nextScore, answerFeedback.nextAnswers);
   }
-}, [answers, current, index, locked, mixedSteps.length, saveQuizProgress, score, selected, showXPGain, sounds, topic]);
+}, [answerFeedback, index, mixedSteps.length, saveQuizProgress]);
+
+useEffect(() => {
+  if (!topic || finished || current?.type !== "mcq") return undefined;
+
+  const handleQuizKeyboard = (event) => {
+    if (event.target instanceof HTMLElement && event.target.closest("button, input, textarea, select, a")) return;
+
+    const optionKeys = ["1", "2", "3", "4", "a", "b", "c", "d"];
+    const pressedKey = event.key.toLowerCase();
+    const keyIndex = optionKeys.indexOf(pressedKey);
+
+    if (keyIndex >= 0 && !locked && !answerFeedback) {
+      const optionIndex = keyIndex % 4;
+      const option = currentOptions[optionIndex];
+      if (option) {
+        event.preventDefault();
+        setSelected(option);
+      }
+      return;
+    }
+
+    if (event.key === "Enter") {
+      if (answerFeedback) {
+        event.preventDefault();
+        advanceAfterAnswer();
+      } else if (selected && !locked) {
+        event.preventDefault();
+        submitAnswer();
+      }
+    }
+  };
+
+  window.addEventListener("keydown", handleQuizKeyboard);
+  return () => window.removeEventListener("keydown", handleQuizKeyboard);
+}, [advanceAfterAnswer, answerFeedback, current?.type, currentOptions, finished, locked, selected, submitAnswer, topic]);
 
 const restart = useCallback(() => {
   setBossMode(false);
@@ -875,6 +1146,8 @@ const restart = useCallback(() => {
   localStorage.removeItem("smarty-game-mode");
 
   setTopic(null);
+  setReviewMode(false);
+  transitionLockRef.current = false;
   setIndex(0);
   setSelected("");
   setScore(0);
@@ -882,10 +1155,48 @@ const restart = useCallback(() => {
   setFinished(false);
   setProgress(null);
   setSaveError("");
+  setQuizNotice("");
+  setAnswerFeedback(null);
   setLocked(false);
   setXpGained(0);
   setComboCount(1);
 }, []);
+
+const missedQuestions = useMemo(
+  () => answers.filter((answer) => !answer.isCorrect && Array.isArray(answer.options) && answer.options.length > 1),
+  [answers],
+);
+
+const startMistakeReview = useCallback(() => {
+  if (!topic || missedQuestions.length === 0) return;
+
+  const retryQuestions = missedQuestions.map((answer, questionIndex) => ({
+    id: `review-${answer.id || questionIndex}-${Date.now()}`,
+    q: answer.q,
+    options: shuffleItems(answer.options),
+    answer: answer.correctAnswer,
+    explanation: answer.explanation,
+    difficulty: answer.difficulty || "Adaptive",
+    source: "review",
+  }));
+
+  setAiQuestions((previous) => ({ ...previous, [topic.id]: retryQuestions }));
+  setReviewMode(true);
+  setBossMode(false);
+  setIndex(0);
+  setSelected("");
+  setScore(0);
+  setAnswers([]);
+  setFinished(false);
+  setProgress(null);
+  setSaveError("");
+  setQuizNotice(`Focused review · ${retryQuestions.length} missed ${retryQuestions.length === 1 ? "question" : "questions"}`);
+  setAnswerFeedback(null);
+  setLocked(false);
+  setXpGained(0);
+  setComboCount(1);
+  transitionLockRef.current = false;
+}, [missedQuestions, topic]);
 
   const finalScore = score;
 
@@ -899,6 +1210,9 @@ const restart = useCallback(() => {
 
   const improvement = progress?.improvement ?? (previousScore === null ? 0 : finalScore - previousScore);
 const handleBossComplete = useCallback((result) => {
+  if (transitionLockRef.current) return;
+  transitionLockRef.current = true;
+
   if (result.success) {
     sounds.correct();
     setComboCount((prev) => prev + 1);
@@ -935,6 +1249,9 @@ const handleBossComplete = useCallback((result) => {
 }, [answers, saveQuizProgress, score, showXPGain, sounds, topic]);
 
 const handleGameComplete = useCallback((result) => {
+  if (transitionLockRef.current) return;
+  transitionLockRef.current = true;
+
   if (result.success) {
     sounds.correct();
     setComboCount((prev) => prev + 1);
@@ -1003,11 +1320,11 @@ if (topic && bossMode && !finished) {
           </div>
 
           <div className="ai-loading-card">
-            <h2>{loadingAI ? "Generating your quiz..." : " questions unavailable"}</h2>
+            <h2>{loadingAI ? "Preparing your quiz..." : "Questions unavailable"}</h2>
             <p>
               {loadingAI
                 ? "Smarty is creating fresh questions for this topic."
-                : saveError || "Please check your AI API setup and try again."}
+                : "Smarty could not prepare this challenge. Please try again."}
             </p>
             {!loadingAI && (
               <button type="button" className="submit-answer-btn" onClick={() => loadAIQuestions(topic.id)}>
@@ -1027,7 +1344,7 @@ if (topic && bossMode && !finished) {
 <main className="quiz-page">
   <button
     className="back-btn quiz-page-back"
-    onClick={() => window.history.back()}
+    onClick={() => navigate(-1)}
   >
     <span className="arrow">←</span> Back
   </button>
@@ -1051,7 +1368,7 @@ if (topic && bossMode && !finished) {
         <button
           type="button"
           className="profile-btn"
-          onClick={() => window.location.href = "/game-profile"}
+          onClick={() => navigate("/game-profile")}
         >
           View Game Profile
         </button>
@@ -1200,6 +1517,10 @@ if (topic && bossMode && !finished) {
 
           <div className="result-actions">
 
+            {missedQuestions.length > 0 && (
+              <button type="button" onClick={startMistakeReview}>Practice Mistakes</button>
+            )}
+
             <button type="button" onClick={() => startQuiz(topic)}>Retry Topic</button>
 
             <button type="button" onClick={restart} className="secondary-btn">
@@ -1277,7 +1598,7 @@ if (topic && bossMode && !finished) {
           <button
             type="button"
             className="profile-mini-btn"
-            onClick={() => window.location.href = "/game-profile"}
+            onClick={() => navigate("/game-profile")}
           >
             🎮
           </button>
@@ -1294,6 +1615,12 @@ if (topic && bossMode && !finished) {
           />
 
         </div>
+        <div className="quiz-session-stats" aria-label="Current quiz status">
+          <span>{current?.difficulty || "Adaptive"}</span>
+          <span>Score <strong>{score}</strong></span>
+          <span className={comboCount > 1 ? "is-active" : ""}>Combo <strong>{comboCount}×</strong></span>
+        </div>
+        {quizNotice && <p className="quiz-source-notice">{quizNotice}</p>}
         {survivalMode && (
   <div className="survival-timer">
     <span>⏱ Survival</span>
@@ -1305,19 +1632,36 @@ if (topic && bossMode && !finished) {
         <h2>{current?.q || "Challenge question"}</h2>
         
 <div className="option-list">
-  {currentOptions.map((option) => (
+  {currentOptions.map((option, optionIndex) => (
     <button
       key={option}
-      className={selected === option ? "option-btn selected" : "option-btn"}
+      className={[
+        "option-btn",
+        selected === option ? "selected" : "",
+        answerFeedback?.correctAnswer === option ? "correct" : "",
+        answerFeedback && selected === option && !answerFeedback.isCorrect ? "wrong" : "",
+      ].filter(Boolean).join(" ")}
       type="button"
       onClick={() => !locked && setSelected(option)}
       disabled={locked}
       aria-pressed={selected === option}
+      data-key={String.fromCharCode(65 + optionIndex)}
     >
       {option}
     </button>
   ))}
 </div>
+
+{answerFeedback && (
+  <div
+    className={`answer-feedback ${answerFeedback.isCorrect ? "correct" : "wrong"}`}
+    role="status"
+    aria-live="polite"
+  >
+    <strong>{answerFeedback.isCorrect ? `Correct · +${answerFeedback.xp} XP` : `Correct answer: ${answerFeedback.correctAnswer}`}</strong>
+    <p>{answerFeedback.explanation}</p>
+  </div>
+)}
 
 {currentOptions.length === 0 && (
   <p className="save-error">
@@ -1328,10 +1672,12 @@ if (topic && bossMode && !finished) {
         <button
           type="button"
           className="submit-answer-btn"
-          onClick={submitAnswer}
-          disabled={!selected || locked || (current?.options || []).length === 0}
+          onClick={answerFeedback ? advanceAfterAnswer : submitAnswer}
+          disabled={!answerFeedback && (!selected || locked || (current?.options || []).length === 0)}
         >
-          {index + 1 === mixedSteps.length ? "Finish Quiz" : "Lock Answer"}
+          {answerFeedback
+            ? (index + 1 === mixedSteps.length ? "View Results" : "Next Challenge")
+            : "Check Answer"}
         </button>
 
       </section>

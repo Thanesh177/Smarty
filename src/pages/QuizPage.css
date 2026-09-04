@@ -1322,6 +1322,7 @@
 
 .result-actions {
   justify-content: center;
+  flex-wrap: wrap;
   margin-top: 26px;
 }
 
@@ -1645,4 +1646,303 @@
 .brain-game .memory-tile.selected *,
 .brain-game .memory-tile[aria-pressed='true'] * {
   color: inherit !important;
+}
+
+/* Production quiz surface */
+.quiz-page {
+  min-height: 100%;
+  padding: clamp(22px, 4vw, 54px) clamp(14px, 4vw, 58px) clamp(42px, 7vw, 84px) !important;
+  background:
+    radial-gradient(circle at 50% -12%, rgba(91, 198, 225, 0.09), transparent 38%),
+    linear-gradient(180deg, #03090d 0%, #020609 54%, #03080b 100%) !important;
+}
+
+.quiz-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.2;
+  background-image:
+    linear-gradient(rgba(168, 219, 232, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168, 219, 232, 0.025) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(to bottom, black, transparent 82%);
+}
+
+.quiz-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.quiz-page-back,
+.quiz-hero,
+.quiz-page > .topic-grid,
+.quiz-page > .question-card,
+.quiz-page > .result-card {
+  width: min(100%, 1240px);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.quiz-hero {
+  gap: clamp(28px, 5vw, 72px) !important;
+  padding: clamp(24px, 4vw, 52px) 0 clamp(30px, 5vw, 64px) !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.quiz-hero h1 {
+  max-width: 760px;
+  font-size: clamp(2.7rem, 6.4vw, 6.5rem) !important;
+  line-height: 0.94 !important;
+  letter-spacing: -0.065em !important;
+}
+
+.quiz-hero p {
+  max-width: 620px;
+  color: rgba(188, 209, 216, 0.65) !important;
+}
+
+.quiz-hero-metrics {
+  gap: 8px !important;
+}
+
+.quiz-hero-metrics span,
+.quiz-source-notice {
+  border: 1px solid rgba(172, 215, 226, 0.08);
+  background: rgba(151, 204, 218, 0.045);
+  color: rgba(195, 220, 227, 0.68);
+}
+
+.streak-card,
+.topic-card,
+.question-card,
+.result-card {
+  border: 1px solid rgba(176, 220, 232, 0.085) !important;
+  background:
+    radial-gradient(circle at 94% 4%, rgba(92, 201, 228, 0.07), transparent 32%),
+    linear-gradient(150deg, rgba(15, 24, 29, 0.96), rgba(6, 10, 13, 0.985)) !important;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3), inset 0 1px rgba(255, 255, 255, 0.035) !important;
+  backdrop-filter: none !important;
+}
+
+.topic-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)) !important;
+  gap: clamp(14px, 2vw, 24px) !important;
+}
+
+.topic-card {
+  min-height: 250px;
+  padding: clamp(20px, 2.2vw, 28px) !important;
+  border-radius: 22px !important;
+  text-align: left;
+  transform: translateZ(0);
+  transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 240ms ease, background 240ms ease !important;
+}
+
+.topic-card::before {
+  opacity: 0.32 !important;
+  filter: saturate(0.65) !important;
+}
+
+.topic-card:hover,
+.topic-card:focus-visible {
+  border-color: rgba(129, 211, 232, 0.2) !important;
+  transform: translate3d(0, -5px, 0) !important;
+}
+
+.topic-card h3 {
+  margin-top: auto !important;
+  font-size: clamp(1.2rem, 1.8vw, 1.55rem) !important;
+  letter-spacing: -0.035em;
+}
+
+.topic-card p {
+  color: rgba(177, 201, 208, 0.6) !important;
+  line-height: 1.55 !important;
+}
+
+.topic-card > strong {
+  color: rgba(158, 220, 236, 0.78) !important;
+}
+
+.question-card {
+  max-width: 820px;
+  padding: clamp(20px, 4vw, 46px) !important;
+  border-radius: clamp(20px, 3vw, 32px) !important;
+}
+
+.quiz-top-row {
+  margin-bottom: 18px;
+  color: rgba(184, 210, 218, 0.62);
+}
+
+.question-card > h2 {
+  max-width: 720px;
+  margin: clamp(24px, 4vw, 40px) 0 24px !important;
+  font-size: clamp(1.55rem, 3.3vw, 2.55rem) !important;
+  line-height: 1.12 !important;
+  letter-spacing: -0.04em;
+}
+
+.progress-track,
+.mini-progress-track {
+  overflow: hidden;
+  background: rgba(181, 219, 229, 0.07) !important;
+}
+
+.progress-fill,
+.mini-progress-fill {
+  background: linear-gradient(90deg, #58bfd9, #85d9c2) !important;
+}
+
+.quiz-source-notice {
+  width: fit-content;
+  margin: 14px 0 0;
+  padding: 7px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
+
+.option-list {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px !important;
+}
+
+.option-btn {
+  min-height: 64px;
+  padding: 15px 17px !important;
+  border: 1px solid rgba(175, 216, 226, 0.09) !important;
+  border-radius: 16px !important;
+  background: rgba(180, 220, 230, 0.035) !important;
+  color: rgba(226, 239, 242, 0.82) !important;
+  text-align: left;
+  line-height: 1.35;
+  box-shadow: none !important;
+}
+
+.option-btn:hover:not(:disabled),
+.option-btn:focus-visible,
+.option-btn.selected {
+  border-color: rgba(102, 202, 227, 0.38) !important;
+  background: rgba(91, 191, 217, 0.11) !important;
+  color: #eef9fb !important;
+  transform: translate3d(0, -2px, 0) !important;
+}
+
+.option-btn.correct,
+.option-btn.correct:disabled {
+  border-color: rgba(91, 210, 157, 0.48) !important;
+  background: rgba(63, 181, 130, 0.13) !important;
+  color: #d9f8e9 !important;
+  opacity: 1 !important;
+}
+
+.option-btn.wrong,
+.option-btn.wrong:disabled {
+  border-color: rgba(233, 117, 117, 0.42) !important;
+  background: rgba(211, 82, 82, 0.12) !important;
+  color: #ffe3e3 !important;
+  opacity: 1 !important;
+}
+
+.question-card > .option-list .option-btn[data-key] {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+}
+
+.question-card > .option-list .option-btn[data-key]::before {
+  content: attr(data-key);
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 1px solid rgba(177, 222, 233, 0.12);
+  border-radius: 9px;
+  color: rgba(202, 230, 237, 0.58);
+  background: rgba(192, 231, 240, 0.045);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.question-card > .option-list .option-btn[data-key].selected::before,
+.question-card > .option-list .option-btn[data-key].correct::before {
+  border-color: rgba(126, 216, 235, 0.38);
+  color: #eefbfe;
+  background: rgba(102, 202, 227, 0.15);
+}
+
+.quiz-session-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: rgba(187, 210, 217, 0.58);
+  font-size: 0.69rem;
+  font-weight: 700;
+}
+
+.quiz-session-stats > span {
+  padding: 6px 9px;
+  border: 1px solid rgba(173, 216, 227, 0.08);
+  border-radius: 999px;
+  background: rgba(177, 220, 231, 0.035);
+}
+
+.quiz-session-stats strong {
+  color: rgba(229, 244, 247, 0.84);
+}
+
+.quiz-session-stats .is-active {
+  border-color: rgba(122, 216, 187, 0.23);
+  color: rgba(159, 231, 207, 0.8);
+  background: rgba(84, 190, 155, 0.09);
+}
+
+.answer-feedback {
+  margin-top: 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(176, 220, 232, 0.09);
+  border-radius: 16px;
+  background: rgba(173, 218, 229, 0.04);
+  animation: feedbackPop 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.answer-feedback.correct { border-color: rgba(91, 210, 157, 0.25); }
+.answer-feedback.wrong { border-color: rgba(233, 117, 117, 0.22); }
+.answer-feedback strong { color: #f0f8fa; }
+.answer-feedback p { margin: 5px 0 0; color: rgba(185, 207, 213, 0.67); line-height: 1.5; }
+
+.submit-answer-btn {
+  min-height: 52px;
+  border: 0 !important;
+  border-radius: 15px !important;
+  background: linear-gradient(135deg, #75cce2, #8ddbc6) !important;
+  color: #041115 !important;
+  box-shadow: 0 14px 34px rgba(69, 183, 208, 0.14) !important;
+}
+
+.submit-answer-btn:disabled {
+  background: rgba(173, 211, 220, 0.07) !important;
+  color: rgba(184, 207, 213, 0.34) !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 700px) {
+  .quiz-page::before { background-size: 42px 42px; }
+  .quiz-hero { padding-top: 10px !important; }
+  .quiz-hero h1 { font-size: clamp(2.45rem, 13vw, 4rem) !important; }
+  .quiz-hero-metrics { display: grid !important; grid-template-columns: repeat(3, 1fr); }
+  .quiz-hero-metrics span { padding: 10px 7px !important; text-align: center; }
+  .topic-grid { grid-template-columns: 1fr !important; }
+  .topic-card { min-height: 205px; }
+  .option-list { grid-template-columns: 1fr; }
+  .option-btn { min-height: 54px !important; }
+  .question-card > h2 { margin-top: 22px !important; }
 }

@@ -51,6 +51,44 @@ const normalizeTopic = (value) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
+const SMARTY_DESTINATIONS = [
+  {
+    id: 'feed',
+    label: 'Feed',
+    action: 'Read',
+    description: 'Posts picked for you',
+    icon: BookOpen,
+    accent: 'rgba(85, 214, 235, 0.34)',
+  },
+  {
+    id: 'quiz',
+    label: 'Quiz',
+    action: 'Play',
+    description: 'Test your knowledge',
+    icon: Gamepad2,
+    route: '/quiz',
+    accent: 'rgba(135, 123, 255, 0.34)',
+  },
+  {
+    id: 'news',
+    label: 'News',
+    action: 'Discover',
+    description: 'Stories that matter',
+    icon: Newspaper,
+    route: '/news',
+    accent: 'rgba(239, 169, 82, 0.32)',
+  },
+  {
+    id: 'discussions',
+    label: 'Discussions',
+    action: 'Discuss',
+    description: 'Learn together',
+    icon: UsersRound,
+    route: '/rooms',
+    accent: 'rgba(105, 215, 159, 0.32)',
+  },
+];
+
 const TOPIC_ALIASES = new Map([
   ['ai', 'artificial-intelligence'],
   ['artificial-intelligence', 'artificial-intelligence'],
@@ -369,16 +407,6 @@ const TOPIC_DESCRIPTIONS = {
   blog: 'Browse thoughtful perspectives, useful lessons, and fresh observations.',
 };
 
-const HERO_FALLBACK_TOPICS = [
-  'Technology',
-  'Health',
-  'Psychology',
-  'Science',
-  'Finance',
-  'History',
-  'Nature',
-];
-
 const getTopicDescription = (topicName) => {
   const normalized = normalizeTopic(topicName);
   return TOPIC_DESCRIPTIONS[normalized]
@@ -540,6 +568,39 @@ const uniqueTopicList = (values = []) => {
   );
 };
 
+const TOPIC_CATALOG_CACHE_KEY = 'smarty.topicCatalog.v2';
+
+const DEFAULT_TOPIC_CATALOG = uniqueTopicList(
+  Object.keys(TOPIC_DESCRIPTIONS)
+    .filter((topic) => topic !== 'all')
+    .map((topic) => topic
+      .split('-')
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')),
+);
+
+const readCachedTopicCatalog = () => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const cached = JSON.parse(localStorage.getItem(TOPIC_CATALOG_CACHE_KEY) || '[]');
+    return Array.isArray(cached)
+      ? uniqueTopicList(cached).filter((topic) => normalizeTopic(topic) !== 'all')
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const cacheTopicCatalog = (topics) => {
+  try {
+    localStorage.setItem(TOPIC_CATALOG_CACHE_KEY, JSON.stringify(uniqueTopicList(topics)));
+  } catch {
+    // Storage can be unavailable in private or restricted WebViews.
+  }
+};
+
 const TopicLaunchCard = memo(function TopicLaunchCard({
   item,
   index,
@@ -681,27 +742,10 @@ const TopicProductCard = memo(function TopicProductCard({ item, index, onSelect 
   );
 });
 
-function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
+function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNavigate }) {
   const rootRef = useRef(null);
   const [topicQuery, setTopicQuery] = useState('');
   const [catalogMode, setCatalogMode] = useState('story');
-  const showcaseTopics = useMemo(() => {
-    const resolvedTopics = [];
-    const seenTopics = new Set();
-
-    [...topics, ...HERO_FALLBACK_TOPICS].forEach((topicName) => {
-      const canonicalTopic = getCanonicalTopic(topicName);
-      if (!canonicalTopic || seenTopics.has(canonicalTopic) || resolvedTopics.length >= 7) return;
-      seenTopics.add(canonicalTopic);
-      resolvedTopics.push(topicName);
-    });
-
-    return resolvedTopics;
-  }, [topics]);
-  const showcaseTopicKey = useMemo(
-    () => showcaseTopics.map((topicName) => getCanonicalTopic(topicName)).join('|'),
-    [showcaseTopics],
-  );
   const filteredCatalogTopics = useMemo(() => {
     const query = topicQuery.trim().toLowerCase();
     if (!query) return topics;
@@ -736,26 +780,35 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
     if (!scroller || chapters.length === 0) return undefined;
 
     let animationFrame = 0;
+    let controlTween = null;
     let resizeFrame = 0;
     let measurements = [];
 
     const measure = () => {
       measurements.forEach((item) => {
-        if (item.transitionTimer) window.clearTimeout(item.transitionTimer);
-        item.visualAnimations?.forEach((animation) => animation.cancel());
-        gsap.killTweensOf(item.playhead);
+        item.sceneTween?.kill();
+        item.sceneTween = null;
         gsap.killTweensOf(item.cards);
-        gsap.killTweensOf(item.pieces);
+        gsap.set(item.cards, { clearProps: 'opacity,visibility' });
+        gsap.set([...item.accents, ...item.fragments, ...item.shells], { clearProps: 'opacity,visibility,transform,willChange' });
       });
       const scrollerRect = scroller.getBoundingClientRect();
       measurements = chapters.map((chapter) => {
         const frame = chapter.querySelector('.topic-catalog-story-frame');
         const stack = chapter.querySelector('.topic-catalog-story-stack');
         const cards = Array.from(chapter.querySelectorAll('.topic-product-card'));
-        const pieces = cards.flatMap((card) => Array.from(card.querySelectorAll(
-          '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow, .topic-product-card-art i',
+        const fragments = cards.flatMap((card) => Array.from(card.querySelectorAll(
+          '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow',
         )));
+        const shells = cards
+          .map((card) => card.querySelector('.topic-product-card-surface'))
+          .filter(Boolean);
+        const accents = cards
+          .map((card) => card.querySelector('.topic-product-card-art'))
+          .filter(Boolean);
         const counter = chapter.querySelector('.topic-catalog-story-index');
+        const previousControl = chapter.querySelector('[data-catalog-step="-1"]');
+        const nextControl = chapter.querySelector('[data-catalog-step="1"]');
         const frameStyle = window.getComputedStyle(frame);
         const stickyTop = Number.parseFloat(frameStyle.top);
         const spacingProbe = document.createElement('span');
@@ -838,204 +891,124 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         frame.style.transform = 'none';
 
         const item = {
+          accents,
           cards,
-          pieces,
           cardsPerScene,
           chapter,
+          columns,
           counter,
           displayedIndex: -1,
           frame,
+          fragments,
           lastIndex: Math.max(0, scenes - 1),
+          motionKey: '',
+          pendingIndex: null,
+          previousControl,
+          nextControl,
           rows,
           stack,
           stackY: gsap.quickSetter(stack, 'y', 'px'),
           startScroll,
           travel,
-          playhead: { position: 0 },
-          transitionTimer: 0,
-          visualAnimations: [],
+          sceneTween: null,
+          shells,
         };
-
-        item.moveTo = gsap.quickTo(item.playhead, 'position', {
-          duration: prefersReducedMotion ? 0 : (window.innerWidth <= 900 ? 0.28 : 0.34),
-          ease: 'power3.out',
-          overwrite: true,
-          onUpdate: () => renderItem(item, item.playhead.position, false),
-        });
 
         return item;
       });
     };
 
     const renderItem = (item, cardPosition, immediate = false) => {
-        const nearestScene = Math.round(cardPosition);
+      const position = Math.max(0, Math.min(item.lastIndex, cardPosition));
+      const lowerScene = Math.floor(position);
+      const upperScene = Math.min(item.lastIndex, lowerScene + 1);
+      const phase = upperScene === lowerScene ? 0 : position - lowerScene;
+      const isTransitioning = !prefersReducedMotion && upperScene !== lowerScene && phase > 0.001;
+      const dominantScene = prefersReducedMotion
+        ? Math.round(position)
+        : (phase < 0.5 ? lowerScene : upperScene);
+      const focusSlot = Math.floor(item.cardsPerScene / 2);
+      const motionKey = `${lowerScene}:${upperScene}:${dominantScene}:${isTransitioning ? 1 : 0}`;
 
-        if (item.displayedIndex !== nearestScene) {
-          const hasRenderedScene = item.displayedIndex >= 0;
-          const outgoingCards = item.cards.filter((card) => card.classList.contains('is-wall-visible'));
-          const incomingCards = [];
-          if (item.transitionTimer) window.clearTimeout(item.transitionTimer);
-          item.transitionTimer = 0;
-          item.visualAnimations.forEach((animation) => animation.cancel());
-          item.visualAnimations = [];
-          item.cards.forEach((card) => card.classList.remove('is-wall-entering', 'is-wall-exiting'));
-          gsap.killTweensOf(item.cards);
-          gsap.killTweensOf(item.pieces);
-          gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,clipPath,filter,willChange' });
-          gsap.set(item.pieces, { clearProps: 'opacity,visibility,transform,filter,willChange' });
-          item.displayedIndex = nearestScene;
-          item.cards.forEach((card, index) => {
-            const scene = Number(card.dataset.wallScene || 0);
-            const isCurrent = scene === nearestScene;
-            if (isCurrent) incomingCards.push(card);
-            card.classList.toggle('is-wall-visible', isCurrent);
-            card.classList.toggle('is-wall-past', scene < nearestScene);
-            card.classList.toggle('is-wall-future', scene > nearestScene);
-            card.classList.toggle('is-wall-focus', isCurrent && index % item.cardsPerScene === Math.floor(item.cardsPerScene / 2));
-          });
+      if (item.motionKey !== motionKey) {
+        item.motionKey = motionKey;
+        item.cards.forEach((card, index) => {
+          const scene = Number(card.dataset.wallScene || 0);
+          const isOutgoing = isTransitioning && scene === lowerScene;
+          const isIncoming = isTransitioning && scene === upperScene;
+          const isCurrent = !isTransitioning && scene === dominantScene;
+          const isVisible = isOutgoing || isIncoming || isCurrent;
+          const isInteractive = scene === dominantScene;
+          card.style.removeProperty('opacity');
+          card.style.removeProperty('transform');
+          card.style.removeProperty('transform-origin');
+          card.style.removeProperty('will-change');
+          card.classList.toggle('is-wall-visible', isVisible);
+          card.classList.toggle('is-wall-exiting', isOutgoing);
+          card.classList.toggle('is-wall-entering', isIncoming);
+          card.classList.toggle('is-wall-interactive', isInteractive);
+          card.classList.toggle('is-wall-past', scene < dominantScene);
+          card.classList.toggle('is-wall-future', scene > dominantScene);
+          card.classList.toggle(
+            'is-wall-focus',
+            isInteractive && index % item.cardsPerScene === focusSlot,
+          );
+          card.tabIndex = isInteractive ? 0 : -1;
+          card.setAttribute('aria-hidden', isInteractive ? 'false' : 'true');
+        });
+      }
 
-          if (!hasRenderedScene || prefersReducedMotion) {
-            outgoingCards.forEach((card) => card.classList.remove('is-wall-exiting'));
-            incomingCards.forEach((card) => card.classList.remove('is-wall-entering'));
-            gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,clipPath,filter' });
-            gsap.set(item.pieces, { clearProps: 'opacity,visibility,transform,filter' });
-          } else {
-            outgoingCards.forEach((card) => card.classList.add('is-wall-exiting'));
-            incomingCards.forEach((card) => card.classList.add('is-wall-entering'));
-            const fragmentMotion = (element, pieceIndex) => {
-              if (element.classList.contains('topic-product-card-icon')) return { x: -38, y: -28, rotate: -8 };
-              if (element.classList.contains('topic-product-card-index')) return { x: 38, y: -26, rotate: 8 };
-              if (element.classList.contains('topic-product-card-copy')) return { x: -32, y: 34, rotate: -5 };
-              if (element.classList.contains('topic-product-card-arrow')) return { x: 35, y: 31, rotate: 7 };
-              return {
-                x: pieceIndex % 2 === 0 ? 32 : -32,
-                y: pieceIndex % 3 === 0 ? -24 : 26,
-                rotate: pieceIndex % 2 === 0 ? 9 : -9,
-              };
-            };
-            const playAnimation = (element, keyframes, options) => {
-              if (!element || keyframes.length < 2) return;
-              const startFrame = keyframes[0];
-              const endFrame = keyframes[keyframes.length - 1];
-              const duration = Math.max(0, Number(options.duration) || 0);
-              const delay = Math.max(0, Number(options.delay) || 0);
-              const easing = options.easing || 'ease';
-              const original = {
-                opacity: element.style.opacity,
-                transform: element.style.transform,
-                transition: element.style.transition,
-                willChange: element.style.willChange,
-              };
-              let firstFrame = 0;
-              let secondFrame = 0;
-              let cancelled = false;
-              const applyFrame = (frame) => {
-                if (frame.opacity !== undefined) element.style.opacity = String(frame.opacity);
-                if (frame.transform !== undefined) element.style.transform = frame.transform;
-              };
-              const animation = {
-                cancel: () => {
-                  if (cancelled) return;
-                  cancelled = true;
-                  if (firstFrame) window.cancelAnimationFrame(firstFrame);
-                  if (secondFrame) window.cancelAnimationFrame(secondFrame);
-                  element.style.opacity = original.opacity;
-                  element.style.transform = original.transform;
-                  element.style.transition = original.transition;
-                  element.style.willChange = original.willChange;
-                },
-              };
+      if (isTransitioning) {
+        const maxDiagonal = Math.max(1, item.rows + item.columns - 2);
+        item.cards.forEach((card, index) => {
+          const scene = Number(card.dataset.wallScene || 0);
+          if (scene !== lowerScene && scene !== upperScene) return;
+          const slot = index % item.cardsPerScene;
+          const column = slot % item.columns;
+          const row = Math.floor(slot / item.columns);
+          const delay = ((row + column) / maxDiagonal) * 0.12;
+          const localPhase = Math.max(0, Math.min(1, (phase - delay) / 0.88));
+          const eased = localPhase ** 3 * (localPhase * (localPhase * 6 - 15) + 10);
+          const isFocus = slot === focusSlot;
+          const restingScale = isFocus ? 1.035 : 1;
+          const configuredOpacity = Number.parseFloat(card.style.getPropertyValue('--wall-card-opacity')) || 1;
+          const restingOpacity = isFocus ? 1 : configuredOpacity;
+          const isOutgoing = scene === lowerScene;
+          const reveal = Math.max(0, Math.min(1, (eased - 0.36) / 0.64));
+          const revealEase = reveal * reveal * (3 - 2 * reveal);
+          const x = isOutgoing ? -18 * eased : 22 * (1 - eased);
+          const y = isOutgoing ? -14 * eased : 18 * (1 - eased);
+          const scale = isOutgoing
+            ? restingScale * (1 - 0.1 * eased)
+            : restingScale * (0.9 + 0.1 * eased);
+          const opacity = isOutgoing ? restingOpacity * (1 - revealEase) : restingOpacity;
 
-              element.style.transition = 'none';
-              element.style.willChange = 'opacity, transform';
-              applyFrame(startFrame);
-              firstFrame = window.requestAnimationFrame(() => {
-                secondFrame = window.requestAnimationFrame(() => {
-                  if (cancelled) return;
-                  element.style.transition = [
-                    `opacity ${duration}ms ${easing} ${delay}ms`,
-                    `transform ${duration}ms ${easing} ${delay}ms`,
-                  ].join(', ');
-                  applyFrame(endFrame);
-                });
-              });
-              item.visualAnimations.push(animation);
-            };
-            const piecesFor = (card) => Array.from(card.querySelectorAll(
-              '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow, .topic-product-card-art i',
-            ));
+          card.style.opacity = opacity.toFixed(4);
+          card.style.transform = `translate3d(calc(-50% + ${x.toFixed(2)}px), calc(-50% + ${y.toFixed(2)}px), 0) scale(${scale.toFixed(4)})`;
+          card.style.transformOrigin = '50% 50%';
+          card.style.willChange = 'transform, opacity';
+        });
+      }
 
-            outgoingCards.forEach((card, cardIndex) => {
-              const cardDelay = cardIndex * 16;
-              playAnimation(card.querySelector('.topic-product-card-surface'), [
-                { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' },
-                { opacity: 0, transform: 'translate3d(0, 0, 0) scale(0.94)' },
-              ], {
-                duration: 460,
-                delay: cardDelay,
-                easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-              });
-              piecesFor(card).forEach((piece, pieceIndex) => {
-                const { x, y, rotate } = fragmentMotion(piece, pieceIndex);
-                const baseTransform = window.getComputedStyle(piece).transform;
-                playAnimation(piece, [
-                  { opacity: 1, transform: baseTransform === 'none' ? 'none' : baseTransform },
-                  { opacity: 0, transform: `translate3d(${x}px, ${y}px, 0) rotate(${rotate}deg) scale(0.68)` },
-                ], {
-                  duration: 390,
-                  delay: cardDelay + pieceIndex * 12,
-                  easing: 'cubic-bezier(0.4, 0, 0.2, 1)',
-                });
-              });
+      if (item.displayedIndex !== dominantScene) {
+        item.displayedIndex = dominantScene;
+        if (item.counter) {
+          const visibleTopic = Math.min(item.cards.length, dominantScene * item.cardsPerScene + 1);
+          item.counter.textContent = `${String(visibleTopic).padStart(2, '0')} / ${String(item.cards.length).padStart(2, '0')}`;
+          if (!immediate && !prefersReducedMotion) {
+            gsap.fromTo(item.counter, { y: 4, autoAlpha: 0.55 }, {
+              y: 0,
+              autoAlpha: 1,
+              duration: 0.34,
+              ease: 'power2.out',
+              overwrite: true,
+              clearProps: 'transform,opacity,visibility',
             });
-
-            incomingCards.forEach((card, cardIndex) => {
-              const cardDelay = 220 + cardIndex * 18;
-              playAnimation(card.querySelector('.topic-product-card-surface'), [
-                { opacity: 0, transform: 'translate3d(0, 0, 0) scale(0.94)' },
-                { opacity: 1, transform: 'translate3d(0, 0, 0) scale(1)' },
-              ], {
-                duration: 650,
-                delay: cardDelay,
-                easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-              });
-              piecesFor(card).forEach((piece, pieceIndex) => {
-                const { x, y, rotate } = fragmentMotion(piece, pieceIndex);
-                const baseTransform = window.getComputedStyle(piece).transform;
-                playAnimation(piece, [
-                  { opacity: 0, transform: `translate3d(${x}px, ${y}px, 0) rotate(${rotate}deg) scale(0.68)` },
-                  { opacity: 1, transform: baseTransform === 'none' ? 'none' : baseTransform },
-                ], {
-                  duration: 590,
-                  delay: cardDelay + 45 + pieceIndex * 12,
-                  easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
-                });
-              });
-            });
-            item.transitionTimer = window.setTimeout(() => {
-              item.visualAnimations.forEach((animation) => animation.cancel());
-              item.visualAnimations = [];
-              outgoingCards.forEach((card) => card.classList.remove('is-wall-exiting'));
-              incomingCards.forEach((card) => card.classList.remove('is-wall-entering'));
-              item.transitionTimer = 0;
-            }, 1200);
-          }
-
-          if (item.counter) {
-            const visibleTopic = Math.min(item.cards.length, nearestScene * item.cardsPerScene + 1);
-            item.counter.textContent = `${String(visibleTopic).padStart(2, '0')} / ${String(item.cards.length).padStart(2, '0')}`;
-            if (!immediate && !prefersReducedMotion) {
-              gsap.fromTo(item.counter, { y: 5, autoAlpha: 0.45 }, {
-                y: 0,
-                autoAlpha: 1,
-                duration: 0.42,
-                ease: 'power3.out',
-                overwrite: true,
-                clearProps: 'transform,opacity,visibility',
-              });
-            }
           }
         }
+        if (item.previousControl) item.previousControl.disabled = dominantScene <= 0;
+        if (item.nextControl) item.nextControl.disabled = dominantScene >= item.lastIndex;
+      }
     };
 
     const render = (immediate = false) => {
@@ -1052,18 +1025,13 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         item.frame.style.setProperty('--catalog-progress', railProgress.toFixed(4));
         item.frame.style.setProperty('--catalog-shift', `${46 + railProgress * 8}%`);
         item.stackY(prefersReducedMotion ? 0 : (railProgress - 0.5) * 10);
-        if (immediate) {
-          item.playhead.position = targetPosition;
-          renderItem(item, targetPosition, true);
-        } else {
-          item.moveTo(targetPosition);
-        }
+        renderItem(item, targetPosition, immediate);
       });
     };
 
     const scheduleRender = () => {
       if (animationFrame) return;
-      animationFrame = window.requestAnimationFrame(render);
+      animationFrame = window.requestAnimationFrame(() => render(false));
     };
 
     const handleResize = () => {
@@ -1075,23 +1043,55 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
       });
     };
 
+    const catalogControls = Array.from(root.querySelectorAll('[data-catalog-step]'));
+    const handleCatalogStep = (event) => {
+      const control = event.currentTarget;
+      const chapter = control.closest('.topic-catalog-story-chapter');
+      const item = measurements.find((measurement) => measurement.chapter === chapter);
+      if (!item || item.lastIndex <= 0) return;
+      const step = Number(control.dataset.catalogStep || 0);
+      const currentScene = Math.max(0, item.displayedIndex);
+      const targetScene = Math.max(0, Math.min(item.lastIndex, currentScene + step));
+      if (targetScene === currentScene) return;
+      const targetScroll = item.startScroll + (targetScene / item.lastIndex) * item.travel;
+      controlTween?.kill();
+      if (prefersReducedMotion) {
+        scroller.scrollTop = targetScroll;
+      } else {
+        const scrollState = { value: scroller.scrollTop };
+        controlTween = gsap.to(scrollState, {
+          value: targetScroll,
+          duration: 0.9,
+          ease: 'power2.inOut',
+          overwrite: true,
+          onUpdate: () => {
+            scroller.scrollTop = scrollState.value;
+          },
+          onComplete: () => {
+            controlTween = null;
+          },
+        });
+      }
+    };
+
     measure();
     render(true);
+    catalogControls.forEach((control) => control.addEventListener('click', handleCatalogStep));
     scroller.addEventListener('scroll', scheduleRender, { passive: true });
     window.addEventListener('resize', handleResize, { passive: true });
 
     return () => {
       scroller.removeEventListener('scroll', scheduleRender);
       window.removeEventListener('resize', handleResize);
+      catalogControls.forEach((control) => control.removeEventListener('click', handleCatalogStep));
+      controlTween?.kill();
       measurements.forEach((item) => {
-        if (item.transitionTimer) window.clearTimeout(item.transitionTimer);
-        item.visualAnimations?.forEach((animation) => animation.cancel());
-        gsap.killTweensOf(item.playhead);
+        item.sceneTween?.kill();
+        item.sceneTween = null;
         gsap.killTweensOf(item.cards);
-        gsap.killTweensOf(item.pieces);
         gsap.killTweensOf(item.counter);
         gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,clipPath,filter,willChange' });
-        gsap.set(item.pieces, { clearProps: 'opacity,visibility,transform,filter,willChange' });
+        gsap.set([...item.accents, ...item.fragments, ...item.shells], { clearProps: 'opacity,visibility,transform,willChange' });
       });
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
       if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
@@ -1100,68 +1100,74 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
 
   useEffect(() => {
     const root = rootRef.current;
-    if (!root || showcaseTopics.length === 0) return undefined;
+    if (!root) return undefined;
 
     const story = root.querySelector('.topic-product-story');
     const stage = root.querySelector('.topic-product-stage');
     const assembly = root.querySelector('.topic-product-assembly');
-    const core = root.querySelector('.topic-product-core');
+    const signalGrid = root.querySelector('.topic-product-signal-grid');
+    const signalHub = root.querySelector('.topic-product-path-hub');
+    const signalPoints = Array.from(signalGrid?.querySelectorAll('i') || []);
     const cards = Array.from(root.querySelectorAll('.topic-product-part'));
     const chapters = Array.from(root.querySelectorAll('.topic-product-chapter'));
     const scrollCue = root.querySelector('.topic-product-scroll-cue');
     const catalogCue = root.querySelector('.topic-product-catalog-cue');
     const scroller = root.closest('.snap-feed-page');
-    if (!story || !stage || !assembly || !core || !scroller || cards.length === 0) return undefined;
+    if (!story || !stage || !assembly || !scroller || cards.length === 0) return undefined;
 
     gsap.registerPlugin(ScrollTrigger);
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const isMobile = () => window.innerWidth <= 760;
-    const radii = () => ({
-      x: isMobile()
-        ? Math.min(assembly.clientWidth * 0.39, 154)
-        : Math.min(assembly.clientWidth * 0.42, 254),
-      y: isMobile()
-        ? Math.min(assembly.clientHeight * 0.36, 122)
-        : Math.min(assembly.clientHeight * 0.39, 172),
-    });
-    const orbitState = (index, turn = 0, radius = 1) => {
-      const { x: orbitX, y: orbitY } = radii();
-      const angle = ((Math.PI * 2 * index) / cards.length) - (Math.PI / 2) + turn;
-      const depth = (Math.sin(angle) + 1) / 2;
+    const signalDeckState = (index, phase = 0) => {
+      const compact = window.innerWidth <= 760;
+      const cardWidth = cards[index]?.offsetWidth || (compact ? 150 : 224);
+      const cardHeight = cards[index]?.offsetHeight || (compact ? 78 : 112);
+      const gapX = compact ? 14 : Math.max(26, Math.min(38, assembly.clientWidth * 0.055));
+      const gapY = compact ? 38 : (window.innerWidth <= 900 ? 44 : 48);
+      const column = index % 2;
+      const row = Math.floor(index / 2);
+      const targetX = (column - 0.5) * (cardWidth + gapX);
+      const targetY = (row - 0.5) * (cardHeight + gapY);
+      const spread = compact ? 5 : 11;
+      const isOuterDiagonal = index === 0 || index === 3;
+      const isExpanded = phase === 1;
 
       return {
-        x: Math.cos(angle) * orbitX * radius,
-        y: Math.sin(angle) * orbitY * radius,
-        z: -44 + depth * 96,
-        rotation: Math.cos(angle) * 4.5,
-        scale: 0.82 + depth * 0.17,
-        autoAlpha: 0.58 + depth * 0.42,
+        x: targetX + (isExpanded ? (column === 0 ? -spread : spread) : 0),
+        y: targetY + (isExpanded ? (row === 0 ? -spread * 0.6 : spread * 0.6) : 0),
+        z: isExpanded ? (isOuterDiagonal ? (compact ? 20 : 30) : (compact ? 10 : 16)) : 0,
+        rotation: 0,
+        rotationX: isExpanded ? (row === 0 ? (compact ? -2 : -3.5) : (compact ? 2 : 3.5)) : 0,
+        rotationY: isExpanded ? (column === 0 ? (compact ? 2.5 : 4.5) : (compact ? -2.5 : -4.5)) : 0,
+        scale: isExpanded ? (isOuterDiagonal ? (compact ? 1.018 : 1.032) : 1.012) : 1,
+        autoAlpha: 1,
       };
     };
-    const setOrbit = (turn = 0, radius = 1) => {
+    const setSignalDeck = (phase = 0) => {
       cards.forEach((card, index) => {
         gsap.set(card, {
-          ...orbitState(index, turn, radius),
+          ...signalDeckState(index, phase),
           pointerEvents: 'auto',
-          transformOrigin: '50% 50%',
+          transformOrigin: index < 2 ? '50% 100%' : '50% 0%',
+          transformPerspective: 900,
           force3D: true,
         });
       });
     };
-    const orbitTween = (index, turn, radius) => ({
-      x: () => orbitState(index, turn, radius).x,
-      y: () => orbitState(index, turn, radius).y,
-      z: () => orbitState(index, turn, radius).z,
-      rotation: () => orbitState(index, turn, radius).rotation,
-      scale: () => orbitState(index, turn, radius).scale,
-      autoAlpha: () => orbitState(index, turn, radius).autoAlpha,
+    const signalDeckTween = (index, phase) => ({
+      x: () => signalDeckState(index, phase).x,
+      y: () => signalDeckState(index, phase).y,
+      z: () => signalDeckState(index, phase).z,
+      rotation: 0,
+      rotationX: () => signalDeckState(index, phase).rotationX,
+      rotationY: () => signalDeckState(index, phase).rotationY,
+      scale: () => signalDeckState(index, phase).scale,
     });
 
+    setSignalDeck(0);
     assembly.classList.add('is-ready');
-    setOrbit(0, 1.08);
 
     if (reduceMotion) {
-      gsap.set(core, { rotation: 0, scale: 1 });
       chapters.forEach((chapter, index) => gsap.set(chapter, {
         autoAlpha: index === 0 ? 1 : 0,
         yPercent: isMobile() ? 0 : -50,
@@ -1169,14 +1175,51 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
         pointerEvents: index === 0 ? 'auto' : 'none',
       }));
       return () => {
-        gsap.set([...cards, core, ...chapters], { clearProps: 'all' });
+        gsap.set([...cards, ...chapters], { clearProps: 'all' });
         assembly.classList.remove('is-ready');
       };
     }
 
     const context = gsap.context(() => {
+      gsap.fromTo(signalGrid,
+        { autoAlpha: 0 },
+        {
+          autoAlpha: 1,
+          duration: 0.72,
+          ease: 'power2.out',
+          clearProps: 'opacity,visibility',
+        });
+
+      gsap.from([signalHub, ...signalPoints].filter(Boolean), {
+        autoAlpha: 0,
+        scale: 0.78,
+        duration: 0.76,
+        stagger: 0.06,
+        delay: 0.1,
+        ease: 'back.out(1.35)',
+        clearProps: 'opacity,visibility,transform',
+      });
+
+      gsap.from(cards, {
+        x: (index) => (isMobile()
+          ? signalDeckState(index, 0).x
+          : signalDeckState(index, 0).x * 0.56),
+        y: (index) => (isMobile()
+          ? signalDeckState(index, 0).y
+          : signalDeckState(index, 0).y * 0.48),
+        z: () => (isMobile() ? -18 : -70),
+        rotationX: (index) => (isMobile() ? 0 : (index < 2 ? -5 : 5)),
+        rotationY: (index) => (isMobile() ? 0 : (index % 2 === 0 ? 3 : -3)),
+        scale: () => (isMobile() ? 0.94 : 0.86),
+        autoAlpha: 0,
+        duration: () => (isMobile() ? 0.72 : 1.2),
+        stagger: isMobile() ? 0.025 : 0.08,
+        ease: 'power4.out',
+        clearProps: 'willChange',
+      });
+
       const timeline = gsap.timeline({
-        defaults: { ease: 'sine.inOut' },
+        defaults: { ease: 'power2.inOut' },
         scrollTrigger: {
           trigger: story,
           scroller,
@@ -1199,15 +1242,11 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
 
       cards.forEach((card, index) => {
         timeline.to(card, {
-          ...orbitTween(index, 0.26, 0.96),
-          duration: 0.34,
-        }, index * 0.012);
+          ...signalDeckTween(index, 1),
+          duration: 0.46,
+        }, index * 0.032);
       });
-      timeline.to(core, {
-        rotation: 118,
-        scale: 1.07,
-        duration: 0.34,
-      }, 0);
+      timeline.to(assembly, { '--assembly-progress': 0.72, duration: 0.46 }, 0);
       timeline.to(scrollCue, { autoAlpha: 0, y: -8, duration: 0.12 }, 0.04);
 
       timeline
@@ -1219,24 +1258,12 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
 
       cards.forEach((card, index) => {
         timeline.to(card, {
-          ...orbitTween(index, 0.84, 1.03),
-          duration: 0.4,
-        }, 0.35 + index * 0.012);
-      });
-      timeline.to(core, {
-        rotation: 286,
-        scale: 0.98,
-        duration: 0.4,
-      }, 0.35);
-
-      cards.forEach((card, index) => {
-        timeline.to(card, {
-          ...orbitTween(index, 1.12, 1.12),
-          duration: 0.24,
-        }, 0.75 + index * 0.01);
+          ...signalDeckTween(index, 2),
+          duration: 0.5,
+        }, 0.4 + index * 0.028);
       });
       timeline
-        .to(core, { rotation: 352, scale: 0.94, duration: 0.24 }, 0.75)
+        .to(assembly, { '--assembly-progress': 1, duration: 0.36 }, 0.48)
         .to(catalogCue, { autoAlpha: 1, y: 0, duration: 0.12 }, 0.86);
     }, root);
 
@@ -1246,7 +1273,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
       context.revert();
       assembly.classList.remove('is-ready');
     };
-  }, [showcaseTopicKey]);
+  }, []);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -1462,43 +1489,56 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
           <div className="topic-product-space" aria-hidden="true" />
           <div className="topic-product-copy">
             <div className="topic-product-chapter">
-              <span>Knowledge, assembled around you</span>
-              <h1>Scroll into something worth knowing.</h1>
-              <p>Move through the ideas, then choose the direction that pulls you in.</p>
+              <span>A route for curious minds</span>
+              <h1>Pick your kind of curious.</h1>
+              <p>Read a new idea, test a hunch, follow a story, or join the debate.</p>
             </div>
 
             <div className="topic-product-chapter">
-              <span>Choose your next discovery</span>
-              <h2>Go deeper when you are ready.</h2>
-              <p>Every card is selectable. Continue scrolling for the complete catalog.</p>
+              <span>Learn by moving between ideas</span>
+              <h2>Think. Play. Discover. Discuss.</h2>
+              <p>Follow any path now, or keep scrolling into the complete topic library.</p>
             </div>
 
           </div>
 
           <div className="topic-product-assembly">
-            <button
-              type="button"
-              className="topic-product-core"
-              onClick={() => onSelect('All')}
-              aria-label="Open the complete Smarty feed"
-            >
-              <span aria-hidden="true">S</span>
-            </button>
-            {showcaseTopics.map((item, index) => {
-              const { icon: TopicIcon } = getTopicVisualMeta(item, index);
+            <div className="topic-product-signal-grid" aria-hidden="true">
+              <i /><i /><i /><i />
+            </div>
+            {SMARTY_DESTINATIONS.map((destination, destinationIndex) => {
+              const DestinationIcon = destination.icon;
               return (
                 <button
                   type="button"
                   className="topic-product-part"
-                  key={getCanonicalTopic(item)}
-                  onClick={() => onSelect(item)}
-                  aria-label={`Explore ${item}`}
+                  key={destination.id}
+                  data-destination={destination.id}
+                  data-index={String(destinationIndex + 1).padStart(2, '0')}
+                  style={{ '--destination-accent': destination.accent }}
+                  onClick={() => {
+                    if (destination.route) {
+                      onNavigate(destination.route);
+                      return;
+                    }
+                    onSelect('All');
+                  }}
+                  aria-label={`Open ${destination.label}`}
                 >
-                  <TopicIcon size={22} strokeWidth={1.7} />
-                  <span>{normalizeTopic(item) === 'all' ? 'All topics' : item}</span>
+                  <DestinationIcon size={22} strokeWidth={1.7} aria-hidden="true" />
+                  <span className="topic-product-part-copy">
+                    <em>{destination.action}</em>
+                    <strong>{destination.label}</strong>
+                    <small>{destination.description}</small>
+                  </span>
+                  <span className="topic-product-part-arrow" aria-hidden="true">↗</span>
                 </button>
               );
             })}
+            <div className="topic-product-path-hub" aria-hidden="true">
+              <Compass size={15} strokeWidth={1.8} />
+              <span>Choose your path</span>
+            </div>
           </div>
 
           <div className="topic-product-scroll-cue" aria-hidden="true">
@@ -1588,6 +1628,14 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect }) {
                     <span className="topic-catalog-story-index" aria-hidden="true">
                       {String(group.length).padStart(2, '0')} topics · one continuous row
                     </span>
+                    <nav className="topic-catalog-story-controls" aria-label="Topic catalog pages">
+                      <button type="button" data-catalog-step="-1" aria-label="Previous topics">
+                        <ArrowLeft size={17} strokeWidth={1.8} aria-hidden="true" />
+                      </button>
+                      <button type="button" data-catalog-step="1" aria-label="Next topics">
+                        <ArrowRight size={17} strokeWidth={1.8} aria-hidden="true" />
+                      </button>
+                    </nav>
                     <div className="topic-catalog-story-stack">
                       {group.map((item) => {
                         const originalIndex = topics.indexOf(item);
@@ -2141,7 +2189,10 @@ const suppressTopicClickRef = useRef(false);
   const [translating, setTranslating] = useState({});
   const [showTranslated, setShowTranslated] = useState({});
   const [selectedTopic, setSelectedTopic] = useState('');
-  const [allTopics, setAllTopics] = useState([]);
+  const [allTopics, setAllTopics] = useState(() => {
+    const cachedTopics = readCachedTopicCatalog();
+    return cachedTopics.length > 0 ? cachedTopics : DEFAULT_TOPIC_CATALOG;
+  });
   const [topicsLoading, setTopicsLoading] = useState(false);
   const [topicsError, setTopicsError] = useState('');
   const [topicsReloadKey, setTopicsReloadKey] = useState(0);
@@ -2933,12 +2984,18 @@ useEffect(() => {
           : [];
 
       if (!cancelled && nextTopics.length > 0) {
-        setAllTopics(uniqueTopicList(nextTopics));
+        const normalizedTopics = uniqueTopicList(nextTopics)
+          .filter((topic) => normalizeTopic(topic) !== 'all');
+        setAllTopics(normalizedTopics);
+        cacheTopicCatalog(normalizedTopics);
       }
     } catch (err) {
-      console.error('Could not load topics:', err);
+      console.warn('Live topic refresh unavailable; using the local catalog.', err);
       if (!cancelled) {
-        setTopicsError('We could not load the topic catalog. Please try again.');
+        setAllTopics((currentTopics) => (
+          currentTopics.length > 0 ? currentTopics : DEFAULT_TOPIC_CATALOG
+        ));
+        setTopicsError('');
       }
     } finally {
       if (!cancelled) setTopicsLoading(false);
@@ -3021,23 +3078,14 @@ useEffect(() => {
 
 
 const topics = useMemo(() => {
-  if (allTopics.length > 0) {
-    return ['All', ...allTopics];
-  }
+  const postTopics = visiblePosts.flatMap((post) => {
+    const values = getPostTopics(post);
+    return values.length > 0 ? values : [];
+  });
+  const mergedTopics = uniqueTopicList([...allTopics, ...postTopics])
+    .filter((topic) => normalizeTopic(topic) !== 'all');
 
-  return [
-    'All',
-    ...uniqueTopicList(
-visiblePosts.flatMap((post) => {
-  const postTopics =
-    getPostTopics(post);
-
-  return postTopics.length > 0
-    ? postTopics
-    : ['Smarty'];
-})
-    ),
-  ];
+  return ['All', ...mergedTopics];
 }, [allTopics, visiblePosts]);
 
 const launchTopics = useMemo(() => topics, [topics]);
@@ -4078,6 +4126,21 @@ const handleTopicSelect = useCallback(
   [selectTopic]
 );
 
+const handleStoryTopicSelect = useCallback(
+  (item) => {
+    selectTopic(item, 'topic-story');
+
+    if (
+      areTopicsEquivalent(getTopicValue(item), 'All') &&
+      !loading &&
+      visiblePosts.length === 0
+    ) {
+      refreshFeed();
+    }
+  },
+  [loading, refreshFeed, selectTopic, visiblePosts.length]
+);
+
 const handleTopicCardPointerIntent = useCallback(() => {
   stopCanvasMomentum();
 
@@ -4622,7 +4685,8 @@ handleComments,
     loading={loading || topicsLoading}
     error={topicsError}
     onRetry={() => setTopicsReloadKey((value) => value + 1)}
-    onSelect={handleTopicSelect}
+    onSelect={handleStoryTopicSelect}
+    onNavigate={navigate}
   />
 )}
 

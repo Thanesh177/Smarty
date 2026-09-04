@@ -31,7 +31,8 @@ const ROUNDS = [
 export default function PatternMatchGame({ onComplete }) {
   const [roundIndex, setRoundIndex] = useState(0);
   const [matches, setMatches] = useState({});
-  const [active, setActive] = useState(null);
+  const [activeLeft, setActiveLeft] = useState(null);
+  const [activeRight, setActiveRight] = useState(null);
   const [results, setResults] = useState([]);
   const [locked, setLocked] = useState(false);
   const [feedback, setFeedback] = useState(null);
@@ -44,16 +45,40 @@ export default function PatternMatchGame({ onComplete }) {
     [roundIndex]
   );
 
+  const connectPair = (leftItem, rightItem) => {
+    setMatches((previous) => {
+      const nextMatches = Object.fromEntries(
+        Object.entries(previous).filter(
+          ([key, value]) => key !== leftItem && value !== rightItem,
+        ),
+      );
+
+      return { ...nextMatches, [leftItem]: rightItem };
+    });
+    setActiveLeft(null);
+    setActiveRight(null);
+  };
+
   const chooseLeft = (item) => {
     if (locked) return;
-    setActive(item);
+
+    if (activeRight) {
+      connectPair(item, activeRight);
+      return;
+    }
+
+    setActiveLeft((current) => current === item ? null : item);
   };
 
   const chooseRight = (item) => {
     if (locked) return;
-    if (!active) return;
-    setMatches((prev) => ({ ...prev, [active]: item }));
-    setActive(null);
+
+    if (activeLeft) {
+      connectPair(activeLeft, item);
+      return;
+    }
+
+    setActiveRight((current) => current === item ? null : item);
   };
 
   const checkMatches = () => {
@@ -81,13 +106,14 @@ export default function PatternMatchGame({ onComplete }) {
   const nextRound = () => {
     setRoundIndex((i) => i + 1);
     setMatches({});
-    setActive(null);
+    setActiveLeft(null);
+    setActiveRight(null);
     setLocked(false);
     setFeedback(null);
   };
 
   const finishGame = () => {
-    const allResults = results;
+    const allResults = [...results];
     // If current round hasn't been checked, include its result
     if (!locked && feedback == null) {
       // If user hasn't checked, auto-check
@@ -133,6 +159,9 @@ export default function PatternMatchGame({ onComplete }) {
       <p className="memory-round-label">
         Round {roundIndex + 1}/{ROUNDS.length} · {round.title}
       </p>
+      <p className="game-hint match-instruction">
+        Tap one idea from each side. You can start on either side and change a pair before checking.
+      </p>
 
       <div className="match-grid">
         <div className="match-column">
@@ -140,12 +169,17 @@ export default function PatternMatchGame({ onComplete }) {
             <button
               key={item}
               type="button"
-              aria-pressed={active === item}
-              className={active === item ? "match-tile active" : "match-tile"}
+              aria-pressed={activeLeft === item}
+              className={[
+                "match-tile",
+                activeLeft === item ? "active" : "",
+                matches[item] ? "matched" : "",
+              ].filter(Boolean).join(" ")}
               onClick={() => chooseLeft(item)}
               disabled={locked}
             >
-              {item}
+              <span>{item}</span>
+              {matches[item] && <small aria-hidden="true">Connected</small>}
             </button>
           ))}
         </div>
@@ -157,12 +191,17 @@ export default function PatternMatchGame({ onComplete }) {
               <button
                 key={item}
                 type="button"
-                aria-pressed={matched}
-                className={matched ? "match-tile matched" : "match-tile"}
+                aria-pressed={activeRight === item}
+                className={[
+                  "match-tile",
+                  activeRight === item ? "active" : "",
+                  matched ? "matched" : "",
+                ].filter(Boolean).join(" ")}
                 onClick={() => chooseRight(item)}
-                disabled={locked || matched}
+                disabled={locked}
               >
-                {item}
+                <span>{item}</span>
+                {matched && <small aria-hidden="true">Connected</small>}
               </button>
             );
           })}
@@ -189,9 +228,11 @@ export default function PatternMatchGame({ onComplete }) {
           className="game-main-btn"
           type="button"
           onClick={checkMatches}
-          disabled={locked}
+          disabled={locked || Object.keys(matches).length !== left.length}
         >
-          Check Matches
+          {Object.keys(matches).length === left.length
+            ? "Check Matches"
+            : `Connect ${left.length - Object.keys(matches).length} more`}
         </button>
       )}
       {locked && roundIndex < ROUNDS.length - 1 && (
