@@ -11,33 +11,12 @@ import {
 } from 'lucide-react';
 import './NavbarMenu.css';
 import SmartyBrand from './SmartyBrand';
-import { startSocialLogin } from '../lib/cognito';
 import { isAdminUser } from '../lib/adminAccess';
-
-function hasStoredAuthToken() {
-  return Boolean(
-    localStorage.getItem('eduscroll_access_token') ||
-    localStorage.getItem('accessToken') ||
-    localStorage.getItem('idToken') ||
-    sessionStorage.getItem('eduscroll_access_token')
-  );
-}
 
 function NavbarMenu({ user, logout, totalUnread = 0 }) {
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
-
-  const startGoogleProfileLogin = useCallback(async () => {
-    try {
-      sessionStorage.setItem('smarty-post-login-redirect', '/profile');
-      localStorage.setItem('smarty-post-login-redirect', '/profile');
-
-      await startSocialLogin('Google', '/profile');
-    } catch (error) {
-      console.error('Google sign-in failed:', error);
-    }
-  }, []);
 
   const closeMenu = useCallback(() => {
     setOpen(false);
@@ -64,19 +43,6 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
       setSigningOut(false);
     }
   }, [closeMenu, logout, signingOut]);
-
-  const handleProfileClick = useCallback(async (event) => {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    closeMenu();
-
-    if (user && hasStoredAuthToken()) {
-      navigate('/profile');
-      return;
-    }
-
-    await startGoogleProfileLogin();
-  }, [closeMenu, navigate, startGoogleProfileLogin, user]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -213,16 +179,15 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
                 <button
                   type="button"
                   className="login-pill"
-                  onClick={async (event) => {
+                  onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     closeMenu();
-
-                    await startGoogleProfileLogin();
+                    navigate('/login', { state: { from: '/profile' } });
                   }}
                 >
                   <LogIn size={17} strokeWidth={2.2} />
-                  <span>Sign in with Google</span>
+                  <span>Sign in</span>
                 </button>
               )}
             </div>

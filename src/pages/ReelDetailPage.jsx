@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { postApi } from '../api/client';
+import LearningJourneyPanel from '../components/learning/LearningJourneyPanel';
 import './ReelDetailPage.css';
 function getPostImage(post) {
   return (
@@ -258,6 +259,13 @@ const handleSave = useCallback(async () => {
           </div>
 
           <p className="reel-body">{post.body}</p>
+
+          <LearningJourneyPanel
+            post={post}
+            postId={reelId}
+            stage="read"
+            creatorName={post.author || post.creatorName || 'Smarty creator'}
+          />
 
           <div className="reel-actions">
             <button onClick={handleLike}>❤️ {post.likes || 0}</button>

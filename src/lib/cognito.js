@@ -22,6 +22,33 @@ const NATIVE_REDIRECT_URI = 'smarty://callback';
 
 const isBrowser = typeof window !== 'undefined';
 
+const toBase64Url = (bytes) => {
+  let binary = '';
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+};
+
+const createSecureRandomValue = (byteLength = 48) => {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return toBase64Url(bytes);
+};
+
+const createPkceChallenge = async (verifier) => {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(verifier)
+  );
+
+  return toBase64Url(new Uint8Array(digest));
+};
+
 const isNativeApp = () => {
   if (!isBrowser) return false;
 
@@ -64,6 +91,15 @@ const isLocalDevelopmentOrigin = (origin) => {
   }
 };
 
+const isAmplifyOrigin = (origin) => {
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'https:' && url.hostname.endsWith('.amplifyapp.com');
+  } catch {
+    return false;
+  }
+};
+
 const getWebRedirectSignIn = () => {
   const origin = getCurrentOrigin();
 
@@ -73,6 +109,10 @@ const getWebRedirectSignIn = () => {
 
   if (origin === LEGACY_AMPLIFY_ORIGIN) {
     return `${LEGACY_AMPLIFY_ORIGIN}/`;
+  }
+
+  if (isAmplifyOrigin(origin)) {
+    return `${origin}/`;
   }
 
   return `${PRODUCTION_ORIGIN}/`;
@@ -87,6 +127,10 @@ const getWebRedirectSignOut = () => {
 
   if (origin === LEGACY_AMPLIFY_ORIGIN) {
     return `${LEGACY_AMPLIFY_ORIGIN}/login`;
+  }
+
+  if (isAmplifyOrigin(origin)) {
+    return `${origin}/login`;
   }
 
   return `${PRODUCTION_ORIGIN}/login`;
@@ -129,7 +173,7 @@ const redirectSignOut = isNativeApp()
 export const isAndroidCognitoLogin = isNativeApp;
 export const isNativeCognitoLogin = isNativeApp;
 
-export const startNativeSocialLogin = (
+export const startNativeSocialLogin = async (
   provider,
   fallbackPath = '/feed'
 ) => {
@@ -157,12 +201,10 @@ export const startNativeSocialLogin = (
     sessionStorage.getItem(
       'smarty-post-login-redirect'
     ) || fallbackPath;
-  const stateBytes = new Uint8Array(24);
-  crypto.getRandomValues(stateBytes);
-  const oauthState = Array.from(
-    stateBytes,
-    (byte) => byte.toString(16).padStart(2, '0')
-  ).join('');
+  const oauthState = createSecureRandomValue(32);
+  const oauthNonce = createSecureRandomValue(32);
+  const codeVerifier = createSecureRandomValue(64);
+  const codeChallenge = await createPkceChallenge(codeVerifier);
 
   sessionStorage.setItem(
     'smarty-native-oauth-state',
@@ -180,6 +222,10 @@ export const startNativeSocialLogin = (
     'smarty-native-oauth-provider',
     provider.toLowerCase()
   );
+  sessionStorage.setItem('smarty-native-oauth-nonce', oauthNonce);
+  localStorage.setItem('smarty-native-oauth-nonce', oauthNonce);
+  sessionStorage.setItem('smarty-native-oauth-code-verifier', codeVerifier);
+  localStorage.setItem('smarty-native-oauth-code-verifier', codeVerifier);
   sessionStorage.setItem(
     'smarty-post-login-redirect',
     redirectPath
@@ -199,6 +245,9 @@ export const startNativeSocialLogin = (
     client_id: COGNITO_CLIENT_ID,
     scope: 'openid email profile',
     state: oauthState,
+    nonce: oauthNonce,
+    code_challenge_method: 'S256',
+    code_challenge: codeChallenge,
   });
 
   window.location.href =
@@ -230,7 +279,7 @@ export const startSocialLogin = async (
   }
 
   if (isNativeApp()) {
-    startNativeSocialLogin(
+    await startNativeSocialLogin(
       normalizedProvider,
       redirectPath
     );
@@ -267,12 +316,22 @@ export const exchangeNativeCodeForTokens = async (
 
   const redirectUri =
     options.redirectUri || NATIVE_REDIRECT_URI;
+  const codeVerifier =
+    options.codeVerifier ||
+    sessionStorage.getItem('smarty-native-oauth-code-verifier') ||
+    localStorage.getItem('smarty-native-oauth-code-verifier') ||
+    '';
+
+  if (!codeVerifier) {
+    throw new Error('The secure sign-in session expired. Please try again.');
+  }
 
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     client_id: COGNITO_CLIENT_ID,
     code,
     redirect_uri: redirectUri,
+    code_verifier: codeVerifier,
   });
 
   const response = await fetch(

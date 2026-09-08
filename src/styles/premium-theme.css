@@ -1,0 +1,464 @@
+/*
+ * Smarty unified visual layer
+ * Keeps every route in the same quiet, dark environment while allowing
+ * feature pages to retain their own layout and interaction patterns.
+ */
+
+:root {
+  --ui-bg: #03080e;
+  --ui-bg-deep: #02060b;
+  --ui-surface: linear-gradient(145deg, rgba(13, 25, 37, 0.72), rgba(6, 14, 23, 0.52));
+  --ui-surface-soft: rgba(143, 184, 198, 0.055);
+  --ui-surface-hover: rgba(143, 198, 214, 0.09);
+  --ui-surface-pressed: rgba(143, 198, 214, 0.13);
+  --ui-text: #f3f7f9;
+  --ui-muted: rgba(205, 221, 227, 0.64);
+  --ui-faint: rgba(183, 204, 212, 0.42);
+  --ui-accent: #9ed9e6;
+  --ui-accent-strong: #dff7fb;
+  --ui-danger: #f4a2aa;
+  --ui-radius: clamp(16px, 1.35vw, 22px);
+  --ui-radius-small: 12px;
+  --ui-gutter: clamp(16px, 3vw, 44px);
+  --ui-shadow: 0 22px 64px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  --ui-shadow-hover: 0 26px 70px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --ui-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html {
+  background: var(--ui-bg-deep);
+}
+
+body,
+#root,
+.app-shell {
+  color: var(--ui-text);
+  background: var(--ui-bg-deep) !important;
+}
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse 70% 48% at 12% -8%, rgba(65, 143, 168, 0.17), transparent 68%),
+    radial-gradient(ellipse 58% 46% at 92% 14%, rgba(73, 79, 145, 0.12), transparent 72%),
+    radial-gradient(ellipse 74% 52% at 46% 108%, rgba(31, 112, 103, 0.1), transparent 72%),
+    linear-gradient(155deg, #03080e 0%, #06101a 48%, #03080e 100%) !important;
+}
+
+.app-shell::before {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  opacity: 0.34;
+  background:
+    linear-gradient(rgba(177, 219, 229, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(177, 219, 229, 0.018) 1px, transparent 1px) !important;
+  background-size: 72px 72px !important;
+  mask-image: radial-gradient(ellipse 82% 74% at 50% 34%, #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 82% 74% at 50% 34%, #000 0%, transparent 78%);
+}
+
+.app-shell::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(179, 226, 235, 0.035), transparent 24%),
+    linear-gradient(180deg, transparent 0%, rgba(1, 4, 8, 0.22) 78%, rgba(1, 4, 8, 0.54) 100%);
+}
+
+.content {
+  color: var(--ui-text);
+  background: transparent !important;
+  scrollbar-color: rgba(157, 203, 215, 0.24) transparent;
+  scrollbar-width: thin;
+}
+
+.content::-webkit-scrollbar,
+:where(.chat-page .messages, .rooms-page .messages, .menu-panel)::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.content::-webkit-scrollbar-track,
+:where(.chat-page .messages, .rooms-page .messages, .menu-panel)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content::-webkit-scrollbar-thumb,
+:where(.chat-page .messages, .rooms-page .messages, .menu-panel)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(157, 203, 215, 0.22);
+  background-clip: padding-box;
+}
+
+:where(
+  .books-page, .reader-page, .read-books-page, .news-page,
+  .feed-topics-page, .saved-page, .profile-page,
+  .creator-profile-container, .follow-requests-page, .chat-page,
+  .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
+  .create-page, .creator-dashboard-page, .quiz-page, .progress-page,
+  .legal-page, .login-page, .register-page, .auth-shell,
+  .room-invite-page, .admin-moderation-page
+) {
+  color: var(--ui-text);
+  background: transparent !important;
+}
+
+:where(
+  .books-page, .read-books-page, .news-page, .feed-topics-page,
+  .saved-page, .profile-page, .creator-profile-container,
+  .follow-requests-page, .comments-page, .reel-detail-page,
+  .post-ai-page, .create-page, .creator-dashboard-page,
+  .quiz-page, .progress-page, .legal-page, .login-page,
+  .register-page, .room-invite-page, .admin-moderation-page
+) {
+  width: min(1560px, 100%);
+  margin-inline: auto;
+}
+
+:where(
+  .books-page, .read-books-page, .news-page, .feed-topics-page,
+  .saved-page, .profile-page, .creator-profile-container,
+  .follow-requests-page, .comments-page, .reel-detail-page,
+  .post-ai-page, .create-page, .creator-dashboard-page,
+  .quiz-page, .progress-page, .legal-page, .login-page,
+  .register-page, .room-invite-page, .admin-moderation-page
+) :where(h1, h2, h3) {
+  color: var(--ui-text);
+  text-wrap: balance;
+}
+
+:where(
+  .books-page, .read-books-page, .news-page, .feed-topics-page,
+  .saved-page, .profile-page, .creator-profile-container,
+  .follow-requests-page, .comments-page, .reel-detail-page,
+  .post-ai-page, .create-page, .creator-dashboard-page,
+  .quiz-page, .progress-page, .legal-page, .login-page,
+  .register-page, .room-invite-page, .admin-moderation-page
+) :where(p, small, time) {
+  color: var(--ui-muted);
+}
+
+/* Blended surfaces: enough separation to scan, without outlined cards. */
+:where(
+  .news-card, .news-daily-brief, .news-section-digest-card,
+  .books-card, .books-hero-card, .books-discover-panel, .read-book-card,
+  .feed-topic-card,
+  .saved-card, .saved-summary, .profile-card, .profile-post-card,
+  .mini-post-card, .request-card, .request-empty-card,
+  .comment-card, .comments-empty, .comments-loading,
+  .reel-content-panel, .reel-comments, .post-ai-card, .post-ai-original,
+  .create-form, .create-side, .dashboard-stat, .dashboard-panel,
+  .dashboard-post-card, .topic-card, .question-card, .result-card,
+  .profile-overview-card, .unlock-section, .mistake-review-card,
+  .learning-journey-panel, .moderation-case-card, .admin-user-result,
+  .login-card, .register-card, .auth-card, .room-invite-card,
+  [class$='-modal-card']
+) {
+  border: 0 !important;
+  border-radius: var(--ui-radius) !important;
+  background: var(--ui-surface) !important;
+  box-shadow: var(--ui-shadow) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :where(
+    .news-card, .books-card, .read-book-card, .feed-topic-card, .saved-card,
+    .profile-post-card, .mini-post-card, .request-card,
+    .comment-card, .dashboard-post-card, .topic-card,
+    .profile-overview-card, .moderation-case-card
+  ):hover {
+    border-color: transparent !important;
+    background: linear-gradient(145deg, rgba(17, 33, 47, 0.82), rgba(8, 18, 28, 0.62)) !important;
+    box-shadow: var(--ui-shadow-hover) !important;
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+/* Form controls disappear into the page until the user interacts with them. */
+:where(
+  .books-page, .reader-page, .read-books-page, .news-page,
+  .saved-page, .profile-page, .creator-profile-container,
+  .follow-requests-page, .chat-page, .rooms-page, .comments-page,
+  .post-ai-page, .create-page, .creator-dashboard-page, .quiz-page,
+  .legal-page, .login-page, .register-page, .room-invite-page,
+  .admin-moderation-page
+) :where(
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  textarea,
+  select
+) {
+  border: 0 !important;
+  border-radius: var(--ui-radius-small) !important;
+  background: rgba(151, 195, 207, 0.075) !important;
+  color: var(--ui-text) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025) !important;
+  transition: background-color 160ms ease, box-shadow 160ms ease !important;
+}
+
+:where(
+  .books-page, .reader-page, .read-books-page, .news-page,
+  .saved-page, .profile-page, .creator-profile-container,
+  .follow-requests-page, .chat-page, .rooms-page, .comments-page,
+  .post-ai-page, .create-page, .creator-dashboard-page, .quiz-page,
+  .legal-page, .login-page, .register-page, .room-invite-page,
+  .admin-moderation-page
+) :where(input, textarea)::placeholder {
+  color: var(--ui-faint) !important;
+}
+
+:where(
+  .books-page, .reader-page, .read-books-page, .news-page,
+  .saved-page, .profile-page, .creator-profile-container,
+  .follow-requests-page, .chat-page, .rooms-page, .comments-page,
+  .post-ai-page, .create-page, .creator-dashboard-page, .quiz-page,
+  .legal-page, .login-page, .register-page, .room-invite-page,
+  .admin-moderation-page
+) :where(input, textarea, select):focus {
+  outline: none !important;
+  background: rgba(151, 205, 218, 0.105) !important;
+  box-shadow: 0 0 0 1px rgba(158, 217, 230, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+}
+
+/* Compact actions. Large tiles and cards intentionally do not match these selectors. */
+:where(.content, .menu-panel, .reminder-popup-card) :where(
+  button[class*='btn'],
+  a[class*='btn'],
+  .news-actions button,
+  .news-actions a,
+  .section-tabs button,
+  .saved-toolbar button,
+  .saved-toolbar a,
+  .profile-actions button,
+  .profile-actions a,
+  .feed-inner-state-actions button,
+  .post-safety-menu button
+) {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0 !important;
+  border-radius: 11px !important;
+  background: rgba(151, 195, 207, 0.085) !important;
+  color: rgba(239, 247, 249, 0.9) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+  font-size: 0.8rem;
+  font-weight: 720;
+  letter-spacing: -0.012em;
+  transition: transform 150ms var(--ui-ease), background-color 150ms ease, color 150ms ease !important;
+}
+
+:where(.content, .menu-panel, .reminder-popup-card) :where(
+  .primary-btn, .btn-primary, .dashboard-primary, .publish-btn,
+  .submit-answer-btn, .learning-primary-action,
+  button[type='submit']:not(.composer-icon-btn)
+) {
+  background: var(--ui-accent-strong) !important;
+  color: #07131b !important;
+  box-shadow: 0 8px 22px rgba(93, 177, 196, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+}
+
+:where(.content, .menu-panel) :where(
+  .secondary-btn, .ghost-btn, .learning-secondary-action, .secondary
+) {
+  background: rgba(151, 195, 207, 0.07) !important;
+  color: rgba(224, 237, 241, 0.78) !important;
+}
+
+:where(.content, .menu-panel) :where(
+  .btn-delete-chat, .btn-report, .delete-room-btn, [class*='danger']
+) {
+  background: rgba(244, 114, 127, 0.1) !important;
+  color: var(--ui-danger) !important;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :where(.content, .menu-panel, .reminder-popup-card) :where(
+    button[class*='btn'],
+    a[class*='btn'],
+    .news-actions button,
+    .news-actions a,
+    .section-tabs button,
+    .saved-toolbar button,
+    .saved-toolbar a,
+    .profile-actions button,
+    .profile-actions a,
+    .feed-inner-state-actions button,
+    .post-safety-menu button
+  ):hover {
+    background: rgba(151, 207, 219, 0.14) !important;
+    color: #f8fcfd !important;
+    transform: translate3d(0, -1px, 0);
+  }
+
+  :where(.content, .menu-panel, .reminder-popup-card) :where(
+    .primary-btn, .btn-primary, .dashboard-primary, .publish-btn,
+    .submit-answer-btn, .learning-primary-action,
+    button[type='submit']:not(.composer-icon-btn)
+  ):hover {
+    background: #eefcff !important;
+    color: #06121a !important;
+  }
+}
+
+:where(.content, .menu-panel) button:disabled,
+:where(.content, .menu-panel) a[aria-disabled='true'] {
+  cursor: not-allowed !important;
+  opacity: 0.42 !important;
+  transform: none !important;
+}
+
+:where(.content, .menu-panel) :where(button, a):focus-visible {
+  outline: 2px solid rgba(158, 217, 230, 0.68) !important;
+  outline-offset: 3px !important;
+}
+
+/* Icon-only actions stay small and legible. */
+:where(.content, .menu-panel) :where(
+  .icon-btn, .reader-icon-btn, .composer-icon-btn, .back-btn,
+  .reel-back-btn, .search-clear-btn, .post-more-button,
+  .active-room-info-close, .close-members, .standalone-media-close
+) {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 !important;
+  display: inline-grid;
+  place-items: center;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: rgba(151, 195, 207, 0.075) !important;
+  color: rgba(236, 246, 248, 0.86) !important;
+  box-shadow: none !important;
+}
+
+/* Navigation and conversation shells merge with the same atmosphere. */
+.topbar.glass-topbar .brand-actions,
+.menu-panel,
+.chat-page .chat-sidebar,
+.chat-page .chat-window,
+.rooms-page .sidebar,
+.rooms-page .chat {
+  border-color: transparent !important;
+  background: linear-gradient(155deg, rgba(10, 21, 32, 0.82), rgba(4, 10, 18, 0.7)) !important;
+  box-shadow: var(--ui-shadow) !important;
+}
+
+.topbar .hamburger-btn {
+  width: 40px;
+  height: 40px;
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: rgba(143, 184, 198, 0.075) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+}
+
+.topbar .hamburger-line {
+  width: 16px;
+  height: 1.5px;
+  background: rgba(239, 247, 249, 0.88);
+  box-shadow: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .topbar .hamburger-btn:hover {
+    background: rgba(143, 198, 214, 0.14) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    transform: translate3d(0, -1px, 0);
+  }
+}
+
+.menu-section a,
+.menu-link-btn,
+.chat-list-item,
+.rooms-page .room-item {
+  border-color: transparent !important;
+}
+
+.menu-section a:hover,
+.menu-section a.active,
+.menu-link-btn:hover,
+.chat-list-item:hover,
+.chat-list-item.active,
+.rooms-page .room-item:hover,
+.rooms-page .room-item.active {
+  background: var(--ui-surface-hover) !important;
+}
+
+.section-tabs,
+.feed-inner-topics,
+.saved-toolbar {
+  scrollbar-width: none;
+}
+
+.section-tabs::-webkit-scrollbar,
+.feed-inner-topics::-webkit-scrollbar,
+.saved-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  :root {
+    --ui-radius: 18px;
+    --ui-gutter: clamp(14px, 4vw, 24px);
+    --ui-shadow: 0 16px 44px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .app-shell {
+    background:
+      radial-gradient(ellipse 95% 42% at 16% -5%, rgba(55, 132, 155, 0.15), transparent 70%),
+      radial-gradient(ellipse 85% 48% at 100% 30%, rgba(68, 72, 137, 0.1), transparent 72%),
+      linear-gradient(165deg, #03080e 0%, #07111b 54%, #03080e 100%) !important;
+  }
+
+  :where(.content, .menu-panel, .reminder-popup-card) :where(
+    button[class*='btn'],
+    a[class*='btn'],
+    .news-actions button,
+    .news-actions a,
+    .section-tabs button,
+    .saved-toolbar button,
+    .profile-actions button,
+    .feed-inner-state-actions button
+  ) {
+    min-height: 42px;
+    padding-inline: 13px;
+  }
+}
+
+@media (max-width: 560px) {
+  :where(
+    .books-page, .read-books-page, .news-page, .feed-topics-page,
+    .saved-page, .profile-page, .creator-profile-container,
+    .follow-requests-page, .comments-page, .reel-detail-page,
+    .post-ai-page, .create-page, .creator-dashboard-page,
+    .quiz-page, .progress-page, .legal-page, .login-page,
+    .register-page, .room-invite-page, .admin-moderation-page
+  ) {
+    padding-inline: 14px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  :where(
+    .news-card, .news-daily-brief, .news-section-digest-card,
+    .books-card, .read-book-card, .feed-topic-card, .saved-card, .profile-card,
+    .profile-post-card, .request-card, .comment-card,
+    .post-ai-card, .create-form, .create-side, .dashboard-panel,
+    .dashboard-post-card, .topic-card, .question-card, .result-card,
+    .profile-overview-card, .learning-journey-panel
+  ) {
+    border-radius: 16px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell::before,
+  .app-shell::after {
+    transform: none !important;
+  }
+}

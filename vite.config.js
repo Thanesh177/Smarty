@@ -65,8 +65,11 @@ export default defineConfig(({ mode }) => {
         rewrite: (path) => path.replace(/^\/smarty-api/, ''),
       },
       '/bbc-api': {
-        target: 'https://bbc-news-api.vercel.app',
+        target: apiProxyTarget,
         changeOrigin: true,
+        secure: true,
+        timeout: 30000,
+        proxyTimeout: 30000,
         rewrite: (path) => path.replace(/^\/bbc-api/, ''),
       },
       '/openlibrary': {

@@ -397,79 +397,122 @@ export const newsApi = {
       }));
   },
 
-  async getLatestNews(lang = 'english') {
-    const [bbcResult, hackerNewsResult, spaceflightResult] =
-      await Promise.allSettled([
-        axios.get(`${NEWS_API_BASE_URL}/latest`, {
-          params: { lang },
-          timeout: API_TIMEOUT,
-        }),
-        this.getHackerNews(),
-        this.getSpaceflightNews(),
-      ]);
+  async getLatestNews(options = {}) {
+    const normalizedOptions = typeof options === 'string'
+      ? { lang: options }
+      : options || {};
+    const lang = String(normalizedOptions.lang || 'english').trim().toLowerCase();
+    const country = String(normalizedOptions.country || 'GLOBAL').trim().toUpperCase();
+    const region = String(normalizedOptions.region || '').trim();
 
-    const combined = {};
+    const requests = [
+      axios.get(`${NEWS_API_BASE_URL}/latest`, {
+        params: { lang, country, ...(region ? { region } : {}) },
+        timeout: API_TIMEOUT,
+      }),
+    ];
 
-    if (bbcResult.status === 'fulfilled') {
-      const bbcData = bbcResult.value.data;
+    const [primaryResult] = await Promise.allSettled(requests);
+    const primaryPayload = primaryResult.status === 'fulfilled'
+      ? primaryResult.value.data
+      : null;
+    const sections = {};
 
-      if (!bbcData?.status || bbcData.status === 200) {
-        Object.entries(bbcData || {}).forEach(([section, items]) => {
-          if (!Array.isArray(items)) return;
+    const addSection = (sectionName, items) => {
+      if (!Array.isArray(items) || !items.length) return;
 
-          combined[section] = items.map((item) => ({
-            ...item,
-            source: item.source || 'BBC News',
-          }));
-        });
-      }
-    }
-
-    if (hackerNewsResult.status === 'fulfilled' && hackerNewsResult.value.length) {
-      combined.Technology = [
-        ...(combined.Technology || []),
-        ...hackerNewsResult.value,
+      const cleanSection = String(sectionName || 'World').trim() || 'World';
+      sections[cleanSection] = [
+        ...(sections[cleanSection] || []),
+        ...items.map((item) => ({
+          ...item,
+          section: item.section || cleanSection,
+          source: item.source || 'News source',
+        })),
       ];
-    }
+    };
 
-    if (spaceflightResult.status === 'fulfilled' && spaceflightResult.value.length) {
-      combined.Space = [
-        ...(combined.Space || []),
-        ...spaceflightResult.value,
-      ];
+    if (primaryPayload && (!primaryPayload.status || primaryPayload.status === 200)) {
+      const primarySections = primaryPayload.sections && typeof primaryPayload.sections === 'object'
+        ? primaryPayload.sections
+        : primaryPayload;
+
+      Object.entries(primarySections).forEach(([sectionName, items]) => {
+        addSection(sectionName, items);
+      });
     }
 
     const seen = new Set();
-
-    Object.keys(combined).forEach((section) => {
-      combined[section] = combined[section].filter((article) => {
-        const key = String(
-          article.news_link || article.title || ''
-        ).trim().toLowerCase();
+    Object.keys(sections).forEach((sectionName) => {
+      sections[sectionName] = sections[sectionName].filter((article) => {
+        const key = String(article.news_link || article.title || '')
+          .trim()
+          .toLowerCase();
 
         if (!key || seen.has(key)) return false;
         seen.add(key);
         return true;
       });
+
+      if (!sections[sectionName].length) delete sections[sectionName];
     });
 
-    if (!Object.values(combined).some((items) => items.length > 0)) {
-      const providerErrors = [
-        bbcResult,
-        hackerNewsResult,
-        spaceflightResult,
-      ]
-        .filter((result) => result.status === 'rejected')
-        .map((result) => result.reason?.message)
-        .filter(Boolean);
+    const articles = Object.entries(sections).flatMap(([sectionName, items]) =>
+      items.map((item) => ({ ...item, section: item.section || sectionName }))
+    );
+
+    if (!articles.length) {
+      const primaryError = primaryResult.status === 'rejected'
+        ? primaryResult.reason?.response?.data?.error || primaryResult.reason?.message
+        : primaryPayload?.error;
 
       throw new Error(
-        providerErrors[0] ||
+        primaryError ||
           'News providers are temporarily unavailable. Please try again.'
       );
     }
 
-    return combined;
+    const location = primaryPayload?.location || {
+      countryCode: country,
+      country: country === 'GLOBAL' ? 'Worldwide' : country,
+      region,
+      label: region || (country === 'GLOBAL' ? 'Worldwide' : country),
+    };
+    const sources = new Set(articles.map((article) => article.source).filter(Boolean));
+    const fallbackSummary = {
+      eyebrow: "Today's briefing",
+      title: `${location.label || 'Worldwide'} at a glance`,
+      overview: `${articles.length} current stories from ${sources.size} news sources, organized for a faster daily read.`,
+      highlights: articles.slice(0, 5).map((article) => ({
+        id: article.id,
+        title: article.title,
+        source: article.source,
+        section: article.section,
+        news_link: article.news_link,
+      })),
+      storyCount: articles.length,
+      sourceCount: sources.size,
+      leadingSections: Object.keys(sections).slice(0, 3),
+    };
+    const dailySummary = primaryPayload?.dailySummary
+      ? {
+          ...primaryPayload.dailySummary,
+          storyCount: articles.length,
+          sourceCount: sources.size,
+        }
+      : fallbackSummary;
+
+    return {
+      status: 200,
+      location,
+      dailySummary,
+      sections,
+      articles,
+      sources: primaryPayload?.sources || [],
+      generatedAt: primaryPayload?.generatedAt || new Date().toISOString(),
+      cacheStatus: primaryPayload?.cacheStatus || 'live',
+      notice: primaryPayload?.notice || '',
+    };
   },
 };
 
@@ -1823,6 +1866,7 @@ async getPostDetails(payload) {
       title: payload?.title || '',
       body: payload?.body || '',
       topic: payload?.topic || '',
+      subTopic: payload?.subTopic || payload?.subtopic || '',
       mode: 'detailed',
     });
 

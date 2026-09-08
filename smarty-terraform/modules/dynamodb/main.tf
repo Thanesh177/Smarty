@@ -1,7 +1,8 @@
 variable "tables" {
   type = map(object({
-    hash_key  = string
-    range_key = optional(string)
+    hash_key      = string
+    range_key     = optional(string)
+    ttl_attribute = optional(string)
   }))
 }
 
@@ -30,6 +31,15 @@ resource "aws_dynamodb_table" "this" {
 
   point_in_time_recovery {
     enabled = true
+  }
+
+  dynamic "ttl" {
+    for_each = try(each.value.ttl_attribute, null) == null ? [] : [each.value.ttl_attribute]
+
+    content {
+      attribute_name = ttl.value
+      enabled        = true
+    }
   }
 
   deletion_protection_enabled = true

@@ -1,182 +1,314 @@
-import { useEffect, useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SmartyBrand from '../components/SmartyBrand';
+import { startSocialLogin } from '../lib/cognito';
+import {
+  getAuthErrorMessage,
+  getChallengePresentation,
+  isStrongPassword,
+  isValidAuthEmail,
+  normalizeAuthEmail,
+} from '../lib/authErrors';
 import './LoginPage.css';
 
-import {
-  startSocialLogin,
-} from '../lib/cognito';
-
-export default function LoginPage() {
-  const { user, loading, login } = useAuth();
-  const location = useLocation();
+function getSafeDestination(location) {
   const fromState = location.state?.from;
-  const from =
+  const candidate =
     (typeof fromState === 'string'
       ? fromState
-      : fromState?.pathname) || '/feed';
+      : fromState?.pathname
+        ? `${fromState.pathname}${fromState.search || ''}${fromState.hash || ''}`
+        : '') || '/feed';
 
-  const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState(() => {
-    const oauthError = new URLSearchParams(window.location.search)
-      .get('oauth_error');
+  if (
+    !candidate.startsWith('/') ||
+    candidate.startsWith('//') ||
+    candidate.includes('\\') ||
+    candidate === '/login' ||
+    candidate === '/register'
+  ) {
+    return '/feed';
+  }
 
-    if (oauthError === 'apple') {
-      return 'Apple sign-in could not be completed. Please try again.';
-    }
+  return candidate;
+}
 
-    if (oauthError === 'google') {
-      return 'Google sign-in could not be completed. Please try again.';
-    }
+function getInitialAuthError(location) {
+  const oauthError = new URLSearchParams(window.location.search).get('oauth_error');
 
-    if (oauthError) {
-      return 'Sign-in could not be completed. Please try again.';
-    }
+  if (oauthError === 'apple') {
+    return 'Apple sign-in could not be completed. Please try again.';
+  }
 
-    return location.state?.oauthError || '';
+  if (oauthError === 'google') {
+    return 'Google sign-in could not be completed. Please try again.';
+  }
+
+  if (oauthError) {
+    return 'Sign-in could not be completed. Please try again.';
+  }
+
+  return location.state?.oauthError || '';
+}
+
+export default function LoginPage() {
+  const {
+    user,
+    loading,
+    login,
+    confirmLogin,
+    beginPasswordReset,
+    finishPasswordReset,
+  } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const from = getSafeDestination(location);
+  const autoSocialStartedRef = useRef(false);
+
+  const [mode, setMode] = useState('sign-in');
+  const [form, setForm] = useState({
+    email: normalizeAuthEmail(location.state?.verifiedEmail),
+    password: '',
+    code: '',
+    newPassword: '',
+    challengeResponse: '',
   });
-  const [message, setMessage] = useState('');
-const [submitting, setSubmitting] = useState(false);
-const [socialProvider, setSocialProvider] = useState('');
+  const [challenge, setChallenge] = useState(null);
+  const [error, setError] = useState(() => getInitialAuthError(location));
+  const [message, setMessage] = useState(() =>
+    new URLSearchParams(window.location.search).get('loggedOut') === '1'
+      ? 'You have been signed out securely.'
+      : ''
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [socialProvider, setSocialProvider] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
+
+  const updateField = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
 
   const prepareSignUpTransition = () => {
     document.documentElement.dataset.authDirection = 'forward';
   };
 
+  const returnToSignIn = () => {
+    setMode('sign-in');
+    setChallenge(null);
+    setError('');
+    setMessage('');
+    updateField('challengeResponse', '');
+  };
+
+  const finishSignIn = useCallback(() => {
+    sessionStorage.setItem('smarty-post-login-redirect', from);
+    localStorage.setItem('smarty-post-login-redirect', from);
+    navigate(from, { replace: true });
+  }, [from, navigate]);
+
+  const continueFromNextStep = useCallback(
+    (nextStep) => {
+      const step = nextStep?.signInStep || '';
+
+      if (step === 'CONFIRM_SIGN_UP') {
+        navigate('/confirm', {
+          state: { email: normalizeAuthEmail(form.email), from },
+        });
+        return;
+      }
+
+      if (step === 'RESET_PASSWORD') {
+        setMode('forgot-password');
+        setMessage('Reset your password to continue signing in.');
+        return;
+      }
+
+      const presentation = getChallengePresentation(nextStep);
+
+      if (presentation) {
+        setChallenge({ nextStep, presentation });
+        setMode('challenge');
+        updateField(
+          'challengeResponse',
+          presentation.type === 'selection'
+            ? presentation.options?.[0] || ''
+            : ''
+        );
+        return;
+      }
+
+      setError(
+        step === 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP'
+          ? 'Authenticator setup is required. Open account security settings in a browser to finish setup.'
+          : 'This account requires an additional verification step. Please try a connected account or contact support.'
+      );
+    },
+    [form.email, from, navigate]
+  );
+
+  const handleSocialLogin = useCallback(
+    async (provider) => {
+      if (submitting) return;
+
+      setError('');
+      setMessage('');
+      setSubmitting(true);
+      setSocialProvider(provider.toLowerCase());
+
+      try {
+        sessionStorage.setItem('smarty-post-login-redirect', from);
+        localStorage.setItem('smarty-post-login-redirect', from);
+        await startSocialLogin(provider, from);
+      } catch (socialError) {
+        console.error(`${provider} sign-in failed:`, socialError);
+        setError(
+          getAuthErrorMessage(
+            socialError,
+            `${provider} sign-in could not be opened. Please try again.`
+          )
+        );
+        setSubmitting(false);
+        setSocialProvider('');
+      }
+    },
+    [from, submitting]
+  );
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    if (params.get('google') !== '1') {
+    if (params.get('google') !== '1' || autoSocialStartedRef.current) {
       return;
     }
 
-    const startGoogleRedirect = async () => {
-      try {
-        const redirectTarget = from === '/login' ? '/profile' : from;
-        sessionStorage.setItem('smarty-post-login-redirect', redirectTarget);
-        localStorage.setItem('smarty-post-login-redirect', redirectTarget);
+    autoSocialStartedRef.current = true;
+    handleSocialLogin('Google');
+  }, [handleSocialLogin]);
 
-        await startSocialLogin('Google', redirectTarget);
-      } catch (error) {
-        console.error('Automatic Google login failed:', error);
-      }
-    };
-
-    startGoogleRedirect();
-  }, [from]);
-
-  if (loading) return <p className="status">Loading...</p>;
-  if (user) return <Navigate to={from === '/login' ? '/profile' : from} replace />;
-
-const handleGoogleLogin = async () => {
-  setError('');
-  setMessage('');
-
-  if (submitting) return;
-
-  setSubmitting(true);
-  setSocialProvider('google');
-
-    try {
-      const redirectTarget = from === '/login' ? '/profile' : from;
-      sessionStorage.setItem('smarty-post-login-redirect', redirectTarget);
-      localStorage.setItem('smarty-post-login-redirect', redirectTarget);
-
-      await startSocialLogin('Google', redirectTarget);
-} catch (err) {
-  setSocialProvider('');
-  setError(
-    err?.message ||
-      'Google login failed. Please try again in Chrome or Safari.'
-  );
-
-  setSubmitting(false);
-  setSocialProvider('');
-}
-  };
-
-
-
-const handleAppleLogin = async () => {
-  setError('');
-  setMessage('');
-
-  if (submitting) return;
-
-  setSubmitting(true);
-  setSocialProvider('apple');
-
-  try {
-    const redirectTarget =
-      from === '/login' ? '/profile' : from;
-
-    sessionStorage.setItem(
-      'smarty-post-login-redirect',
-      redirectTarget
+  if (loading) {
+    return (
+      <main className="login-page auth-loading-page" role="status" aria-live="polite">
+        <div className="auth-loading-card">
+          <span className="auth-loading-mark" aria-hidden="true">S</span>
+          <div>
+            <strong>Restoring your session</strong>
+            <p>This should only take a moment.</p>
+          </div>
+        </div>
+      </main>
     );
-
-    localStorage.setItem(
-      'smarty-post-login-redirect',
-      redirectTarget
-    );
-
-    await startSocialLogin('Apple', redirectTarget);
-  } catch (err) {
-    console.error('Apple login failed:', err);
-
-    setError(
-      err?.message ||
-        'Apple login failed. Please try again.'
-    );
-
-    setSubmitting(false);
-    setSocialProvider('');
   }
-};
+
+  if (user) return <Navigate to={from} replace />;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (submitting) return;
+
+    const email = normalizeAuthEmail(form.email);
     setError('');
     setMessage('');
-    const email = form.email.trim();
-    const password = form.password;
 
-    if (!email || !password) {
-      setError('Please enter both email and password.');
+    if (mode !== 'challenge' && !isValidAuthEmail(email)) {
+      setError('Enter a valid email address.');
       return;
     }
 
     setSubmitting(true);
 
     try {
-      const result = await login(email, password);
-
-      if (result?.success === false) {
-        const step = result?.nextStep?.signInStep;
-
-        if (step === 'CONFIRM_SIGN_UP') {
-          setError('Your account is not confirmed yet. Please verify your email on the confirmation page.');
+      if (mode === 'sign-in') {
+        if (!form.password) {
+          setError('Enter your password.');
           return;
         }
 
-        setError(`Next sign-in step: ${step || 'unknown'}`);
-        return;
+        sessionStorage.setItem('smarty-post-login-redirect', from);
+        localStorage.setItem('smarty-post-login-redirect', from);
+
+        const result = await login(email, form.password);
+
+        if (result?.success) {
+          finishSignIn();
+          return;
+        }
+
+        continueFromNextStep(result?.nextStep);
       }
 
-      setMessage('Login successful. Loading your profile...');
-      sessionStorage.setItem('smarty-post-login-redirect', from);
-      localStorage.setItem('smarty-post-login-redirect', from);
+      if (mode === 'forgot-password') {
+        const result = await beginPasswordReset(email);
 
-      window.setTimeout(() => {
-        window.location.replace(from);
-      }, 250);
-    } catch (err) {
-      setError(err?.message || 'Login failed. Check your Cognito configuration.');
+        if (result?.isPasswordReset) {
+          setMode('sign-in');
+          setMessage('Your password is ready to use. Sign in below.');
+          return;
+        }
+
+        setMode('reset-password');
+        setMessage(
+          result?.nextStep?.codeDeliveryDetails?.destination
+            ? `A reset code was sent to ${result.nextStep.codeDeliveryDetails.destination}.`
+            : 'A password reset code was sent to your email.'
+        );
+      }
+
+      if (mode === 'reset-password') {
+        if (!form.code.trim()) {
+          setError('Enter the reset code from your email.');
+          return;
+        }
+
+        if (!isStrongPassword(form.newPassword)) {
+          setError('Use at least 10 characters with uppercase, lowercase, and a number.');
+          return;
+        }
+
+        await finishPasswordReset(email, form.code, form.newPassword);
+        setMode('sign-in');
+        setForm((current) => ({
+          ...current,
+          password: '',
+          code: '',
+          newPassword: '',
+        }));
+        setMessage('Password updated. Sign in with your new password.');
+      }
+
+      if (mode === 'challenge') {
+        const response = form.challengeResponse.trim();
+
+        if (!response) {
+          setError('Complete the verification step to continue.');
+          return;
+        }
+
+        const result = await confirmLogin(response);
+
+        if (result?.success) {
+          finishSignIn();
+          return;
+        }
+
+        continueFromNextStep(result?.nextStep);
+      }
+    } catch (authError) {
+      setError(getAuthErrorMessage(authError));
     } finally {
       setSubmitting(false);
     }
   };
+
+  const isRecoveryMode = mode === 'forgot-password' || mode === 'reset-password';
+  const challengePresentation = challenge?.presentation;
 
   return (
     <main className="login-page">
@@ -193,122 +325,239 @@ const handleAppleLogin = async () => {
             </p>
           </div>
 
-          <div className="login-highlights">
-            <div>
-              <strong>01</strong>
-              <span>Personalized feed</span>
-            </div>
-            <div>
-              <strong>02</strong>
-              <span>Save useful posts</span>
-            </div>
-            <div>
-              <strong>03</strong>
-              <span>Create knowledge reels</span>
-            </div>
+          <div className="login-highlights" aria-label="Account benefits">
+            <div><strong>01</strong><span>Personalized feed</span></div>
+            <div><strong>02</strong><span>Save useful posts</span></div>
+            <div><strong>03</strong><span>Secure sync</span></div>
           </div>
         </section>
 
         <section className="login-layout">
-          <form className="login-card" onSubmit={handleSubmit}>
-          <nav className="auth-mode-switch" aria-label="Authentication options">
-            <span className="auth-mode-option active" aria-current="page">
-              Sign in
-            </span>
-            <Link
-              className="auth-mode-option"
-              to="/register"
-              state={{ from }}
-              viewTransition
-              onClick={prepareSignUpTransition}
-            >
-              Sign up
-            </Link>
-          </nav>
-
-          <div className="login-card-header">
-            <h2>Sign in</h2>
-            <p>Use your email or a connected account.</p>
-          </div>
-
-          <label>
-            Email
-            <input
-              placeholder="you@example.com"
-              type="email"
-              value={form.email}
-              autoComplete="email"
-              disabled={submitting}
-              onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
-            />
-          </label>
-
-          <label>
-            Password
-            <input
-              placeholder="Enter your password"
-              type="password"
-              value={form.password}
-              autoComplete="current-password"
-              disabled={submitting}
-              onChange={(e) => setForm((current) => ({ ...current, password: e.target.value }))}
-            />
-          </label>
-
-          {error && <p className="status error">{error}</p>}
-          {message && <p className="status success">{message}</p>}
-
-          <button
-            className="primary-btn login-submit"
-            disabled={submitting || !form.email.trim() || !form.password}
-            type="submit"
+          <form
+            className="login-card"
+            onSubmit={handleSubmit}
+            aria-busy={submitting}
+            noValidate
           >
-            {submitting && !socialProvider ? 'Signing in...' : 'Sign in'}
-          </button>
-
-          <div className="login-divider">
-            <span>or continue with</span>
-          </div>
-
-            <div className="social-login-stack" aria-label="Social sign in options">
-              <button
-                type="button"
-                className="apple-login-btn"
-                disabled={submitting}
-                onClick={handleAppleLogin}
-              >
-                <span className="apple-icon" aria-hidden="true">
-                  
+            {!isRecoveryMode && mode !== 'challenge' && (
+              <nav className="auth-mode-switch" aria-label="Authentication options">
+                <span className="auth-mode-option active" aria-current="page">
+                  Sign in
                 </span>
-                {socialProvider === 'apple' ? 'Opening...' : 'Apple'}
-              </button>
+                <Link
+                  className="auth-mode-option"
+                  to="/register"
+                  state={{ from }}
+                  viewTransition
+                  onClick={prepareSignUpTransition}
+                >
+                  Sign up
+                </Link>
+              </nav>
+            )}
 
-              <button
-                type="button"
-                className="google-login-btn"
-                data-google-login-button
-                disabled={submitting}
-                onClick={handleGoogleLogin}
-              >
-                <span className="google-icon" aria-hidden="true">
-                  G
-                </span>
-                {socialProvider === 'google' ? 'Opening...' : 'Google'}
-              </button>
+            <div className="login-card-header">
+              <h2>
+                {mode === 'sign-in' && 'Sign in'}
+                {mode === 'forgot-password' && 'Reset password'}
+                {mode === 'reset-password' && 'Enter reset code'}
+                {mode === 'challenge' && (challengePresentation?.title || 'Verify sign-in')}
+              </h2>
+              <p>
+                {mode === 'sign-in' && 'Use your email or a connected account.'}
+                {mode === 'forgot-password' && 'We’ll send a secure code to your email.'}
+                {mode === 'reset-password' && 'Create a new password for your account.'}
+                {mode === 'challenge' && challengePresentation?.description}
+              </p>
             </div>
 
-            <p className="login-legal-note">
-              By creating an account, you agree to Smarty&apos;s{' '}
-              <Link to="/terms" target="_blank" rel="noreferrer">
-                Terms of Use and EULA
-              </Link>{' '}
-              and acknowledge the{' '}
-              <Link to="/privacy" target="_blank" rel="noreferrer">
-                Privacy Policy
-              </Link>
-              . Smarty has zero tolerance for objectionable content or abusive
-              behavior.
-            </p>
+            {mode !== 'challenge' && (
+              <label>
+                Email
+                <input
+                  placeholder="you@example.com"
+                  type="email"
+                  value={form.email}
+                  autoComplete="email"
+                  inputMode="email"
+                  disabled={submitting || mode === 'reset-password'}
+                  onChange={(event) => updateField('email', event.target.value)}
+                />
+              </label>
+            )}
+
+            {mode === 'sign-in' && (
+              <label>
+                <span className="auth-field-label">
+                  Password
+                  <button
+                    className="auth-inline-action"
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </span>
+                <input
+                  placeholder="Enter your password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  autoComplete="current-password"
+                  disabled={submitting}
+                  onKeyUp={(event) => setCapsLockOn(event.getModifierState('CapsLock'))}
+                  onBlur={() => setCapsLockOn(false)}
+                  onChange={(event) => updateField('password', event.target.value)}
+                />
+                {capsLockOn && <small className="auth-field-hint">Caps Lock is on</small>}
+              </label>
+            )}
+
+            {mode === 'reset-password' && (
+              <>
+                <label>
+                  Reset code
+                  <input
+                    placeholder="6-digit code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    value={form.code}
+                    disabled={submitting}
+                    onChange={(event) => updateField('code', event.target.value.replace(/\s/g, ''))}
+                  />
+                </label>
+                <label>
+                  <span className="auth-field-label">
+                    New password
+                    <button
+                      className="auth-inline-action"
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </span>
+                  <input
+                    placeholder="Create a strong password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    value={form.newPassword}
+                    disabled={submitting}
+                    onChange={(event) => updateField('newPassword', event.target.value)}
+                  />
+                  <small className="auth-field-hint">10+ characters · uppercase · lowercase · number</small>
+                </label>
+              </>
+            )}
+
+            {mode === 'challenge' && challengePresentation?.type === 'selection' ? (
+              <label>
+                {challengePresentation.label}
+                <select
+                  value={form.challengeResponse}
+                  disabled={submitting}
+                  onChange={(event) => updateField('challengeResponse', event.target.value)}
+                >
+                  {challengePresentation.options.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+            ) : mode === 'challenge' ? (
+              <label>
+                {challengePresentation?.label || 'Verification value'}
+                <input
+                  type={
+                    challengePresentation?.type === 'password' ||
+                    challengePresentation?.type === 'new-password'
+                      ? 'password'
+                      : challengePresentation?.type === 'email'
+                        ? 'email'
+                        : 'text'
+                  }
+                  inputMode={challengePresentation?.inputMode}
+                  autoComplete={challengePresentation?.autoComplete}
+                  value={form.challengeResponse}
+                  disabled={submitting}
+                  onChange={(event) => updateField('challengeResponse', event.target.value)}
+                />
+              </label>
+            ) : null}
+
+            {error && <p className="status error" role="alert">{error}</p>}
+            {message && <p className="status success" role="status">{message}</p>}
+
+            <button
+              className="primary-btn login-submit"
+              disabled={submitting}
+              type="submit"
+            >
+              {submitting
+                ? 'Please wait…'
+                : mode === 'sign-in'
+                  ? 'Sign in'
+                  : mode === 'forgot-password'
+                    ? 'Send reset code'
+                    : mode === 'reset-password'
+                      ? 'Update password'
+                      : 'Continue securely'}
+            </button>
+
+            {mode === 'sign-in' && (
+              <button
+                className="auth-recovery-link"
+                type="button"
+                onClick={() => {
+                  setMode('forgot-password');
+                  setError('');
+                  setMessage('');
+                }}
+              >
+                Forgot password?
+              </button>
+            )}
+
+            {(isRecoveryMode || mode === 'challenge') && (
+              <button className="auth-recovery-link" type="button" onClick={returnToSignIn}>
+                Back to sign in
+              </button>
+            )}
+
+            {mode === 'sign-in' && (
+              <>
+                <div className="login-divider"><span>or continue with</span></div>
+
+                <div className="social-login-stack" aria-label="Connected sign in options">
+                  <button
+                    type="button"
+                    className="apple-login-btn"
+                    disabled={submitting}
+                    onClick={() => handleSocialLogin('Apple')}
+                  >
+                    <span className="apple-icon" aria-hidden="true"></span>
+                    {socialProvider === 'apple' ? 'Opening…' : 'Apple'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="google-login-btn"
+                    data-google-login-button
+                    disabled={submitting}
+                    onClick={() => handleSocialLogin('Google')}
+                  >
+                    <span className="google-icon" aria-hidden="true">G</span>
+                    {socialProvider === 'google' ? 'Opening…' : 'Google'}
+                  </button>
+                </div>
+
+                <p className="login-legal-note">
+                  New accounts agree to Smarty&apos;s{' '}
+                  <Link to="/terms" target="_blank" rel="noreferrer">Terms of Use and EULA</Link>{' '}
+                  and acknowledge the{' '}
+                  <Link to="/privacy" target="_blank" rel="noreferrer">Privacy Policy</Link>.
+                </p>
+              </>
+            )}
           </form>
         </section>
       </div>

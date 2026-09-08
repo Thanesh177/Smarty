@@ -73,11 +73,15 @@ export function removeWrongQuestion(topicId, mistakeToRemove) {
 
 export function saveWrongQuestion(topicId, question) {
   const existing = getWrongQuestions();
+  const normalizedQuestion = String(question?.q || "").trim().toLowerCase();
+  const withoutDuplicate = (existing[topicId] || []).filter(
+    (item) => String(item?.q || "").trim().toLowerCase() !== normalizedQuestion,
+  );
 
   const updated = {
     ...existing,
     [topicId]: [
-      ...(existing[topicId] || []),
+      ...withoutDuplicate,
       {
         q: question.q,
         answer: question.answer,

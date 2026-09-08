@@ -431,6 +431,45 @@
   }
 }
 
+/* A quiz launched from a post keeps the source lesson visible without competing
+   with the question. */
+.focused-quiz-source {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 7px 10px;
+  border: 1px solid rgba(120, 216, 235, 0.12);
+  border-radius: 999px;
+  background: rgba(120, 216, 235, 0.055);
+  color: rgba(205, 229, 235, 0.58);
+  font-size: 0.69rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+}
+
+.focused-quiz-source span {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.focused-quiz-source strong {
+  color: rgba(226, 244, 248, 0.86);
+}
+
+.result-actions {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+@media (max-width: 700px) {
+  .quiz-page > .question-card,
+  .quiz-page > .result-card {
+    padding-right: 66px !important;
+  }
+}
+
 .streak-card::after {
   content: "";
   position: absolute;

@@ -430,11 +430,14 @@ module "lambda" {
     "news" = {
       runtime     = "python3.12"
       handler     = "lambda_function.lambda_handler"
-      timeout     = 3
-      memory_size = 128
+      timeout     = 20
+      memory_size = 256
       role_arn    = "arn:aws:iam::147179611217:role/service-role/news-role-507fc3ni"
       filename    = "../../lambda-zips/news.zip"
-      environment = {}
+      environment = {
+        BEDROCK_MODEL_ID = "amazon.nova-micro-v1:0"
+        NEWS_TABLE       = "DailyNews"
+      }
     }
 
     "topicRoomSendMessage" = {
@@ -566,7 +569,8 @@ module "dynamodb" {
     }
 
     DailyNews = {
-      hash_key = "date"
+      hash_key      = "date"
+      ttl_attribute = "expiresAt"
     }
 
     HiddenRooms = {
@@ -584,7 +588,8 @@ module "dynamodb" {
     }
 
     QuizQuestionCache = {
-      hash_key = "cacheKey"
+      hash_key      = "cacheKey"
+      ttl_attribute = "expiresAt"
     }
 
     ReelComments = {
@@ -677,13 +682,51 @@ module "dynamodb" {
     }
 
     UserQuizQuestionHistory = {
-      hash_key = "historyKey"
+      hash_key      = "historyKey"
+      ttl_attribute = "expiresAt"
     }
 
     UserReports = {
       hash_key = "reportId"
     }
   }
+}
+
+resource "aws_iam_role_policy" "news_daily_cache" {
+  name = "news-daily-cache"
+  role = "news-role-507fc3ni"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ReadWriteDailyNewsCache"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem"
+        ]
+        Resource = "arn:aws:dynamodb:us-east-1:147179611217:table/DailyNews"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "news_daily_summary" {
+  name = "news-daily-summary"
+  role = "news-role-507fc3ni"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "GenerateDailyNewsSummary"
+        Effect   = "Allow"
+        Action   = "bedrock:InvokeModel"
+        Resource = "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-micro-v1:0"
+      }
+    ]
+  })
 }
 
 module "cognito" {

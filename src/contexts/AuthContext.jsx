@@ -1,11 +1,22 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   signIn,
   signUp,
   signOut,
   getCurrentUser,
   fetchAuthSession,
+  confirmSignIn,
   confirmSignUp,
+  resendSignUpCode,
+  resetPassword,
+  confirmResetPassword,
 } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
 import { exchangeNativeCodeForTokens } from '../lib/cognito';
@@ -117,6 +128,18 @@ function clearAuthStorage() {
   notifyAuthChanged();
 }
 
+function clearNativeOAuthStorage() {
+  [
+    'smarty-native-oauth-state',
+    'smarty-native-oauth-provider',
+    'smarty-native-oauth-nonce',
+    'smarty-native-oauth-code-verifier',
+  ].forEach((key) => {
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(key);
+  });
+}
+
 function clearAmplifyAuthStorage() {
   const prefixes = [
     'CognitoIdentityServiceProvider.',
@@ -173,7 +196,14 @@ function normalizeRedirectPath(value) {
   const fallback = '/feed';
   const text = String(value || '').trim();
 
-  if (!text || text === '/login' || text === '/register') {
+  if (
+    !text ||
+    text === '/login' ||
+    text === '/register' ||
+    text.startsWith('//') ||
+    text.startsWith('/\\') ||
+    text.includes('\\')
+  ) {
     return fallback;
   }
 
@@ -226,12 +256,10 @@ function redirectAfterLogin() {
     return;
   }
 
-  if (sessionStorage.getItem('smarty-auth-redirecting') === targetPath) {
-    return;
-  }
-
   sessionStorage.setItem('smarty-auth-redirecting', targetPath);
-  window.location.replace(targetPath);
+  window.history.replaceState({}, document.title, targetPath);
+  window.dispatchEvent(new PopStateEvent('popstate'));
+  sessionStorage.removeItem('smarty-auth-redirecting');
 }
 
 function mapCognitoUser(currentUser, session) {
@@ -299,13 +327,13 @@ function getVerifiedNativeCachedUser() {
   }
 }
 
-async function waitForCognitoSession(attempts = 1) {
+async function waitForCognitoSession(attempts = 1, forceRefresh = false) {
   let lastError;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const currentUser = await getCurrentUser();
-      const session = await fetchAuthSession();
+      const session = await fetchAuthSession({ forceRefresh });
       return { currentUser, session };
     } catch (error) {
       lastError = error;
@@ -323,6 +351,22 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+
+  const establishSession = useCallback(async ({
+    attempts = 1,
+    forceRefresh = false,
+  } = {}) => {
+    const { currentUser, session } = await waitForCognitoSession(
+      attempts,
+      forceRefresh
+    );
+    const authUser = mapCognitoUser(currentUser, session);
+
+    saveAuthUser(authUser);
+    setUser(authUser);
+
+    return authUser;
+  }, []);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -352,10 +396,7 @@ export function AuthProvider({ children }) {
             'Native OAuth provider returned an error:',
             nativeProviderError
           );
-          sessionStorage.removeItem('smarty-native-oauth-state');
-          localStorage.removeItem('smarty-native-oauth-state');
-          sessionStorage.removeItem('smarty-native-oauth-provider');
-          localStorage.removeItem('smarty-native-oauth-provider');
+          clearNativeOAuthStorage();
           clearAuthStorage();
           setUser(null);
           setLoading(false);
@@ -372,6 +413,10 @@ export function AuthProvider({ children }) {
               sessionStorage.getItem('smarty-native-oauth-state') ||
               localStorage.getItem('smarty-native-oauth-state') ||
               '';
+            const expectedNonce =
+              sessionStorage.getItem('smarty-native-oauth-nonce') ||
+              localStorage.getItem('smarty-native-oauth-nonce') ||
+              '';
 
             if (!expectedState || returnedState !== expectedState) {
               throw new Error('The sign-in response could not be verified. Please try again.');
@@ -385,6 +430,10 @@ export function AuthProvider({ children }) {
 
             if (!subject || !isCurrentJwt(tokens.id_token, subject)) {
               throw new Error('Native OAuth returned an invalid identity token.');
+            }
+
+            if (!expectedNonce || payload.nonce !== expectedNonce) {
+              throw new Error('The sign-in response could not be verified. Please try again.');
             }
 
             const email = payload.email || '';
@@ -402,10 +451,7 @@ export function AuthProvider({ children }) {
 
             saveAuthUser(authUser);
 
-            sessionStorage.removeItem('smarty-native-oauth-state');
-            localStorage.removeItem('smarty-native-oauth-state');
-            sessionStorage.removeItem('smarty-native-oauth-provider');
-            localStorage.removeItem('smarty-native-oauth-provider');
+            clearNativeOAuthStorage();
 
             const storedRedirect =
               sessionStorage.getItem('smarty-post-login-redirect') ||
@@ -428,10 +474,7 @@ export function AuthProvider({ children }) {
             clearAuthStorage();
             setUser(null);
             setLoading(false);
-            sessionStorage.removeItem('smarty-native-oauth-state');
-            localStorage.removeItem('smarty-native-oauth-state');
-            sessionStorage.removeItem('smarty-native-oauth-provider');
-            localStorage.removeItem('smarty-native-oauth-provider');
+            clearNativeOAuthStorage();
             window.location.replace(
               `/login?oauth_error=${encodeURIComponent(nativeProvider)}`
             );
@@ -439,14 +482,7 @@ export function AuthProvider({ children }) {
           }
         }
 
-        const { currentUser, session } = await waitForCognitoSession(
-          isWebOAuthReturn ? 14 : 1
-        );
-
-        const authUser = mapCognitoUser(currentUser, session);
-
-        saveAuthUser(authUser);
-        setUser(authUser);
+        await establishSession({ attempts: isWebOAuthReturn ? 14 : 1 });
 
         if (isWebOAuthReturn) {
           redirectAfterLogin();
@@ -477,7 +513,7 @@ export function AuthProvider({ children }) {
     };
 
     initAuth();
-  }, []);
+  }, [establishSession]);
 
   useEffect(() => {
     const unsubscribe = Hub.listen('auth', async ({ payload }) => {
@@ -487,12 +523,7 @@ export function AuthProvider({ children }) {
         payload.event === 'cognitoHostedUI'
       ) {
         try {
-          const currentUser = await getCurrentUser();
-          const session = await fetchAuthSession();
-          const authUser = mapCognitoUser(currentUser, session);
-
-          saveAuthUser(authUser);
-          setUser(authUser);
+          await establishSession({ attempts: 8 });
           redirectAfterLogin();
         } catch (err) {
           console.error('OAuth login failed:', err);
@@ -506,7 +537,7 @@ export function AuthProvider({ children }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [establishSession]);
 
   const login = async (email, password) => {
     try {
@@ -524,13 +555,28 @@ export function AuthProvider({ children }) {
     });
 
     if (result.isSignedIn) {
-      const currentUser = await getCurrentUser();
-      const session = await fetchAuthSession();
-      const authUser = mapCognitoUser(currentUser, session);
+      await establishSession({ attempts: 3 });
 
-      saveAuthUser(authUser);
-      setUser(authUser);
+      return { success: true };
+    }
 
+    return {
+      success: false,
+      nextStep: result.nextStep,
+    };
+  };
+
+  const confirmLogin = async (challengeResponse) => {
+    const response = String(challengeResponse || '').trim();
+
+    if (!response) {
+      throw new Error('Enter the requested verification value.');
+    }
+
+    const result = await confirmSignIn({ challengeResponse: response });
+
+    if (result.isSignedIn) {
+      await establishSession({ attempts: 3 });
       return { success: true };
     }
 
@@ -568,6 +614,42 @@ export function AuthProvider({ children }) {
     return result;
   };
 
+  const resendRegistrationCode = async (email) => {
+    return resendSignUpCode({ username: String(email || '').trim().toLowerCase() });
+  };
+
+  const beginPasswordReset = async (email) => {
+    return resetPassword({ username: String(email || '').trim().toLowerCase() });
+  };
+
+  const finishPasswordReset = async (email, code, newPassword) => {
+    await confirmResetPassword({
+      username: String(email || '').trim().toLowerCase(),
+      confirmationCode: String(code || '').trim(),
+      newPassword,
+    });
+
+    return { success: true };
+  };
+
+  const restoreSession = useCallback(
+    async ({ forceRefresh = false, attempts = 4 } = {}) => {
+      try {
+        return await establishSession({ attempts, forceRefresh });
+      } catch (error) {
+        const cachedUser = getVerifiedNativeCachedUser();
+
+        if (cachedUser) {
+          setUser(cachedUser);
+          return cachedUser;
+        }
+
+        throw error;
+      }
+    },
+    [establishSession]
+  );
+
   const logout = async () => {
     if (loggingOut) return;
 
@@ -578,6 +660,7 @@ export function AuthProvider({ children }) {
     sessionStorage.removeItem('smarty-auth-redirecting');
     sessionStorage.removeItem('smarty-post-login-redirect');
     localStorage.removeItem('smarty-post-login-redirect');
+    clearNativeOAuthStorage();
 
     try {
       // Amplify must see its own session records before they are cleared so it
@@ -598,19 +681,8 @@ export function AuthProvider({ children }) {
   };
 
   const refreshToken = async () => {
-    const session = await fetchAuthSession({ forceRefresh: true });
-    const idToken = session?.tokens?.idToken?.toString() ?? null;
-    const accessToken = session?.tokens?.accessToken?.toString() ?? null;
-
-    if (idToken) {
-      setUser((prev) => {
-        const nextUser = prev ? { ...prev, token: idToken, accessToken } : prev;
-        if (nextUser) saveAuthUser(nextUser);
-        return nextUser;
-      });
-    }
-
-    return idToken;
+    const authUser = await restoreSession({ forceRefresh: true, attempts: 3 });
+    return authUser?.token || null;
   };
 
   const value = useMemo(
@@ -618,14 +690,19 @@ export function AuthProvider({ children }) {
       user,
       loading,
       login,
+      confirmLogin,
       register,
       confirmRegistration,
+      resendRegistrationCode,
+      beginPasswordReset,
+      finishPasswordReset,
+      restoreSession,
       logout,
       loggingOut,
       refreshToken,
       isAuthenticated: !!user,
     }),
-    [user, loading, loggingOut]
+    [user, loading, loggingOut, restoreSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

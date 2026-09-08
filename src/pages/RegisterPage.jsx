@@ -1,17 +1,31 @@
-import { useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SmartyBrand from '../components/SmartyBrand';
 import TermsAgreement, {
   recordTermsAcceptance,
 } from '../components/TermsAgreement';
 import { userApi } from '../api/client';
+import {
+  getAuthErrorMessage,
+  getPasswordChecks,
+  isStrongPassword,
+  isValidAuthEmail,
+  normalizeAuthEmail,
+} from '../lib/authErrors';
 import './LoginPage.css';
 import './RegisterPage.css';
 
 export default function RegisterPage() {
-  const { user, register, confirmRegistration } = useAuth();
+  const {
+    user,
+    register,
+    login,
+    confirmRegistration,
+    resendRegistrationCode,
+  } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const fromState = location.state?.from;
   const from =
     (typeof fromState === 'string'
@@ -23,12 +37,19 @@ export default function RegisterPage() {
     name: '',
     email: '',
     password: '',
+    confirmPassword: '',
     code: '',
   });
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(false);
+  const passwordChecks = useMemo(
+    () => getPasswordChecks(form.password),
+    [form.password]
+  );
 
   const prepareSignInTransition = () => {
     document.documentElement.dataset.authDirection = 'backward';
@@ -48,25 +69,44 @@ export default function RegisterPage() {
 
     try {
       if (step === 'register') {
-        const cleanEmail = form.email.trim().toLowerCase();
+        const cleanEmail = normalizeAuthEmail(form.email);
 
         if (!termsAccepted) {
           setError('Please agree to the Terms of Use and EULA before registering.');
           return;
         }
 
-        if (!cleanEmail) {
-          setError('Please enter your email.');
+        if (form.name.trim().length < 2) {
+          setError('Enter your name.');
           return;
         }
 
-        const existing = await userApi.checkEmailExists(cleanEmail);
-
-        if (existing.exists) {
-          console.warn('Email found in SmartyUsers, continuing signup so Cognito can confirm duplicate status.');
+        if (!isValidAuthEmail(cleanEmail)) {
+          setError('Enter a valid email address.');
+          return;
         }
 
-        const result = await register(form.name, cleanEmail, form.password);
+        if (!isStrongPassword(form.password)) {
+          setError('Use at least 10 characters with uppercase, lowercase, and a number.');
+          return;
+        }
+
+        if (form.password !== form.confirmPassword) {
+          setError('The passwords do not match.');
+          return;
+        }
+
+        try {
+          const existing = await userApi.checkEmailExists(cleanEmail);
+
+          if (existing.exists) {
+            console.info('Account record found; Cognito will verify whether sign-up can continue.');
+          }
+        } catch (lookupError) {
+          console.info('Account lookup unavailable; continuing with secure registration.', lookupError);
+        }
+
+        const result = await register(form.name.trim(), cleanEmail, form.password);
         recordTermsAcceptance(cleanEmail);
 
         if (result?.isSignUpComplete) {
@@ -79,25 +119,52 @@ export default function RegisterPage() {
       }
 
       if (step === 'confirm') {
-        await confirmRegistration(form.email.trim().toLowerCase(), form.code);
-        setMessage('Account verified. You can log in now.');
+        const cleanEmail = normalizeAuthEmail(form.email);
+
+        if (!form.code.trim()) {
+          setError('Enter the verification code from your email.');
+          return;
+        }
+
+        await confirmRegistration(cleanEmail, form.code.trim());
+        const signInResult = await login(cleanEmail, form.password);
+
+        if (signInResult?.success) {
+          navigate(from, { replace: true });
+          return;
+        }
+
+        setMessage('Account verified. Sign in to continue.');
         setStep('done');
       }
     } catch (err) {
-      const errorName = err?.name || '';
-      const errorMessage = err?.message || '';
-      const combinedError = `${errorName} ${errorMessage}`;
+      setError(getAuthErrorMessage(err, 'Registration could not be completed.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-      if (
-        combinedError.includes('UsernameExistsException') ||
-        combinedError.toLowerCase().includes('already exists') ||
-        combinedError.toLowerCase().includes('already signed up') ||
-        combinedError.toLowerCase().includes('account with the given email')
-      ) {
-        setError('This email is already signed up. Please log in instead.');
-      } else {
-        setError(errorMessage || 'Registration failed.');
-      }
+  const handleResendCode = async () => {
+    if (submitting || resendCooldown) return;
+
+    const cleanEmail = normalizeAuthEmail(form.email);
+
+    if (!isValidAuthEmail(cleanEmail)) {
+      setError('Enter the email used to create your account.');
+      return;
+    }
+
+    setSubmitting(true);
+    setError('');
+    setMessage('');
+
+    try {
+      await resendRegistrationCode(cleanEmail);
+      setMessage('A new verification code was sent.');
+      setResendCooldown(true);
+      window.setTimeout(() => setResendCooldown(false), 30_000);
+    } catch (err) {
+      setError(getAuthErrorMessage(err, 'A new code could not be sent.'));
     } finally {
       setSubmitting(false);
     }
@@ -192,13 +259,44 @@ export default function RegisterPage() {
 
                 <label>
                   Password
+                  <span className="auth-password-control">
+                    <input
+                      placeholder="Create a strong password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      value={form.password}
+                      disabled={submitting}
+                      onChange={(e) => updateField('password', e.target.value)}
+                    />
+                    <button
+                      className="auth-password-toggle"
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </span>
+                </label>
+
+                <div className="auth-password-checks" aria-label="Password requirements">
+                  {passwordChecks.map((check) => (
+                    <span className={check.valid ? 'is-valid' : ''} key={check.id}>
+                      <i aria-hidden="true" />
+                      {check.label}
+                    </span>
+                  ))}
+                </div>
+
+                <label>
+                  Confirm password
                   <input
-                    placeholder="Create a password"
-                    type="password"
+                    placeholder="Repeat your password"
+                    type={showPassword ? 'text' : 'password'}
                     autoComplete="new-password"
-                    value={form.password}
+                    value={form.confirmPassword}
                     disabled={submitting}
-                    onChange={(e) => updateField('password', e.target.value)}
+                    onChange={(e) => updateField('confirmPassword', e.target.value)}
                   />
                 </label>
 
@@ -235,6 +333,15 @@ export default function RegisterPage() {
                     onChange={(e) => updateField('code', e.target.value)}
                   />
                 </label>
+
+                <button
+                  className="auth-recovery-link"
+                  type="button"
+                  disabled={submitting || resendCooldown}
+                  onClick={handleResendCode}
+                >
+                  {resendCooldown ? 'Code sent · try again shortly' : 'Send a new code'}
+                </button>
               </>
             )}
 
@@ -247,7 +354,11 @@ export default function RegisterPage() {
                 disabled={
                   submitting ||
                   (step === 'register' &&
-                    (!form.email.trim() || !form.password || !termsAccepted)) ||
+                    (!form.name.trim() ||
+                      !form.email.trim() ||
+                      !form.password ||
+                      !form.confirmPassword ||
+                      !termsAccepted)) ||
                   (step === 'confirm' && !form.code.trim())
                 }
                 type="submit"

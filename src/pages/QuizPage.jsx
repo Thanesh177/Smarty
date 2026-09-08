@@ -1,7 +1,20 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import confetti from "canvas-confetti";
 import { saveWrongQuestion, getWrongQuestions } from "../lib/progressStore";
+import { getFocusedQuizId, getLearningContext, markLearningProgress } from "../lib/learningJourney";
+import {
+  clearActiveQuiz,
+  filterUnseenQuestions,
+  getQuestionFingerprint,
+  getQuizContextKey,
+  getRecentQuestionFingerprints,
+  getRecentQuestionPrompts,
+  loadActiveQuiz,
+  recordQuestionHistory,
+  saveActiveQuiz,
+} from "../lib/quizQuestionStore";
+import { useAuth } from "../contexts/AuthContext";
 import "./QuizPage.css";
 import { checkAchievements } from "../components/achievements/achievementEngine";
 import AchievementToast from "../components/achievements/AchievementToast";
@@ -270,7 +283,7 @@ const createLocalQuestions = (topicId) => {
     const shift = index % choices.length;
     const options = [...choices.slice(shift), ...choices.slice(0, shift)];
 
-    return {
+    const question = {
       id: `local-${topicId}-${index + 1}`,
       q,
       options,
@@ -278,6 +291,11 @@ const createLocalQuestions = (topicId) => {
       explanation,
       difficulty: index < 2 ? "Easy" : index < 3 ? "Medium" : "Hard",
       source: "local",
+    };
+
+    return {
+      ...question,
+      fingerprint: getQuestionFingerprint(question),
     };
   });
 };
@@ -415,31 +433,68 @@ ai_technology: [
 ],
 };
 
-function getDifficultyForTopic(topicId, progressMap) {
+function getChallengeProfile(topicId, progressMap) {
   const forceHard = localStorage.getItem("smarty-force-hard") === "true";
-  if (forceHard) return "Hard";
-
   const item = progressMap[topicId] || {};
-  const bestPercent = item.bestPercent || 0;
+  const bestPercent = Number(item.bestPercent || 0);
+  const lastPercent = Number(item.lastPercent ?? item.bestPercent ?? 0);
+  const attempts = Number(item.attempts || 0);
+  const totalXP = Number(item.totalXP || 0);
+  const level = Math.max(1, Number(item.level || Math.floor(totalXP / 100) + 1));
 
-  if (bestPercent >= 80) return "Hard";
-  if (bestPercent >= 50) return "Medium";
-  return "Easy";
+  if (forceHard || level >= 8 || (attempts >= 5 && bestPercent >= 85)) {
+    return {
+      difficulty: "Hard",
+      depth: "Expert",
+      level,
+      minimumDifficulty: "Hard",
+      questionStyle: "multi-step failure analysis, evidence evaluation, edge cases, and transfer to unfamiliar scenarios",
+    };
+  }
+
+  if (level >= 5 || (attempts >= 3 && bestPercent >= 72 && lastPercent >= 60)) {
+    return {
+      difficulty: "Hard",
+      depth: "Advanced",
+      level,
+      minimumDifficulty: "Hard",
+      questionStyle: "causal reasoning, realistic application, trade-offs, and close plausible distractors",
+    };
+  }
+
+  if (level >= 3 || attempts >= 2 || bestPercent >= 50) {
+    return {
+      difficulty: "Medium",
+      depth: "Intermediate",
+      level,
+      minimumDifficulty: "Medium",
+      questionStyle: "mechanisms, comparisons, cause and effect, and application to a new example",
+    };
+  }
+
+  return {
+    difficulty: "Easy",
+    depth: "Foundation",
+    level,
+    minimumDifficulty: "Easy",
+    questionStyle: "specific concepts, one-step mechanisms, and clear recall with meaningful distractors",
+  };
 }
 
-function getAdaptiveQuestions(topicId, progressMap) {
+function getAdaptiveQuestions(topicId, progressMap, seenFingerprints = []) {
   const all = (QUESTIONS[topicId] || []).map((question) => ({
     ...question,
     options: shuffleItems(question.options),
   }));
-  const level = getDifficultyForTopic(topicId, progressMap);
+  const profile = getChallengeProfile(topicId, progressMap);
+  const unseen = filterUnseenQuestions(all, seenFingerprints);
 
-  const preferred = all.filter((question) => {
-    if (level === "Hard") return question.difficulty === "Hard" || question.difficulty === "Medium";
-    if (level === "Medium") return question.difficulty === "Medium";
+  const preferred = unseen.filter((question) => {
+    if (profile.minimumDifficulty === "Hard") return question.difficulty === "Hard";
+    if (profile.minimumDifficulty === "Medium") return question.difficulty !== "Easy";
     return question.difficulty === "Easy";
   });
-  const remaining = all.filter((question) => !preferred.includes(question));
+  const remaining = unseen.filter((question) => !preferred.includes(question));
 
   return [...shuffleItems(preferred), ...shuffleItems(remaining)].slice(0, 5);
 }
@@ -456,7 +511,11 @@ function getAnswerXP(question, comboCount) {
   return baseXP + comboBonus;
 }
 
-function normalizeGeneratedQuestions(payload, topicId) {
+function normalizeGeneratedQuestions(payload, topicId, {
+  excludedFingerprints = [],
+  fallbackDifficulty = "Adaptive",
+  limit = 5,
+} = {}) {
   let parsed = payload;
 
   if (typeof parsed?.body === "string") {
@@ -475,12 +534,14 @@ function normalizeGeneratedQuestions(payload, topicId) {
         ? parsed.items
         : [];
 
-  return values.map((question, questionIndex) => {
+  const normalized = values.map((question, questionIndex) => {
     const q = String(question?.q || question?.question || question?.prompt || "").trim();
     const rawOptions = question?.options || question?.choices || question?.answers || [];
-    const options = Array.isArray(rawOptions)
-      ? rawOptions.map((option) => String(option?.text || option?.label || option || "").trim()).filter(Boolean)
-      : [];
+    const options = Array.isArray(rawOptions) ? [...new Set(
+      rawOptions
+        .map((option) => String(option?.text || option?.label || option || "").trim())
+        .filter(Boolean),
+    )] : [];
     const rawAnswer = question?.answer ?? question?.correctAnswer ?? question?.correct ?? question?.correctOption;
     const answer = Number.isInteger(rawAnswer)
       ? options[rawAnswer]
@@ -488,7 +549,7 @@ function normalizeGeneratedQuestions(payload, topicId) {
 
     if (!q || options.length < 2 || !answer || !options.includes(answer)) return null;
 
-    return {
+    const normalizedQuestion = {
       id: question?.id || `generated-${topicId}-${questionIndex + 1}`,
       q,
       options,
@@ -496,10 +557,96 @@ function normalizeGeneratedQuestions(payload, topicId) {
       explanation: String(
         question?.explanation || question?.reason || `The correct answer is ${answer}.`,
       ).trim(),
-      difficulty: question?.difficulty || "Adaptive",
+      difficulty: ["Easy", "Medium", "Hard"].includes(question?.difficulty)
+        ? question.difficulty
+        : fallbackDifficulty,
       source: "generated",
     };
-  }).filter(Boolean).slice(0, 5);
+
+    return {
+      ...normalizedQuestion,
+      fingerprint: getQuestionFingerprint(normalizedQuestion),
+    };
+  }).filter(Boolean);
+
+  return filterUnseenQuestions(normalized, excludedFingerprints).slice(0, limit);
+}
+
+function shortenLessonStatement(value, maxLength = 170) {
+  const firstSentence = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(/(?<=[.!?])\s+/)[0] || '';
+
+  if (firstSentence.length <= maxLength) return firstSentence;
+  return `${firstSentence.slice(0, maxLength - 1).trim()}…`;
+}
+
+function buildFocusedFallbackQuestions(item = {}, challengeProfile = { difficulty: "Medium" }) {
+  const topic = String(item.topic || item.title || 'this topic').trim();
+  const focus = String(item.focus || item.title || topic).trim();
+  const sourceTitle = String(item.sourceTitle || item.title || focus).trim();
+  const sourceStatement = shortenLessonStatement(item.sourceBody);
+  const broadDistractor = `A broad overview of every part of ${topic}`;
+
+  const questions = [
+    {
+      q: 'What exact concept is this learning path focused on?',
+      options: [focus, broadDistractor, `The history of ${topic} as a whole`, 'An unrelated general-knowledge survey'],
+      answer: focus,
+      explanation: `This lesson narrows ${topic} to one teachable idea: ${focus}.`,
+    },
+    {
+      q: `Which title belongs to the lesson you just explored?`,
+      options: [sourceTitle, `A complete guide to ${topic}`, `Why every theory about ${topic} is identical`, 'A general list without a central idea'],
+      answer: sourceTitle,
+      explanation: `“${sourceTitle}” is the source lesson for this challenge.`,
+    },
+    {
+      q: `What is the most useful way to understand ${focus}?`,
+      options: ['Trace its parts and their cause-and-effect steps', 'Memorize the broad topic name only', 'Skip the mechanism and rely on a slogan', 'Treat every example as proof of a universal rule'],
+      answer: 'Trace its parts and their cause-and-effect steps',
+      explanation: 'Following the mechanism step by step produces understanding that can be applied and recalled.',
+    },
+    {
+      q: `Which question best checks real understanding of ${focus}?`,
+      options: ['Can I explain how it works in a new example?', 'Can I repeat the topic label?', 'Did I read it as quickly as possible?', 'Can I avoid asking any follow-up questions?'],
+      answer: 'Can I explain how it works in a new example?',
+      explanation: 'Transferring an idea to a new example is stronger evidence of understanding than recognition alone.',
+    },
+    {
+      q: `What should make you revise an explanation of ${focus}?`,
+      options: ['Repeatable evidence that contradicts its prediction', 'A difficult word in the explanation', 'One person repeating the same claim', 'The topic becoming popular online'],
+      answer: 'Repeatable evidence that contradicts its prediction',
+      explanation: 'A strong learner updates an explanation when reliable, repeatable evidence does not match what it predicts.',
+    },
+  ];
+
+  if (sourceStatement) {
+    questions.splice(2, 0, {
+      q: 'Which statement comes directly from the source lesson?',
+      options: [sourceStatement, `${focus} has no mechanism or meaningful constraints.`, `${topic} can only be understood by memorizing definitions.`, `The lesson says every example of ${focus} behaves identically.`],
+      answer: sourceStatement,
+      explanation: 'This statement anchors the challenge in the lesson you just read.',
+    });
+  }
+
+  return questions.slice(0, 5).map((question, index) => {
+    const normalizedQuestion = {
+      ...question,
+      id: `focused-fallback-${item.id || 'lesson'}-${index + 1}`,
+      options: shuffleItems(question.options),
+      difficulty: index === 0 && challengeProfile.difficulty !== 'Hard'
+        ? 'Easy'
+        : challengeProfile.difficulty,
+      source: 'lesson-fallback',
+    };
+
+    return {
+      ...normalizedQuestion,
+      fingerprint: getQuestionFingerprint(normalizedQuestion),
+    };
+  });
 }
 
 function getStoredGuestId() {
@@ -517,28 +664,6 @@ function getStoredGuestId() {
 
   return created;
 }
-
-function getActiveQuizKey(topicId) {
-  return `smarty-active-quiz-${topicId}`;
-}
-
-function getStoredActiveQuiz(topicId) {
-  try {
-    const saved = localStorage.getItem(getActiveQuizKey(topicId));
-    return saved ? JSON.parse(saved) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveActiveQuiz(topicId, questions) {
-  localStorage.setItem(getActiveQuizKey(topicId), JSON.stringify(questions));
-}
-
-function clearActiveQuiz(topicId) {
-  localStorage.removeItem(getActiveQuizKey(topicId));
-}
-
 
 function getGradeMessage(percent) {
 
@@ -636,6 +761,8 @@ function getTotalXP(progressMap) {
 
 export default function QuizPage() {
 const navigate = useNavigate();
+const location = useLocation();
+const { user } = useAuth();
 const [comboCount, setComboCount] = useState(1);
 const SURVIVAL_TIME = 12;
 const [survivalTimeLeft, setSurvivalTimeLeft] = useState(SURVIVAL_TIME);
@@ -645,6 +772,48 @@ const survivalMode = useMemo(() => localStorage.getItem("smarty-game-mode") === 
 const [bossMode, setBossMode] = useState(false);
 const [xpGained, setXpGained] = useState(0);
 const transitionLockRef = useRef(false);
+const focusedQuizStartedRef = useRef('');
+const learningUserId = user?.sub || user?.userId || user?.id || user?.username || '';
+const quizUserId = useMemo(() => learningUserId || getStoredGuestId(), [learningUserId]);
+
+const focusedLearningTopic = useMemo(() => {
+  const params = new URLSearchParams(location.search);
+  const stateContext = location.state?.learningContext || {};
+  const routePost = location.state?.post || {};
+  const baseContext = getLearningContext(
+    { ...routePost, ...stateContext },
+    params.get('postId') || stateContext.postId || '',
+  );
+  const focus = String(params.get('focus') || stateContext.focus || baseContext.focus || '').trim();
+  const topicName = String(params.get('topic') || stateContext.topic || baseContext.topic || '').trim();
+  const postId = String(params.get('postId') || stateContext.postId || baseContext.postId || '').trim();
+
+  if (!focus || !postId) return null;
+
+  const context = {
+    ...baseContext,
+    ...stateContext,
+    postId,
+    topic: topicName || baseContext.topic,
+    focus,
+    title: stateContext.title || baseContext.title || focus,
+    body: stateContext.body || baseContext.body || '',
+  };
+
+  return {
+    id: getFocusedQuizId(context),
+    title: context.focus,
+    topic: context.topic,
+    focus: context.focus,
+    desc: `A focused knowledge check based on “${context.title}”.`,
+    emoji: '◎',
+    color: 'cyan',
+    postId: context.postId,
+    sourceTitle: context.title,
+    sourceBody: context.body,
+    learningContext: context,
+  };
+}, [location.search, location.state]);
 
 const showXPGain = useCallback((xp) => {
   setXpGained(0);
@@ -727,6 +896,10 @@ const renderedReviewItems = useMemo(
 
 
   const current = mixedSteps[index];
+  const activeChallengeProfile = useMemo(
+    () => getChallengeProfile(topic?.id || '', topicProgressMap),
+    [topic?.id, topicProgressMap],
+  );
   const currentTopicHasAIQuestions = topic ? Array.isArray(aiQuestions[topic.id]) && aiQuestions[topic.id].length > 0 : false;
 
   const currentOptions = useMemo(() => (
@@ -744,30 +917,54 @@ const renderedReviewItems = useMemo(
     </>
   ), [comboCount, newAchievements, xpGained]);
 
-  const loadAIQuestions = useCallback(async (topicId) => {
+  const loadAIQuestions = useCallback(async (topicId, topicDetails = null) => {
+  const selectedTopic = topicDetails || TOPICS.find((item) => item.id === topicId) || { id: topicId };
+  const challengeProfile = getChallengeProfile(topicId, topicProgressMap);
+  const contextKey = getQuizContextKey(selectedTopic);
+  const seenFingerprints = getRecentQuestionFingerprints(quizUserId, topicId);
   const useLocalQuestions = (notice = "") => {
-    const localQuestions = getAdaptiveQuestions(topicId, topicProgressMap);
+    const adaptiveQuestions = getAdaptiveQuestions(topicId, topicProgressMap, seenFingerprints);
+    const focusedQuestions = filterUnseenQuestions(
+      buildFocusedFallbackQuestions(selectedTopic, challengeProfile),
+      seenFingerprints,
+    );
+    const localQuestions = adaptiveQuestions.length > 0 ? adaptiveQuestions : focusedQuestions;
     setAiQuestions((prev) => ({ ...prev, [topicId]: localQuestions }));
-    setQuizNotice(notice);
+    setQuizNotice(
+      localQuestions.length > 0
+        ? notice
+        : "You completed every available offline question for this topic. Reconnect to create a fresh set.",
+    );
     setLoadingAI(false);
   };
 
   if (!CAN_USE_REMOTE_QUIZ_API) {
-    useLocalQuestions("Offline-ready questions are active.");
+    useLocalQuestions(
+      selectedTopic.postId
+        ? "Lesson-based questions are active."
+        : "Offline-ready questions are active.",
+    );
     return;
   }
-  const activeQuiz = getStoredActiveQuiz(topicId);
+  const activeQuiz = loadActiveQuiz({
+    userId: quizUserId,
+    topicId,
+    difficulty: challengeProfile.difficulty,
+    contextKey,
+  });
 
 if (Array.isArray(activeQuiz) && activeQuiz.length > 0) {
-  const normalizedActiveQuiz = normalizeGeneratedQuestions(activeQuiz, topicId);
+  const normalizedActiveQuiz = normalizeGeneratedQuestions(activeQuiz, topicId, {
+    fallbackDifficulty: challengeProfile.difficulty,
+  });
   if (normalizedActiveQuiz.length === 0) {
-    clearActiveQuiz(topicId);
+    clearActiveQuiz(quizUserId, topicId);
   } else {
   setAiQuestions((prev) => ({
     ...prev,
     [topicId]: normalizedActiveQuiz,
   }));
-  setQuizNotice("");
+  setQuizNotice(`Resumed ${challengeProfile.depth.toLowerCase()} challenge`);
   setLoadingAI(false);
   return;
   }
@@ -783,59 +980,98 @@ if (Array.isArray(activeQuiz) && activeQuiz.length > 0) {
   let requestTimeout = 0;
 
   try {
-    const difficulty = getDifficultyForTopic(topicId, topicProgressMap);
-    const userId = getStoredGuestId();
-
     const wrongQuestions = getWrongQuestions();
     const weakAreas = (wrongQuestions[topicId] || [])
-      .slice(-3)
+      .slice(-5)
       .map((item) => item.q);
+    const recentQuestionPrompts = getRecentQuestionPrompts(quizUserId, topicId);
 
     const controller = new AbortController();
-    requestTimeout = window.setTimeout(() => controller.abort(), 9000);
-    const res = await fetch(buildApiUrl('/quiz/generate'), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        userId,
-        topicId,
-        difficulty,
-        weakAreas,
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      throw new Error("AI generation failed.");
+    requestTimeout = window.setTimeout(() => controller.abort(), 14000);
+    const collectedQuestions = [];
+    const excludedFingerprints = new Set(seenFingerprints);
+
+    for (let generationAttempt = 0; generationAttempt < 2 && collectedQuestions.length < 5; generationAttempt += 1) {
+      const res = await fetch(buildApiUrl('/quiz/generate'), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: quizUserId,
+          topicId,
+          topicTitle: selectedTopic.title || selectedTopic.focus || topicId,
+          parentTopic: selectedTopic.topic || selectedTopic.title || topicId,
+          focus: selectedTopic.focus || selectedTopic.title || '',
+          sourcePostId: selectedTopic.postId || '',
+          sourceTitle: selectedTopic.sourceTitle || '',
+          sourceBody: selectedTopic.sourceBody || '',
+          difficulty: challengeProfile.difficulty,
+          minimumDifficulty: challengeProfile.minimumDifficulty,
+          learnerLevel: challengeProfile.level,
+          learnerDepth: challengeProfile.depth,
+          questionStyle: challengeProfile.questionStyle,
+          requestedCount: Math.max(5 - collectedQuestions.length, 5),
+          generationAttempt,
+          weakAreas,
+          recentQuestionFingerprints: [...excludedFingerprints].slice(-100),
+          excludeQuestions: recentQuestionPrompts,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new Error("AI generation failed.");
+      }
+
+      const data = await res.json();
+      const freshBatch = normalizeGeneratedQuestions(data, topicId, {
+        excludedFingerprints: [...excludedFingerprints],
+        fallbackDifficulty: challengeProfile.difficulty,
+        limit: 5 - collectedQuestions.length,
+      });
+
+      for (const question of freshBatch) {
+        collectedQuestions.push(question);
+        excludedFingerprints.add(question.fingerprint);
+      }
     }
 
-    const data = await res.json();
-    const questions = normalizeGeneratedQuestions(data, topicId);
+    const questions = collectedQuestions.slice(0, 5);
 
     if (questions.length === 0) {
-      throw new Error("AI returned no questions.");
+      throw new Error("AI returned no unseen questions.");
     }
 
-saveActiveQuiz(topicId, questions);
+saveActiveQuiz({
+  userId: quizUserId,
+  topicId,
+  difficulty: challengeProfile.difficulty,
+  contextKey,
+  questions,
+});
 
 setAiQuestions((prev) => ({
   ...prev,
   [topicId]: questions,
 }));
-setQuizNotice("");
+setQuizNotice(`${challengeProfile.depth} challenge · ${questions.length} fresh questions`);
   } catch (error) {
     console.warn("Generated quiz unavailable; using local questions.", error);
-    useLocalQuestions("Fresh questions are unavailable, so Smarty loaded the built-in challenge.");
+    useLocalQuestions(
+      selectedTopic.postId
+        ? "Fresh questions are unavailable, so Smarty prepared a challenge from this lesson."
+        : "Fresh questions are unavailable, so Smarty loaded the built-in challenge.",
+    );
   } finally {
     if (requestTimeout) window.clearTimeout(requestTimeout);
     setLoadingAI(false);
   }
-}, [topicProgressMap]);
+}, [quizUserId, topicProgressMap]);
 
   const startQuiz = useCallback((item) => {
     const bossPractice = localStorage.getItem("smarty-boss-practice") === "true";
-    const shouldStartBoss = visitProgress.streak >= 7 || bossPractice;
+    const isFocusedLesson = Boolean(item?.postId || item?.learningContext?.postId);
+    const shouldStartBoss = !isFocusedLesson && (visitProgress.streak >= 7 || bossPractice);
 
     setBossMode(shouldStartBoss);
 
@@ -858,8 +1094,16 @@ setQuizNotice("");
     setLocked(false);
     setXpGained(0);
     setComboCount(1);
-    loadAIQuestions(item.id);
+    loadAIQuestions(item.id, item);
   }, [loadAIQuestions, visitProgress.streak]);
+
+  useEffect(() => {
+    if (!focusedLearningTopic) return;
+    if (focusedQuizStartedRef.current === focusedLearningTopic.id) return;
+
+    focusedQuizStartedRef.current = focusedLearningTopic.id;
+    startQuiz(focusedLearningTopic);
+  }, [focusedLearningTopic, startQuiz]);
 
 const renderedTopics = useMemo(
   () => TOPICS.map((item) => (
@@ -879,9 +1123,15 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
   setQuizNotice("");
   setAnswerFeedback(null);
 
-  const userId = getStoredGuestId();
+  const userId = quizUserId;
 
   const percentage = mixedSteps.length ? Math.round((finalScore / mixedSteps.length) * 100) : 0;
+
+  recordQuestionHistory(userId, topic.id, finalAnswers);
+
+  if (topic?.postId) {
+    markLearningProgress(topic.postId, learningUserId, 'challenge');
+  }
 
   if (!CAN_USE_REMOTE_QUIZ_API) {
     const xpEarnedLocal = finalAnswers.reduce(
@@ -895,11 +1145,13 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
       attempts: (topicProgressMap[topic.id]?.attempts || 0) + 1,
       totalXP: (topicProgressMap[topic.id]?.totalXP || 0) + xpEarnedLocal,
       lastScore: finalScore,
+      lastPercent: percentage,
+      lastDifficulty: activeChallengeProfile.difficulty,
       updatedAt: new Date().toISOString(),
     });
 
     setTopicProgressMap(updatedProgress);
-    clearActiveQuiz(topic.id);
+    clearActiveQuiz(userId, topic.id);
     setSaveError("");
     setSaving(false);
     return;
@@ -932,6 +1184,10 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
             explanation: answer.explanation,
             isCorrect: answer.isCorrect,
             difficulty: answer.difficulty,
+            fingerprint: answer.fingerprint || getQuestionFingerprint({
+              q: answer.q,
+              answer: answer.correctAnswer,
+            }),
             xp: answer.xp || 0,
           })),
         }),
@@ -951,6 +1207,8 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
         totalXP: data.totalXP ?? ((topicProgressMap[topic.id]?.totalXP || 0) + xpEarned),
         level: data.level,
         lastScore: finalScore,
+        lastPercent: percentage,
+        lastDifficulty: activeChallengeProfile.difficulty,
         updatedAt: new Date().toISOString(),
       });
 
@@ -966,7 +1224,7 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
         setNewAchievements(unlocked);
         sounds.levelUp();
       }
-      clearActiveQuiz(topic.id);
+      clearActiveQuiz(userId, topic.id);
 
       if (percentage >= 60) {
         confetti({
@@ -982,16 +1240,18 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
         attempts: (topicProgressMap[topic.id]?.attempts || 0) + 1,
         totalXP: (topicProgressMap[topic.id]?.totalXP || 0) + xpEarned,
         lastScore: finalScore,
+        lastPercent: percentage,
+        lastDifficulty: activeChallengeProfile.difficulty,
         updatedAt: new Date().toISOString(),
       });
 
       setTopicProgressMap(updatedProgress);
-      clearActiveQuiz(topic.id);
+      clearActiveQuiz(userId, topic.id);
       setSaveError(error.message || "Could not save quiz progress.");
     } finally {
       setSaving(false);
     }
-  }, [mixedSteps.length, overallLevel, sounds, topic, topicProgressMap, visitProgress.streak]);
+  }, [activeChallengeProfile.difficulty, learningUserId, mixedSteps.length, overallLevel, quizUserId, sounds, topic, topicProgressMap, visitProgress.streak]);
 
 useEffect(() => {
   if (!topic || finished || !current || !survivalMode || locked || bossMode) return;
@@ -1072,6 +1332,8 @@ const submitAnswer = useCallback(() => {
       correctAnswer: current.answer,
       explanation: current.explanation,
       difficulty: current.difficulty,
+      fingerprint: current.fingerprint || getQuestionFingerprint(current),
+      source: current.source,
       isCorrect,
       xp: earnedXP,
       options: currentOptions,
@@ -1162,6 +1424,25 @@ const restart = useCallback(() => {
   setComboCount(1);
 }, []);
 
+const returnToFocusedLesson = useCallback(() => {
+  if (!focusedLearningTopic?.postId) return;
+
+  navigate(`/post-ai/${encodeURIComponent(focusedLearningTopic.postId)}`, {
+    state: {
+      learningContext: focusedLearningTopic.learningContext,
+      post: {
+        ...(location.state?.post || {}),
+        ...focusedLearningTopic.learningContext,
+      },
+    },
+  });
+}, [focusedLearningTopic, location.state, navigate]);
+
+const exploreFocusedTopic = useCallback(() => {
+  if (!focusedLearningTopic?.topic) return;
+  navigate(`/feed?topic=${encodeURIComponent(focusedLearningTopic.topic)}`);
+}, [focusedLearningTopic, navigate]);
+
 const missedQuestions = useMemo(
   () => answers.filter((answer) => !answer.isCorrect && Array.isArray(answer.options) && answer.options.length > 1),
   [answers],
@@ -1178,6 +1459,10 @@ const startMistakeReview = useCallback(() => {
     explanation: answer.explanation,
     difficulty: answer.difficulty || "Adaptive",
     source: "review",
+    fingerprint: answer.fingerprint || getQuestionFingerprint({
+      q: answer.q,
+      answer: answer.correctAnswer,
+    }),
   }));
 
   setAiQuestions((previous) => ({ ...previous, [topic.id]: retryQuestions }));
@@ -1324,10 +1609,10 @@ if (topic && bossMode && !finished) {
             <p>
               {loadingAI
                 ? "Smarty is creating fresh questions for this topic."
-                : "Smarty could not prepare this challenge. Please try again."}
+                : (quizNotice || "Smarty could not prepare this challenge. Please try again.")}
             </p>
             {!loadingAI && (
-              <button type="button" className="submit-answer-btn" onClick={() => loadAIQuestions(topic.id)}>
+              <button type="button" className="submit-answer-btn" onClick={() => loadAIQuestions(topic.id, topic)}>
                 Try Again
               </button>
             )}
@@ -1517,6 +1802,10 @@ if (topic && bossMode && !finished) {
 
           <div className="result-actions">
 
+            {focusedLearningTopic?.postId && (
+              <button type="button" onClick={returnToFocusedLesson}>Review Lesson</button>
+            )}
+
             {missedQuestions.length > 0 && (
               <button type="button" onClick={startMistakeReview}>Practice Mistakes</button>
             )}
@@ -1526,6 +1815,12 @@ if (topic && bossMode && !finished) {
             <button type="button" onClick={restart} className="secondary-btn">
               Choose Another Topic
             </button>
+
+            {focusedLearningTopic?.topic && (
+              <button type="button" onClick={exploreFocusedTopic} className="secondary-btn">
+                Find Similar Ideas
+              </button>
+            )}
 
           </div>
 
@@ -1616,11 +1911,17 @@ if (topic && bossMode && !finished) {
 
         </div>
         <div className="quiz-session-stats" aria-label="Current quiz status">
-          <span>{current?.difficulty || "Adaptive"}</span>
+          <span>{activeChallengeProfile.depth} · {current?.difficulty || activeChallengeProfile.difficulty}</span>
           <span>Score <strong>{score}</strong></span>
           <span className={comboCount > 1 ? "is-active" : ""}>Combo <strong>{comboCount}×</strong></span>
         </div>
         {quizNotice && <p className="quiz-source-notice">{quizNotice}</p>}
+        {focusedLearningTopic && (
+          <div className="focused-quiz-source">
+            <span>Focused lesson</span>
+            <strong>{focusedLearningTopic.topic}</strong>
+          </div>
+        )}
         {survivalMode && (
   <div className="survival-timer">
     <span>⏱ Survival</span>

@@ -1,51 +1,93 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { newsApi } from '../api/client';
+import {
+  NEWS_COUNTRIES,
+  NEWS_REGIONS,
+  getDefaultNewsCountry,
+} from '../data/newsLocations';
 import './NewsPage.css';
 import './LibraryNewsTheme.css';
 
-const CACHE_PREFIX = 'smarty_multi_source_news_v2_';
+const CACHE_PREFIX = 'smarty_location_news_v18_';
 const CACHE_TTL = 1000 * 60 * 15;
+const CACHE_STALE_TTL = 1000 * 60 * 60 * 48;
 const PAGE_SIZE = 9;
-const LANGUAGES = ['english'];
 
-function getCacheKey(lang) {
-  return `${CACHE_PREFIX}${lang}`;
+function getCacheKey(country, region) {
+  return `${CACHE_PREFIX}${country}_${encodeURIComponent(region || 'all')}`;
 }
 
-function getCachedNews(lang) {
+function getCachedNews(country, region) {
   try {
-    const cached = JSON.parse(localStorage.getItem(getCacheKey(lang)));
-    if (!cached) return null;
+    const key = getCacheKey(country, region);
+    const cached = JSON.parse(localStorage.getItem(key) || 'null');
+    if (!cached?.news || !cached?.timestamp) return null;
 
-    const expired = Date.now() - cached.timestamp > CACHE_TTL;
-    if (expired) {
-      localStorage.removeItem(getCacheKey(lang));
+    const age = Date.now() - cached.timestamp;
+    if (age > CACHE_STALE_TTL) {
+      localStorage.removeItem(key);
       return null;
     }
 
-    return cached.news;
+    return {
+      news: cached.news,
+      timestamp: cached.timestamp,
+      isFresh: age <= CACHE_TTL,
+    };
   } catch {
     return null;
   }
 }
 
-function setCachedNews(lang, news) {
+function setCachedNews(country, region, news) {
   try {
     localStorage.setItem(
-      getCacheKey(lang),
-      JSON.stringify({
-        timestamp: Date.now(),
-        news,
-      })
+      getCacheKey(country, region),
+      JSON.stringify({ timestamp: Date.now(), news })
     );
   } catch {
-    // Ignore cache write failures.
+    // News still works if local storage is unavailable.
   }
+}
+
+function getSavedRegion(country) {
+  try {
+    const saved = localStorage.getItem(`smarty-news-region-${country}`) || '';
+    return (NEWS_REGIONS[country] || []).includes(saved) ? saved : '';
+  } catch {
+    return '';
+  }
+}
+
+function formatUpdatedAt(value) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(parsed);
+}
+
+function formatPublishedAt(value) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  const minutes = Math.max(1, Math.round((Date.now() - parsed.getTime()) / 60000));
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return days < 7
+    ? `${days}d ago`
+    : new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(parsed);
 }
 
 function NewsSkeleton() {
   return (
-    <div className="news-card skeleton-card">
+    <div className="news-card skeleton-card" aria-hidden="true">
       <div className="skeleton-image" />
       <div className="news-card-body">
         <div className="skeleton-line small" />
@@ -56,52 +98,48 @@ function NewsSkeleton() {
   );
 }
 
-const NewsCard = memo(function NewsCard({
-  article,
-  index,
-  saved,
-  onToggleSave,
-  onShare,
-}) {
+const NewsCard = memo(function NewsCard({ article, index, saved, onToggleSave, onShare }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const hasImage = Boolean(article.image_link) && !imageFailed;
+  const publishedAt = formatPublishedAt(article.published_at);
+
   return (
-    <article className={`news-card ${index === 0 ? 'featured' : ''}`}>
-      {article.image_link ? (
+    <article className="news-card">
+      {hasImage ? (
         <img
           src={article.image_link}
-          alt={article.title || 'News article'}
-          loading={index < 2 ? 'eager' : 'lazy'}
+          alt=""
+          loading={index < 3 ? 'eager' : 'lazy'}
           decoding="async"
-          fetchpriority={index < 2 ? 'high' : 'auto'}
+          fetchPriority={index < 3 ? 'high' : 'auto'}
+          onError={() => setImageFailed(true)}
         />
       ) : (
-        <div className="missing-news-image">
-          {article.source || article.section || 'Latest News'}
+        <div className="missing-news-image" aria-hidden="true">
+          <span>{article.section || 'Latest'}</span>
         </div>
       )}
 
       <div className="news-card-body">
-        <span className="section-label">
-          {article.source || article.section}
-        </span>
+        <div className="news-card-meta">
+          <span className="section-label">{article.section || 'News'}</span>
+          {publishedAt && <time dateTime={article.published_at}>{publishedAt}</time>}
+        </div>
 
         <h3>{article.title || 'Untitled news'}</h3>
-
-        <p>{article.summary || 'No summary available.'}</p>
+        <p>{article.summary || `Current reporting from ${article.source || 'this source'}.`}</p>
+        <span className="news-card-source">{article.source || 'News source'}</span>
 
         <div className="news-actions">
-          <a
-            href={article.news_link}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Read
+          <a href={article.news_link} target="_blank" rel="noreferrer">
+            Read story
           </a>
-
-          <button onClick={() => onToggleSave(article)}>
+          <button type="button" onClick={() => onToggleSave(article)}>
             {saved ? 'Saved' : 'Save'}
           </button>
-
-          <button onClick={() => onShare(article)}>Share</button>
+          <button type="button" onClick={() => onShare(article)}>
+            Share
+          </button>
         </div>
       </div>
     </article>
@@ -121,9 +159,173 @@ const SectionTab = memo(function SectionTab({ section, active, onSelect }) {
   );
 });
 
+const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSection }) {
+  if (!summary) return null;
+
+  return (
+    <section className="news-daily-brief" aria-labelledby="daily-brief-title">
+      <div className="news-brief-lead">
+        <div className="news-brief-copy">
+          <span className="news-brief-eyebrow">{summary.eyebrow || "Today's briefing"}</span>
+          <h2 id="daily-brief-title">
+            {summary.title || `${locationLabel} at a glance`}
+          </h2>
+          <p>{summary.overview}</p>
+
+          <dl className="news-brief-stats">
+            <div>
+              <dt>Stories analyzed</dt>
+              <dd>{summary.storyCount || 0}</dd>
+            </div>
+            <div>
+              <dt>Sources</dt>
+              <dd>{summary.sourceCount || 0}</dd>
+            </div>
+            <div>
+              <dt>Coverage areas</dt>
+              <dd>{summary.sectionCount || summary.sectionDigests?.length || 0}</dd>
+            </div>
+          </dl>
+
+          <p className="news-analysis-scope">
+            <span aria-hidden="true" />
+            {summary.analysisStatement || 'The full story collection is included in this digest.'}
+          </p>
+        </div>
+
+        {summary.highlights?.length > 0 && (
+          <div className="news-brief-highlights">
+            <span>Leading developments</span>
+            <ol>
+              {summary.highlights.slice(0, 4).map((highlight, index) => (
+                <li key={highlight.id || highlight.news_link || `${highlight.title}-${index}`}>
+                  <a href={highlight.news_link} target="_blank" rel="noreferrer">
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                    <span className="news-brief-story-copy">
+                      <strong>{highlight.title}</strong>
+                      <small>{highlight.source || highlight.section}</small>
+                    </span>
+                    <i aria-hidden="true">↗</i>
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+
+      <div className="news-brief-insight-grid">
+        {summary.keyTakeaways?.length > 0 ? (
+          <div className="news-brief-takeaways">
+            <header>
+              <span className="news-brief-section-kicker">Today’s summary</span>
+              <h3>What happened today</h3>
+            </header>
+            <ol>
+              {summary.keyTakeaways.map((takeaway, index) => {
+                const sources = [...new Set(
+                  (takeaway.stories || []).map((story) => story.source).filter(Boolean)
+                )].slice(0, 3);
+                return (
+                  <li key={`${takeaway.title}-${index}`}>
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                    <div>
+                      <strong>{takeaway.title}</strong>
+                      <p>{takeaway.summary}</p>
+                      {sources.length > 0 && <small>{sources.join(' · ')}</small>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        ) : summary.keyThemes?.length > 0 ? (
+          <div className="news-brief-themes">
+            <div>
+              <span className="news-brief-section-kicker">Signals across the day</span>
+              <h3>The themes shaping today’s coverage</h3>
+            </div>
+            <ul>
+              {summary.keyThemes.map((theme) => (
+                <li key={theme.label}>
+                  <strong>{theme.label}</strong>
+                  <span>{theme.storyCount} {theme.storyCount === 1 ? 'story' : 'stories'}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {summary.coverageBreakdown?.length > 0 && (
+          <div className="news-coverage-map" aria-label="Coverage distribution">
+            <header>
+              <span className="news-brief-section-kicker">Coverage balance</span>
+              <h3>Stories by section</h3>
+            </header>
+            <div className="news-coverage-rows">
+              {summary.coverageBreakdown.map((item) => (
+                <div key={item.section}>
+                  <span>{item.section}</span>
+                  <div aria-hidden="true">
+                    <i style={{ width: `${Math.max(4, item.share)}%` }} />
+                  </div>
+                  <strong>{item.storyCount}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {summary.sectionDigests?.length > 0 && (
+        <div className="news-section-digest">
+          <header>
+            <span className="news-brief-section-kicker">The deeper read</span>
+            <h3>The whole day, in a few minutes</h3>
+            <p>Each summary considers every story in that coverage area. Open a section only when you want the full reporting.</p>
+          </header>
+
+          <div className="news-section-digest-grid">
+            {summary.sectionDigests.map((digest, index) => (
+              <article key={digest.section} className="news-section-digest-card">
+                <div className="news-digest-card-topline">
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <strong>{digest.section}</strong>
+                  <small>
+                    {digest.storyCount} {digest.storyCount === 1 ? 'story' : 'stories'}
+                    {' · '}
+                    {digest.sourceCount} {digest.sourceCount === 1 ? 'source' : 'sources'}
+                  </small>
+                </div>
+
+                <p>{digest.summary}</p>
+
+                {digest.themes?.length > 0 && (
+                  <div className="news-digest-themes" aria-label={`${digest.section} themes`}>
+                    {digest.themes.slice(0, 3).map((theme) => (
+                      <span key={theme.label}>{theme.label}</span>
+                    ))}
+                  </div>
+                )}
+
+                <button type="button" onClick={() => onSelectSection(digest.section)}>
+                  Explore {digest.section.toLowerCase()} stories
+                  <span aria-hidden="true">→</span>
+                </button>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+});
+
 export default function NewsPage() {
-  const [news, setNews] = useState({});
-  const [language, setLanguage] = useState('english');
+  const initialCountry = useMemo(() => getDefaultNewsCountry(), []);
+  const [country, setCountry] = useState(initialCountry);
+  const [region, setRegion] = useState(() => getSavedRegion(initialCountry));
+  const [newsData, setNewsData] = useState(null);
   const [search, setSearch] = useState('');
   const [selectedSection, setSelectedSection] = useState('All');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -137,149 +339,118 @@ export default function NewsPage() {
   const [lastUpdated, setLastUpdated] = useState('');
   const [fromCache, setFromCache] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
   const loaderRef = useRef(null);
+  const newsStoriesRef = useRef(null);
   const requestIdRef = useRef(0);
   const mountedRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
-
     return () => {
       mountedRef.current = false;
       requestIdRef.current += 1;
     };
   }, []);
 
-  const fetchNews = useCallback(async (lang = language, forceRefresh = false) => {
-    setError('');
-    setVisibleCount(PAGE_SIZE);
-
-    if (!mountedRef.current) return;
-
-    const cachedNews = getCachedNews(lang);
-
-    if (cachedNews && !forceRefresh) {
-      if (!mountedRef.current) return;
-      setNews(cachedNews);
-      setFromCache(true);
-      setLoading(false);
-      setLastUpdated(new Date().toLocaleString());
-      return;
-    }
-
+  const fetchNews = useCallback(async (targetCountry, targetRegion, forceRefresh = false) => {
+    const cached = getCachedNews(targetCountry, targetRegion);
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    setError('');
+    setRefreshing(false);
+    setVisibleCount(PAGE_SIZE);
 
-    setLoading(true);
-    setFromCache(false);
+    if (cached) {
+      setNewsData(cached.news);
+      setFromCache(true);
+      setLastUpdated(formatUpdatedAt(cached.news.generatedAt || cached.timestamp));
+      setLoading(false);
+      if (cached.isFresh && !forceRefresh) return;
+    } else {
+      setFromCache(false);
+    }
+
+    setLoading(!cached && !forceRefresh);
+    setRefreshing(Boolean(cached) || forceRefresh);
 
     try {
-      const data = await newsApi.getLatestNews(lang);
+      const data = await newsApi.getLatestNews({
+        country: targetCountry,
+        region: targetRegion,
+        lang: 'english',
+      });
 
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
-      setNews(data);
-      setCachedNews(lang, data);
-      setLastUpdated(new Date().toLocaleString());
-    } catch (err) {
+      setNewsData(data);
+      setCachedNews(targetCountry, targetRegion, data);
+      setFromCache(data.cacheStatus === 'stale-cache');
+      setLastUpdated(formatUpdatedAt(data.generatedAt || Date.now()));
+      if (data.notice) setError(data.notice);
+    } catch (fetchError) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
-      if (lang !== 'english') {
-        try {
-          const fallbackCached = getCachedNews('english');
-
-          if (fallbackCached && !forceRefresh) {
-            setNews(fallbackCached);
-            setFromCache(true);
-            setSelectedSection('All');
-            setLastUpdated(new Date().toLocaleString());
-            setError(`${lang.toUpperCase()} news is unavailable right now. Showing English news instead.`);
-            return;
-          }
-
-          const fallbackData = await newsApi.getLatestNews('english');
-
-          if (!mountedRef.current || requestId !== requestIdRef.current) return;
-
-          setNews(fallbackData);
-          setCachedNews('english', fallbackData);
-          setFromCache(false);
-          setSelectedSection('All');
-          setLastUpdated(new Date().toLocaleString());
-          setError(`${lang.toUpperCase()} news is unavailable right now. Showing English news instead.`);
-          return;
-        } catch (fallbackErr) {
-          if (mountedRef.current) {
-            setError(
-              fallbackErr.message ||
-                err.message ||
-                'Failed to load news. Please try again later.'
-            );
-          }
-          return;
-        }
-      }
-
-      if (mountedRef.current) {
-        setError(err.message || 'Failed to load news. Please try again later.');
-      }
+      setError(
+        cached
+          ? 'Could not refresh right now. Your latest saved briefing is still available.'
+          : fetchError.message || 'Could not load current news. Please try again.'
+      );
     } finally {
       if (mountedRef.current && requestId === requestIdRef.current) {
         setLoading(false);
+        setRefreshing(false);
       }
     }
-  }, [language]);
+  }, []);
 
   useEffect(() => {
-    fetchNews(language);
-  }, [fetchNews, language]);
+    fetchNews(country, region);
+  }, [country, fetchNews, region]);
 
+  const regionOptions = useMemo(() => NEWS_REGIONS[country] || [], [country]);
   const sections = useMemo(() => {
-    return Object.entries(news).filter(([, value]) => Array.isArray(value));
-  }, [news]);
-
-  const sectionNames = useMemo(() => {
-    return ['All', ...sections.map(([name]) => name)];
-  }, [sections]);
-
+    const sectionMap = newsData?.sections || {};
+    return Object.entries(sectionMap).filter(([, items]) => Array.isArray(items) && items.length);
+  }, [newsData]);
+  const sectionNames = useMemo(() => ['All', ...sections.map(([name]) => name)], [sections]);
   const articles = useMemo(() => {
-    let allArticles = sections.flatMap(([section, items]) =>
-      items.map((item) => ({ ...item, section }))
+    let nextArticles = sections.flatMap(([sectionName, items]) =>
+      items.map((item) => ({ ...item, section: item.section || sectionName }))
     );
 
     if (selectedSection !== 'All') {
-      allArticles = allArticles.filter(
-        (item) => item.section === selectedSection
+      nextArticles = nextArticles.filter((item) => item.section === selectedSection);
+    }
+
+    const query = search.trim().toLowerCase();
+    if (query) {
+      nextArticles = nextArticles.filter((item) =>
+        `${item.title || ''} ${item.summary || ''} ${item.section || ''} ${item.source || ''}`
+          .toLowerCase()
+          .includes(query)
       );
     }
 
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-
-      allArticles = allArticles.filter((item) => {
-        const text = `${item.title || ''} ${item.summary || ''} ${item.section || ''}`.toLowerCase();
-        return text.includes(q);
-      });
-    }
-
-    return allArticles;
-  }, [sections, selectedSection, search]);
-
-  const visibleArticles = useMemo(() => {
-    return articles.slice(0, visibleCount);
-  }, [articles, visibleCount]);
-
+    return nextArticles;
+  }, [search, sections, selectedSection]);
+  const visibleArticles = useMemo(
+    () => articles.slice(0, visibleCount),
+    [articles, visibleCount]
+  );
   const savedLinks = useMemo(
     () => new Set(saved.map((item) => item.news_link)),
     [saved]
   );
+  const locationLabel = newsData?.location?.label ||
+    NEWS_COUNTRIES.find((item) => item.code === country)?.name ||
+    'Worldwide';
 
   const toggleSave = useCallback((article) => {
     setSaved((currentSaved) => {
       const exists = currentSaved.some((item) => item.news_link === article.news_link);
-
       const updated = exists
         ? currentSaved.filter((item) => item.news_link !== article.news_link)
         : [...currentSaved, article];
@@ -287,7 +458,7 @@ export default function NewsPage() {
       try {
         localStorage.setItem('saved_news', JSON.stringify(updated));
       } catch {
-        // Ignore save write failures.
+        // Keep the in-memory saved state if storage is unavailable.
       }
 
       return updated;
@@ -302,18 +473,18 @@ export default function NewsPage() {
           text: article.summary,
           url: article.news_link,
         });
-      } else {
+      } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(article.news_link);
       }
     } catch {
-      // user cancelled share
+      // Closing the platform share sheet is not an app error.
     }
   }, []);
 
   const renderedArticles = useMemo(
     () => visibleArticles.map((article, index) => (
       <NewsCard
-        key={`${article.news_link}-${index}`}
+        key={article.id || article.news_link || `${article.title}-${index}`}
         article={article}
         index={index}
         saved={savedLinks.has(article.news_link)}
@@ -326,130 +497,195 @@ export default function NewsPage() {
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [language, selectedSection, search]);
+  }, [country, region, search, selectedSection]);
 
   useEffect(() => {
-    if (!loaderRef.current) return;
+    if (!loaderRef.current) return undefined;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, articles.length));
+          setVisibleCount((current) => Math.min(current + PAGE_SIZE, articles.length));
         }
       },
-      { rootMargin: '300px' }
+      { rootMargin: '320px' }
     );
 
     observer.observe(loaderRef.current);
-
     return () => observer.disconnect();
   }, [articles.length]);
 
-  const handleSearchChange = useCallback((e) => {
-    setSearch(e.target.value);
-  }, []);
-
-  const handleLanguageChange = useCallback((e) => {
-    setLanguage(e.target.value);
+  const handleCountryChange = useCallback((event) => {
+    const nextCountry = event.target.value;
+    setCountry(nextCountry);
+    setRegion('');
+    setNewsData(null);
     setSelectedSection('All');
+    setSearch('');
+    try {
+      localStorage.setItem('smarty-news-country', nextCountry);
+    } catch {
+      // Continue with an in-memory selection.
+    }
   }, []);
 
-  const handleSectionSelect = useCallback((section) => {
+  const handleRegionChange = useCallback((event) => {
+    const nextRegion = event.target.value;
+    setRegion(nextRegion);
+    setNewsData(null);
+    setSelectedSection('All');
+    try {
+      localStorage.setItem(`smarty-news-region-${country}`, nextRegion);
+    } catch {
+      // Continue with an in-memory selection.
+    }
+  }, [country]);
+
+  const handleBriefSectionSelect = useCallback((section) => {
     setSelectedSection(section);
+    requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      newsStoriesRef.current?.scrollIntoView({
+        behavior: reduceMotion ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    });
   }, []);
-
-  const handleRefreshNews = useCallback(() => {
-    fetchNews(language, true);
-  }, [fetchNews, language]);
 
   return (
     <section className="news-page">
       <div className="news-hero">
         <div>
-          <span className="news-kicker">News</span>
-          <h1>News, without the noise.</h1>
-          <p>Fresh stories across technology, science, world events, and more.</p>
-
+          <span className="news-kicker">Daily intelligence</span>
+          <h1>Know what matters, where it matters.</h1>
+          <p>Choose a country or state for a focused daily briefing, then explore every story.</p>
           {lastUpdated && (
-            <span className="last-updated">Last updated: {lastUpdated}</span>
+            <span className="last-updated">Updated at {lastUpdated}</span>
           )}
         </div>
 
         <button
           type="button"
           className="refresh-news-btn"
-          onClick={handleRefreshNews}
-          disabled={loading}
-          aria-label="Refresh news"
+          onClick={() => fetchNews(country, region, true)}
+          disabled={loading || refreshing}
+          aria-label="Refresh current news"
         >
-          Refresh
+          {refreshing ? 'Refreshing' : 'Refresh'}
         </button>
       </div>
 
-      <div className="news-controls">
-        <input
-          type="search"
-          aria-label="Search news"
-          placeholder="Search news..."
-          value={search}
-          onChange={handleSearchChange}
-        />
+      <div className="news-controls news-location-controls">
+        <label className="news-search-control">
+          <span>Search</span>
+          <input
+            type="search"
+            aria-label="Search current news"
+            placeholder={`Search ${locationLabel} news`}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
 
-        <select
-          aria-label="News language"
-          value={language}
-          onChange={handleLanguageChange}
-        >
-          {LANGUAGES.map((lang) => (
-            <option key={lang} value={lang}>
-              {lang.toUpperCase()}
-            </option>
-          ))}
-        </select>
+        <label>
+          <span>Country</span>
+          <select aria-label="News country" value={country} onChange={handleCountryChange}>
+            {NEWS_COUNTRIES.map((item) => (
+              <option key={item.code} value={item.code}>{item.name}</option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <span>State or region</span>
+          <select
+            aria-label="News state or region"
+            value={region}
+            onChange={handleRegionChange}
+            disabled={!regionOptions.length}
+          >
+            <option value="">{regionOptions.length ? 'All states and regions' : 'Countrywide'}</option>
+            {regionOptions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
-      {fromCache && !loading && (
-        <p className="cache-note">Showing cached results</p>
+      {(fromCache || newsData?.notice) && !loading && (
+        <p className="cache-note">
+          {newsData?.notice || 'Showing your latest saved briefing.'}
+        </p>
       )}
 
-      {!loading && !error && sectionNames.length > 1 && (
-        <div className="section-tabs">
-          {sectionNames.map((section) => (
-            <SectionTab
-              key={section}
-              section={section}
-              active={selectedSection === section}
-              onSelect={handleSectionSelect}
-            />
-          ))}
-        </div>
+      {error && newsData && (
+        <p className="news-inline-notice" role="status">{error}</p>
       )}
 
       {loading && (
         <div className="news-grid">
-          {Array.from({ length: 9 }).map((_, index) => (
-            <NewsSkeleton key={index} />
-          ))}
+          {Array.from({ length: 6 }).map((_, index) => <NewsSkeleton key={index} />)}
         </div>
       )}
 
-      {error && <p className="news-status error">{error}</p>}
-
-      {!loading && !error && visibleArticles.length === 0 && (
-        <p className="news-status">No news found.</p>
+      {!loading && !newsData && error && (
+        <div className="news-retry" role="alert">
+          <h2>Today’s briefing is unavailable.</h2>
+          <p>{error}</p>
+          <button type="button" onClick={() => fetchNews(country, region, true)}>
+            Try again
+          </button>
+        </div>
       )}
 
-      {!loading && !error && visibleArticles.length > 0 && (
+      {!loading && newsData && (
         <>
-          <div className="news-grid">
-            {renderedArticles}
-          </div>
+          <DailyBrief
+            summary={newsData.dailySummary}
+            locationLabel={locationLabel}
+            onSelectSection={handleBriefSectionSelect}
+          />
 
-          <div ref={loaderRef} className="scroll-loader">
-            {visibleCount < articles.length
-              ? 'Loading more news...'
-              : 'You reached the end'}
-          </div>
+          <div ref={newsStoriesRef} className="news-story-anchor" aria-hidden="true" />
+
+          {sectionNames.length > 1 && (
+            <nav className="section-tabs" aria-label="News sections">
+              {sectionNames.map((section) => (
+                <SectionTab
+                  key={section}
+                  section={section}
+                  active={selectedSection === section}
+                  onSelect={setSelectedSection}
+                />
+              ))}
+            </nav>
+          )}
+
+          {visibleArticles.length > 0 ? (
+            <>
+              <div className="news-grid">{renderedArticles}</div>
+              <div ref={loaderRef} className="scroll-loader">
+                {visibleCount < articles.length ? 'Loading more stories' : 'You are up to date'}
+              </div>
+            </>
+          ) : (
+            <p className="news-status">No stories match this search.</p>
+          )}
+
+          <p className="news-provider-note">
+            {newsData.sources?.length > 0 && (
+              <>
+                News discovery provided by{' '}
+                {newsData.sources.map((source, index) => (
+                  <span key={source.url || source.name}>
+                    {index > 0 ? ', ' : ''}
+                    <a href={source.url} target="_blank" rel="noreferrer">{source.name}</a>
+                  </span>
+                ))}.
+              </>
+            )}{' '}
+            {country === 'GLOBAL' && 'Worldwide also includes Hacker News and Spaceflight News.'}
+          </p>
         </>
       )}
     </section>

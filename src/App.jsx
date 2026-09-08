@@ -24,7 +24,6 @@ import {
   subscribeChatSocket,
 } from './api/chatSocket';
 import { getUserScopedStorageKey } from './lib/userScopedStorage';
-import { startSocialLogin } from './lib/cognito';
 
 import JoinRoomPage from './pages/JoinRoomPage';
 import Booksinfo from './pages/Booksinfo';
@@ -55,6 +54,7 @@ import AdminModerationPage from './pages/AdminModerationPage';
 import { isAdminUser } from './lib/adminAccess';
 import './styles/production-pages.css';
 import './styles/ipad.css';
+import './styles/premium-theme.css';
 
 const GLOBAL_PULL_REFRESH_RATIO = 0.4;
 
@@ -65,37 +65,6 @@ function hasStoredAuthToken() {
     localStorage.getItem('idToken') ||
     sessionStorage.getItem('eduscroll_access_token')
   );
-}
-
-async function startGoogleProfileSignIn(redirectPath = '') {
-  try {
-    const currentPath = `${window.location.pathname || '/'}${window.location.search || ''}${window.location.hash || ''}`;
-
-    const pendingInviteCode = getPendingRoomInviteCode();
-
-    const inviteRedirectPath = pendingInviteCode
-      ? `/rooms/invite/${encodeURIComponent(pendingInviteCode)}`
-      : '';
-
-    const finalRedirectPath = (
-      redirectPath ||
-      inviteRedirectPath ||
-      currentPath ||
-      '/profile'
-    );
-
-    sessionStorage.setItem('smarty-post-login-redirect', finalRedirectPath);
-    localStorage.setItem('smarty-post-login-redirect', finalRedirectPath);
-
-    if (pendingInviteCode) {
-      sessionStorage.setItem('smarty-resume-room-invite', 'true');
-      localStorage.setItem('smarty-resume-room-invite', 'true');
-    }
-
-    await startSocialLogin('Google', finalRedirectPath);
-  } catch (error) {
-    console.error('Google sign-in failed:', error);
-  }
 }
 
 function PageLoader() {
@@ -142,14 +111,24 @@ function AppOpeningScreen({ leaving = false, continuation = false }) {
 }
 
 function OAuthCompletionPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, restoreSession } = useAuth();
   const navigate = useNavigate();
   const [timedOut, setTimedOut] = useState(false);
+  const retriedRef = useRef(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setTimedOut(true), 9000);
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (loading || user || retriedRef.current) return;
+
+    retriedRef.current = true;
+    restoreSession({ attempts: 8 }).catch((error) => {
+      console.error('OAuth session recovery failed:', error);
+    });
+  }, [loading, restoreSession, user]);
 
   if (user) {
     const storedTarget =
@@ -246,26 +225,10 @@ class RouteErrorBoundary extends Component {
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
-  const shouldGoogleSignIn = location.pathname === '/profile' || location.pathname.startsWith('/profile/');
-  const isReallyAuthenticated = Boolean(user);
 
-  useEffect(() => {
-    if (loading || isReallyAuthenticated || !shouldGoogleSignIn) return;
+  if (loading) return <PageLoader />;
 
-    const pendingInviteCode = getPendingRoomInviteCode();
-
-startGoogleProfileSignIn(
-  pendingInviteCode
-    ? `/rooms/invite/${encodeURIComponent(pendingInviteCode)}`
-    : ''
-);
-  }, [loading, isReallyAuthenticated, shouldGoogleSignIn]);
-
-  if (loading || (!isReallyAuthenticated && shouldGoogleSignIn)) {
-    return <PageLoader />;
-  }
-
-  return isReallyAuthenticated ? children : <Navigate to="/login" replace state={{ from: location }} />;
+  return user ? children : <Navigate to="/login" replace state={{ from: location }} />;
 }
 
 function AdminRoute({ children }) {
@@ -1049,9 +1012,9 @@ useEffect(() => {
               <button
                 type="button"
                 className="quick-icon-link"
-                aria-label={user ? 'Profile' : 'Sign in with Google'}
-                title={user ? 'Profile' : 'Sign in with Google'}
-                onClick={async (event) => {
+                aria-label={user ? 'Profile' : 'Sign in'}
+                title={user ? 'Profile' : 'Sign in'}
+                onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
 
@@ -1060,7 +1023,7 @@ useEffect(() => {
                     return;
                   }
 
-                  await startGoogleProfileSignIn('/profile');
+                  navigate('/login', { state: { from: '/profile' } });
                 }}
               >
                 <CircleUserRound size={21} strokeWidth={2.15} />
@@ -1903,11 +1866,11 @@ function ReminderPopupStyles() {
   color: rgba(248, 250, 252, 0.92);
   padding: 8px;
   border-radius: 999px;
-  background: rgba(2, 6, 23, 0.42);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: linear-gradient(160deg, rgba(10, 21, 32, 0.78), rgba(3, 9, 16, 0.68));
+  border: 0;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.035);
+  backdrop-filter: blur(22px) saturate(130%);
+  -webkit-backdrop-filter: blur(22px) saturate(130%);
 
   position: relative;
   z-index: 3001;
@@ -1925,9 +1888,9 @@ function ReminderPopupStyles() {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: rgba(2, 6, 23, 0.9) !important;
-        border: 1px solid rgba(15, 23, 42, 0.95) !important;
-        box-shadow: 0 12px 26px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+        background: rgba(143, 184, 198, 0.075) !important;
+        border: 0 !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.035) !important;
         color: rgba(248, 250, 252, 0.96) !important;
         padding: 0;
         cursor: pointer;
@@ -1942,8 +1905,8 @@ function ReminderPopupStyles() {
       .quick-icon-link:hover,
       button.quick-icon-link:hover,
       a.quick-icon-link:hover {
-        background: rgba(15, 23, 42, 0.98) !important;
-        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+        background: rgba(143, 198, 214, 0.14) !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.05) !important;
         transform: translateY(-1px);
       }
 
@@ -1989,8 +1952,10 @@ function ReminderPopupStyles() {
 }
 
         .topbar-row {
-          min-height: 58px;
-          gap: 8px;
+          min-height: 0;
+          flex-direction: row;
+          align-items: center;
+          gap: 6px;
         }
 
         .brand-logo {
@@ -2012,14 +1977,16 @@ function ReminderPopupStyles() {
           height: 38px;
           min-width: 38px;
           border-radius: 12px;
-          background: rgba(2, 6, 23, 0.92) !important;
-          border: 1px solid rgba(15, 23, 42, 0.95) !important;
-          box-shadow: 0 12px 26px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+          background: rgba(143, 184, 198, 0.085) !important;
+          border: 0 !important;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.035) !important;
           color: rgba(248, 250, 252, 0.96) !important;
         }
 
         .brand-actions {
-          gap: 8px;
+          flex-direction: row;
+          gap: 6px;
+          padding: 6px;
         }
 
         .topbar-create-btn {
