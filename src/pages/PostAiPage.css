@@ -1018,7 +1018,11 @@
 .post-ai-status button:focus-visible,
 .post-ai-prompts button:focus-visible,
 .post-ai-form textarea:focus-visible,
-.post-ai-form button:focus-visible {
+.post-ai-form button:focus-visible,
+.post-ai-deeper-toggle:focus-visible,
+.post-ai-premium-gate button:focus-visible,
+.post-ai-premium-close:focus-visible,
+.post-ai-premium-done:focus-visible {
   outline: 2px solid rgba(var(--post-ai-accent-rgb), 0.82);
   outline-offset: 3px;
 }

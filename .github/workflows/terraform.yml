@@ -17,6 +17,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Use Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test news service
+        working-directory: smarty-terraform/lambda-src/news
+        run: python -m unittest -v test_lambda_function.py
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 

@@ -132,27 +132,27 @@
     min-height: 44px;
   }
 
-  /* Bottom navigation is easier to reach and no longer masks right-side UI. */
+  /* Keep navigation as a compact right-side rail on iPad. */
   .topbar {
     top: auto !important;
-    right: 50% !important;
+    right: max(12px, env(safe-area-inset-right)) !important;
     bottom: calc(12px + env(safe-area-inset-bottom)) !important;
     left: auto !important;
-    transform: translateX(50%) !important;
+    transform: none !important;
   }
 
   .topbar-row {
     width: auto !important;
     min-height: 0 !important;
-    flex-direction: row !important;
-    align-items: center !important;
-    justify-content: center !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    justify-content: flex-end !important;
   }
 
   .brand-actions {
-    flex-direction: row !important;
+    flex-direction: column !important;
     align-items: center !important;
-    justify-content: center !important;
+    justify-content: flex-end !important;
     gap: 8px !important;
     padding: 7px !important;
   }
@@ -169,10 +169,10 @@
   }
 
   .menu-panel {
-    right: 0 !important;
-    bottom: calc(100% + 12px) !important;
+    right: calc(100% + 12px) !important;
+    bottom: 0 !important;
     width: min(272px, calc(100vw - 32px)) !important;
-    max-height: min(620px, calc(100dvh - 116px)) !important;
+    max-height: min(620px, calc(100dvh - 32px)) !important;
   }
 
   /* Shared content grids */

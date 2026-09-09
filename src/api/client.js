@@ -159,6 +159,7 @@ const HACKER_NEWS_BASE_URL =
 const SPACEFLIGHT_NEWS_BASE_URL =
   import.meta.env.VITE_SPACEFLIGHT_NEWS_BASE_URL ||
   'https://api.spaceflightnewsapi.net/v4';
+const NEWS_API_TIMEOUT = Number(import.meta.env.VITE_NEWS_API_TIMEOUT || 25000);
 
 const getStoredToken = () => {
   try {
@@ -335,11 +336,104 @@ const hasLiveAuthSession = async () => {
   }
 };
 
+const isSafeNewsUrl = (value) => {
+  try {
+    const parsed = new URL(String(value || ''));
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+};
+
+const normalizeNewsArticle = (item, sectionName = 'World', index = 0) => {
+  const title = String(item?.title || '').replace(/\s+/g, ' ').trim();
+  const newsLink = String(item?.news_link || item?.url || '').trim();
+  if (!title || !isSafeNewsUrl(newsLink)) return null;
+
+  const cleanSection = String(item?.section || sectionName || 'World').trim() || 'World';
+  const imageLink = String(item?.image_link || item?.image_url || '').trim();
+  const source = String(item?.source || item?.news_site || 'News source').trim();
+
+  return {
+    ...item,
+    id: String(item?.id || `${cleanSection}-${index}-${newsLink}`),
+    title,
+    summary: String(item?.summary || '').replace(/\s+/g, ' ').trim(),
+    news_link: newsLink,
+    image_link: isSafeNewsUrl(imageLink) ? imageLink : '',
+    published_at: item?.published_at || '',
+    source,
+    section: cleanSection,
+  };
+};
+
+const articleReference = (article) => ({
+  id: article.id,
+  title: article.title,
+  source: article.source,
+  section: article.section,
+  news_link: article.news_link,
+  published_at: article.published_at,
+});
+
+const buildClientDailySummary = (articles, location) => {
+  const grouped = articles.reduce((result, article) => {
+    (result[article.section] ||= []).push(article);
+    return result;
+  }, {});
+  const sourceCount = new Set(articles.map((article) => article.source).filter(Boolean)).size;
+  const representatives = [];
+  Object.values(grouped).forEach((items) => {
+    if (items[0] && representatives.length < 4) representatives.push(items[0]);
+  });
+  articles.forEach((article) => {
+    if (representatives.length < 4 && !representatives.includes(article)) {
+      representatives.push(article);
+    }
+  });
+  const sentence = (title) => {
+    const cleanTitle = String(title || '').trim();
+    return /[.!?]$/.test(cleanTitle) ? cleanTitle : `${cleanTitle}.`;
+  };
+  const sectionDigests = Object.entries(grouped).map(([section, items]) => ({
+    section,
+    storyCount: items.length,
+    sourceCount: new Set(items.map((item) => item.source).filter(Boolean)).size,
+    summary: items.slice(0, 3).map((item) => sentence(item.title)).join(' '),
+    themes: [],
+    topStories: items.slice(0, 3).map(articleReference),
+  }));
+
+  return {
+    eyebrow: "Today's briefing",
+    title: `The day in ${location.label || 'Worldwide'}`,
+    overview: representatives.map((article) => sentence(article.title)).join(' '),
+    analysisStatement: 'A concise digest of the latest available reporting.',
+    coverageWindow: 'Latest available',
+    highlights: representatives.map(articleReference),
+    storyCount: articles.length,
+    sourceCount,
+    sectionCount: Object.keys(grouped).length,
+    keyTakeaways: representatives.slice(0, 3).map((article) => ({
+      title: article.section,
+      summary: sentence(article.title),
+      stories: [articleReference(article)],
+    })),
+    summaryMode: 'extractive',
+    sectionDigests,
+    coverageBreakdown: sectionDigests.map((digest) => ({
+      section: digest.section,
+      storyCount: digest.storyCount,
+      share: Math.round((digest.storyCount / articles.length) * 100),
+    })),
+  };
+};
+
 export const newsApi = {
-  async getHackerNews(limit = 12) {
+  async getHackerNews(limit = 12, requestOptions = {}) {
     const { data: storyIds } = await axios.get(
       `${HACKER_NEWS_BASE_URL}/topstories.json`,
-      { timeout: API_TIMEOUT }
+      { timeout: API_TIMEOUT, signal: requestOptions.signal }
     );
 
     const ids = Array.isArray(storyIds) ? storyIds.slice(0, limit) : [];
@@ -347,6 +441,7 @@ export const newsApi = {
       ids.map((id) =>
         axios.get(`${HACKER_NEWS_BASE_URL}/item/${id}.json`, {
           timeout: API_TIMEOUT,
+          signal: requestOptions.signal,
         })
       )
     );
@@ -375,12 +470,13 @@ export const newsApi = {
       }));
   },
 
-  async getSpaceflightNews(limit = 12) {
+  async getSpaceflightNews(limit = 12, requestOptions = {}) {
     const { data } = await axios.get(
       `${SPACEFLIGHT_NEWS_BASE_URL}/articles/`,
       {
         params: { limit },
         timeout: API_TIMEOUT,
+        signal: requestOptions.signal,
       }
     );
 
@@ -405,41 +501,63 @@ export const newsApi = {
     const country = String(normalizedOptions.country || 'GLOBAL').trim().toUpperCase();
     const region = String(normalizedOptions.region || '').trim();
 
-    const requests = [
+    const primaryResult = await Promise.allSettled([
       axios.get(`${NEWS_API_BASE_URL}/latest`, {
         params: { lang, country, ...(region ? { region } : {}) },
-        timeout: API_TIMEOUT,
+        timeout: NEWS_API_TIMEOUT,
+        signal: normalizedOptions.signal,
       }),
-    ];
-
-    const [primaryResult] = await Promise.allSettled(requests);
+    ]).then(([result]) => result);
     const primaryPayload = primaryResult.status === 'fulfilled'
       ? primaryResult.value.data
       : null;
     const sections = {};
+    let usedBrowserFallback = false;
+    const browserFallbackSources = [];
 
     const addSection = (sectionName, items) => {
       if (!Array.isArray(items) || !items.length) return;
 
       const cleanSection = String(sectionName || 'World').trim() || 'World';
-      sections[cleanSection] = [
-        ...(sections[cleanSection] || []),
-        ...items.map((item) => ({
-          ...item,
-          section: item.section || cleanSection,
-          source: item.source || 'News source',
-        })),
-      ];
+      const normalizedItems = items
+        .map((item, index) => normalizeNewsArticle(item, cleanSection, index))
+        .filter(Boolean);
+      if (!normalizedItems.length) return;
+      sections[cleanSection] = [...(sections[cleanSection] || []), ...normalizedItems];
     };
 
     if (primaryPayload && (!primaryPayload.status || primaryPayload.status === 200)) {
-      const primarySections = primaryPayload.sections && typeof primaryPayload.sections === 'object'
-        ? primaryPayload.sections
-        : primaryPayload;
+      if (primaryPayload.sections && typeof primaryPayload.sections === 'object') {
+        Object.entries(primaryPayload.sections).forEach(([sectionName, items]) => {
+          addSection(sectionName, items);
+        });
+      } else if (Array.isArray(primaryPayload.articles)) {
+        primaryPayload.articles.forEach((item) => {
+          addSection(item?.section || 'World', [item]);
+        });
+      }
+    }
 
-      Object.entries(primarySections).forEach(([sectionName, items]) => {
-        addSection(sectionName, items);
-      });
+    if (!Object.keys(sections).length && country === 'GLOBAL' && !normalizedOptions.signal?.aborted) {
+      const [hackerResult, spaceResult] = await Promise.allSettled([
+        newsApi.getHackerNews(10, { signal: normalizedOptions.signal }),
+        newsApi.getSpaceflightNews(10, { signal: normalizedOptions.signal }),
+      ]);
+      if (hackerResult.status === 'fulfilled' && hackerResult.value.length) {
+        addSection('Technology', hackerResult.value);
+        browserFallbackSources.push({
+          name: 'Hacker News',
+          url: 'https://news.ycombinator.com/',
+        });
+      }
+      if (spaceResult.status === 'fulfilled' && spaceResult.value.length) {
+        addSection('Science', spaceResult.value);
+        browserFallbackSources.push({
+          name: 'Spaceflight News',
+          url: 'https://spaceflightnewsapi.net/',
+        });
+      }
+      usedBrowserFallback = Object.keys(sections).length > 0;
     }
 
     const seen = new Set();
@@ -462,6 +580,9 @@ export const newsApi = {
     );
 
     if (!articles.length) {
+      if (normalizedOptions.signal?.aborted) {
+        throw new DOMException('News request cancelled.', 'AbortError');
+      }
       const primaryError = primaryResult.status === 'rejected'
         ? primaryResult.reason?.response?.data?.error || primaryResult.reason?.message
         : primaryPayload?.error;
@@ -479,28 +600,17 @@ export const newsApi = {
       label: region || (country === 'GLOBAL' ? 'Worldwide' : country),
     };
     const sources = new Set(articles.map((article) => article.source).filter(Boolean));
-    const fallbackSummary = {
-      eyebrow: "Today's briefing",
-      title: `${location.label || 'Worldwide'} at a glance`,
-      overview: `${articles.length} current stories from ${sources.size} news sources, organized for a faster daily read.`,
-      highlights: articles.slice(0, 5).map((article) => ({
-        id: article.id,
-        title: article.title,
-        source: article.source,
-        section: article.section,
-        news_link: article.news_link,
-      })),
-      storyCount: articles.length,
-      sourceCount: sources.size,
-      leadingSections: Object.keys(sections).slice(0, 3),
-    };
-    const dailySummary = primaryPayload?.dailySummary
+    const fallbackSummary = buildClientDailySummary(articles, location);
+    const dailySummary = primaryPayload?.dailySummary && !usedBrowserFallback
       ? {
           ...primaryPayload.dailySummary,
           storyCount: articles.length,
           sourceCount: sources.size,
         }
       : fallbackSummary;
+    const sourceList = primaryPayload?.sources?.length && !usedBrowserFallback
+      ? primaryPayload.sources
+      : browserFallbackSources;
 
     return {
       status: 200,
@@ -508,10 +618,16 @@ export const newsApi = {
       dailySummary,
       sections,
       articles,
-      sources: primaryPayload?.sources || [],
-      generatedAt: primaryPayload?.generatedAt || new Date().toISOString(),
-      cacheStatus: primaryPayload?.cacheStatus || 'live',
-      notice: primaryPayload?.notice || '',
+      sources: sourceList,
+      generatedAt: usedBrowserFallback
+        ? new Date().toISOString()
+        : primaryPayload?.generatedAt || new Date().toISOString(),
+      cacheStatus: usedBrowserFallback
+        ? 'browser-fallback'
+        : primaryPayload?.cacheStatus || 'live',
+      notice: primaryPayload?.notice || (usedBrowserFallback
+        ? 'Showing worldwide technology and science while the daily briefing service reconnects.'
+        : ''),
     };
   },
 };

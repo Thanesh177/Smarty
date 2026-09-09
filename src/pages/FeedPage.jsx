@@ -773,39 +773,19 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
     if (!root || filteredCatalogTopics.length === 0) return undefined;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    gsap.registerPlugin(ScrollTrigger);
-
     const scroller = root.closest('.snap-feed-page');
     const chapters = Array.from(root.querySelectorAll('.topic-catalog-story-chapter'));
     if (!scroller || chapters.length === 0) return undefined;
 
     let animationFrame = 0;
-    let controlTween = null;
     let resizeFrame = 0;
     let measurements = [];
 
     const measure = () => {
-      measurements.forEach((item) => {
-        item.sceneTween?.kill();
-        item.sceneTween = null;
-        gsap.killTweensOf(item.cards);
-        gsap.set(item.cards, { clearProps: 'opacity,visibility' });
-        gsap.set([...item.accents, ...item.fragments, ...item.shells], { clearProps: 'opacity,visibility,transform,willChange' });
-      });
       const scrollerRect = scroller.getBoundingClientRect();
       measurements = chapters.map((chapter) => {
         const frame = chapter.querySelector('.topic-catalog-story-frame');
-        const stack = chapter.querySelector('.topic-catalog-story-stack');
         const cards = Array.from(chapter.querySelectorAll('.topic-product-card'));
-        const fragments = cards.flatMap((card) => Array.from(card.querySelectorAll(
-          '.topic-product-card-icon, .topic-product-card-index, .topic-product-card-copy, .topic-product-card-arrow',
-        )));
-        const shells = cards
-          .map((card) => card.querySelector('.topic-product-card-surface'))
-          .filter(Boolean);
-        const accents = cards
-          .map((card) => card.querySelector('.topic-product-card-art'))
-          .filter(Boolean);
         const counter = chapter.querySelector('.topic-catalog-story-index');
         const previousControl = chapter.querySelector('[data-catalog-step="-1"]');
         const nextControl = chapter.querySelector('[data-catalog-step="1"]');
@@ -872,143 +852,71 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
 
           card.style.left = `calc(50% + ${columnOffset}px)`;
           card.style.top = `calc(50% + ${rowOffset}px)`;
-          card.style.opacity = '';
-          card.style.visibility = 'visible';
-          card.style.pointerEvents = '';
-          card.style.willChange = 'auto';
-          card.style.transform = '';
           card.style.setProperty('--wall-card-tilt', `${tilt}deg`);
-          card.style.setProperty('--wall-card-delay', `${slot * 48}ms`);
-          card.style.setProperty('--wall-fragment-delay', `${slot * 14}ms`);
+          card.style.setProperty('--wall-card-delay', prefersReducedMotion ? '0ms' : `${slot * 34}ms`);
           card.style.setProperty('--wall-card-depth', depth.toFixed(2));
-          card.style.setProperty('--wall-card-scale', '1');
-          card.style.setProperty('--wall-card-opacity', Math.max(0.82, 1 - depth * 0.055).toFixed(3));
           card.dataset.wallScene = String(Math.floor(index / cardsPerScene));
         });
 
-        stack.style.transform = 'translate3d(0, 0, 0)';
-        frame.style.opacity = '1';
-        frame.style.transform = 'none';
-
-        const item = {
-          accents,
+        return {
           cards,
           cardsPerScene,
           chapter,
-          columns,
           counter,
           displayedIndex: -1,
           frame,
-          fragments,
           lastIndex: Math.max(0, scenes - 1),
-          motionKey: '',
-          pendingIndex: null,
+          lastProgress: -1,
           previousControl,
           nextControl,
-          rows,
-          stack,
-          stackY: gsap.quickSetter(stack, 'y', 'px'),
           startScroll,
           travel,
-          sceneTween: null,
-          shells,
         };
-
-        return item;
       });
     };
 
-    const renderItem = (item, cardPosition, immediate = false) => {
-      const position = Math.max(0, Math.min(item.lastIndex, cardPosition));
-      const lowerScene = Math.floor(position);
-      const upperScene = Math.min(item.lastIndex, lowerScene + 1);
-      const phase = upperScene === lowerScene ? 0 : position - lowerScene;
-      const isTransitioning = !prefersReducedMotion && upperScene !== lowerScene && phase > 0.001;
-      const dominantScene = prefersReducedMotion
-        ? Math.round(position)
-        : (phase < 0.5 ? lowerScene : upperScene);
+    const resolveScene = (item, position) => {
+      if (item.displayedIndex < 0 || prefersReducedMotion) return Math.round(position);
+      let nextScene = item.displayedIndex;
+      while (nextScene < item.lastIndex && position >= nextScene + 0.58) nextScene += 1;
+      while (nextScene > 0 && position <= nextScene - 0.58) nextScene -= 1;
+      return nextScene;
+    };
+
+    const showScene = (item, sceneIndex, immediate = false) => {
+      const dominantScene = Math.max(0, Math.min(item.lastIndex, sceneIndex));
+      if (item.displayedIndex === dominantScene) return;
+
+      item.displayedIndex = dominantScene;
       const focusSlot = Math.floor(item.cardsPerScene / 2);
-      const motionKey = `${lowerScene}:${upperScene}:${dominantScene}:${isTransitioning ? 1 : 0}`;
+      item.cards.forEach((card, index) => {
+        const cardScene = Number(card.dataset.wallScene || 0);
+        const isCurrent = cardScene === dominantScene;
+        card.classList.remove('is-wall-entering', 'is-wall-exiting');
+        card.classList.toggle('is-wall-visible', isCurrent);
+        card.classList.toggle('is-wall-interactive', isCurrent);
+        card.classList.toggle('is-wall-past', cardScene < dominantScene);
+        card.classList.toggle('is-wall-future', cardScene > dominantScene);
+        card.classList.toggle('is-wall-focus', isCurrent && index % item.cardsPerScene === focusSlot);
+        card.tabIndex = isCurrent ? 0 : -1;
+        card.setAttribute('aria-hidden', isCurrent ? 'false' : 'true');
+      });
 
-      if (item.motionKey !== motionKey) {
-        item.motionKey = motionKey;
-        item.cards.forEach((card, index) => {
-          const scene = Number(card.dataset.wallScene || 0);
-          const isOutgoing = isTransitioning && scene === lowerScene;
-          const isIncoming = isTransitioning && scene === upperScene;
-          const isCurrent = !isTransitioning && scene === dominantScene;
-          const isVisible = isOutgoing || isIncoming || isCurrent;
-          const isInteractive = scene === dominantScene;
-          card.style.removeProperty('opacity');
-          card.style.removeProperty('transform');
-          card.style.removeProperty('transform-origin');
-          card.style.removeProperty('will-change');
-          card.classList.toggle('is-wall-visible', isVisible);
-          card.classList.toggle('is-wall-exiting', isOutgoing);
-          card.classList.toggle('is-wall-entering', isIncoming);
-          card.classList.toggle('is-wall-interactive', isInteractive);
-          card.classList.toggle('is-wall-past', scene < dominantScene);
-          card.classList.toggle('is-wall-future', scene > dominantScene);
-          card.classList.toggle(
-            'is-wall-focus',
-            isInteractive && index % item.cardsPerScene === focusSlot,
-          );
-          card.tabIndex = isInteractive ? 0 : -1;
-          card.setAttribute('aria-hidden', isInteractive ? 'false' : 'true');
-        });
-      }
-
-      if (isTransitioning) {
-        const maxDiagonal = Math.max(1, item.rows + item.columns - 2);
-        item.cards.forEach((card, index) => {
-          const scene = Number(card.dataset.wallScene || 0);
-          if (scene !== lowerScene && scene !== upperScene) return;
-          const slot = index % item.cardsPerScene;
-          const column = slot % item.columns;
-          const row = Math.floor(slot / item.columns);
-          const delay = ((row + column) / maxDiagonal) * 0.12;
-          const localPhase = Math.max(0, Math.min(1, (phase - delay) / 0.88));
-          const eased = localPhase ** 3 * (localPhase * (localPhase * 6 - 15) + 10);
-          const isFocus = slot === focusSlot;
-          const restingScale = isFocus ? 1.035 : 1;
-          const configuredOpacity = Number.parseFloat(card.style.getPropertyValue('--wall-card-opacity')) || 1;
-          const restingOpacity = isFocus ? 1 : configuredOpacity;
-          const isOutgoing = scene === lowerScene;
-          const reveal = Math.max(0, Math.min(1, (eased - 0.36) / 0.64));
-          const revealEase = reveal * reveal * (3 - 2 * reveal);
-          const x = isOutgoing ? -18 * eased : 22 * (1 - eased);
-          const y = isOutgoing ? -14 * eased : 18 * (1 - eased);
-          const scale = isOutgoing
-            ? restingScale * (1 - 0.1 * eased)
-            : restingScale * (0.9 + 0.1 * eased);
-          const opacity = isOutgoing ? restingOpacity * (1 - revealEase) : restingOpacity;
-
-          card.style.opacity = opacity.toFixed(4);
-          card.style.transform = `translate3d(calc(-50% + ${x.toFixed(2)}px), calc(-50% + ${y.toFixed(2)}px), 0) scale(${scale.toFixed(4)})`;
-          card.style.transformOrigin = '50% 50%';
-          card.style.willChange = 'transform, opacity';
-        });
-      }
-
-      if (item.displayedIndex !== dominantScene) {
-        item.displayedIndex = dominantScene;
-        if (item.counter) {
-          const visibleTopic = Math.min(item.cards.length, dominantScene * item.cardsPerScene + 1);
-          item.counter.textContent = `${String(visibleTopic).padStart(2, '0')} / ${String(item.cards.length).padStart(2, '0')}`;
-          if (!immediate && !prefersReducedMotion) {
-            gsap.fromTo(item.counter, { y: 4, autoAlpha: 0.55 }, {
-              y: 0,
-              autoAlpha: 1,
-              duration: 0.34,
-              ease: 'power2.out',
-              overwrite: true,
-              clearProps: 'transform,opacity,visibility',
-            });
-          }
+      const firstTopic = dominantScene * item.cardsPerScene + 1;
+      const lastTopic = Math.min(item.cards.length, firstTopic + item.cardsPerScene - 1);
+      if (item.counter) {
+        item.counter.textContent = `${String(firstTopic).padStart(2, '0')}–${String(lastTopic).padStart(2, '0')} / ${String(item.cards.length).padStart(2, '0')}`;
+        item.counter.classList.toggle('is-changing', !immediate);
+        if (!immediate) {
+          window.requestAnimationFrame(() => item.counter?.classList.remove('is-changing'));
         }
-        if (item.previousControl) item.previousControl.disabled = dominantScene <= 0;
-        if (item.nextControl) item.nextControl.disabled = dominantScene >= item.lastIndex;
       }
+      if (item.previousControl) item.previousControl.disabled = dominantScene <= 0;
+      if (item.nextControl) item.nextControl.disabled = dominantScene >= item.lastIndex;
+      item.frame.style.setProperty(
+        '--catalog-shift',
+        `${46 + (item.lastIndex > 0 ? dominantScene / item.lastIndex : 0) * 8}%`,
+      );
     };
 
     const render = (immediate = false) => {
@@ -1019,13 +927,15 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
         const rawProgress = (scrollTop - item.startScroll) / item.travel;
         const railProgress = Math.max(0, Math.min(1, rawProgress));
         const targetPosition = railProgress * item.lastIndex;
+        const targetScene = resolveScene(item, targetPosition);
 
         item.frame.classList.toggle('is-scroll-active', rawProgress >= 0 && rawProgress <= 1);
         item.frame.classList.toggle('is-reduced-motion', prefersReducedMotion);
-        item.frame.style.setProperty('--catalog-progress', railProgress.toFixed(4));
-        item.frame.style.setProperty('--catalog-shift', `${46 + railProgress * 8}%`);
-        item.stackY(prefersReducedMotion ? 0 : (railProgress - 0.5) * 10);
-        renderItem(item, targetPosition, immediate);
+        if (Math.abs(railProgress - item.lastProgress) >= 0.002 || immediate) {
+          item.lastProgress = railProgress;
+          item.frame.style.setProperty('--catalog-progress', railProgress.toFixed(3));
+        }
+        showScene(item, targetScene, immediate);
       });
     };
 
@@ -1054,24 +964,10 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
       const targetScene = Math.max(0, Math.min(item.lastIndex, currentScene + step));
       if (targetScene === currentScene) return;
       const targetScroll = item.startScroll + (targetScene / item.lastIndex) * item.travel;
-      controlTween?.kill();
-      if (prefersReducedMotion) {
-        scroller.scrollTop = targetScroll;
-      } else {
-        const scrollState = { value: scroller.scrollTop };
-        controlTween = gsap.to(scrollState, {
-          value: targetScroll,
-          duration: 0.9,
-          ease: 'power2.inOut',
-          overwrite: true,
-          onUpdate: () => {
-            scroller.scrollTop = scrollState.value;
-          },
-          onComplete: () => {
-            controlTween = null;
-          },
-        });
-      }
+      scroller.scrollTo({
+        top: targetScroll,
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      });
     };
 
     measure();
@@ -1084,19 +980,29 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
       scroller.removeEventListener('scroll', scheduleRender);
       window.removeEventListener('resize', handleResize);
       catalogControls.forEach((control) => control.removeEventListener('click', handleCatalogStep));
-      controlTween?.kill();
       measurements.forEach((item) => {
-        item.sceneTween?.kill();
-        item.sceneTween = null;
-        gsap.killTweensOf(item.cards);
-        gsap.killTweensOf(item.counter);
-        gsap.set(item.cards, { clearProps: 'opacity,visibility,transform,clipPath,filter,willChange' });
-        gsap.set([...item.accents, ...item.fragments, ...item.shells], { clearProps: 'opacity,visibility,transform,willChange' });
+        item.cards.forEach((card) => {
+          card.classList.remove(
+            'is-wall-visible',
+            'is-wall-entering',
+            'is-wall-exiting',
+            'is-wall-interactive',
+            'is-wall-past',
+            'is-wall-future',
+            'is-wall-focus',
+          );
+          card.removeAttribute('data-wall-scene');
+          card.style.removeProperty('left');
+          card.style.removeProperty('top');
+          card.style.removeProperty('--wall-card-tilt');
+          card.style.removeProperty('--wall-card-delay');
+          card.style.removeProperty('--wall-card-depth');
+        });
       });
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
       if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
     };
-  }, [catalogMode, catalogStoryGroups.length, filteredCatalogTopics.length, topicQuery]);
+  }, [catalogMode, filteredCatalogTopics.length]);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -1104,6 +1010,8 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
 
     const story = root.querySelector('.topic-product-story');
     const stage = root.querySelector('.topic-product-stage');
+    const knowledgeMap = root.querySelector('.topic-product-knowledge-map');
+    const knowledgeTrace = root.querySelector('.topic-product-knowledge-trace');
     const assembly = root.querySelector('.topic-product-assembly');
     const signalGrid = root.querySelector('.topic-product-signal-grid');
     const signalHub = root.querySelector('.topic-product-path-hub');
@@ -1230,6 +1138,23 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
           fastScrollEnd: true,
         },
       });
+
+      if (knowledgeMap) {
+        timeline.to(knowledgeMap, {
+          xPercent: 1.8,
+          yPercent: -1.2,
+          scale: 1.025,
+          duration: 0.96,
+          ease: 'none',
+        }, 0);
+      }
+      if (knowledgeTrace) {
+        timeline.to(knowledgeTrace, {
+          strokeDashoffset: -150,
+          duration: 0.96,
+          ease: 'none',
+        }, 0);
+      }
 
       chapters.forEach((chapter, index) => gsap.set(chapter, {
         autoAlpha: index === 0 ? 1 : 0,
@@ -1486,7 +1411,56 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
 
       <div className="topic-product-story">
         <div className="topic-product-stage">
-          <div className="topic-product-space" aria-hidden="true" />
+          <div className="topic-product-space" aria-hidden="true">
+            <div className="topic-product-knowledge-field">
+              <svg
+                className="topic-product-knowledge-map"
+                viewBox="0 0 1000 700"
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <defs>
+                  <linearGradient id="smarty-knowledge-line" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stopColor="#7c99aa" stopOpacity="0.06" />
+                    <stop offset="0.5" stopColor="#89dff3" stopOpacity="0.26" />
+                    <stop offset="1" stopColor="#8da6b6" stopOpacity="0.05" />
+                  </linearGradient>
+                  <radialGradient id="smarty-knowledge-node">
+                    <stop offset="0" stopColor="#b8f1fb" stopOpacity="0.9" />
+                    <stop offset="0.24" stopColor="#70d3e9" stopOpacity="0.42" />
+                    <stop offset="1" stopColor="#70d3e9" stopOpacity="0" />
+                  </radialGradient>
+                </defs>
+                <g className="topic-product-knowledge-lines">
+                  <path d="M92 535 C218 472 292 492 358 405 S492 244 610 323 S760 470 914 188" />
+                  <path d="M162 176 C286 205 294 338 358 405 S540 519 712 546" />
+                  <path d="M358 405 C475 409 532 405 610 323 S720 186 842 116" />
+                  <path d="M610 323 C690 302 772 324 894 392" />
+                  <path d="M238 602 C336 543 436 557 514 502 S626 436 712 546" />
+                </g>
+                <path
+                  className="topic-product-knowledge-trace"
+                  d="M92 535 C218 472 292 492 358 405 S492 244 610 323 S760 470 914 188"
+                />
+                <g className="topic-product-knowledge-nodes">
+                  <g transform="translate(92 535)"><circle r="27" /><circle r="4" /></g>
+                  <g transform="translate(162 176)"><circle r="22" /><circle r="3.5" /></g>
+                  <g transform="translate(358 405)"><circle r="34" /><circle r="5" /></g>
+                  <g transform="translate(514 502)"><circle r="20" /><circle r="3.5" /></g>
+                  <g transform="translate(610 323)"><circle r="42" /><circle r="6" /></g>
+                  <g transform="translate(712 546)"><circle r="24" /><circle r="4" /></g>
+                  <g transform="translate(842 116)"><circle r="20" /><circle r="3.5" /></g>
+                  <g transform="translate(894 392)"><circle r="24" /><circle r="4" /></g>
+                  <g transform="translate(914 188)"><circle r="30" /><circle r="5" /></g>
+                </g>
+              </svg>
+              <div className="topic-product-knowledge-labels">
+                <span>Discover</span>
+                <span>Understand</span>
+                <span>Test</span>
+                <span>Share</span>
+              </div>
+            </div>
+          </div>
           <div className="topic-product-copy">
             <div className="topic-product-chapter">
               <span>A route for curious minds</span>
@@ -1539,10 +1513,15 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
               <Compass size={15} strokeWidth={1.8} />
               <span>Choose your path</span>
             </div>
+            <div className="topic-product-mobile-route" aria-hidden="true">
+              <span><strong>{filteredCatalogTopics.length || DEFAULT_TOPIC_CATALOG.length}</strong> topics</span>
+              <i />
+              <span><strong>{SMARTY_DESTINATIONS.length}</strong> ways to learn</span>
+            </div>
           </div>
 
           <div className="topic-product-scroll-cue" aria-hidden="true">
-            <span>Scroll to assemble</span><i />
+            <span>Scroll to explore</span><i />
           </div>
           <div className="topic-product-catalog-cue" aria-hidden="true">Continue to the catalog</div>
         </div>

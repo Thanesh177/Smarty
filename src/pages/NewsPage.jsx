@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { newsApi } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import {
   NEWS_COUNTRIES,
   NEWS_REGIONS,
@@ -8,7 +9,7 @@ import {
 import './NewsPage.css';
 import './LibraryNewsTheme.css';
 
-const CACHE_PREFIX = 'smarty_location_news_v18_';
+const CACHE_PREFIX = 'smarty_location_news_v19_';
 const CACHE_TTL = 1000 * 60 * 15;
 const CACHE_STALE_TTL = 1000 * 60 * 60 * 48;
 const PAGE_SIZE = 9;
@@ -21,7 +22,11 @@ function getCachedNews(country, region) {
   try {
     const key = getCacheKey(country, region);
     const cached = JSON.parse(localStorage.getItem(key) || 'null');
-    if (!cached?.news || !cached?.timestamp) return null;
+    const hasSections = cached?.news?.sections &&
+      typeof cached.news.sections === 'object' &&
+      Object.values(cached.news.sections).some((items) => Array.isArray(items) && items.length > 0);
+    const hasArticles = Array.isArray(cached?.news?.articles) && cached.news.articles.length > 0;
+    if (!cached?.news || !cached?.timestamp || (!hasSections && !hasArticles)) return null;
 
     const age = Date.now() - cached.timestamp;
     if (age > CACHE_STALE_TTL) {
@@ -131,13 +136,22 @@ const NewsCard = memo(function NewsCard({ article, index, saved, onToggleSave, o
         <span className="news-card-source">{article.source || 'News source'}</span>
 
         <div className="news-actions">
-          <a href={article.news_link} target="_blank" rel="noreferrer">
+          <a href={article.news_link} target="_blank" rel="noopener noreferrer">
             Read story
           </a>
-          <button type="button" onClick={() => onToggleSave(article)}>
+          <button
+            type="button"
+            aria-pressed={saved}
+            aria-label={`${saved ? 'Remove' : 'Save'} ${article.title}`}
+            onClick={() => onToggleSave(article)}
+          >
             {saved ? 'Saved' : 'Save'}
           </button>
-          <button type="button" onClick={() => onShare(article)}>
+          <button
+            type="button"
+            aria-label={`Share ${article.title}`}
+            onClick={() => onShare(article)}
+          >
             Share
           </button>
         </div>
@@ -199,7 +213,7 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
             <ol>
               {summary.highlights.slice(0, 4).map((highlight, index) => (
                 <li key={highlight.id || highlight.news_link || `${highlight.title}-${index}`}>
-                  <a href={highlight.news_link} target="_blank" rel="noreferrer">
+                  <a href={highlight.news_link} target="_blank" rel="noopener noreferrer">
                     <span>{String(index + 1).padStart(2, '0')}</span>
                     <span className="news-brief-story-copy">
                       <strong>{highlight.title}</strong>
@@ -278,7 +292,14 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
       </div>
 
       {summary.sectionDigests?.length > 0 && (
-        <div className="news-section-digest">
+        <details className="news-section-digest">
+          <summary>
+            <span>
+              <strong>Read the section-by-section briefing</strong>
+              <small>{summary.sectionDigests.length} coverage areas</small>
+            </span>
+            <i aria-hidden="true">+</i>
+          </summary>
           <header>
             <span className="news-brief-section-kicker">The deeper read</span>
             <h3>The whole day, in a few minutes</h3>
@@ -315,13 +336,14 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
               </article>
             ))}
           </div>
-        </div>
+        </details>
       )}
     </section>
   );
 });
 
 export default function NewsPage() {
+  const { user } = useAuth();
   const initialCountry = useMemo(() => getDefaultNewsCountry(), []);
   const [country, setCountry] = useState(initialCountry);
   const [region, setRegion] = useState(() => getSavedRegion(initialCountry));
@@ -329,13 +351,8 @@ export default function NewsPage() {
   const [search, setSearch] = useState('');
   const [selectedSection, setSelectedSection] = useState('All');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [saved, setSaved] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('saved_news') || '[]');
-    } catch {
-      return [];
-    }
-  });
+  const [saved, setSaved] = useState([]);
+  const [actionStatus, setActionStatus] = useState('');
   const [lastUpdated, setLastUpdated] = useState('');
   const [fromCache, setFromCache] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -346,16 +363,38 @@ export default function NewsPage() {
   const newsStoriesRef = useRef(null);
   const requestIdRef = useRef(0);
   const mountedRef = useRef(true);
+  const abortControllerRef = useRef(null);
+  const savedStorageKey = useMemo(() => {
+    const accountId = user?.userId || user?.sub || user?.id || user?.email || 'guest';
+    return `smarty-saved-news-v1-${encodeURIComponent(String(accountId))}`;
+  }, [user]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       requestIdRef.current += 1;
+      abortControllerRef.current?.abort();
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(savedStorageKey) || '[]');
+      setSaved(Array.isArray(stored) ? stored : []);
+    } catch {
+      setSaved([]);
+    }
+  }, [savedStorageKey]);
+
+  useEffect(() => {
+    if (!actionStatus) return undefined;
+    const timer = window.setTimeout(() => setActionStatus(''), 2200);
+    return () => window.clearTimeout(timer);
+  }, [actionStatus]);
+
   const fetchNews = useCallback(async (targetCountry, targetRegion, forceRefresh = false) => {
+    abortControllerRef.current?.abort();
     const cached = getCachedNews(targetCountry, targetRegion);
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
@@ -365,7 +404,7 @@ export default function NewsPage() {
 
     if (cached) {
       setNewsData(cached.news);
-      setFromCache(true);
+      setFromCache(!cached.isFresh);
       setLastUpdated(formatUpdatedAt(cached.news.generatedAt || cached.timestamp));
       setLoading(false);
       if (cached.isFresh && !forceRefresh) return;
@@ -375,12 +414,15 @@ export default function NewsPage() {
 
     setLoading(!cached && !forceRefresh);
     setRefreshing(Boolean(cached) || forceRefresh);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
       const data = await newsApi.getLatestNews({
         country: targetCountry,
         region: targetRegion,
         lang: 'english',
+        signal: controller.signal,
       });
 
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
@@ -392,6 +434,9 @@ export default function NewsPage() {
       if (data.notice) setError(data.notice);
     } catch (fetchError) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
+      if (controller.signal.aborted || fetchError?.name === 'AbortError' || fetchError?.code === 'ERR_CANCELED') {
+        return;
+      }
 
       setError(
         cached
@@ -402,6 +447,7 @@ export default function NewsPage() {
       if (mountedRef.current && requestId === requestIdRef.current) {
         setLoading(false);
         setRefreshing(false);
+        if (abortControllerRef.current === controller) abortControllerRef.current = null;
       }
     }
   }, []);
@@ -412,7 +458,14 @@ export default function NewsPage() {
 
   const regionOptions = useMemo(() => NEWS_REGIONS[country] || [], [country]);
   const sections = useMemo(() => {
-    const sectionMap = newsData?.sections || {};
+    let sectionMap = newsData?.sections || {};
+    if (!Object.keys(sectionMap).length && Array.isArray(newsData?.articles)) {
+      sectionMap = newsData.articles.reduce((result, article) => {
+        const section = article.section || 'World';
+        (result[section] ||= []).push(article);
+        return result;
+      }, {});
+    }
     return Object.entries(sectionMap).filter(([, items]) => Array.isArray(items) && items.length);
   }, [newsData]);
   const sectionNames = useMemo(() => ['All', ...sections.map(([name]) => name)], [sections]);
@@ -449,21 +502,19 @@ export default function NewsPage() {
     'Worldwide';
 
   const toggleSave = useCallback((article) => {
-    setSaved((currentSaved) => {
-      const exists = currentSaved.some((item) => item.news_link === article.news_link);
-      const updated = exists
-        ? currentSaved.filter((item) => item.news_link !== article.news_link)
-        : [...currentSaved, article];
+    const exists = saved.some((item) => item.news_link === article.news_link);
+    const updated = exists
+      ? saved.filter((item) => item.news_link !== article.news_link)
+      : [...saved, article];
 
-      try {
-        localStorage.setItem('saved_news', JSON.stringify(updated));
-      } catch {
-        // Keep the in-memory saved state if storage is unavailable.
-      }
-
-      return updated;
-    });
-  }, []);
+    setSaved(updated);
+    try {
+      localStorage.setItem(savedStorageKey, JSON.stringify(updated));
+    } catch {
+      // Keep the in-memory saved state if storage is unavailable.
+    }
+    setActionStatus(exists ? 'Removed from saved stories.' : 'Story saved.');
+  }, [saved, savedStorageKey]);
 
   const shareArticle = useCallback(async (article) => {
     try {
@@ -473,11 +524,15 @@ export default function NewsPage() {
           text: article.summary,
           url: article.news_link,
         });
+        setActionStatus('Story shared.');
       } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(article.news_link);
+        setActionStatus('Story link copied.');
+      } else {
+        setActionStatus('Sharing is not available on this device.');
       }
-    } catch {
-      // Closing the platform share sheet is not an app error.
+    } catch (shareError) {
+      if (shareError?.name !== 'AbortError') setActionStatus('Could not share this story.');
     }
   }, []);
 
@@ -554,6 +609,11 @@ export default function NewsPage() {
 
   return (
     <section className="news-page">
+      {actionStatus && (
+        <p className="news-action-status" role="status" aria-live="polite">
+          {actionStatus}
+        </p>
+      )}
       <div className="news-hero">
         <div>
           <span className="news-kicker">Daily intelligence</span>
@@ -679,7 +739,7 @@ export default function NewsPage() {
                 {newsData.sources.map((source, index) => (
                   <span key={source.url || source.name}>
                     {index > 0 ? ', ' : ''}
-                    <a href={source.url} target="_blank" rel="noreferrer">{source.name}</a>
+                    <a href={source.url} target="_blank" rel="noopener noreferrer">{source.name}</a>
                   </span>
                 ))}.
               </>

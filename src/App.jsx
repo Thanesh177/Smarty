@@ -1001,10 +1001,15 @@ useEffect(() => {
                 aria-label="Feed"
                 title="Feed"
                 onClick={(event) => {
-                  if (window.location.pathname === '/feed') {
-                    event.preventDefault();
-                    window.location.reload();
-                  }
+                  if (window.location.pathname !== '/feed' || window.location.search) return;
+                  event.preventDefault();
+                  const feedScroller = document.querySelector('.snap-feed-page');
+                  feedScroller?.scrollTo({
+                    top: 0,
+                    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+                      ? 'auto'
+                      : 'smooth',
+                  });
                 }}
               >
                 <House size={20} strokeWidth={2.2} />
@@ -1943,7 +1948,7 @@ function ReminderPopupStyles() {
 
       @media (max-width: 640px) {
         .topbar {
-  right: 10px;
+  right: max(8px, env(safe-area-inset-right));
   bottom: calc(10px + env(safe-area-inset-bottom));
   padding: 0;
   background: transparent !important;
@@ -1953,8 +1958,8 @@ function ReminderPopupStyles() {
 
         .topbar-row {
           min-height: 0;
-          flex-direction: row;
-          align-items: center;
+          flex-direction: column;
+          align-items: flex-end;
           gap: 6px;
         }
 
@@ -1984,7 +1989,7 @@ function ReminderPopupStyles() {
         }
 
         .brand-actions {
-          flex-direction: row;
+          flex-direction: column;
           gap: 6px;
           padding: 6px;
         }

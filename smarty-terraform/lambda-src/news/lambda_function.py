@@ -8,6 +8,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from decimal import Decimal
 from email.utils import parsedate_to_datetime
@@ -24,11 +25,12 @@ GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 GOOGLE_NEWS_URL = "https://news.google.com/rss"
 HACKER_NEWS_URL = "https://hn.algolia.com/api/v1/search"
 SPACEFLIGHT_NEWS_URL = "https://api.spaceflightnewsapi.net/v4/articles/"
-CACHE_VERSION = 18
+CACHE_VERSION = 19
 CACHE_TTL_SECONDS = 20 * 60
 STALE_TTL_SECONDS = 48 * 60 * 60
 MAX_ARTICLES = 60
-MIN_ARTICLES = 8
+MIN_ARTICLES = 4
+MAX_PROVIDER_RESPONSE_BYTES = 3 * 1024 * 1024
 BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-micro-v1:0")
 
 STOP_WORDS = frozenset({
@@ -99,23 +101,30 @@ COUNTRIES = {
 CATEGORY_RULES = {
     "Politics": (
         "election", "government", "minister", "president", "parliament",
-        "senate", "congress", "policy", "diplomatic", "court", "law",
+        "senate", "congress", "policy", "diplomatic", "diplomacy", "court",
+        "law", "governor", "mayor", "campaign", "party", "administration",
+        "sanction", "assembly", "legislature", "cabinet", "military",
     ),
     "Business": (
         "market", "economy", "economic", "business", "company", "bank",
         "trade", "stocks", "inflation", "jobs", "finance", "industry",
+        "oil", "currency", "tariff", "import", "export", "investment",
+        "earnings", "profit", "prices", "retail", "merger",
     ),
     "Technology": (
         "technology", "software", "artificial intelligence", " ai ", "cyber",
         "digital", "internet", "chip", "robot", "startup", "data",
+        "apple", "google", "microsoft", "anthropic", "openai", "computer",
     ),
     "Science": (
         "science", "research", "space", "nasa", "discovery", "study",
-        "scientist", "physics", "biology", "climate",
+        "scientist", "physics", "biology", "climate", "archaeology",
+        "fossil", "species", "telescope", "rocket", "ocean",
     ),
     "Health": (
         "health", "hospital", "medicine", "medical", "disease", "doctor",
-        "vaccine", "mental health", "nutrition", "fitness",
+        "vaccine", "mental health", "nutrition", "fitness", "virus",
+        "cancer", "drug", "patient", "public health",
     ),
     "Sports": (
         "sport", "football", "soccer", "basketball", "baseball", "hockey",
@@ -123,9 +132,35 @@ CATEGORY_RULES = {
     ),
     "Culture": (
         "culture", "film", "movie", "music", "book", "art", "festival",
-        "television", "actor", "museum", "fashion",
+        "television", "actor", "museum", "fashion", "theatre", "theater",
+        "streaming", "celebrity",
+    ),
+    "Education": (
+        "education", "school", "student", "teacher", "university", "college",
+        "campus", "classroom", "curriculum",
+    ),
+    "Environment": (
+        "hurricane", "storm", "flood", "wildfire", "drought", "earthquake",
+        "weather", "pollution", "conservation", "environment",
+    ),
+    "Justice": (
+        "trial", "police", "arrest", "sentenced", "prison", "prosecutor",
+        "crime", "criminal", "lawsuit", "jury", "judge",
     ),
 }
+
+CATEGORY_PRIORITY = (
+    "Health",
+    "Sports",
+    "Science",
+    "Technology",
+    "Education",
+    "Environment",
+    "Justice",
+    "Business",
+    "Culture",
+    "Politics",
+)
 
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.INFO)
@@ -140,7 +175,7 @@ NEWS_CACHE = DYNAMODB.Table(NEWS_TABLE)
 BEDROCK_CONFIG = Config(
     retries={"total_max_attempts": 2, "mode": "adaptive"},
     connect_timeout=2,
-    read_timeout=7,
+    read_timeout=5,
 )
 BEDROCK_RUNTIME = boto3.client(
     "bedrock-runtime",
@@ -183,7 +218,7 @@ def clean_region(value):
 def make_location(country_code, region):
     normalized_country = str(country_code or "GLOBAL").strip().upper()
     if normalized_country not in COUNTRIES:
-        normalized_country = "GLOBAL"
+        raise ValueError("Unsupported news country.")
 
     country_name, gdelt_country = COUNTRIES[normalized_country]
     normalized_region = clean_region(region)
@@ -257,7 +292,10 @@ def fetch_json(url, params, timeout=6):
         },
     )
     with urllib.request.urlopen(request, timeout=timeout) as provider_response:
-        return json.loads(provider_response.read().decode("utf-8"))
+        payload = provider_response.read(MAX_PROVIDER_RESPONSE_BYTES + 1)
+        if len(payload) > MAX_PROVIDER_RESPONSE_BYTES:
+            raise ValueError("News provider response exceeded the safe size limit.")
+        return json.loads(payload.decode("utf-8"))
 
 
 def fetch_xml(url, params):
@@ -270,13 +308,23 @@ def fetch_xml(url, params):
         },
     )
     with urllib.request.urlopen(request, timeout=6) as provider_response:
-        return ET.fromstring(provider_response.read())
+        payload = provider_response.read(MAX_PROVIDER_RESPONSE_BYTES + 1)
+        if len(payload) > MAX_PROVIDER_RESPONSE_BYTES:
+            raise ValueError("News provider response exceeded the safe size limit.")
+        return ET.fromstring(payload)
 
 
 def classify_article(title, prefer_local=False):
-    normalized = f" {re.sub(r'[^a-z0-9]+', ' ', str(title or '').lower()).strip()} "
-    for section, keywords in CATEGORY_RULES.items():
-        if any(f" {keyword.strip()} " in normalized for keyword in keywords):
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(title or "").lower()).strip()
+    for section in CATEGORY_PRIORITY:
+        keywords = CATEGORY_RULES[section]
+        if any(
+            re.search(
+                rf"\b{re.escape(keyword.strip()).replace(r'\ ', r'\s+')}(?:s|es|ed|ing)?\b",
+                normalized,
+            )
+            for keyword in keywords
+        ):
             return section
     return "Local" if prefer_local else "World"
 
@@ -486,22 +534,58 @@ def fetch_spaceflight_articles():
     return results
 
 
+def article_timestamp(article):
+    raw_value = str(article.get("published_at") or "").strip()
+    if not raw_value:
+        return 0
+    try:
+        return datetime.fromisoformat(raw_value.replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def similar_headlines(first_title, second_title):
+    first_tokens = set(headline_tokens(first_title, STOP_WORDS))
+    second_tokens = set(headline_tokens(second_title, STOP_WORDS))
+    if len(first_tokens) < 3 or len(second_tokens) < 3:
+        return False
+
+    overlap = len(first_tokens & second_tokens)
+    union = len(first_tokens | second_tokens)
+    containment = overlap / min(len(first_tokens), len(second_tokens))
+    jaccard = overlap / union if union else 0
+    return containment >= 0.84 or jaccard >= 0.7
+
+
 def merge_articles(*article_groups):
     merged = []
     seen_urls = set()
     seen_titles = set()
+    seen_headlines = []
 
-    for group in article_groups:
-        for article in group:
-            url_key = str(article.get("news_link") or "").split("#", 1)[0].rstrip("/").lower()
-            title_key = re.sub(r"[^a-z0-9]+", " ", str(article.get("title") or "").lower()).strip()
-            if not url_key or not title_key or url_key in seen_urls or title_key in seen_titles:
-                continue
-            seen_urls.add(url_key)
-            seen_titles.add(title_key)
-            merged.append(article)
-            if len(merged) >= MAX_ARTICLES:
-                return merged
+    candidates = [article for group in article_groups for article in group]
+    candidates.sort(
+        key=lambda article: (
+            article_timestamp(article),
+            -int(article.get("rank") or 0),
+        ),
+        reverse=True,
+    )
+
+    for article in candidates:
+        url_key = str(article.get("news_link") or "").split("#", 1)[0].rstrip("/").lower()
+        title = str(article.get("title") or "")
+        title_key = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
+        if not url_key or not title_key or url_key in seen_urls or title_key in seen_titles:
+            continue
+        if any(similar_headlines(title, existing_title) for existing_title in seen_headlines):
+            continue
+        seen_urls.add(url_key)
+        seen_titles.add(title_key)
+        seen_headlines.append(title)
+        merged.append(article)
+        if len(merged) >= MAX_ARTICLES:
+            return merged
 
     return merged
 
@@ -653,6 +737,13 @@ def compact_text(value, max_length):
     return f"{shortened}…"
 
 
+def headline_sentence(article, max_length=220):
+    title = compact_text(article.get("title"), max_length).strip()
+    if not title:
+        return ""
+    return title if title.endswith((".", "!", "?")) else f"{title}."
+
+
 def representative_articles(articles, limit=4):
     selected = []
     selected_ids = set()
@@ -679,19 +770,16 @@ def representative_articles(articles, limit=4):
 
 def build_extractive_summary(articles, location, section_digests):
     representatives = representative_articles(articles, limit=4)
-    quoted_titles = [f"“{compact_text(article['title'], 180)}”" for article in representatives]
-    if quoted_titles:
-        overview = (
-            f"Today’s reporting from {location['label']} is led by "
-            f"{natural_join(quoted_titles)}. Open the developments below for the original reporting."
-        )
+    development_sentences = [headline_sentence(article) for article in representatives]
+    if development_sentences:
+        overview = " ".join(development_sentences)
     else:
-        overview = f"Today’s reporting from {location['label']} is collected below."
+        overview = f"No current developments were available for {location['label']}."
 
     takeaways = [
         {
             "title": article["section"],
-            "summary": compact_text(article["title"], 240),
+            "summary": headline_sentence(article, 240),
             "stories": [story_reference(article)],
         }
         for article in representatives[:3]
@@ -704,15 +792,9 @@ def build_extractive_summary(articles, location, section_digests):
 
     for digest in section_digests:
         section_articles = articles_by_section.get(digest["section"], [])
-        section_titles = [
-            f"“{compact_text(article['title'], 150)}”"
-            for article in section_articles[:3]
-        ]
-        if section_titles:
-            section_summaries[digest["section"]] = (
-                f"The main {digest['section'].lower()} reports cover "
-                f"{natural_join(section_titles)}."
-            )
+        section_sentences = [headline_sentence(article, 180) for article in section_articles[:3]]
+        if section_sentences:
+            section_summaries[digest["section"]] = " ".join(section_sentences)
 
     return {
         "overview": overview,
@@ -799,11 +881,11 @@ def article_match_scores(text, articles):
 
 def match_supporting_articles(text, articles, limit=3):
     ranked_matches = article_match_scores(text, articles)
-    if not ranked_matches or ranked_matches[0][0] < 5:
+    if not ranked_matches or ranked_matches[0][0] < 3:
         return []
 
     best_score = ranked_matches[0][0]
-    minimum_score = max(5, best_score * 0.55)
+    minimum_score = max(3, best_score * 0.55)
     matches = []
     for score, article in ranked_matches:
         if score < minimum_score:
@@ -837,7 +919,7 @@ def section_summary_is_grounded(summary, section, articles):
         other_scores = article_match_scores(clause, other_articles)
         best_section_score = section_scores[0][0] if section_scores else 0
         best_other_score = other_scores[0][0] if other_scores else 0
-        if best_section_score < 4 or best_other_score > best_section_score:
+        if best_section_score < 3 or best_other_score > best_section_score:
             return False
     return True
 
@@ -948,7 +1030,7 @@ HEADLINES
                 )
             }],
             messages=[{"role": "user", "content": [{"text": prompt}]}],
-            inferenceConfig={"maxTokens": 900, "temperature": 0.1},
+            inferenceConfig={"maxTokens": 700, "temperature": 0.1},
         )
         response_text = "".join(
             block.get("text", "")
@@ -980,29 +1062,7 @@ HEADLINES
 def build_section_digest(section, articles, location):
     sources = {article.get("source") for article in articles if article.get("source")}
     themes = build_themes(articles, location, limit=3)
-    theme_labels = [theme["label"] for theme in themes]
-
-    story_label = "story" if len(articles) == 1 else "stories"
-    source_label = "source" if len(sources) == 1 else "sources"
-
-    if len(articles) == 1:
-        article = articles[0]
-        summary = (
-            f"The current {section.lower()} story examines {article['title']}, "
-            f"reported by {article['source']}."
-        )
-    elif theme_labels:
-        summary = (
-            f"Across {len(articles)} {story_label} from {len(sources)} {source_label}, "
-            f"{section.lower()} coverage repeatedly focuses on "
-            f"{natural_join(theme_labels)}."
-        )
-    else:
-        summary = (
-            f"This briefing brings together {len(articles)} "
-            f"{section.lower()} {story_label} from {len(sources)} {source_label}. "
-            "Open the section to review the reporting in full."
-        )
+    summary = " ".join(headline_sentence(article, 180) for article in articles[:3])
 
     return {
         "section": section,
@@ -1057,7 +1117,10 @@ def build_daily_summary(articles, location):
             "Open the linked reports for full context."
         ),
         "coverageWindow": "Past 24 hours",
-        "highlights": [story_reference(article) for article in articles[:6]],
+        "highlights": [
+            story_reference(article)
+            for article in representative_articles(articles, limit=6)
+        ],
         "storyCount": len(articles),
         "sourceCount": len(source_names),
         "sectionCount": len(articles_by_section),
@@ -1077,76 +1140,84 @@ def build_daily_summary(articles, location):
 
 
 def build_payload(location):
-    google_articles = []
-    gdelt_articles = []
-    specialist_articles = []
-    sources = []
-
-    try:
-        google_articles = fetch_google_articles(location)
-        if google_articles:
-            sources.append({
+    provider_results = {}
+    providers = {
+        "google": {
+            "fetcher": lambda: fetch_google_articles(location),
+            "source": {
                 "name": "Google News",
                 "url": "https://news.google.com/",
                 "note": "Country and regional news discovery",
-            })
-    except (urllib.error.URLError, TimeoutError, ET.ParseError):
-        LOGGER.warning(json.dumps({
-            "event": "google_news_fetch_failed",
-            "country": location["countryCode"],
-            "region": location["region"],
-        }))
-
-    if len(google_articles) < MIN_ARTICLES:
-        try:
-            gdelt_articles = fetch_gdelt_articles(location)
-            if gdelt_articles:
-                sources.append({
-                    "name": "GDELT Project",
-                    "url": "https://www.gdeltproject.org/",
-                    "note": "Global and local news discovery",
-                })
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-            LOGGER.warning(json.dumps({
-                "event": "gdelt_fetch_failed",
-                "country": location["countryCode"],
-                "region": location["region"],
-            }))
-
+            },
+        },
+        "gdelt": {
+            "fetcher": lambda: fetch_gdelt_articles(location),
+            "source": {
+                "name": "GDELT Project",
+                "url": "https://www.gdeltproject.org/",
+                "note": "Global and local news discovery",
+            },
+        },
+    }
     if location["countryCode"] == "GLOBAL":
-        specialist_providers = (
-            (
-                "hacker_news_fetch_failed",
-                fetch_hacker_articles,
-                {
+        providers.update({
+            "hacker-news": {
+                "fetcher": fetch_hacker_articles,
+                "source": {
                     "name": "Hacker News",
                     "url": "https://news.ycombinator.com/",
                     "note": "Technology and research discussions",
                 },
-            ),
-            (
-                "spaceflight_news_fetch_failed",
-                fetch_spaceflight_articles,
-                {
+            },
+            "spaceflight-news": {
+                "fetcher": fetch_spaceflight_articles,
+                "source": {
                     "name": "Spaceflight News",
                     "url": "https://spaceflightnewsapi.net/",
                     "note": "Space science and exploration reporting",
                 },
-            ),
-        )
-        for event_name, fetcher, source in specialist_providers:
+            },
+        })
+
+    with ThreadPoolExecutor(max_workers=len(providers)) as executor:
+        futures = {
+            executor.submit(provider["fetcher"]): provider_name
+            for provider_name, provider in providers.items()
+        }
+        for future in as_completed(futures):
+            provider_name = futures[future]
             try:
-                provider_articles = fetcher()
-                if provider_articles:
-                    specialist_articles.extend(provider_articles)
-                    sources.append(source)
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
-                LOGGER.warning(json.dumps({"event": event_name}))
+                provider_articles = future.result()
+            except Exception as error:
+                LOGGER.warning(json.dumps({
+                    "event": "news_provider_fetch_failed",
+                    "provider": provider_name,
+                    "country": location["countryCode"],
+                    "region": location["region"],
+                    "errorType": type(error).__name__,
+                }))
+                continue
 
-    articles = merge_articles(google_articles, specialist_articles, gdelt_articles)
+            if provider_articles:
+                provider_results[provider_name] = provider_articles
 
-    if len(articles) < MIN_ARTICLES:
-        raise RuntimeError("The news provider returned too few current stories.")
+    sources = [
+        provider["source"]
+        for provider_name, provider in providers.items()
+        if provider_name in provider_results
+    ]
+
+    articles = merge_articles(
+        provider_results.get("google", []),
+        provider_results.get("gdelt", []),
+        provider_results.get("hacker-news", []),
+        provider_results.get("spaceflight-news", []),
+    )
+
+    if not articles:
+        raise RuntimeError("The news providers returned no current stories.")
+
+    partial = len(articles) < MIN_ARTICLES
 
     sections = {}
     for article in articles:
@@ -1162,13 +1233,25 @@ def build_payload(location):
         "sources": sources,
         "generatedAt": generated_at,
         "cacheStatus": "fresh",
+        "partial": partial,
+        "notice": (
+            "A limited briefing is shown while some news sources reconnect."
+            if partial else ""
+        ),
     }
 
 
 def lambda_handler(event, context):
-    method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+    request_context = event.get("requestContext", {})
+    method = (
+        request_context.get("http", {}).get("method")
+        or event.get("httpMethod")
+        or "GET"
+    ).upper()
     if method == "OPTIONS":
         return {"statusCode": 204, "headers": HEADERS, "body": ""}
+    if method != "GET":
+        return api_response(405, {"error": "Method not allowed."})
 
     params = event.get("queryStringParameters") or {}
 
@@ -1182,7 +1265,7 @@ def lambda_handler(event, context):
     now = int(time.time())
 
     if cached and int(cached.get("freshUntil", 0)) > now and cached.get("payload"):
-        payload = cached["payload"]
+        payload = dict(cached["payload"])
         payload["cacheStatus"] = "fresh-cache"
         return api_response(200, payload)
 
@@ -1211,7 +1294,7 @@ def lambda_handler(event, context):
         }))
 
         if cached and int(cached.get("expiresAt", 0)) > now and cached.get("payload"):
-            payload = cached["payload"]
+            payload = dict(cached["payload"])
             payload["cacheStatus"] = "stale-cache"
             payload["notice"] = "Showing the latest saved briefing while news sources reconnect."
             return api_response(200, payload)
@@ -1220,4 +1303,22 @@ def lambda_handler(event, context):
             "error": "Current news is temporarily unavailable for this location.",
             "retryable": True,
             "location": {key: value for key, value in location.items() if key != "gdeltCountry"},
+        })
+    except Exception as error:
+        LOGGER.exception(json.dumps({
+            "event": "news_unhandled_error",
+            "country": location["countryCode"],
+            "region": location["region"],
+            "errorType": type(error).__name__,
+        }))
+
+        if cached and int(cached.get("expiresAt", 0)) > now and cached.get("payload"):
+            payload = dict(cached["payload"])
+            payload["cacheStatus"] = "stale-cache"
+            payload["notice"] = "Showing the latest saved briefing while news sources reconnect."
+            return api_response(200, payload)
+
+        return api_response(500, {
+            "error": "The news service could not complete this request.",
+            "retryable": True,
         })

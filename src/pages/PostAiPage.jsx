@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -107,6 +108,7 @@ export default function PostAiPage() {
   const navigate = useNavigate();
   const mountedRef = useRef(true);
   const messagesRef = useRef(null);
+  const premiumCloseRef = useRef(null);
   const { user } = useAuth();
 
   const postFromState = useMemo(() => location.state?.post || null, [location.state]);
@@ -218,12 +220,18 @@ export default function PostAiPage() {
   useEffect(() => {
     if (!premiumDialogOpen) return undefined;
 
+    const previouslyFocused = document.activeElement;
     const closeOnEscape = (event) => {
       if (event.key === 'Escape') setPremiumDialogOpen(false);
     };
 
     window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
+    premiumCloseRef.current?.focus();
+
+    return () => {
+      window.removeEventListener('keydown', closeOnEscape);
+      previouslyFocused?.focus?.();
+    };
   }, [premiumDialogOpen]);
 
   useEffect(() => {
@@ -635,46 +643,50 @@ export default function PostAiPage() {
         </section>
       </section>
 
-      {premiumDialogOpen && (
-        <div
-          className="post-ai-premium-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setPremiumDialogOpen(false);
-          }}
-          role="presentation"
-        >
-          <section
-            className="post-ai-premium-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="post-ai-premium-title"
+      {premiumDialogOpen && createPortal(
+        (
+          <div
+            className="post-ai-premium-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setPremiumDialogOpen(false);
+            }}
+            role="presentation"
           >
-            <button
-              type="button"
-              className="post-ai-premium-close"
-              onClick={() => setPremiumDialogOpen(false)}
-              aria-label="Close premium preview"
+            <section
+              className="post-ai-premium-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="post-ai-premium-title"
             >
-              <X size={18} aria-hidden="true" />
-            </button>
-            <span className="post-ai-gate-icon" aria-hidden="true">
-              <LockKeyhole size={22} />
-            </span>
-            <span className="post-ai-premium-label">Smarty Premium</span>
-            <h2 id="post-ai-premium-title">Deeper learning is coming soon.</h2>
-            <p>
-              Premium purchasing is not enabled yet. Your current lessons, quizzes,
-              and discussions remain available while we prepare the complete experience.
-            </p>
-            <button
-              type="button"
-              className="post-ai-premium-done"
-              onClick={() => setPremiumDialogOpen(false)}
-            >
-              Continue learning
-            </button>
-          </section>
-        </div>
+              <button
+                ref={premiumCloseRef}
+                type="button"
+                className="post-ai-premium-close"
+                onClick={() => setPremiumDialogOpen(false)}
+                aria-label="Close premium preview"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+              <span className="post-ai-gate-icon" aria-hidden="true">
+                <LockKeyhole size={22} />
+              </span>
+              <span className="post-ai-premium-label">Smarty Premium</span>
+              <h2 id="post-ai-premium-title">Deeper learning is coming soon.</h2>
+              <p>
+                Premium purchasing is not enabled yet. Your current lessons, quizzes,
+                and discussions remain available while we prepare the complete experience.
+              </p>
+              <button
+                type="button"
+                className="post-ai-premium-done"
+                onClick={() => setPremiumDialogOpen(false)}
+              >
+                Continue learning
+              </button>
+            </section>
+          </div>
+        ),
+        document.body
       )}
     </main>
   );

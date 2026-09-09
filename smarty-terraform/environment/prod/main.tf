@@ -765,7 +765,12 @@ module "http_api" {
       "https://main.d3qiuefonbp8n9.amplifyapp.com",
       "https://staging.dgss25qxft1o4.amplifyapp.com",
       "https://production.dgss25qxft1o4.amplifyapp.com",
+      "capacitor://localhost",
+      "ionic://localhost",
+      "http://localhost",
       "http://localhost:5173",
+      "http://localhost:5174",
+      "https://localhost",
     ]
 
     allow_methods = [

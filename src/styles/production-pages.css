@@ -2425,15 +2425,15 @@ body:has(.rooms-page.has-active-room) .room-scroll-latest {
 
 @media (max-width: 760px) {
   body:has(.rooms-page) .topbar {
-    right: 50% !important;
+    right: max(8px, env(safe-area-inset-right)) !important;
     bottom: calc(8px + env(safe-area-inset-bottom)) !important;
-    transform: translateX(50%) !important;
+    transform: none !important;
   }
 
   body:has(.rooms-page) .topbar-row,
   body:has(.rooms-page) .brand-actions {
     min-height: 0 !important;
-    flex-direction: row !important;
+    flex-direction: column !important;
     align-items: center !important;
   }
 
