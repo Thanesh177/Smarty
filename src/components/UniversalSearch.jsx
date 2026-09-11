@@ -178,6 +178,14 @@ function tokenMatchScore(queryToken, candidateToken) {
 function getQueryVariants(query) {
   const normalized = normalizeText(query);
   const aliases = QUERY_ALIASES[normalized] || [];
+
+  // Two-character concepts such as AI and ML are too broad for regular
+  // word-prefix matching. Rank their expanded concepts instead while keeping
+  // the user's original text for the input and destination links.
+  if (normalized.length <= 2 && aliases.length > 0) {
+    return aliases.map(normalizeText).filter(Boolean);
+  }
+
   return [normalized, ...aliases.map(normalizeText)].filter(Boolean);
 }
 
@@ -242,7 +250,7 @@ function uniqueTopics(values = []) {
 function scoreMatch(searchableValue, query) {
   return getQueryVariants(query).reduce((best, variant, index) => {
     const score = scoreSingleMatch(searchableValue, variant);
-    return Math.max(best, index === 0 ? score : score * 0.9);
+    return Math.max(best, index === 0 ? score : score * 0.8);
   }, 0);
 }
 
@@ -384,8 +392,6 @@ function makePostResults(posts, query) {
       post?.topic,
       post?.subTopic,
       post?.subtopic,
-      post?.author,
-      post?.creatorName,
     ].flat().filter(Boolean).join(' ')
   );
 
@@ -487,7 +493,9 @@ function makeNewsResults(articles, query) {
 }
 
 function makeActionResults(query, signedIn) {
-  const encoded = encodeURIComponent(query);
+  const canonicalQuery = QUERY_ALIASES[normalizeText(query)]?.[0] || query;
+  const encoded = encodeURIComponent(canonicalQuery);
+  const literalEncoded = encodeURIComponent(query);
   const actions = [
     {
       key: `action-feed-${normalizeText(query)}`,
@@ -511,7 +519,7 @@ function makeActionResults(query, signedIn) {
       label: `Find “${query}” in today’s news`,
       description: 'Search your selected country and regional briefing.',
       meta: 'News',
-      path: `/news?search=${encoded}`,
+      path: `/news?search=${literalEncoded}`,
     },
     {
       key: `action-books-${normalizeText(query)}`,
@@ -519,7 +527,7 @@ function makeActionResults(query, signedIn) {
       label: `Find books about “${query}”`,
       description: 'Search the free reading library.',
       meta: 'Books',
-      path: `/read-books?search=${encoded}`,
+      path: `/read-books?search=${literalEncoded}`,
     },
   ];
 
@@ -530,7 +538,7 @@ function makeActionResults(query, signedIn) {
       label: `Discuss “${query}”`,
       description: 'Find a room or start exploring related discussions.',
       meta: 'Rooms',
-      path: `/rooms?search=${encoded}`,
+      path: `/rooms?search=${literalEncoded}`,
     });
   }
 
@@ -603,6 +611,16 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
     });
   }, [recentStorageKey]);
 
+  const clearRecentSearches = useCallback(() => {
+    setRecentSearches([]);
+    try {
+      localStorage.removeItem(recentStorageKey);
+    } catch {
+      // The visible history still clears if storage is unavailable.
+    }
+    inputRef.current?.focus();
+  }, [recentStorageKey]);
+
   const runSearch = useCallback(async (rawQuery, options = {}) => {
     const cleanQuery = String(rawQuery || '').trim().slice(0, MAX_QUERY_LENGTH);
     if (cleanQuery.length < 2) return;
@@ -628,8 +646,12 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
     const cachedPosts = readCachedPosts(userId);
     const cachedNews = readCachedNews();
     const cachedSources = sourceCache.get(searchScope);
-    const sourceCacheFresh = Boolean(
-      cachedSources && Date.now() - cachedSources.savedAt < SOURCE_CACHE_MS
+    const now = Date.now();
+    const topicsCacheFresh = Boolean(
+      !options.force && cachedSources && now - cachedSources.topicsSavedAt < SOURCE_CACHE_MS
+    );
+    const postsCacheFresh = Boolean(
+      !options.force && cachedSources && now - cachedSources.postsSavedAt < SOURCE_CACHE_MS
     );
     let sourceSnapshot = cachedSources || { topics: [], posts: [], news: [] };
     let latestResults = {
@@ -647,17 +669,12 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
     if (!isOnline) {
       setLoading(false);
       setPendingSources([]);
-      setBoundedCache(
-        searchCache,
-        cacheKey,
-        { savedAt: Date.now(), results: latestResults },
-        MAX_SEARCH_CACHE_ENTRIES
-      );
       return;
     }
 
     const sourcesToSearch = [
-      ...(!sourceCacheFresh ? ['topics', 'posts'] : []),
+      ...(!topicsCacheFresh ? ['topics'] : []),
+      ...(!postsCacheFresh ? ['posts'] : []),
       ...(user ? ['people', 'rooms'] : []),
       'books',
       ...(cachedNews.length || sourceSnapshot.news?.length ? [] : ['news']),
@@ -718,16 +735,18 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
 
     const jobs = [];
 
-    if (!sourceCacheFresh) {
+    if (!topicsCacheFresh) {
       jobs.push(runSource('topics', () => postApi.getTopics(), (value) => {
         const liveTopics = extractArray(value, ['topics', 'items', 'results']);
-        updateSourceCache({ topics: liveTopics });
+        updateSourceCache({ topics: liveTopics, topicsSavedAt: Date.now() });
         commitResults('topics', makeTopicResults([...DEFAULT_TOPICS, ...liveTopics], cleanQuery));
       }));
+    }
 
+    if (!postsCacheFresh) {
       jobs.push(runSource('posts', () => postApi.getFeed({ limit: 60 }), (value) => {
         const livePosts = extractArray(value, ['items', 'posts', 'reels']);
-        updateSourceCache({ posts: livePosts });
+        updateSourceCache({ posts: livePosts, postsSavedAt: Date.now() });
         commitResults('posts', makePostResults([...cachedPosts, ...livePosts], cleanQuery));
       }));
     }
@@ -774,7 +793,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
         }),
         (value) => {
           const liveNews = extractNewsArticles(value);
-          updateSourceCache({ news: liveNews });
+          updateSourceCache({ news: liveNews, newsSavedAt: Date.now() });
           commitResults('news', makeNewsResults(liveNews, cleanQuery));
         },
         EXTERNAL_SOURCE_TIMEOUT_MS
@@ -797,6 +816,25 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
   }, [isOnline, searchScope, user, userId]);
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => {
+      setIsOnline(false);
+      abortControllerRef.current?.abort();
+      requestSequenceRef.current += 1;
+      setLoading(false);
+      setPendingSources([]);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!open) return undefined;
 
     const cleanQuery = query.trim();
@@ -808,6 +846,8 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
       setResults(EMPTY_RESULTS);
       setLoading(false);
       setPartialFailure(false);
+      setPendingSources([]);
+      setFailedSources([]);
       return undefined;
     }
 
@@ -922,9 +962,34 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
     [groups]
   );
 
+  const visibleFilters = useMemo(
+    () => FILTERS.filter(([value]) => user || (value !== 'people' && value !== 'rooms')),
+    [user]
+  );
+
+  useEffect(() => {
+    if (!user && (activeFilter === 'people' || activeFilter === 'rooms')) {
+      setActiveFilter('all');
+    }
+  }, [activeFilter, user]);
+
   useEffect(() => {
     setActiveIndex(0);
   }, [activeFilter, query]);
+
+  useEffect(() => {
+    setActiveIndex((current) => {
+      if (!keyboardResults.length) return 0;
+      return Math.min(current, keyboardResults.length - 1);
+    });
+  }, [keyboardResults.length]);
+
+  useEffect(() => {
+    if (!open || !keyboardResults.length) return;
+    document
+      .getElementById(`universal-result-${activeIndex}`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+  }, [activeIndex, keyboardResults.length, open]);
 
   const selectResult = useCallback((result) => {
     if (!result) return;
@@ -984,6 +1049,13 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
 
   const cleanQuery = query.trim();
   const hasResults = keyboardResults.length > 0;
+  const directResultCount = Object.entries(results).reduce(
+    (total, [key, items]) => key === 'actions' ? total : total + items.length,
+    0
+  );
+  const pendingLabel = pendingSources
+    .map((source) => SOURCE_LABELS[source] || source)
+    .join(', ');
 
   return (
     <div
@@ -1009,9 +1081,10 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
             type="search"
             autoComplete="off"
             spellCheck="false"
+            maxLength={MAX_QUERY_LENGTH}
             placeholder="Search topics, posts, people, books, news…"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => setQuery(event.target.value.slice(0, MAX_QUERY_LENGTH))}
             onKeyDown={handleInputKeyDown}
             aria-controls="universal-search-results"
             aria-activedescendant={hasResults ? `universal-result-${activeIndex}` : undefined}
@@ -1044,7 +1117,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
 
         {cleanQuery.length >= 2 && (
           <nav className="universal-search-filters" aria-label="Search result types">
-            {FILTERS.map(([value, label]) => {
+            {visibleFilters.map(([value, label]) => {
               const count = value === 'all'
                 ? Object.values(results).reduce((total, items) => total + items.length, 0)
                 : results[value]?.length || 0;
@@ -1075,7 +1148,10 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
 
               {recentSearches.length > 0 && (
                 <section className="universal-search-recent" aria-label="Recent searches">
-                  <h3><History size={15} aria-hidden="true" /> Recent</h3>
+                  <header>
+                    <h3><History size={15} aria-hidden="true" /> Recent</h3>
+                    <button type="button" onClick={clearRecentSearches}>Clear</button>
+                  </header>
                   <div>
                     {recentSearches.map((item) => (
                       <button type="button" key={item} onClick={() => setQuery(item)}>{item}</button>
@@ -1099,9 +1175,30 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
             </div>
           ) : (
             <div className="universal-search-results" role="listbox" aria-label="Search results">
+              <p className="sr-only" aria-live="polite">
+                {loading
+                  ? `Searching ${pendingLabel || 'Smarty'}`
+                  : `${directResultCount} matching results available`}
+              </p>
+
+              {!isOnline && (
+                <div className="universal-search-connectivity" role="status">
+                  <WifiOff size={15} aria-hidden="true" />
+                  <span>Offline. Showing saved results and available learning paths.</span>
+                </div>
+              )}
+
               {loading && (
                 <div className="universal-search-progress" role="status">
-                  <LoaderCircle size={15} aria-hidden="true" /> Searching across Smarty
+                  <LoaderCircle size={15} aria-hidden="true" />
+                  Searching {pendingLabel || 'across Smarty'}
+                </div>
+              )}
+
+              {!loading && directResultCount === 0 && activeFilter === 'all' && (
+                <div className="universal-search-no-direct-match">
+                  <strong>No direct match yet.</strong>
+                  <span>These paths can still take you deeper into “{cleanQuery}”.</span>
                 </div>
               )}
 
@@ -1157,10 +1254,22 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
                 </div>
               )}
 
-              {partialFailure && (
-                <p className="universal-search-notice">
-                  Some live sources are taking longer. Available results are shown.
-                </p>
+              {partialFailure && isOnline && (
+                <div className="universal-search-notice" role="status">
+                  <span>
+                    {failedSources.length
+                      ? `${failedSources.map((source) => SOURCE_LABELS[source] || source).join(', ')} could not be refreshed.`
+                      : 'Some live sources could not be refreshed.'}
+                    {' '}Available results are still shown.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => runSearch(cleanQuery, { force: true })}
+                    disabled={loading}
+                  >
+                    <RotateCcw size={13} aria-hidden="true" /> Retry
+                  </button>
+                </div>
               )}
             </div>
           )}
