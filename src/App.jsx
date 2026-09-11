@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import SupportPage from './pages/SupportPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
+import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import NavbarMenu from './components/NavbarMenu';
 import { notificationApi, chatApi, getPendingRoomInvite } from './api/client';
 import {
@@ -12,10 +13,12 @@ import {
 } from './firebase';
 import AuthRedirectHandler from './components/AuthRedirectHandler';
 import InstallPrompt from './components/InstallPrompt';
+import UniversalSearch from './components/UniversalSearch';
 import {
   CircleUserRound,
   MessagesSquare,
   House,
+  Search,
 } from 'lucide-react';
 import SmartyBrand from './components/SmartyBrand';
 
@@ -24,6 +27,13 @@ import {
   subscribeChatSocket,
 } from './api/chatSocket';
 import { getUserScopedStorageKey } from './lib/userScopedStorage';
+import {
+  getNotificationBody,
+  getNotificationDecision,
+  getNotificationFingerprint,
+  loadNotificationPreferences,
+  syncNotificationPreferencesToWorker,
+} from './lib/notificationPreferences';
 
 import JoinRoomPage from './pages/JoinRoomPage';
 import Booksinfo from './pages/Booksinfo';
@@ -115,6 +125,24 @@ function OAuthCompletionPage() {
   const navigate = useNavigate();
   const [timedOut, setTimedOut] = useState(false);
   const retriedRef = useRef(false);
+  const destinationRef = useRef(null);
+
+  if (!destinationRef.current) {
+    const storedTarget =
+      sessionStorage.getItem('smarty-post-login-redirect') ||
+      localStorage.getItem('smarty-post-login-redirect') ||
+      '/feed?topic=All';
+    const candidate = String(storedTarget || '').trim();
+
+    destinationRef.current =
+      candidate.startsWith('/') &&
+      !candidate.startsWith('//') &&
+      !candidate.includes('\\') &&
+      candidate !== '/login' &&
+      candidate !== '/register'
+        ? candidate
+        : '/feed?topic=All';
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => setTimedOut(true), 9000);
@@ -130,17 +158,14 @@ function OAuthCompletionPage() {
     });
   }, [loading, restoreSession, user]);
 
-  if (user) {
-    const storedTarget =
-      sessionStorage.getItem('smarty-post-login-redirect') ||
-      localStorage.getItem('smarty-post-login-redirect') ||
-      '/feed?topic=All';
-    const target = String(storedTarget).startsWith('/')
-      ? storedTarget
-      : '/feed?topic=All';
+  useEffect(() => {
+    if (!user) return;
 
-    return <Navigate to={target} replace />;
-  }
+    sessionStorage.removeItem('smarty-post-login-redirect');
+    localStorage.removeItem('smarty-post-login-redirect');
+    sessionStorage.removeItem('smarty-auth-redirecting');
+    navigate(destinationRef.current, { replace: true });
+  }, [navigate, user]);
 
   if (!loading && timedOut) {
     return (
@@ -372,6 +397,7 @@ function Layout() {
   const [popupNotification, setPopupNotification] = useState(null);
   const [globalPullDistance, setGlobalPullDistance] = useState(0);
   const [globalRefreshing, setGlobalRefreshing] = useState(false);
+  const [universalSearchOpen, setUniversalSearchOpen] = useState(false);
 
   const touchStartXRef = useRef(null);
   const unreadRefreshInFlightRef = useRef(false);
@@ -388,6 +414,14 @@ function Layout() {
     location.pathname === '/login' ||
     location.pathname === '/register' ||
     location.pathname === '/confirm';
+
+  const openUniversalSearch = useCallback(() => {
+    setUniversalSearchOpen(true);
+  }, []);
+
+  const closeUniversalSearch = useCallback(() => {
+    setUniversalSearchOpen(false);
+  }, []);
 
 useEffect(() => {
   if (!user) return;
@@ -846,14 +880,13 @@ useEffect(() => {
     async function setupPush() {
       if (!user || !navigator.onLine) return;
 
-      const isStandalone =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        window.navigator.standalone;
       const alreadyGranted =
         'Notification' in window &&
         Notification.permission === 'granted';
 
-      if (!isStandalone && !alreadyGranted) return;
+      // Permission prompts should only follow an explicit user action. Once
+      // permission exists, refresh the token quietly on subsequent sessions.
+      if (!alreadyGranted) return;
 
       try {
         await notificationApi.initPush(user);
@@ -864,6 +897,20 @@ useEffect(() => {
 
     setupPush();
   }, [user]);
+
+  useEffect(() => {
+    const syncPreferences = (event) => {
+      const preferences = event?.detail || loadNotificationPreferences(currentUserId);
+      syncNotificationPreferencesToWorker(preferences);
+    };
+
+    syncPreferences();
+    window.addEventListener('smarty-notification-preferences-changed', syncPreferences);
+
+    return () => {
+      window.removeEventListener('smarty-notification-preferences-changed', syncPreferences);
+    };
+  }, [currentUserId]);
 
   // Foreground push listener
 useEffect(() => {
@@ -921,12 +968,20 @@ useEffect(() => {
   useEffect(() => {
     const handleSmartyNotification = (event) => {
       const detail = event.detail || {};
-      const rawMessageId = String(
-        detail.rawPayload?.messageId ||
-        detail.rawPayload?.data?.messageId ||
-        detail.rawPayload?.data?.notificationId ||
-        ''
-      );
+      const notificationType = String(detail.type || '').toLowerCase();
+
+      if (
+        notificationType.includes('chat') ||
+        notificationType.includes('message')
+      ) {
+        window.dispatchEvent(new Event('chat-unread-refresh-request'));
+      }
+
+      const preferences = loadNotificationPreferences(currentUserId);
+      const decision = getNotificationDecision(detail, preferences);
+      if (!decision.deliver) return;
+
+      const rawMessageId = getNotificationFingerprint(detail);
 
       if (rawMessageId) {
         if (recentNotificationIdsRef.current.has(rawMessageId)) return;
@@ -940,18 +995,9 @@ useEffect(() => {
 
       setPopupNotification({
         title: detail.title || 'Smarty',
-        body: detail.body || 'You have a new notification.',
+        body: getNotificationBody(detail, preferences),
         url: detail.url || '/',
       });
-
-      const notificationType = String(detail.type || '').toLowerCase();
-
-      if (
-        notificationType.includes('chat') ||
-        notificationType.includes('message')
-      ) {
-        window.dispatchEvent(new Event('chat-unread-refresh-request'));
-      }
     };
 
     window.addEventListener('smarty-notification', handleSmartyNotification);
@@ -959,13 +1005,20 @@ useEffect(() => {
     return () => {
       window.removeEventListener('smarty-notification', handleSmartyNotification);
     };
-  }, []);
+  }, [currentUserId]);
 
 
 
   return (
     <>
       <AuthRedirectHandler />
+
+      <UniversalSearch
+        open={universalSearchOpen}
+        onOpen={openUniversalSearch}
+        onClose={closeUniversalSearch}
+        user={user}
+      />
 
       <ReminderPopup
         title={popupNotification?.title || 'Smarty'}
@@ -994,6 +1047,16 @@ useEffect(() => {
             </NavLink>
 
             <div className="brand-actions">
+
+              <button
+                type="button"
+                className="quick-icon-link"
+                aria-label="Search Smarty"
+                title="Search"
+                onClick={openUniversalSearch}
+              >
+                <Search size={20} strokeWidth={2.15} />
+              </button>
 
               <NavLink
                 to="/feed"
@@ -1068,6 +1131,7 @@ useEffect(() => {
                 user={user}
                 logout={logout}
                 totalUnread={totalUnread}
+                onOpenSearch={openUniversalSearch}
               />
             </div>
           </div>
@@ -1127,6 +1191,14 @@ useEffect(() => {
                 <Route path="/support" element={<SupportPage/>} />
                 <Route path="/terms" element={<TermsPage/>} />
                 <Route path="/privacy" element={<PrivacyPage/>} />
+                <Route
+                  path="/notifications"
+                  element={
+                    <ProtectedRoute>
+                      <NotificationSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
 
                 <Route
                   path="/admin"

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -192,76 +193,6 @@ function getCognitoLogoutUrl() {
   return `https://${cognitoDomain}/logout?${params.toString()}`;
 }
 
-function normalizeRedirectPath(value) {
-  const fallback = '/feed';
-  const text = String(value || '').trim();
-
-  if (
-    !text ||
-    text === '/login' ||
-    text === '/register' ||
-    text.startsWith('//') ||
-    text.startsWith('/\\') ||
-    text.includes('\\')
-  ) {
-    return fallback;
-  }
-
-  if (text.startsWith('/')) {
-    return text;
-  }
-
-  try {
-    const url = new URL(text);
-    return `${url.pathname}${url.search || ''}${url.hash || ''}` || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function getPostLoginRedirect() {
-  const fallback = '/feed';
-
-  try {
-    const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
-
-    if (
-      window.location.pathname.startsWith('/rooms/invite/') ||
-      window.location.pathname.startsWith('/rooms/join/') ||
-      window.location.pathname.startsWith('/room-invites/')
-    ) {
-      return currentPath;
-    }
-
-    const stored =
-      sessionStorage.getItem('smarty-post-login-redirect') ||
-      localStorage.getItem('smarty-post-login-redirect') ||
-      fallback;
-
-    sessionStorage.removeItem('smarty-post-login-redirect');
-    localStorage.removeItem('smarty-post-login-redirect');
-
-    return normalizeRedirectPath(stored);
-  } catch {
-    return fallback;
-  }
-}
-
-function redirectAfterLogin() {
-  const targetPath = getPostLoginRedirect();
-  const currentPath = `${window.location.pathname}${window.location.search || ''}${window.location.hash || ''}`;
-
-  if (currentPath === targetPath) {
-    sessionStorage.removeItem('smarty-auth-redirecting');
-    return;
-  }
-
-  sessionStorage.setItem('smarty-auth-redirecting', targetPath);
-  window.history.replaceState({}, document.title, targetPath);
-  window.dispatchEvent(new PopStateEvent('popstate'));
-  sessionStorage.removeItem('smarty-auth-redirecting');
-}
-
 function mapCognitoUser(currentUser, session) {
   const idTokenObject = session?.tokens?.idToken;
   const accessTokenObject = session?.tokens?.accessToken;
@@ -351,24 +282,50 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const authBootStartedRef = useRef(false);
+  const sessionRestorePromiseRef = useRef(null);
 
   const establishSession = useCallback(async ({
     attempts = 1,
     forceRefresh = false,
   } = {}) => {
-    const { currentUser, session } = await waitForCognitoSession(
-      attempts,
-      forceRefresh
-    );
-    const authUser = mapCognitoUser(currentUser, session);
+    if (!forceRefresh && sessionRestorePromiseRef.current) {
+      return sessionRestorePromiseRef.current;
+    }
 
-    saveAuthUser(authUser);
-    setUser(authUser);
+    const restorePromise = (async () => {
+      const { currentUser, session } = await waitForCognitoSession(
+        attempts,
+        forceRefresh
+      );
+      const authUser = mapCognitoUser(currentUser, session);
 
-    return authUser;
+      saveAuthUser(authUser);
+      setUser(authUser);
+
+      return authUser;
+    })();
+
+    if (!forceRefresh) {
+      sessionRestorePromiseRef.current = restorePromise;
+    }
+
+    try {
+      return await restorePromise;
+    } finally {
+      if (sessionRestorePromiseRef.current === restorePromise) {
+        sessionRestorePromiseRef.current = null;
+      }
+    }
   }, []);
 
   useEffect(() => {
+    // React StrictMode intentionally re-runs effects in development. An OAuth
+    // authorization code is single-use, so the callback must only be exchanged
+    // once for the lifetime of this provider instance.
+    if (authBootStartedRef.current) return;
+    authBootStartedRef.current = true;
+
     const initAuth = async () => {
       try {
         sessionStorage.removeItem('smarty-auth-redirecting');
@@ -453,18 +410,6 @@ export function AuthProvider({ children }) {
 
             clearNativeOAuthStorage();
 
-            const storedRedirect =
-              sessionStorage.getItem('smarty-post-login-redirect') ||
-              localStorage.getItem('smarty-post-login-redirect') ||
-              '/feed';
-            const normalizedRedirect = normalizeRedirectPath(storedRedirect);
-            const redirectPath = normalizedRedirect.startsWith('/login')
-              ? '/feed'
-              : normalizedRedirect;
-
-            window.history.replaceState({}, document.title, redirectPath);
-            sessionStorage.removeItem('smarty-post-login-redirect');
-            localStorage.removeItem('smarty-post-login-redirect');
             setUser(authUser);
             setLoading(false);
             sessionStorage.removeItem('smarty-auth-redirecting');
@@ -483,10 +428,6 @@ export function AuthProvider({ children }) {
         }
 
         await establishSession({ attempts: isWebOAuthReturn ? 14 : 1 });
-
-        if (isWebOAuthReturn) {
-          redirectAfterLogin();
-        }
       } catch (err) {
         const message = err?.name || err?.message || '';
 
@@ -524,7 +465,6 @@ export function AuthProvider({ children }) {
       ) {
         try {
           await establishSession({ attempts: 8 });
-          redirectAfterLogin();
         } catch (err) {
           console.error('OAuth login failed:', err);
         }
@@ -555,9 +495,9 @@ export function AuthProvider({ children }) {
     });
 
     if (result.isSignedIn) {
-      await establishSession({ attempts: 3 });
+      const authUser = await establishSession({ attempts: 3 });
 
-      return { success: true };
+      return { success: true, user: authUser };
     }
 
     return {
@@ -576,8 +516,8 @@ export function AuthProvider({ children }) {
     const result = await confirmSignIn({ challengeResponse: response });
 
     if (result.isSignedIn) {
-      await establishSession({ attempts: 3 });
-      return { success: true };
+      const authUser = await establishSession({ attempts: 3 });
+      return { success: true, user: authUser };
     }
 
     return {

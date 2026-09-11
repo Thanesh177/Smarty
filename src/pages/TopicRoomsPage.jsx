@@ -708,7 +708,9 @@ export default function TopicRoomsPage() {
   const [showActiveRoomInfo, setShowActiveRoomInfo] = useState(false);
   const [activeInfoSection, setActiveInfoSection] = useState('');
   const [openRoomActionMenuId, setOpenRoomActionMenuId] = useState('');
-  const [roomSearch, setRoomSearch] = useState('');
+  const [roomSearch, setRoomSearch] = useState(
+    () => new URLSearchParams(location.search).get('search') || ''
+  );
   const [roomPrivacyFilter, setRoomPrivacyFilter] = useState('private');
   const [modalTitle, setModalTitle] = useState('Group Members');
   const [modalMode, setModalMode] = useState('members');
@@ -733,6 +735,11 @@ export default function TopicRoomsPage() {
   const roomsLoadingRef = useRef(false);
   const roomsLoadInFlightKeyRef = useRef('');
   const initialRoomsLoadedForUserRef = useRef('');
+
+  useEffect(() => {
+    const incomingSearch = new URLSearchParams(location.search).get('search');
+    if (incomingSearch !== null) setRoomSearch(incomingSearch);
+  }, [location.search]);
   const roomAccountScopeRef = useRef(userId || '');
   const roomsCacheRef = useRef({ key: '', timestamp: 0, rooms: [] });
   const pendingRoomsReloadRef = useRef(false);

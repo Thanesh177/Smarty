@@ -2586,13 +2586,17 @@ export const moderationApi = {
 };
 
 export const notificationApi = {
-  async initPush(user) {
+  async initPush(user, options = {}) {
     const userId = user?.id || user?.userId || user?.sub;
 
     if (!userId) return null;
 
     try {
-      await delay(1500);
+      const delayMs = Number.isFinite(Number(options.delayMs))
+        ? Math.max(0, Number(options.delayMs))
+        : 1500;
+
+      if (delayMs > 0) await delay(delayMs);
 
       const token = await requestNotificationToken();
 

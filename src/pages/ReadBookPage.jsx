@@ -284,7 +284,9 @@ const BookGrid = memo(function BookGrid({ title, books, savedBookIds, onToggleSa
 export default function ReadBookPage() {
   const location = useLocation();
   const isPreviewPage = location.pathname === '/preview-books';
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(
+    () => new URLSearchParams(location.search).get('search') || ''
+  );
   const [authorFilter, setAuthorFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -321,6 +323,12 @@ export default function ReadBookPage() {
     () => new Set(savedBooks.map((book) => String(getBookId(book)))),
     [savedBooks]
   );
+
+  useEffect(() => {
+    const incomingSearch = new URLSearchParams(location.search).get('search');
+    if (incomingSearch !== null) setQuery(incomingSearch);
+  }, [location.search]);
+
   useEffect(() => {
     mountedRef.current = true;
 

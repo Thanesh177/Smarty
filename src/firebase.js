@@ -5,6 +5,12 @@ import {
   isSupported,
   onMessage,
 } from 'firebase/messaging';
+import {
+  getNotificationBody,
+  getNotificationDecision,
+  loadActiveNotificationPreferences,
+  syncNotificationPreferencesToWorker,
+} from './lib/notificationPreferences';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyCN1HxV4Rvvgdz8fqH40rH23L-JXtDjX3c',
@@ -117,7 +123,15 @@ export async function requestNotificationToken() {
       return null;
     }
 
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await navigator.serviceWorker.register(
+      '/firebase-messaging-sw.js',
+      { scope: '/' }
+    );
+
+    await navigator.serviceWorker.ready;
+    await syncNotificationPreferencesToWorker(
+      loadActiveNotificationPreferences()
+    );
 
     const token = await getToken(messaging, {
       vapidKey:
@@ -197,7 +211,7 @@ export async function listenForForegroundMessages() {
       payload.notification?.title ||
       'Smarty';
 
-    const body =
+    const incomingBody =
       payload.data?.body ||
       payload.notification?.body ||
       'You have a new notification.';
@@ -205,13 +219,21 @@ export async function listenForForegroundMessages() {
     const url = payload.data?.url || '/';
     const type = payload.data?.type || 'general';
 
-    dispatchSmartyForegroundNotification({
+    const detail = {
       title,
-      body,
+      body: incomingBody,
       url,
       type,
       rawPayload: payload,
-    });
+    };
+    const preferences = loadActiveNotificationPreferences();
+    const decision = getNotificationDecision(detail, preferences);
+
+    if (!decision.deliver) return;
+
+    const body = getNotificationBody(detail, preferences);
+
+    dispatchSmartyForegroundNotification({ ...detail, body });
 
     if (document.visibilityState === 'visible') {
       return;

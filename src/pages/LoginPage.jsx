@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Link,
-  Navigate,
   useLocation,
   useNavigate,
 } from 'react-router-dom';
@@ -70,6 +69,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const from = getSafeDestination(location);
   const autoSocialStartedRef = useRef(false);
+  const authActionInFlightRef = useRef(false);
 
   const [mode, setMode] = useState('sign-in');
   const [form, setForm] = useState({
@@ -107,11 +107,13 @@ export default function LoginPage() {
     updateField('challengeResponse', '');
   };
 
-  const finishSignIn = useCallback(() => {
-    sessionStorage.setItem('smarty-post-login-redirect', from);
-    localStorage.setItem('smarty-post-login-redirect', from);
+  useEffect(() => {
+    if (loading || !user) return;
+
+    sessionStorage.removeItem('smarty-post-login-redirect');
+    localStorage.removeItem('smarty-post-login-redirect');
     navigate(from, { replace: true });
-  }, [from, navigate]);
+  }, [from, loading, navigate, user]);
 
   const continueFromNextStep = useCallback(
     (nextStep) => {
@@ -155,8 +157,9 @@ export default function LoginPage() {
 
   const handleSocialLogin = useCallback(
     async (provider) => {
-      if (submitting) return;
+      if (authActionInFlightRef.current) return;
 
+      authActionInFlightRef.current = true;
       setError('');
       setMessage('');
       setSubmitting(true);
@@ -176,9 +179,10 @@ export default function LoginPage() {
         );
         setSubmitting(false);
         setSocialProvider('');
+        authActionInFlightRef.current = false;
       }
     },
-    [from, submitting]
+    [from]
   );
 
   useEffect(() => {
@@ -206,12 +210,24 @@ export default function LoginPage() {
     );
   }
 
-  if (user) return <Navigate to={from} replace />;
+  if (user) {
+    return (
+      <main className="login-page auth-loading-page" role="status" aria-live="polite">
+        <div className="auth-loading-card">
+          <span className="auth-loading-mark" aria-hidden="true">S</span>
+          <div>
+            <strong>Opening your feed</strong>
+            <p>Your session is ready.</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (submitting) return;
+    if (authActionInFlightRef.current) return;
 
     const email = normalizeAuthEmail(form.email);
     setError('');
@@ -222,6 +238,7 @@ export default function LoginPage() {
       return;
     }
 
+    authActionInFlightRef.current = true;
     setSubmitting(true);
 
     try {
@@ -237,7 +254,6 @@ export default function LoginPage() {
         const result = await login(email, form.password);
 
         if (result?.success) {
-          finishSignIn();
           return;
         }
 
@@ -294,7 +310,6 @@ export default function LoginPage() {
         const result = await confirmLogin(response);
 
         if (result?.success) {
-          finishSignIn();
           return;
         }
 
@@ -303,6 +318,7 @@ export default function LoginPage() {
     } catch (authError) {
       setError(getAuthErrorMessage(authError));
     } finally {
+      authActionInFlightRef.current = false;
       setSubmitting(false);
     }
   };

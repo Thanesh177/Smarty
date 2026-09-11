@@ -5,15 +5,17 @@ import {
   Newspaper,
   BrainCircuit,
   Users,
+  Bell,
   ShieldCheck,
   LogOut,
   LogIn,
+  Search,
 } from 'lucide-react';
 import './NavbarMenu.css';
 import SmartyBrand from './SmartyBrand';
 import { isAdminUser } from '../lib/adminAccess';
 
-function NavbarMenu({ user, logout, totalUnread = 0 }) {
+function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const navigate = useNavigate();
@@ -120,6 +122,20 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
             </div>
 
             <div className="menu-section compact-menu-section" aria-label="Learning">
+              <button
+                type="button"
+                className="menu-link-btn"
+                onClick={() => {
+                  closeMenu();
+                  onOpenSearch?.();
+                }}
+              >
+                <span className="menu-link-left">
+                  <Search size={18} strokeWidth={2.2} />
+                  <span>Search</span>
+                </span>
+              </button>
+
               <NavLink to="/booksinfo" onClick={closeMenu} className="menu-icon-link">
                 <span className="menu-link-left">
                   <BookOpen size={18} strokeWidth={2.2} />
@@ -147,6 +163,15 @@ function NavbarMenu({ user, logout, totalUnread = 0 }) {
                   <span>Rooms</span>
                 </span>
               </NavLink>
+
+              {user && (
+                <NavLink to="/notifications" onClick={closeMenu} className="menu-icon-link">
+                  <span className="menu-link-left">
+                    <Bell size={18} strokeWidth={2.2} />
+                    <span>Notifications</span>
+                  </span>
+                </NavLink>
+              )}
 
               {isAdminUser(user) && (
                 <NavLink

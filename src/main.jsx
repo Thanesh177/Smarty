@@ -74,19 +74,6 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-// Remove stale service workers in normal browsers, but preserve the official
-// iOS app's WebView session and startup state.
-if ('serviceWorker' in navigator && !isSmartyNativeApp) {
-  navigator.serviceWorker
-    .getRegistrations()
-    .then((registrations) => {
-      registrations.forEach((registration) => {
-        registration.unregister().catch(() => {});
-      });
-    })
-    .catch(() => {});
-}
-
 // Keep reload protection active during startup to avoid infinite WebView loops.
 setTimeout(() => {
   try {

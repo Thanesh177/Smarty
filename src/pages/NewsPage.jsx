@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { newsApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -344,11 +345,14 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
 
 export default function NewsPage() {
   const { user } = useAuth();
+  const location = useLocation();
   const initialCountry = useMemo(() => getDefaultNewsCountry(), []);
   const [country, setCountry] = useState(initialCountry);
   const [region, setRegion] = useState(() => getSavedRegion(initialCountry));
   const [newsData, setNewsData] = useState(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(
+    () => new URLSearchParams(location.search).get('search') || ''
+  );
   const [selectedSection, setSelectedSection] = useState('All');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [saved, setSaved] = useState([]);
@@ -368,6 +372,11 @@ export default function NewsPage() {
     const accountId = user?.userId || user?.sub || user?.id || user?.email || 'guest';
     return `smarty-saved-news-v1-${encodeURIComponent(String(accountId))}`;
   }, [user]);
+
+  useEffect(() => {
+    const incomingSearch = new URLSearchParams(location.search).get('search');
+    if (incomingSearch !== null) setSearch(incomingSearch);
+  }, [location.search]);
 
   useEffect(() => {
     mountedRef.current = true;
