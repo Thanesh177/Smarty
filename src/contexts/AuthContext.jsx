@@ -20,7 +20,13 @@ import {
   confirmResetPassword,
 } from 'aws-amplify/auth';
 import { Hub } from 'aws-amplify/utils';
-import { exchangeNativeCodeForTokens } from '../lib/cognito';
+import {
+  clearNativeRefreshSession,
+  exchangeNativeCodeForTokens,
+  hasNativeRefreshSession,
+  persistNativeRefreshSession,
+  refreshNativeSession,
+} from '../lib/cognito';
 import { removeLegacyAccountCacheKeys } from '../lib/userScopedStorage';
 import { normalizeGroups } from '../lib/adminAccess';
 
@@ -117,6 +123,7 @@ function saveAuthUser(authUser) {
 }
 
 function clearAuthStorage() {
+  clearNativeRefreshSession();
   localStorage.removeItem('eduscroll_token');
   localStorage.removeItem('eduscroll_user');
   localStorage.removeItem('eduscroll_access_token');
@@ -129,7 +136,19 @@ function clearAuthStorage() {
   notifyAuthChanged();
 }
 
-function clearNativeOAuthStorage() {
+function pendingNativeState() {
+  return sessionStorage.getItem('smarty-native-oauth-state') ||
+    localStorage.getItem('smarty-native-oauth-state') || '';
+}
+
+function staleAuthOperation() {
+  const error = new Error('A newer sign-in operation has replaced this attempt.');
+  error.name = 'StaleAuthOperation';
+  return error;
+}
+
+function clearNativeOAuthStorage(expectedState) {
+  if (expectedState && pendingNativeState() !== expectedState) return;
   [
     'smarty-native-oauth-state',
     'smarty-native-oauth-provider',
@@ -235,6 +254,15 @@ function mapCognitoUser(currentUser, session) {
 }
 
 function getVerifiedNativeCachedUser() {
+  const cachedUser = getNativeCachedIdentity();
+  if (!cachedUser || !isCurrentJwt(cachedUser.token, cachedUser.sub)) {
+    return null;
+  }
+
+  return cachedUser;
+}
+
+function getNativeCachedIdentity() {
   if (!isRunningInsideNativeApp()) return null;
 
   try {
@@ -242,8 +270,10 @@ function getVerifiedNativeCachedUser() {
     const subject = normalizeIdentity(
       cachedUser?.userId || cachedUser?.sub || cachedUser?.id
     );
+    const token = cachedUser?.token || localStorage.getItem('eduscroll_token') || '';
+    const tokenSubject = normalizeIdentity(decodeJwtPayload(token).sub);
 
-    if (!cachedUser || !isCurrentJwt(cachedUser.token, subject)) {
+    if (!cachedUser || !subject || tokenSubject !== subject) {
       return null;
     }
 
@@ -252,10 +282,52 @@ function getVerifiedNativeCachedUser() {
       id: subject,
       userId: subject,
       sub: subject,
+      token,
     };
   } catch {
     return null;
   }
+}
+
+function mapNativeTokens(tokens, cachedUser = null) {
+  const idToken = String(tokens?.id_token || '');
+  const accessToken = String(tokens?.access_token || '');
+  const payload = decodeJwtPayload(idToken || accessToken);
+  const subject = normalizeIdentity(payload.sub);
+  const cachedSubject = normalizeIdentity(
+    cachedUser?.userId || cachedUser?.sub || cachedUser?.id
+  );
+
+  if (
+    !subject ||
+    (cachedSubject && cachedSubject !== subject) ||
+    !isCurrentJwt(idToken || accessToken, subject)
+  ) {
+    throw new Error('The restored session identity could not be verified.');
+  }
+
+  const email = payload.email || cachedUser?.email || '';
+  const name =
+    payload.name ||
+    payload.given_name ||
+    payload.preferred_username ||
+    cachedUser?.name ||
+    getSafeName(payload, email);
+  const groups = payload['cognito:groups'] === undefined
+    ? cachedUser?.groups
+    : payload['cognito:groups'];
+
+  return {
+    id: subject,
+    userId: subject,
+    sub: subject,
+    username: getSafeUsername(cachedUser, payload, email),
+    email,
+    name,
+    groups: normalizeGroups(groups),
+    token: idToken || accessToken,
+    accessToken,
+  };
 }
 
 async function waitForCognitoSession(attempts = 1, forceRefresh = false) {
@@ -278,30 +350,189 @@ async function waitForCognitoSession(attempts = 1, forceRefresh = false) {
   throw lastError || new Error('Authentication session was not available.');
 }
 
+async function withAuthDeadline(operation, message = 'Session restoration took too long. Please sign in again.') {
+  let timer;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise((_, reject) => {
+        timer = window.setTimeout(() => reject(new Error(message)), 15000);
+      }),
+    ]);
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [authError, setAuthError] = useState('');
   const authBootStartedRef = useRef(false);
   const sessionRestorePromiseRef = useRef(null);
+  const nativeCompletionRef = useRef(null);
+  const sessionRevisionRef = useRef(0);
+  const loggingOutRef = useRef(false);
+
+  const invalidatePendingSession = useCallback(() => {
+    sessionRevisionRef.current += 1;
+    sessionRestorePromiseRef.current = null;
+  }, []);
+
+  const completeNativeLogin = useCallback((params) => {
+    const state = params.get('state') || '';
+    // The system browser and onOpenURL may deliver the same callback. Keep
+    // the settled promise too: an authorization code must never be reused.
+    if (state && nativeCompletionRef.current?.state === state) {
+      return nativeCompletionRef.current.promise;
+    }
+
+    // Validate before changing ownership. An old callback must not invalidate
+    // a newer attempt or erase its PKCE material.
+    if (!state || state !== pendingNativeState()) return Promise.reject(staleAuthOperation());
+    invalidatePendingSession();
+    const revision = sessionRevisionRef.current;
+    setAuthError('');
+    const promise = (async () => {
+      const expectedState = pendingNativeState();
+      const expectedNonce = sessionStorage.getItem('smarty-native-oauth-nonce') ||
+        localStorage.getItem('smarty-native-oauth-nonce') || '';
+      if (!state || !expectedState || state !== expectedState) {
+        throw new Error('The sign-in response could not be verified. Please start sign-in again.');
+      }
+      if (params.has('error')) {
+        throw new Error(params.get('error') === 'access_denied'
+          ? 'Sign-in was cancelled.'
+          : 'Google or Apple could not finish sign-in. Please try again.');
+      }
+
+      const tokens = await exchangeNativeCodeForTokens(params.get('code'), {
+        redirectUri: 'smarty://callback',
+      });
+      if (revision !== sessionRevisionRef.current || pendingNativeState() !== state) {
+        throw staleAuthOperation();
+      }
+      const payload = decodeJwtPayload(tokens.id_token);
+      const subject = normalizeIdentity(payload.sub);
+      if (!subject || !isCurrentJwt(tokens.id_token, subject) ||
+          !expectedNonce || payload.nonce !== expectedNonce) {
+        throw new Error('The sign-in response could not be verified. Please start sign-in again.');
+      }
+
+      const email = payload.email || '';
+      const authUser = {
+        id: subject, userId: subject, sub: subject,
+        username: getSafeUsername(null, payload, email),
+        email, name: getSafeName(payload, email),
+        groups: normalizeGroups(payload['cognito:groups']),
+        token: tokens.id_token, accessToken: tokens.access_token,
+      };
+      if (!persistNativeRefreshSession(tokens, subject)) {
+        throw new Error('A lasting sign-in session could not be created. Please try again.');
+      }
+      saveAuthUser(authUser);
+      clearNativeOAuthStorage(state);
+      setUser(authUser);
+      setLoading(false);
+      return authUser;
+    })();
+    nativeCompletionRef.current = { state, promise };
+    return promise;
+  }, [invalidatePendingSession]);
+
+  useEffect(() => {
+    // Acknowledge receipt synchronously so native code never reloads the page
+    // while the exchange is running. Deliver only from the trusted WKWebView.
+    const handleCallback = (callbackUrl) => {
+      if (!isRunningInsideNativeApp()) return false;
+      let callback;
+      try { callback = new URL(callbackUrl); } catch { return false; }
+      if (callback.protocol !== 'smarty:' || callback.hostname !== 'callback') return false;
+      const state = callback.searchParams.get('state') || '';
+      // Acknowledge stale deliveries so the native wrapper does not reload
+      // the page and accidentally restart a consumed authorization code.
+      if (!state || (state !== pendingNativeState() && nativeCompletionRef.current?.state !== state)) return true;
+      const wasCancelled = callback.searchParams.get('error') === 'access_denied';
+      completeNativeLogin(callback.searchParams).catch((error) => {
+        if (error.name === 'StaleAuthOperation' || pendingNativeState() !== state) return;
+        clearNativeOAuthStorage(state);
+        setLoading(false);
+        setAuthError(wasCancelled ? '' : error.message);
+        window.dispatchEvent(new CustomEvent('smarty:native-auth-status', {
+          detail: {
+            status: wasCancelled ? 'cancelled' : 'failed',
+            state,
+            message: wasCancelled ? '' : error.message,
+          },
+        }));
+      });
+      return true;
+    };
+    const handleStarted = () => {
+      invalidatePendingSession();
+      setAuthError('');
+      setUser(null);
+      clearAuthStorage();
+      setLoading(false);
+    };
+    window.__SMARTY_COMPLETE_NATIVE_OAUTH__ = handleCallback;
+    window.addEventListener('smarty:native-auth-started', handleStarted);
+    return () => {
+      window.removeEventListener('smarty:native-auth-started', handleStarted);
+      if (window.__SMARTY_COMPLETE_NATIVE_OAUTH__ === handleCallback) {
+        delete window.__SMARTY_COMPLETE_NATIVE_OAUTH__;
+      }
+    };
+  }, [completeNativeLogin, invalidatePendingSession]);
 
   const establishSession = useCallback(async ({
     attempts = 1,
     forceRefresh = false,
   } = {}) => {
+    const nativeUser = getVerifiedNativeCachedUser();
+    if (nativeUser && !forceRefresh) {
+      setUser(nativeUser);
+      setLoading(false);
+      return nativeUser;
+    }
+    if (isRunningInsideNativeApp() && pendingNativeState()) throw staleAuthOperation();
     if (!forceRefresh && sessionRestorePromiseRef.current) {
       return sessionRestorePromiseRef.current;
     }
 
+    const revision = sessionRevisionRef.current;
     const restorePromise = (async () => {
-      const { currentUser, session } = await waitForCognitoSession(
-        attempts,
-        forceRefresh
-      );
+      const cachedNativeIdentity = getNativeCachedIdentity();
+      if (
+        cachedNativeIdentity &&
+        hasNativeRefreshSession(cachedNativeIdentity.sub)
+      ) {
+        const nativeTokens = await withAuthDeadline(
+          refreshNativeSession(),
+          'Session restoration took too long. Check your connection and try again.'
+        );
+        if (revision !== sessionRevisionRef.current) throw staleAuthOperation();
+        if (!nativeTokens) {
+          throw new Error('The saved native session was not available.');
+        }
+
+        const authUser = mapNativeTokens(nativeTokens, cachedNativeIdentity);
+        saveAuthUser(authUser);
+        setUser(authUser);
+        setAuthError('');
+        setLoading(false);
+        return authUser;
+      }
+
+      const { currentUser, session } = await withAuthDeadline(waitForCognitoSession(attempts, forceRefresh));
+      if (revision !== sessionRevisionRef.current) throw staleAuthOperation();
       const authUser = mapCognitoUser(currentUser, session);
 
       saveAuthUser(authUser);
       setUser(authUser);
+      setAuthError('');
+      setLoading(false);
 
       return authUser;
     })();
@@ -327,6 +558,7 @@ export function AuthProvider({ children }) {
     authBootStartedRef.current = true;
 
     const initAuth = async () => {
+      const bootRevision = sessionRevisionRef.current;
       try {
         sessionStorage.removeItem('smarty-auth-redirecting');
         const params = new URLSearchParams(window.location.search);
@@ -348,78 +580,18 @@ export function AuthProvider({ children }) {
           localStorage.getItem('smarty-native-oauth-provider') ||
           'social';
 
-        if (isNativeReturn && nativeProviderError) {
-          console.error(
-            'Native OAuth provider returned an error:',
-            nativeProviderError
-          );
-          clearNativeOAuthStorage();
-          clearAuthStorage();
-          setUser(null);
-          setLoading(false);
-          window.location.replace(
-            `/login?oauth_error=${encodeURIComponent(nativeProvider)}`
-          );
-          return;
-        }
-
-        if (isNativeReturn && nativeCode && hasOAuthState) {
+        if (isNativeReturn && (nativeCode || nativeProviderError) && hasOAuthState) {
           try {
-            const returnedState = params.get('state') || '';
-            const expectedState =
-              sessionStorage.getItem('smarty-native-oauth-state') ||
-              localStorage.getItem('smarty-native-oauth-state') ||
-              '';
-            const expectedNonce =
-              sessionStorage.getItem('smarty-native-oauth-nonce') ||
-              localStorage.getItem('smarty-native-oauth-nonce') ||
-              '';
-
-            if (!expectedState || returnedState !== expectedState) {
-              throw new Error('The sign-in response could not be verified. Please try again.');
-            }
-
-            const tokens = await exchangeNativeCodeForTokens(nativeCode, {
-              redirectUri: 'smarty://callback',
-            });
-            const payload = decodeJwtPayload(tokens.id_token);
-            const subject = normalizeIdentity(payload.sub);
-
-            if (!subject || !isCurrentJwt(tokens.id_token, subject)) {
-              throw new Error('Native OAuth returned an invalid identity token.');
-            }
-
-            if (!expectedNonce || payload.nonce !== expectedNonce) {
-              throw new Error('The sign-in response could not be verified. Please try again.');
-            }
-
-            const email = payload.email || '';
-            const authUser = {
-              id: subject,
-              userId: subject,
-              sub: subject,
-              username: getSafeUsername(null, payload, email),
-              email,
-              name: getSafeName(payload, email),
-              groups: normalizeGroups(payload['cognito:groups']),
-              token: tokens.id_token,
-              accessToken: tokens.access_token,
-            };
-
-            saveAuthUser(authUser);
-
-            clearNativeOAuthStorage();
-
-            setUser(authUser);
-            setLoading(false);
+            await completeNativeLogin(params);
             sessionStorage.removeItem('smarty-auth-redirecting');
             return;
           } catch (nativeOAuthError) {
+            if (nativeOAuthError.name === 'StaleAuthOperation' || pendingNativeState() !== params.get('state')) return;
             console.error('Native OAuth token exchange failed:', nativeOAuthError);
             clearAuthStorage();
             setUser(null);
             setLoading(false);
-            clearNativeOAuthStorage();
+            clearNativeOAuthStorage(params.get('state'));
             window.location.replace(
               `/login?oauth_error=${encodeURIComponent(nativeProvider)}`
             );
@@ -429,6 +601,7 @@ export function AuthProvider({ children }) {
 
         await establishSession({ attempts: isWebOAuthReturn ? 14 : 1 });
       } catch (err) {
+        if (bootRevision !== sessionRevisionRef.current || err.name === 'StaleAuthOperation') return;
         const message = err?.name || err?.message || '';
 
         const isUnauthenticated =
@@ -438,26 +611,34 @@ export function AuthProvider({ children }) {
 
         if (!isUnauthenticated) {
           console.error('Auth init failed:', err);
+          setAuthError('Your session could not be restored. Please sign in again.');
         }
 
-        const nativeCachedUser = getVerifiedNativeCachedUser();
+        const nativeCachedUser = getNativeCachedIdentity();
+        const canRetryNativeSession = Boolean(
+          nativeCachedUser &&
+          hasNativeRefreshSession(nativeCachedUser.sub) &&
+          !err?.invalidSession
+        );
 
-        if (nativeCachedUser) {
+        if (canRetryNativeSession) {
           setUser(nativeCachedUser);
+          setAuthError('');
         } else {
           clearAuthStorage();
           setUser(null);
         }
       } finally {
-        setLoading(false);
+        if (bootRevision === sessionRevisionRef.current) setLoading(false);
       }
     };
 
     initAuth();
-  }, [establishSession]);
+  }, [completeNativeLogin, establishSession]);
 
   useEffect(() => {
     const unsubscribe = Hub.listen('auth', async ({ payload }) => {
+      if (loggingOutRef.current && payload.event !== 'signedOut') return;
       if (
         payload.event === 'signedIn' ||
         payload.event === 'signInWithRedirect' ||
@@ -466,33 +647,55 @@ export function AuthProvider({ children }) {
         try {
           await establishSession({ attempts: 8 });
         } catch (err) {
+          if (err.name === 'StaleAuthOperation') return;
           console.error('OAuth login failed:', err);
+          setAuthError('Sign-in could not be completed. Please try again.');
+          setLoading(false);
         }
       }
 
+      if (payload.event === 'signInWithRedirect_failure') {
+        const cachedNativeUser = getNativeCachedIdentity();
+        if (
+          isRunningInsideNativeApp() &&
+          (
+            pendingNativeState() ||
+            getVerifiedNativeCachedUser() ||
+            (cachedNativeUser && hasNativeRefreshSession(cachedNativeUser.sub))
+          )
+        ) return;
+        invalidatePendingSession();
+        setAuthError('Connected sign-in could not be completed. Please try again.');
+        setLoading(false);
+      }
+
       if (payload.event === 'signedOut') {
+        invalidatePendingSession();
         clearAuthStorage();
         setUser(null);
       }
     });
 
     return () => unsubscribe();
-  }, [establishSession]);
+  }, [establishSession, invalidatePendingSession]);
 
   const login = async (email, password) => {
+    invalidatePendingSession();
+    clearNativeOAuthStorage();
+    setAuthError('');
     try {
-      await getCurrentUser();
-      await signOut({ global: false });
+      await withAuthDeadline(getCurrentUser());
+      await withAuthDeadline(signOut({ global: false }));
     } catch {
       // No existing Cognito session.
     }
 
     clearAuthStorage();
 
-    const result = await signIn({
+    const result = await withAuthDeadline(signIn({
       username: email,
       password,
-    });
+    }), 'Sign-in took too long. Check your connection and try again.');
 
     if (result.isSignedIn) {
       const authUser = await establishSession({ attempts: 3 });
@@ -513,7 +716,7 @@ export function AuthProvider({ children }) {
       throw new Error('Enter the requested verification value.');
     }
 
-    const result = await confirmSignIn({ challengeResponse: response });
+    const result = await withAuthDeadline(confirmSignIn({ challengeResponse: response }), 'Verification took too long. Please try again.');
 
     if (result.isSignedIn) {
       const authUser = await establishSession({ attempts: 3 });
@@ -577,9 +780,13 @@ export function AuthProvider({ children }) {
       try {
         return await establishSession({ attempts, forceRefresh });
       } catch (error) {
-        const cachedUser = getVerifiedNativeCachedUser();
+        const cachedUser = getNativeCachedIdentity();
 
-        if (cachedUser) {
+        if (
+          cachedUser &&
+          hasNativeRefreshSession(cachedUser.sub) &&
+          !error?.invalidSession
+        ) {
           setUser(cachedUser);
           return cachedUser;
         }
@@ -591,9 +798,12 @@ export function AuthProvider({ children }) {
   );
 
   const logout = async () => {
-    if (loggingOut) return;
+    if (loggingOutRef.current) return;
+    loggingOutRef.current = true;
 
     setLoggingOut(true);
+    invalidatePendingSession();
+    nativeCompletionRef.current = null;
     setUser(null);
     clearAuthStorage();
 
@@ -605,7 +815,7 @@ export function AuthProvider({ children }) {
     try {
       // Amplify must see its own session records before they are cleared so it
       // can revoke the local Cognito session and federated hosted-UI session.
-      await signOut({ global: false });
+      await withAuthDeadline(signOut({ global: false }));
     } catch (error) {
       console.warn('Cognito sign-out failed; using hosted logout fallback.', error);
     } finally {
@@ -629,6 +839,7 @@ export function AuthProvider({ children }) {
     () => ({
       user,
       loading,
+      authError,
       login,
       confirmLogin,
       register,
@@ -642,7 +853,7 @@ export function AuthProvider({ children }) {
       refreshToken,
       isAuthenticated: !!user,
     }),
-    [user, loading, loggingOut, restoreSession]
+    [user, loading, loggingOut, authError, restoreSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

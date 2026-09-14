@@ -33,8 +33,8 @@ const ALL_ACHIEVEMENTS = [
   },
 ];
 
-export function checkAchievements({ topicId, percentage, streak, overallLevel }) {
-  const unlocked = getAchievements();
+export function checkAchievements({ topicId, percentage, streak, overallLevel, userId }) {
+  const unlocked = getAchievements(userId);
   const unlockedIds = unlocked.map((item) => item.id);
 
   const newlyUnlocked = [];
@@ -53,7 +53,7 @@ export function checkAchievements({ topicId, percentage, streak, overallLevel })
   if (overallLevel >= 5) add("level_5");
 
   const updated = [...unlocked, ...newlyUnlocked];
-  saveAchievements(updated);
+  saveAchievements(updated, userId);
 
   return newlyUnlocked;
 }

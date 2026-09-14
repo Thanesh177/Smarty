@@ -284,7 +284,8 @@
 .post-ai-explanation-paragraphs {
   margin-top: clamp(24px, 3vw, 36px);
   display: grid;
-  gap: 14px;
+  gap: clamp(12px, 1.6vw, 18px);
+  counter-reset: explanation-section;
 }
 
 .post-ai-explanation-paragraphs > p,
@@ -300,18 +301,30 @@
   padding-left: 1.25rem;
 }
 
+.post-ai-explanation-paragraphs > ol {
+  padding-left: 1.35rem;
+}
+
 .post-ai-explanation-paragraphs li + li {
   margin-top: 8px;
 }
 
 .post-ai-text-section {
-  padding: clamp(17px, 2.2vw, 23px);
+  position: relative;
+  padding: clamp(19px, 2.4vw, 27px);
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.032);
+  background:
+    linear-gradient(135deg, rgba(var(--post-ai-accent-rgb), 0.035), transparent 46%),
+    rgba(255, 255, 255, 0.026);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+  counter-increment: explanation-section;
 }
 
 .post-ai-text-section h3 {
-  margin: 0 0 9px;
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
   color: rgba(var(--post-ai-accent-rgb), 0.9);
   font-size: 0.72rem;
   font-weight: 840;
@@ -319,10 +332,32 @@
   text-transform: uppercase;
 }
 
-.post-ai-text-section p {
+.post-ai-text-section h3::before {
+  content: counter(explanation-section, decimal-leading-zero);
+  color: rgba(226, 244, 248, 0.34);
+  font-variant-numeric: tabular-nums;
+}
+
+.post-ai-text-section-body {
+  display: grid;
+  gap: 11px;
+}
+
+.post-ai-text-section p,
+.post-ai-text-section ul,
+.post-ai-text-section ol {
   margin: 0;
   color: rgba(228, 237, 240, 0.8);
   line-height: 1.78;
+}
+
+.post-ai-text-section ul,
+.post-ai-text-section ol {
+  padding-left: 1.25rem;
+}
+
+.post-ai-text-section li + li {
+  margin-top: 7px;
 }
 
 .post-ai-loading {
@@ -1338,4 +1373,18 @@
   .post-ai-messages {
     scroll-behavior: auto;
   }
+}
+.post-study-objective { margin: 0 0 25px; padding: 20px 0; border-block: 1px solid #ffffff0e; }
+.post-study-objective > span, .post-study-sources > span { color: #8fcbd2; font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; }
+.post-study-objective p { color: #c7d9e1; line-height: 1.7; margin: 10px 0; }
+.post-study-objective a, .post-study-sources a { color: #9acfd8; text-decoration: none; display: inline-flex; gap: 8px; align-items: center; padding: 12px 0; font-size: .82rem; }
+.post-study-sources { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; margin: 18px 0; }
+.post-study-sources a { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .post-ai-page { padding-right: 68px !important; }
+  .post-ai-page .post-ai-card, .post-ai-page .post-ai-chat { padding: 18px !important; }
+  .post-ai-topline { grid-template-columns: 1fr; gap: 8px; }
+  .post-ai-progress-label { white-space: normal; line-height: 1.5; }
+  .post-ai-comments { justify-self: start; }
+  .post-ai-page .post-ai-hero h1 { font-size: clamp(1.9rem, 8vw, 2.6rem); }
 }

@@ -20,7 +20,14 @@ const LEGACY_AMPLIFY_ORIGIN =
 
 const NATIVE_REDIRECT_URI = 'smarty://callback';
 
+const NATIVE_REFRESH_TOKEN_KEY =
+  'smarty-native-refresh-token';
+const NATIVE_REFRESH_SUBJECT_KEY =
+  'smarty-native-refresh-subject';
+
 const isBrowser = typeof window !== 'undefined';
+let nativeRefreshPromise = null;
+let nativeSessionGeneration = 0;
 
 const toBase64Url = (bytes) => {
   let binary = '';
@@ -146,8 +153,8 @@ const saveCurrentRedirectPath = () => {
 
   if (
     currentPath &&
-    currentPath !== '/login' &&
-    currentPath !== '/register'
+    !/^\/(login|register)(\/|$)/.test(window.location.pathname) &&
+    !new URLSearchParams(window.location.search).has('code')
   ) {
     sessionStorage.setItem(
       'smarty-post-login-redirect',
@@ -250,9 +257,15 @@ export const startNativeSocialLogin = async (
     code_challenge: codeChallenge,
   });
 
-  window.location.href =
-    `https://${COGNITO_DOMAIN}` +
-    `/oauth2/authorize?${query.toString()}`;
+  const authorizationUrl = `https://${COGNITO_DOMAIN}/oauth2/authorize?${query.toString()}`;
+  window.dispatchEvent(new CustomEvent('smarty:native-auth-started', { detail: { state: oauthState } }));
+  const nativeBridge = window.webkit?.messageHandlers?.smartyNative;
+  if (nativeBridge?.postMessage) {
+    // Keep the current page and its pending login state alive on iOS.
+    nativeBridge.postMessage({ action: 'startOAuth', url: authorizationUrl });
+  } else {
+    window.location.href = authorizationUrl;
+  }
 };
 
 export const startSocialLogin = async (
@@ -334,19 +347,28 @@ export const exchangeNativeCodeForTokens = async (
     code_verifier: codeVerifier,
   });
 
-  const response = await fetch(
-    `https://${COGNITO_DOMAIN}/oauth2/token`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type':
-          'application/x-www-form-urlencoded',
-      },
-      body,
-    }
-  );
-
-  const responseText = await response.text();
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 25000);
+  let response;
+  let responseText;
+  try {
+    response = await fetch(
+      `https://${COGNITO_DOMAIN}/oauth2/token`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        signal: controller.signal,
+      }
+    );
+    responseText = await response.text();
+  } catch (error) {
+    throw new Error(error.name === 'AbortError'
+      ? 'The sign-in service took too long to respond. Please try again.'
+      : 'We could not reach the sign-in service. Check your connection and try again.');
+  } finally {
+    window.clearTimeout(timeout);
+  }
   let data = {};
 
   try {
@@ -361,14 +383,203 @@ export const exchangeNativeCodeForTokens = async (
 
   if (!response.ok) {
     throw new Error(
-      data?.error_description ||
-      data?.error ||
-      responseText ||
-      'Native OAuth token exchange failed.'
+      data?.error === 'invalid_grant'
+        ? 'This sign-in attempt has expired or was already used. Please start sign-in again.'
+        : 'The sign-in service could not complete this attempt. Please try again.'
     );
   }
 
   return data;
+};
+
+const decodeTokenPayload = (token) => {
+  try {
+    const payload = String(token || '').split('.')[1] || '';
+    const normalized = payload
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(payload.length / 4) * 4, '=');
+
+    return JSON.parse(atob(normalized));
+  } catch {
+    return {};
+  }
+};
+
+const nativeSessionError = (message, code = '') => {
+  const error = new Error(message);
+  error.code = code;
+  error.invalidSession = [
+    'invalid_grant',
+    'invalid_client',
+    'identity_mismatch',
+  ].includes(code);
+  return error;
+};
+
+export const persistNativeRefreshSession = (
+  tokens,
+  expectedSubject
+) => {
+  if (!isBrowser) return false;
+
+  const refreshToken = String(tokens?.refresh_token || '').trim();
+  const subject = String(expectedSubject || '').trim();
+  const tokenSubject = String(
+    decodeTokenPayload(tokens?.id_token || tokens?.access_token).sub || ''
+  ).trim();
+
+  if (!refreshToken || !subject || tokenSubject !== subject) {
+    return false;
+  }
+
+  localStorage.setItem(NATIVE_REFRESH_TOKEN_KEY, refreshToken);
+  localStorage.setItem(NATIVE_REFRESH_SUBJECT_KEY, subject);
+  nativeSessionGeneration += 1;
+  return true;
+};
+
+export const hasNativeRefreshSession = (expectedSubject = '') => {
+  if (!isBrowser) return false;
+
+  try {
+    const refreshToken = localStorage.getItem(NATIVE_REFRESH_TOKEN_KEY) || '';
+    const storedSubject = localStorage.getItem(NATIVE_REFRESH_SUBJECT_KEY) || '';
+    const expected = String(expectedSubject || '').trim();
+
+    return Boolean(
+      refreshToken &&
+      storedSubject &&
+      (!expected || storedSubject === expected)
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const clearNativeRefreshSession = () => {
+  nativeSessionGeneration += 1;
+  nativeRefreshPromise = null;
+
+  if (!isBrowser) return;
+
+  localStorage.removeItem(NATIVE_REFRESH_TOKEN_KEY);
+  localStorage.removeItem(NATIVE_REFRESH_SUBJECT_KEY);
+};
+
+export const refreshNativeSession = async () => {
+  if (!isBrowser) return null;
+  if (nativeRefreshPromise) return nativeRefreshPromise;
+
+  const refreshToken = localStorage.getItem(NATIVE_REFRESH_TOKEN_KEY) || '';
+  const expectedSubject = localStorage.getItem(NATIVE_REFRESH_SUBJECT_KEY) || '';
+
+  if (!refreshToken || !expectedSubject) return null;
+  if (!COGNITO_DOMAIN || !COGNITO_CLIENT_ID) {
+    throw nativeSessionError(
+      'The sign-in service is not configured for session restoration.',
+      'configuration_error'
+    );
+  }
+
+  const generation = nativeSessionGeneration;
+  const request = (async () => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 25000);
+    let response;
+    let responseText = '';
+
+    try {
+      response = await fetch(
+        `https://${COGNITO_DOMAIN}/oauth2/token`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: COGNITO_CLIENT_ID,
+            refresh_token: refreshToken,
+          }),
+          signal: controller.signal,
+        }
+      );
+      responseText = await response.text();
+    } catch (error) {
+      throw nativeSessionError(
+        error.name === 'AbortError'
+          ? 'Session restoration took too long. Please try again.'
+          : 'We could not refresh your session. Check your connection and try again.',
+        error.name === 'AbortError' ? 'timeout' : 'network_error'
+      );
+    } finally {
+      window.clearTimeout(timeout);
+    }
+
+    let data = {};
+    try {
+      data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      data = {};
+    }
+
+    if (!response.ok) {
+      const code = String(data?.error || `http_${response.status}`);
+      if (code === 'invalid_grant' || code === 'invalid_client') {
+        clearNativeRefreshSession();
+      }
+
+      throw nativeSessionError(
+        code === 'invalid_grant'
+          ? 'Your saved session is no longer valid. Please sign in again.'
+          : 'The sign-in service could not restore your session. Please try again.',
+        code
+      );
+    }
+
+    if (generation !== nativeSessionGeneration) {
+      throw nativeSessionError(
+        'The saved session was cleared while it was being restored.',
+        'session_changed'
+      );
+    }
+
+    const idToken = data?.id_token || '';
+    const accessToken = data?.access_token || '';
+    const tokenSubject = String(
+      decodeTokenPayload(idToken || accessToken).sub || ''
+    ).trim();
+
+    if (!tokenSubject || tokenSubject !== expectedSubject) {
+      clearNativeRefreshSession();
+      throw nativeSessionError(
+        'The restored session did not match the signed-in account.',
+        'identity_mismatch'
+      );
+    }
+
+    const rotatedRefreshToken = String(data?.refresh_token || '').trim();
+    if (rotatedRefreshToken) {
+      localStorage.setItem(NATIVE_REFRESH_TOKEN_KEY, rotatedRefreshToken);
+    }
+
+    return {
+      ...data,
+      refresh_token: rotatedRefreshToken || refreshToken,
+      subject: expectedSubject,
+    };
+  })();
+
+  nativeRefreshPromise = request;
+
+  try {
+    return await request;
+  } finally {
+    if (nativeRefreshPromise === request) {
+      nativeRefreshPromise = null;
+    }
+  }
 };
 
 // Retained for older imports while native clients update.

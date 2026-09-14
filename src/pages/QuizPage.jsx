@@ -1,8 +1,17 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import confetti from "canvas-confetti";
-import { saveWrongQuestion, getWrongQuestions } from "../lib/progressStore";
-import { getFocusedQuizId, getLearningContext, markLearningProgress } from "../lib/learningJourney";
+import {
+  getProgress,
+  getProgressUserId,
+  getVisitStreak,
+  getWrongQuestions,
+  saveProgress,
+  saveWrongQuestion,
+} from "../lib/progressStore";
+import { getFocusedQuizId, getLearningContext, recordLearningQuiz } from "../lib/learningJourney";
+import { getLearningGuide, getGuideQuestions } from "../data/learningGuides";
+import { postApi } from "../api/client";
 import {
   clearActiveQuiz,
   filterUnseenQuestions,
@@ -29,11 +38,6 @@ const API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').replace(/\/
 const CAN_USE_REMOTE_QUIZ_API = Boolean(API_BASE_URL) && (
   typeof window === "undefined" || window.location.protocol !== "file:"
 );
-
-const buildApiUrl = (path) => {
-  if (!API_BASE_URL) return '';
-  return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
-};
 
 const TOPICS = [
 
@@ -537,17 +541,42 @@ function normalizeGeneratedQuestions(payload, topicId, {
   const normalized = values.map((question, questionIndex) => {
     const q = String(question?.q || question?.question || question?.prompt || "").trim();
     const rawOptions = question?.options || question?.choices || question?.answers || [];
-    const options = Array.isArray(rawOptions) ? [...new Set(
-      rawOptions
-        .map((option) => String(option?.text || option?.label || option || "").trim())
-        .filter(Boolean),
-    )] : [];
+    const seenOptions = new Set();
+    const options = Array.isArray(rawOptions) ? rawOptions
+      .map((option) => String(option?.text || option?.label || option || "")
+        .replace(/^\s*[A-D][.):\-]\s*/i, "")
+        .trim())
+      .filter((option) => {
+        const key = option.toLocaleLowerCase();
+        if (!option || seenOptions.has(key)) return false;
+        seenOptions.add(key);
+        return true;
+      })
+      .slice(0, 4) : [];
     const rawAnswer = question?.answer ?? question?.correctAnswer ?? question?.correct ?? question?.correctOption;
-    const answer = Number.isInteger(rawAnswer)
-      ? options[rawAnswer]
-      : String(rawAnswer || "").trim();
+    const answerIndex = Number.isInteger(rawAnswer)
+      ? rawAnswer
+      : /^\d+$/.test(String(rawAnswer || "").trim())
+        ? Number(rawAnswer)
+        : /^[A-D]$/i.test(String(rawAnswer || "").trim())
+          ? String(rawAnswer).trim().toUpperCase().charCodeAt(0) - 65
+          : -1;
+    const answerText = String(rawAnswer || "")
+      .replace(/^\s*[A-D][.):\-]\s*/i, "")
+      .trim();
+    const answer = answerIndex >= 0
+      ? options[answerIndex]
+      : options.find((option) => option.toLocaleLowerCase() === answerText.toLocaleLowerCase());
+    const difficultyText = String(question?.difficulty || "").trim().toLocaleLowerCase();
+    const difficulty = difficultyText === "easy"
+      ? "Easy"
+      : difficultyText === "medium"
+        ? "Medium"
+        : difficultyText === "hard"
+          ? "Hard"
+          : fallbackDifficulty;
 
-    if (!q || options.length < 2 || !answer || !options.includes(answer)) return null;
+    if (q.length < 12 || options.length < 3 || !answer || !options.includes(answer)) return null;
 
     const normalizedQuestion = {
       id: question?.id || `generated-${topicId}-${questionIndex + 1}`,
@@ -557,9 +586,7 @@ function normalizeGeneratedQuestions(payload, topicId, {
       explanation: String(
         question?.explanation || question?.reason || `The correct answer is ${answer}.`,
       ).trim(),
-      difficulty: ["Easy", "Medium", "Hard"].includes(question?.difficulty)
-        ? question.difficulty
-        : fallbackDifficulty,
+      difficulty,
       source: "generated",
     };
 
@@ -572,98 +599,6 @@ function normalizeGeneratedQuestions(payload, topicId, {
   return filterUnseenQuestions(normalized, excludedFingerprints).slice(0, limit);
 }
 
-function shortenLessonStatement(value, maxLength = 170) {
-  const firstSentence = String(value || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(/(?<=[.!?])\s+/)[0] || '';
-
-  if (firstSentence.length <= maxLength) return firstSentence;
-  return `${firstSentence.slice(0, maxLength - 1).trim()}…`;
-}
-
-function buildFocusedFallbackQuestions(item = {}, challengeProfile = { difficulty: "Medium" }) {
-  const topic = String(item.topic || item.title || 'this topic').trim();
-  const focus = String(item.focus || item.title || topic).trim();
-  const sourceTitle = String(item.sourceTitle || item.title || focus).trim();
-  const sourceStatement = shortenLessonStatement(item.sourceBody);
-  const broadDistractor = `A broad overview of every part of ${topic}`;
-
-  const questions = [
-    {
-      q: 'What exact concept is this learning path focused on?',
-      options: [focus, broadDistractor, `The history of ${topic} as a whole`, 'An unrelated general-knowledge survey'],
-      answer: focus,
-      explanation: `This lesson narrows ${topic} to one teachable idea: ${focus}.`,
-    },
-    {
-      q: `Which title belongs to the lesson you just explored?`,
-      options: [sourceTitle, `A complete guide to ${topic}`, `Why every theory about ${topic} is identical`, 'A general list without a central idea'],
-      answer: sourceTitle,
-      explanation: `“${sourceTitle}” is the source lesson for this challenge.`,
-    },
-    {
-      q: `What is the most useful way to understand ${focus}?`,
-      options: ['Trace its parts and their cause-and-effect steps', 'Memorize the broad topic name only', 'Skip the mechanism and rely on a slogan', 'Treat every example as proof of a universal rule'],
-      answer: 'Trace its parts and their cause-and-effect steps',
-      explanation: 'Following the mechanism step by step produces understanding that can be applied and recalled.',
-    },
-    {
-      q: `Which question best checks real understanding of ${focus}?`,
-      options: ['Can I explain how it works in a new example?', 'Can I repeat the topic label?', 'Did I read it as quickly as possible?', 'Can I avoid asking any follow-up questions?'],
-      answer: 'Can I explain how it works in a new example?',
-      explanation: 'Transferring an idea to a new example is stronger evidence of understanding than recognition alone.',
-    },
-    {
-      q: `What should make you revise an explanation of ${focus}?`,
-      options: ['Repeatable evidence that contradicts its prediction', 'A difficult word in the explanation', 'One person repeating the same claim', 'The topic becoming popular online'],
-      answer: 'Repeatable evidence that contradicts its prediction',
-      explanation: 'A strong learner updates an explanation when reliable, repeatable evidence does not match what it predicts.',
-    },
-  ];
-
-  if (sourceStatement) {
-    questions.splice(2, 0, {
-      q: 'Which statement comes directly from the source lesson?',
-      options: [sourceStatement, `${focus} has no mechanism or meaningful constraints.`, `${topic} can only be understood by memorizing definitions.`, `The lesson says every example of ${focus} behaves identically.`],
-      answer: sourceStatement,
-      explanation: 'This statement anchors the challenge in the lesson you just read.',
-    });
-  }
-
-  return questions.slice(0, 5).map((question, index) => {
-    const normalizedQuestion = {
-      ...question,
-      id: `focused-fallback-${item.id || 'lesson'}-${index + 1}`,
-      options: shuffleItems(question.options),
-      difficulty: index === 0 && challengeProfile.difficulty !== 'Hard'
-        ? 'Easy'
-        : challengeProfile.difficulty,
-      source: 'lesson-fallback',
-    };
-
-    return {
-      ...normalizedQuestion,
-      fingerprint: getQuestionFingerprint(normalizedQuestion),
-    };
-  });
-}
-
-function getStoredGuestId() {
-  const existing = localStorage.getItem("smarty-user-id");
-
-  if (existing) return existing;
-
-  const randomId = globalThis.crypto?.randomUUID
-    ? globalThis.crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-  const created = `guest-${randomId}`;
-
-  localStorage.setItem("smarty-user-id", created);
-
-  return created;
-}
 
 function getGradeMessage(percent) {
 
@@ -677,44 +612,8 @@ function getGradeMessage(percent) {
 
 }
 
-function getVisitStreak() {
-  const today = new Date().toISOString().split("T")[0];
-
-  const saved = JSON.parse(localStorage.getItem("smarty-visit-streak") || "{}");
-
-  if (!saved.lastVisit) {
-    const data = { streak: 1, lastVisit: today };
-    localStorage.setItem("smarty-visit-streak", JSON.stringify(data));
-    return data;
-  }
-
-  if (saved.lastVisit === today) return saved;
-
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayText = yesterday.toISOString().split("T")[0];
-
-  const newStreak = saved.lastVisit === yesterdayText ? saved.streak + 1 : 0;
-
-  const data = {
-    streak: newStreak === 0 ? 1 : newStreak,
-    lastVisit: today,
-  };
-
-  localStorage.setItem("smarty-visit-streak", JSON.stringify(data));
-  return data;
-}
-
-function getStoredTopicProgress() {
-  try {
-    return JSON.parse(localStorage.getItem("smarty-topic-progress") || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveStoredTopicProgress(topicId, data) {
-  const existing = getStoredTopicProgress();
+function saveStoredTopicProgress(userId, topicId, data) {
+  const existing = getProgress(userId);
   const updated = {
     ...existing,
     [topicId]: {
@@ -723,7 +622,7 @@ function saveStoredTopicProgress(topicId, data) {
     },
   };
 
-  localStorage.setItem("smarty-topic-progress", JSON.stringify(updated));
+  saveProgress(updated, userId);
   return updated;
 }
 
@@ -773,13 +672,20 @@ const [bossMode, setBossMode] = useState(false);
 const [xpGained, setXpGained] = useState(0);
 const transitionLockRef = useRef(false);
 const focusedQuizStartedRef = useRef('');
+const quizAttemptRef = useRef('');
+const questionRequestRef = useRef({ id: 0, controller: null });
+useEffect(() => () => {
+  questionRequestRef.current.id += 1;
+  questionRequestRef.current.controller?.abort();
+  focusedQuizStartedRef.current = '';
+}, []);
 const learningUserId = user?.sub || user?.userId || user?.id || user?.username || '';
-const quizUserId = useMemo(() => learningUserId || getStoredGuestId(), [learningUserId]);
+const quizUserId = useMemo(() => getProgressUserId(user), [user]);
 
 const focusedLearningTopic = useMemo(() => {
   const params = new URLSearchParams(location.search);
   const stateContext = location.state?.learningContext || {};
-  const routePost = location.state?.post || {};
+  const routePost = location.state?.post || getLearningGuide(params.get('postId')) || {};
   const baseContext = getLearningContext(
     { ...routePost, ...stateContext },
     params.get('postId') || stateContext.postId || '',
@@ -812,6 +718,7 @@ const focusedLearningTopic = useMemo(() => {
     sourceTitle: context.title,
     sourceBody: context.body,
     learningContext: context,
+    reviewQuestions: Boolean(location.state?.reviewLesson),
   };
 }, [location.search, location.state]);
 
@@ -845,9 +752,13 @@ const showXPGain = useCallback((xp) => {
   const [locked, setLocked] = useState(false);
   const [aiQuestions, setAiQuestions] = useState({});
   const [loadingAI, setLoadingAI] = useState(false);
-  const [topicProgressMap, setTopicProgressMap] = useState(() => getStoredTopicProgress());
+  const [topicProgressMap, setTopicProgressMap] = useState(() => getProgress(quizUserId));
 
-const visitProgress = useMemo(() => getVisitStreak(), []);
+useEffect(() => {
+  setTopicProgressMap(getProgress(quizUserId));
+}, [quizUserId]);
+
+const visitProgress = useMemo(() => getVisitStreak(quizUserId), [quizUserId]);
 const totalXP = useMemo(() => getTotalXP(topicProgressMap), [topicProgressMap]);
 const overallLevel = Math.max(1, Math.floor(totalXP / 250) + 1);
 const overallXpPercent = totalXP % 250 ? ((totalXP % 250) / 250) * 100 : totalXP > 0 ? 100 : 0;
@@ -918,157 +829,101 @@ const renderedReviewItems = useMemo(
   ), [comboCount, newAchievements, xpGained]);
 
   const loadAIQuestions = useCallback(async (topicId, topicDetails = null) => {
-  const selectedTopic = topicDetails || TOPICS.find((item) => item.id === topicId) || { id: topicId };
-  const challengeProfile = getChallengeProfile(topicId, topicProgressMap);
-  const contextKey = getQuizContextKey(selectedTopic);
-  const seenFingerprints = getRecentQuestionFingerprints(quizUserId, topicId);
-  const useLocalQuestions = (notice = "") => {
-    const adaptiveQuestions = getAdaptiveQuestions(topicId, topicProgressMap, seenFingerprints);
-    const focusedQuestions = filterUnseenQuestions(
-      buildFocusedFallbackQuestions(selectedTopic, challengeProfile),
-      seenFingerprints,
-    );
-    const localQuestions = adaptiveQuestions.length > 0 ? adaptiveQuestions : focusedQuestions;
-    setAiQuestions((prev) => ({ ...prev, [topicId]: localQuestions }));
-    setQuizNotice(
-      localQuestions.length > 0
-        ? notice
-        : "You completed every available offline question for this topic. Reconnect to create a fresh set.",
-    );
-    setLoadingAI(false);
-  };
-
-  if (!CAN_USE_REMOTE_QUIZ_API) {
-    useLocalQuestions(
-      selectedTopic.postId
-        ? "Lesson-based questions are active."
-        : "Offline-ready questions are active.",
-    );
-    return;
-  }
-  const activeQuiz = loadActiveQuiz({
-    userId: quizUserId,
-    topicId,
-    difficulty: challengeProfile.difficulty,
-    contextKey,
-  });
-
-if (Array.isArray(activeQuiz) && activeQuiz.length > 0) {
-  const normalizedActiveQuiz = normalizeGeneratedQuestions(activeQuiz, topicId, {
-    fallbackDifficulty: challengeProfile.difficulty,
-  });
-  if (normalizedActiveQuiz.length === 0) {
-    clearActiveQuiz(quizUserId, topicId);
-  } else {
-  setAiQuestions((prev) => ({
-    ...prev,
-    [topicId]: normalizedActiveQuiz,
-  }));
-  setQuizNotice(`Resumed ${challengeProfile.depth.toLowerCase()} challenge`);
-  setLoadingAI(false);
-  return;
-  }
-}
-
-  setLoadingAI(true);
-
-  setAiQuestions((prev) => ({
-    ...prev,
-    [topicId]: [],
-  }));
-
-  let requestTimeout = 0;
-
-  try {
-    const wrongQuestions = getWrongQuestions();
-    const weakAreas = (wrongQuestions[topicId] || [])
-      .slice(-5)
-      .map((item) => item.q);
-    const recentQuestionPrompts = getRecentQuestionPrompts(quizUserId, topicId);
-
+    questionRequestRef.current.controller?.abort();
+    const requestId = ++questionRequestRef.current.id;
     const controller = new AbortController();
-    requestTimeout = window.setTimeout(() => controller.abort(), 14000);
-    const collectedQuestions = [];
-    const excludedFingerprints = new Set(seenFingerprints);
+    questionRequestRef.current.controller = controller;
+    const isCurrent = () => questionRequestRef.current.id === requestId;
+    let selectedTopic = topicDetails || TOPICS.find((item) => item.id === topicId) || { id: topicId };
+    const challengeProfile = getChallengeProfile(topicId, topicProgressMap);
+    const seen = getRecentQuestionFingerprints(quizUserId, topicId);
+    const guide = getLearningGuide(selectedTopic.postId);
+    setLoadingAI(true);
+    setAiQuestions((prev) => ({ ...prev, [topicId]: [] }));
 
-    for (let generationAttempt = 0; generationAttempt < 2 && collectedQuestions.length < 5; generationAttempt += 1) {
-      const res = await fetch(buildApiUrl('/quiz/generate'), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: quizUserId,
-          topicId,
-          topicTitle: selectedTopic.title || selectedTopic.focus || topicId,
+    const useLocalQuestions = () => {
+      if (!isCurrent()) return;
+      const questions = guide
+        ? filterUnseenQuestions(getGuideQuestions(guide.id), selectedTopic.reviewQuestions ? [] : seen)
+            .map((question) => ({ ...question, options: shuffleItems(question.options), fingerprint: getQuestionFingerprint(question) }))
+        : selectedTopic.postId ? [] : getAdaptiveQuestions(topicId, topicProgressMap, seen);
+      setAiQuestions((prev) => ({ ...prev, [topicId]: questions }));
+      setQuizNotice(questions.length
+        ? (guide ? (selectedTopic.reviewQuestions ? 'Review practice · revisiting this guide’s questions' : 'Guide check · concepts, examples, and limits') : 'Built-in topic questions')
+        : selectedTopic.postId
+          ? (guide ? 'You have seen this guide’s questions. Choose review practice to revisit them, or explore a new lesson.'
+            : 'A focused quiz is unavailable right now. Revisit the lesson and your reflection, or try again shortly.')
+          : 'No unseen built-in questions remain. Reconnect for a fresh challenge.');
+    };
+
+    let timeout;
+    try {
+      if (guide || !CAN_USE_REMOTE_QUIZ_API) {
+        useLocalQuestions();
+        return;
+      }
+      timeout = window.setTimeout(() => controller.abort(), 25000);
+      if (selectedTopic.postId && !selectedTopic.sourceBody) {
+        const post = await postApi.getSingleReel(selectedTopic.postId);
+        if (!isCurrent()) return;
+        const context = getLearningContext(post, selectedTopic.postId);
+        if (!context.body) throw new Error('The source lesson is unavailable.');
+        selectedTopic = { ...selectedTopic, sourceTitle: context.title, sourceBody: context.body, learningContext: context };
+        setTopic((current) => current?.id === topicId ? selectedTopic : current);
+      }
+      const contextKey = getQuizContextKey(selectedTopic);
+      const active = loadActiveQuiz({ userId: quizUserId, topicId, difficulty: challengeProfile.difficulty, contextKey });
+      if (active?.length) {
+        const questions = normalizeGeneratedQuestions(active, topicId, {
+          excludedFingerprints: seen,
+          fallbackDifficulty: challengeProfile.difficulty,
+        });
+        if (questions.length) {
+          setAiQuestions((prev) => ({ ...prev, [topicId]: questions }));
+          setQuizNotice('Continue your unfinished challenge');
+          return;
+        }
+        clearActiveQuiz(quizUserId, topicId);
+      }
+      const collected = [];
+      const excluded = new Set(seen);
+      for (let attempt = 0; attempt < 2 && collected.length < 5; attempt += 1) {
+        const data = await postApi.generateLearningQuiz({
+          userId: quizUserId, topicId, topicTitle: selectedTopic.title || topicId,
           parentTopic: selectedTopic.topic || selectedTopic.title || topicId,
           focus: selectedTopic.focus || selectedTopic.title || '',
-          sourcePostId: selectedTopic.postId || '',
-          sourceTitle: selectedTopic.sourceTitle || '',
+          sourcePostId: selectedTopic.postId || '', sourceTitle: selectedTopic.sourceTitle || '',
           sourceBody: selectedTopic.sourceBody || '',
-          difficulty: challengeProfile.difficulty,
-          minimumDifficulty: challengeProfile.minimumDifficulty,
-          learnerLevel: challengeProfile.level,
-          learnerDepth: challengeProfile.depth,
-          questionStyle: challengeProfile.questionStyle,
-          requestedCount: Math.max(5 - collectedQuestions.length, 5),
-          generationAttempt,
-          weakAreas,
-          recentQuestionFingerprints: [...excludedFingerprints].slice(-100),
-          excludeQuestions: recentQuestionPrompts,
-        }),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        throw new Error("AI generation failed.");
+          difficulty: challengeProfile.difficulty, minimumDifficulty: challengeProfile.minimumDifficulty,
+          learnerLevel: challengeProfile.level, learnerDepth: challengeProfile.depth,
+          questionStyle: selectedTopic.postId
+            ? challengeProfile.questionStyle + '. Test the source concept: mechanism, cause and effect, a new example, and a limitation. Do not ask for the post title or generic study advice.'
+            : challengeProfile.questionStyle,
+          requestedCount: 5 - collected.length, generationAttempt: attempt,
+          weakAreas: (getWrongQuestions(quizUserId)[topicId] || []).slice(-5).map((item) => item.q),
+          recentQuestionFingerprints: [...excluded].slice(-100),
+          excludeQuestions: getRecentQuestionPrompts(quizUserId, topicId),
+        }, { signal: controller.signal });
+        if (!isCurrent()) return;
+        const batch = normalizeGeneratedQuestions(data, topicId, {
+          excludedFingerprints: [...excluded], fallbackDifficulty: challengeProfile.difficulty, limit: 5 - collected.length,
+        }).filter((question) => !selectedTopic.postId || !/which title|what exact concept|name of (the|this) (post|lesson)/i.test(question.q));
+        batch.forEach((question) => { collected.push(question); excluded.add(question.fingerprint); });
       }
-
-      const data = await res.json();
-      const freshBatch = normalizeGeneratedQuestions(data, topicId, {
-        excludedFingerprints: [...excludedFingerprints],
-        fallbackDifficulty: challengeProfile.difficulty,
-        limit: 5 - collectedQuestions.length,
-      });
-
-      for (const question of freshBatch) {
-        collectedQuestions.push(question);
-        excludedFingerprints.add(question.fingerprint);
-      }
+      if (!collected.length) throw new Error('No unseen questions available.');
+      try { saveActiveQuiz({ userId: quizUserId, topicId, difficulty: challengeProfile.difficulty, contextKey, questions: collected }); } catch { /* A quiz still works when storage is full. */ }
+      setAiQuestions((prev) => ({ ...prev, [topicId]: collected }));
+      setQuizNotice(challengeProfile.depth + ' · ' + collected.length + ' fresh questions');
+    } catch (error) {
+      if (isCurrent()) useLocalQuestions();
+    } finally {
+      if (timeout) window.clearTimeout(timeout);
+      if (isCurrent()) setLoadingAI(false);
     }
-
-    const questions = collectedQuestions.slice(0, 5);
-
-    if (questions.length === 0) {
-      throw new Error("AI returned no unseen questions.");
-    }
-
-saveActiveQuiz({
-  userId: quizUserId,
-  topicId,
-  difficulty: challengeProfile.difficulty,
-  contextKey,
-  questions,
-});
-
-setAiQuestions((prev) => ({
-  ...prev,
-  [topicId]: questions,
-}));
-setQuizNotice(`${challengeProfile.depth} challenge · ${questions.length} fresh questions`);
-  } catch (error) {
-    console.warn("Generated quiz unavailable; using local questions.", error);
-    useLocalQuestions(
-      selectedTopic.postId
-        ? "Fresh questions are unavailable, so Smarty prepared a challenge from this lesson."
-        : "Fresh questions are unavailable, so Smarty loaded the built-in challenge.",
-    );
-  } finally {
-    if (requestTimeout) window.clearTimeout(requestTimeout);
-    setLoadingAI(false);
-  }
-}, [quizUserId, topicProgressMap]);
+  }, [quizUserId, topicProgressMap]);
 
   const startQuiz = useCallback((item) => {
+    quizAttemptRef.current = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
     const bossPractice = localStorage.getItem("smarty-boss-practice") === "true";
     const isFocusedLesson = Boolean(item?.postId || item?.learningContext?.postId);
     const shouldStartBoss = !isFocusedLesson && (visitProgress.streak >= 7 || bossPractice);
@@ -1099,11 +954,11 @@ setQuizNotice(`${challengeProfile.depth} challenge · ${questions.length} fresh 
 
   useEffect(() => {
     if (!focusedLearningTopic) return;
-    if (focusedQuizStartedRef.current === focusedLearningTopic.id) return;
+    if (focusedQuizStartedRef.current === `${quizUserId}:${focusedLearningTopic.id}`) return;
 
-    focusedQuizStartedRef.current = focusedLearningTopic.id;
+    focusedQuizStartedRef.current = `${quizUserId}:${focusedLearningTopic.id}`;
     startQuiz(focusedLearningTopic);
-  }, [focusedLearningTopic, startQuiz]);
+  }, [focusedLearningTopic, quizUserId, startQuiz]);
 
 const renderedTopics = useMemo(
   () => TOPICS.map((item) => (
@@ -1127,19 +982,42 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
 
   const percentage = mixedSteps.length ? Math.round((finalScore / mixedSteps.length) * 100) : 0;
 
-  recordQuestionHistory(userId, topic.id, finalAnswers);
+  const finishRewards = () => {
+    const unlocked = checkAchievements({
+      topicId: topic.id,
+      percentage,
+      streak: visitProgress.streak,
+      overallLevel,
+      userId,
+    });
+
+    if (unlocked.length) {
+      setNewAchievements(unlocked);
+      sounds.levelUp();
+    }
+
+    clearActiveQuiz(userId, topic.id);
+    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (percentage >= 60 && !reducedMotion) {
+      confetti({ particleCount: 110, spread: 78, origin: { y: 0.65 } });
+    }
+  };
+
+  try { recordQuestionHistory(userId, topic.id, finalAnswers); } catch { /* Keep results visible if storage is unavailable. */ }
 
   if (topic?.postId) {
-    markLearningProgress(topic.postId, learningUserId, 'challenge');
+    const checks = finalAnswers.filter((answer) => Array.isArray(answer.options) && answer.options.length > 1);
+    recordLearningQuiz(topic.postId, learningUserId, { correct: checks.filter((answer) => answer.isCorrect).length,
+      total: checks.length, attemptId: quizAttemptRef.current }, topic.learningContext || { ...topic, postId: topic.postId });
   }
 
-  if (!CAN_USE_REMOTE_QUIZ_API) {
+  if (!CAN_USE_REMOTE_QUIZ_API || getLearningGuide(topic?.postId)) {
     const xpEarnedLocal = finalAnswers.reduce(
       (total, answer) => total + (answer.xp || 0),
       0
     );
 
-    const updatedProgress = saveStoredTopicProgress(topic.id, {
+    const updatedProgress = saveStoredTopicProgress(userId, topic.id, {
       bestScore: Math.max(topicProgressMap[topic.id]?.bestScore || 0, finalScore),
       bestPercent: Math.max(topicProgressMap[topic.id]?.bestPercent || 0, percentage),
       attempts: (topicProgressMap[topic.id]?.attempts || 0) + 1,
@@ -1151,7 +1029,7 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
     });
 
     setTopicProgressMap(updatedProgress);
-    clearActiveQuiz(userId, topic.id);
+    finishRewards();
     setSaveError("");
     setSaving(false);
     return;
@@ -1163,12 +1041,7 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
   );
 
   try {
-      const res = await fetch(buildApiUrl('/quiz/save'), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const data = (await postApi.saveLearningQuiz({
           userId,
           topicId: topic.id,
           topicTitle: topic.title,
@@ -1190,17 +1063,10 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
             }),
             xp: answer.xp || 0,
           })),
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Could not save quiz progress.");
-      }
-
-      const data = await res.json();
+      })) || {};
 
       setProgress(data);
-      const updatedProgress = saveStoredTopicProgress(topic.id, {
+      const updatedProgress = saveStoredTopicProgress(userId, topic.id, {
         bestScore: data.bestScore ?? finalScore,
         bestPercent: Math.max(data.percentage || percentage, topicProgressMap[topic.id]?.bestPercent || 0),
         attempts: data.attempts ?? ((topicProgressMap[topic.id]?.attempts || 0) + 1),
@@ -1213,28 +1079,9 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
       });
 
       setTopicProgressMap(updatedProgress);
-      const unlocked = checkAchievements({
-        topicId: topic.id,
-        percentage,
-        streak: visitProgress.streak,
-        overallLevel,
-      });
-
-      if (unlocked.length) {
-        setNewAchievements(unlocked);
-        sounds.levelUp();
-      }
-      clearActiveQuiz(userId, topic.id);
-
-      if (percentage >= 60) {
-        confetti({
-          particleCount: 140,
-          spread: 85,
-          origin: { y: 0.65 },
-        });
-      }
+      finishRewards();
     } catch (error) {
-      const updatedProgress = saveStoredTopicProgress(topic.id, {
+      const updatedProgress = saveStoredTopicProgress(userId, topic.id, {
         bestScore: Math.max(topicProgressMap[topic.id]?.bestScore || 0, finalScore),
         bestPercent: Math.max(topicProgressMap[topic.id]?.bestPercent || 0, percentage),
         attempts: (topicProgressMap[topic.id]?.attempts || 0) + 1,
@@ -1246,7 +1093,7 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
       });
 
       setTopicProgressMap(updatedProgress);
-      clearActiveQuiz(userId, topic.id);
+      finishRewards();
       setSaveError(error.message || "Could not save quiz progress.");
     } finally {
       setSaving(false);
@@ -1272,12 +1119,17 @@ useEffect(() => {
           correctAnswer: current.answer || "Time ran out",
           explanation: "You ran out of time. Survival mode trains fast thinking.",
           difficulty: current.difficulty || "Survival",
+          fingerprint: current.fingerprint || getQuestionFingerprint(current),
+          source: current.source,
           isCorrect: false,
           xp: 0,
+          options: currentOptions,
         };
 
         const nextAnswers = [...answers, timeoutAnswer];
         setAnswers(nextAnswers);
+        if (current.type === "mcq") saveWrongQuestion(topic.id, timeoutAnswer, quizUserId);
+        try { recordQuestionHistory(quizUserId, topic.id, [timeoutAnswer]); } catch { /* Keep the timer responsive if storage is unavailable. */ }
 
         if (index + 1 < mixedSteps.length) {
           setIndex((prevIndex) => prevIndex + 1);
@@ -1295,7 +1147,7 @@ useEffect(() => {
   }, 1000);
 
   return () => clearInterval(timer);
-}, [answers, bossMode, current, finished, index, locked, mixedSteps.length, saveQuizProgress, score, survivalMode, topic]);
+}, [answers, bossMode, current, currentOptions, finished, index, locked, mixedSteps.length, quizUserId, saveQuizProgress, score, survivalMode, topic]);
 
 const submitAnswer = useCallback(() => {
   if (locked || transitionLockRef.current || !selected || !current) return;
@@ -1317,15 +1169,9 @@ const submitAnswer = useCallback(() => {
     setXpGained(0);
   }
 
-  if (!isCorrect && current.type === "mcq") {
-    saveWrongQuestion(topic.id, current);
-  }
-
   const nextScore = score + (isCorrect ? 1 : 0);
 
-  const nextAnswers = [
-    ...answers,
-    {
+  const answerRecord = {
       id: current.id,
       q: current.q,
       selected,
@@ -1337,20 +1183,28 @@ const submitAnswer = useCallback(() => {
       isCorrect,
       xp: earnedXP,
       options: currentOptions,
-    },
-  ];
+    };
+
+  if (!isCorrect && current.type === "mcq") {
+    saveWrongQuestion(topic.id, answerRecord, quizUserId);
+  }
+
+  try { recordQuestionHistory(quizUserId, topic.id, [answerRecord]); } catch { /* An answer still counts if storage is unavailable. */ }
+
+  const nextAnswers = [...answers, answerRecord];
 
   setAnswers(nextAnswers);
   setScore(nextScore);
   setAnswerFeedback({
     isCorrect,
+    selected,
     correctAnswer: current.answer,
     explanation: current.explanation,
     xp: earnedXP,
     nextScore,
     nextAnswers,
   });
-}, [answers, comboCount, current, currentOptions, locked, score, selected, showXPGain, sounds, topic]);
+}, [answers, comboCount, current, currentOptions, locked, quizUserId, score, selected, showXPGain, sounds, topic]);
 
 const advanceAfterAnswer = useCallback(() => {
   if (!answerFeedback || transitionLockRef.current === "advancing") return;
@@ -1403,6 +1257,9 @@ useEffect(() => {
 }, [advanceAfterAnswer, answerFeedback, current?.type, currentOptions, finished, locked, selected, submitAnswer, topic]);
 
 const restart = useCallback(() => {
+  questionRequestRef.current.id += 1;
+  questionRequestRef.current.controller?.abort();
+  setLoadingAI(false);
   setBossMode(false);
   localStorage.removeItem("smarty-boss-practice");
   localStorage.removeItem("smarty-game-mode");
@@ -1448,8 +1305,49 @@ const missedQuestions = useMemo(
   [answers],
 );
 
+const difficultyResults = useMemo(() => {
+  const groups = new Map();
+
+  answers
+    .filter((answer) => Array.isArray(answer.options) && answer.options.length > 1)
+    .forEach((answer) => {
+      const label = answer.difficulty || "Adaptive";
+      const currentGroup = groups.get(label) || { label, correct: 0, total: 0 };
+      currentGroup.total += 1;
+      currentGroup.correct += answer.isCorrect ? 1 : 0;
+      groups.set(label, currentGroup);
+    });
+
+  return [...groups.values()].map((group) => ({
+    ...group,
+    percent: Math.round((group.correct / Math.max(group.total, 1)) * 100),
+  }));
+}, [answers]);
+
+const nextLearningMove = useMemo(() => {
+  if (missedQuestions.length > 0) {
+    const weakest = [...difficultyResults].sort((left, right) => left.percent - right.percent)[0];
+    return {
+      eyebrow: "Recommended next",
+      title: `Repair ${missedQuestions.length} knowledge ${missedQuestions.length === 1 ? "gap" : "gaps"}`,
+      description: weakest
+        ? `Start with the ${weakest.label.toLowerCase()} questions. Read why the correct choice works, then retry only what you missed.`
+        : "Review each explanation, explain the idea in your own words, then retry only what you missed.",
+    };
+  }
+
+  return {
+    eyebrow: "Recommended next",
+    title: `Move into ${activeChallengeProfile.depth === "Expert" ? "a connected topic" : "deeper reasoning"}`,
+    description: activeChallengeProfile.depth === "Expert"
+      ? "You have a strong command of this set. Apply it to a connected subject to strengthen transfer."
+      : "Your next challenge will introduce closer distractors, real examples, and more cause-and-effect reasoning.",
+  };
+}, [activeChallengeProfile.depth, difficultyResults, missedQuestions.length]);
+
 const startMistakeReview = useCallback(() => {
   if (!topic || missedQuestions.length === 0) return;
+  quizAttemptRef.current = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
   const retryQuestions = missedQuestions.map((answer, questionIndex) => ({
     id: `review-${answer.id || questionIndex}-${Date.now()}`,
@@ -1487,7 +1385,7 @@ const startMistakeReview = useCallback(() => {
 
   const percentage = mixedSteps.length ? Math.round((finalScore / mixedSteps.length) * 100) : 0;
 
-  const won = percentage >= 60;
+  const won = percentage >= (topic?.postId ? 80 : 60);
 
   const xpPreview = answers.reduce((total, answer) => total + (answer.xp || 0), 0);
 
@@ -1616,6 +1514,8 @@ if (topic && bossMode && !finished) {
                 Try Again
               </button>
             )}
+            {!loadingAI && getLearningGuide(topic?.postId) && <button type="button" className="submit-answer-btn" onClick={() => loadAIQuestions(topic.id, { ...topic, reviewQuestions: true })}>Review this guide’s questions</button>}
+            {!loadingAI && topic?.postId && <button type="button" className="back-btn" onClick={returnToFocusedLesson}>Return to the lesson</button>}
           </div>
         </section>
         {quizShellExtras}
@@ -1738,6 +1638,7 @@ if (topic && bossMode && !finished) {
           </div>
 
           <p>{getGradeMessage(percentage)}</p>
+          {topic?.postId && <p>{percentage >= 80 && mixedSteps.length >= 3 ? 'Concept check passed. Revisit it tomorrow, then build on a connected idea.' : 'Review the explanations below. A full check needs at least three questions and 80% correct.'}</p>}
 
           <div className="progress-insight">
 
@@ -1792,6 +1693,21 @@ if (topic && bossMode && !finished) {
 
           </div>
 
+          <section className="quiz-next-move" aria-labelledby="quiz-next-move-title">
+            <span>{nextLearningMove.eyebrow}</span>
+            <h2 id="quiz-next-move-title">{nextLearningMove.title}</h2>
+            <p>{nextLearningMove.description}</p>
+            {difficultyResults.length > 0 && (
+              <div className="quiz-difficulty-results" aria-label="Accuracy by difficulty">
+                {difficultyResults.map((item) => (
+                  <span key={item.label}>
+                    {item.label} <strong>{item.correct}/{item.total}</strong>
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
+
           <div className="review-panel">
 
             <h3>Review Your Answers</h3>
@@ -1801,6 +1717,8 @@ if (topic && bossMode && !finished) {
           </div>
 
           <div className="result-actions">
+
+            {focusedLearningTopic?.postId && <button type="button" onClick={() => navigate(`/learn?topic=${encodeURIComponent(focusedLearningTopic.topic)}`)}>Choose my next lesson →</button>}
 
             {focusedLearningTopic?.postId && (
               <button type="button" onClick={returnToFocusedLesson}>Review Lesson</button>
@@ -1930,8 +1848,9 @@ if (topic && bossMode && !finished) {
 )}
 
 
-        <h2>{current?.q || "Challenge question"}</h2>
-        
+        <div key={current?.id || `${topic?.id}-${index}`} className="quiz-question-stage">
+          <h2>{current?.q || "Challenge question"}</h2>
+
 <div className="option-list">
   {currentOptions.map((option, optionIndex) => (
     <button
@@ -1959,8 +1878,23 @@ if (topic && bossMode && !finished) {
     role="status"
     aria-live="polite"
   >
-    <strong>{answerFeedback.isCorrect ? `Correct · +${answerFeedback.xp} XP` : `Correct answer: ${answerFeedback.correctAnswer}`}</strong>
-    <p>{answerFeedback.explanation}</p>
+    <div className="answer-feedback-heading">
+      <span aria-hidden="true">{answerFeedback.isCorrect ? "✓" : "↗"}</span>
+      <div>
+        <small>{answerFeedback.isCorrect ? "Strong reasoning" : "Build the connection"}</small>
+        <strong>{answerFeedback.isCorrect ? `Correct · +${answerFeedback.xp} XP` : "Not quite yet"}</strong>
+      </div>
+    </div>
+    {!answerFeedback.isCorrect && (
+      <div className="answer-comparison">
+        <p><span>Your choice</span>{answerFeedback.selected}</p>
+        <p><span>Correct answer</span>{answerFeedback.correctAnswer}</p>
+      </div>
+    )}
+    <div className="answer-explanation">
+      <span>Why this works</span>
+      <p>{answerFeedback.explanation}</p>
+    </div>
   </div>
 )}
 
@@ -1980,6 +1914,7 @@ if (topic && bossMode && !finished) {
             ? (index + 1 === mixedSteps.length ? "View Results" : "Next Challenge")
             : "Check Answer"}
         </button>
+        </div>
 
       </section>
 {quizShellExtras}

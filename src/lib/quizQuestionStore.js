@@ -46,6 +46,7 @@ export function getQuizContextKey(topic = {}) {
     topic.focus,
     topic.postId,
     topic.sourceTitle,
+    topic.sourceBody,
   ].map(normalizeFingerprintText).join("|");
 
   return `ctx-${hashText(context || "general")}`;

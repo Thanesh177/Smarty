@@ -644,7 +644,146 @@ TOPIC_SUBTOPICS = {
     ),
 }
 
+
+# Rotate between these domains before returning to a similar area. The topic
+# catalog remains the source of truth; this grouping only controls variety.
+TOPIC_DOMAINS = {
+    "Digital systems": (
+        "Artificial Intelligence",
+        "Machine Learning",
+        "Data Science",
+        "Robotics",
+        "Cybersecurity",
+        "Cryptography",
+        "Software Systems",
+        "Databases",
+        "Operating Systems",
+        "Computer Networks",
+        "Cloud Computing",
+    ),
+    "Engineering and technology": (
+        "Semiconductors",
+        "Electronics",
+        "Engineering",
+        "Manufacturing",
+        "Materials Science",
+        "Aviation",
+        "Transportation",
+        "Energy",
+        "Infrastructure",
+        "Architecture",
+    ),
+    "Physical and quantitative science": (
+        "Physics",
+        "Chemistry",
+        "Mathematics",
+        "Statistics",
+        "Probability",
+    ),
+    "Life science": (
+        "Biology",
+        "Genetics",
+        "Neuroscience",
+        "Human Body",
+        "Immunology",
+        "Microbiology",
+    ),
+    "Earth and space": (
+        "Astronomy",
+        "Space",
+        "Earth Science",
+        "Geology",
+        "Oceanography",
+        "Weather",
+        "Climate Change",
+        "Ecology",
+        "Environment",
+    ),
+    "Mind, learning, and health": (
+        "Psychology",
+        "Human Behavior",
+        "Decision Making",
+        "Memory",
+        "Learning",
+        "Sleep",
+        "Nutrition",
+        "Fitness",
+        "Health",
+        "Mental Health",
+    ),
+    "Money and enterprise": (
+        "Finance",
+        "Investing",
+        "Personal Finance",
+        "Stock Market",
+        "Economics",
+        "Global Economy",
+        "Business",
+        "Startups",
+        "Marketing",
+        "Consumer Behavior",
+        "Supply Chain",
+    ),
+    "Food and agriculture": (
+        "Agriculture",
+        "Food Science",
+    ),
+    "History and civilization": (
+        "History",
+        "Ancient Civilizations",
+        "World History",
+        "Geopolitical History",
+        "Military History",
+        "Political History",
+        "Economic History",
+        "Diplomatic History",
+        "Colonial History",
+        "Borders and Empires",
+        "Medieval History",
+        "Modern History",
+        "Trade Routes",
+        "Revolutions",
+    ),
+    "Society and humanities": (
+        "Archaeology",
+        "Anthropology",
+        "Sociology",
+        "Culture",
+        "Linguistics",
+        "Philosophy",
+        "Ethics",
+    ),
+    "Arts and creative practice": (
+        "Art History",
+        "Music Theory",
+        "Photography",
+        "Filmmaking",
+        "Product Design",
+    ),
+}
+
+
 BASE_TOPICS = tuple(TOPIC_SUBTOPICS)
+
+_DOMAIN_TOPICS = tuple(
+    topic
+    for topics in TOPIC_DOMAINS.values()
+    for topic in topics
+)
+if len(_DOMAIN_TOPICS) != len(set(_DOMAIN_TOPICS)):
+    raise RuntimeError("A content topic is assigned to more than one domain")
+if set(_DOMAIN_TOPICS) != set(BASE_TOPICS):
+    missing = sorted(set(BASE_TOPICS) - set(_DOMAIN_TOPICS))
+    extra = sorted(set(_DOMAIN_TOPICS) - set(BASE_TOPICS))
+    raise RuntimeError(
+        f"Topic domain coverage is incomplete. Missing={missing}; extra={extra}"
+    )
+
+TOPIC_TO_DOMAIN = {
+    topic: domain
+    for domain, topics in TOPIC_DOMAINS.items()
+    for topic in topics
+}
 
 
 CONTENT_ANGLES = (

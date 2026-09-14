@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "smarty-terraform/**"
+      - "infrastructure/ai-content/**"
   workflow_dispatch:
 
 jobs:
@@ -25,6 +26,10 @@ jobs:
       - name: Test news service
         working-directory: smarty-terraform/lambda-src/news
         run: python -m unittest -v test_lambda_function.py
+
+      - name: Test AI learning content
+        working-directory: infrastructure/ai-content
+        run: python -m unittest -v test_content_quality.py
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3

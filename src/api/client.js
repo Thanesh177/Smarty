@@ -1,7 +1,11 @@
 import axios from 'axios';
+import { getLearningGuide } from '../data/learningGuides';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { endpoints } from './endpoints';
-import '../lib/cognito';
+import {
+  hasNativeRefreshSession,
+  refreshNativeSession,
+} from '../lib/cognito';
 import { requestNotificationToken } from '../firebase';
 
 const CONFIGURED_API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -212,20 +216,61 @@ const isUsableToken = (token, expectedSubject = '') => {
   );
 };
 
-const getVerifiedNativeStoredToken = () => {
-  const isNative = Boolean(
-    typeof window !== 'undefined' &&
-    (
-      window.AndroidBridge ||
-      window.SmartyAndroid ||
-      window.__SMARTY_NATIVE_APP__ === true ||
-      window.__SMARTY_PLATFORM__ === 'ios' ||
-      window.__SMARTY_IS_NATIVE_APP__ === true ||
-      /Smarty(?:Android|-iOS)/i.test(navigator.userAgent)
-    )
-  );
+const isRunningInsideNativeApp = () => Boolean(
+  typeof window !== 'undefined' &&
+  (
+    window.AndroidBridge ||
+    window.SmartyAndroid ||
+    window.__SMARTY_NATIVE_APP__ === true ||
+    window.__SMARTY_PLATFORM__ === 'ios' ||
+    window.__SMARTY_IS_NATIVE_APP__ === true ||
+    /Smarty(?:Android|-iOS)/i.test(navigator.userAgent)
+  )
+);
 
-  if (!isNative) return '';
+const getNativeCachedSubject = () => {
+  if (!isRunningInsideNativeApp()) return '';
+
+  try {
+    const cachedUser = JSON.parse(localStorage.getItem('eduscroll_user') || 'null');
+    return String(
+      cachedUser?.userId || cachedUser?.sub || cachedUser?.id || ''
+    ).trim();
+  } catch {
+    return '';
+  }
+};
+
+const persistRefreshedNativeTokens = (tokens, expectedSubject) => {
+  const idToken = String(tokens?.id_token || '');
+  const accessToken = String(tokens?.access_token || '');
+  const requestToken = idToken || accessToken;
+
+  if (!isUsableToken(requestToken, expectedSubject)) return '';
+
+  try {
+    localStorage.setItem('eduscroll_token', requestToken);
+    if (accessToken) {
+      localStorage.setItem('eduscroll_access_token', accessToken);
+    }
+
+    const cachedUser = JSON.parse(localStorage.getItem('eduscroll_user') || 'null');
+    if (cachedUser) {
+      localStorage.setItem('eduscroll_user', JSON.stringify({
+        ...cachedUser,
+        token: requestToken,
+        accessToken,
+      }));
+    }
+  } catch {
+    // The fresh token can still serve this request when storage is unavailable.
+  }
+
+  return requestToken;
+};
+
+const getVerifiedNativeStoredToken = () => {
+  if (!isRunningInsideNativeApp()) return '';
 
   try {
     const token = getStoredToken();
@@ -242,6 +287,44 @@ const getVerifiedNativeStoredToken = () => {
 
 const getAuthToken = async () => {
   const now = Date.now();
+  // Native OAuth is completed outside Amplify. Its current identity must
+  // take precedence over a stale SDK session from an earlier account.
+  const nativeToken = getVerifiedNativeStoredToken();
+  if (nativeToken) {
+    cachedAuthToken = nativeToken;
+    cachedAuthTokenAt = now;
+    return nativeToken;
+  }
+  if (typeof window !== 'undefined' && window.__SMARTY_IS_NATIVE_APP__ === true &&
+      (sessionStorage.getItem('smarty-native-oauth-state') || localStorage.getItem('smarty-native-oauth-state'))) {
+    return '';
+  }
+
+  const nativeSubject = getNativeCachedSubject();
+  if (
+    nativeSubject &&
+    hasNativeRefreshSession(nativeSubject)
+  ) {
+    try {
+      const refreshedTokens = await refreshNativeSession();
+      const refreshedToken = persistRefreshedNativeTokens(
+        refreshedTokens,
+        nativeSubject
+      );
+
+      if (refreshedToken) {
+        cachedAuthToken = refreshedToken;
+        cachedAuthTokenAt = Date.now();
+        return refreshedToken;
+      }
+
+      return '';
+    } catch {
+      // Do not fall back to a stale Amplify identity for native social login.
+      return '';
+    }
+  }
+
   const storedToken = getStoredToken();
 
   if (
@@ -1896,6 +1979,14 @@ export const readBooksApi = {
 };
 
 export const postApi = {
+async generateLearningQuiz(payload, { signal } = {}) {
+  const { data } = await api.post('/quiz/generate', payload, { signal });
+  return parseApiBody(data);
+},
+async saveLearningQuiz(payload) {
+  const { data } = await api.post('/quiz/save', payload);
+  return parseApiBody(data);
+},
 async getFeed({ limit = 10, cursor = null, topic = null } = {}) {
   if (USE_MOCK) {
     await delay(300);
@@ -1965,11 +2056,23 @@ async deleteComment(payload) {
 },
 
 async getPostDetails(payload) {
+  const guide = getLearningGuide(payload?.postId || payload?.id || payload?.reelId);
+  if (guide) return {
+    post: guide,
+    explanation: guide.aiDetailedExplanation,
+    aiDetailedExplanation: guide.aiDetailedExplanation,
+    aiDetailedExplanationVersion: 3,
+    cached: true,
+    persisted: true,
+  };
   if (USE_MOCK) {
     await delay(200);
     return {
       explanation: payload?.aiDetailedExplanation || '',
       aiDetailedExplanation: payload?.aiDetailedExplanation || '',
+      aiDetailedExplanationVersion: payload?.aiDetailedExplanationVersion || 0,
+      cached: Boolean(payload?.aiDetailedExplanation),
+      persisted: false,
       post: payload || {},
     };
   }
@@ -1992,6 +2095,10 @@ async getPostDetails(payload) {
       ...parsed,
       explanation: parsed?.post?.aiDetailedExplanation || parsed?.aiDetailedExplanation || parsed?.explanation || '',
       aiDetailedExplanation: parsed?.post?.aiDetailedExplanation || parsed?.aiDetailedExplanation || parsed?.explanation || '',
+      aiDetailedExplanationVersion:
+        parsed?.post?.aiDetailedExplanationVersion || parsed?.aiDetailedExplanationVersion || 0,
+      cached: parsed?.cached === true,
+      persisted: parsed?.persisted !== false,
       post: parsed?.post || {},
     };
   } catch (err) {
@@ -2201,6 +2308,8 @@ async toggleSave(reelId) {
   },
   
 async getSingleReel(reelId) {
+  const guide = getLearningGuide(reelId);
+  if (guide) return guide;
   if (USE_MOCK) {
     await delay(200);
     return null;

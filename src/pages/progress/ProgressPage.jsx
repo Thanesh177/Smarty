@@ -1,9 +1,11 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   getProgress,
+  getProgressUserId,
   getWrongQuestions,
   removeWrongQuestion,
 } from "../../lib/progressStore";
+import { useAuth } from "../../contexts/AuthContext";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import "./ProgressPage.css";
 
@@ -86,8 +88,15 @@ const MistakeTopicBlock = memo(function MistakeTopicBlock({ topicId, items, onRe
 });
 
 export default function ProgressPage() {
-  const progress = useMemo(() => getProgress(), []);
-  const [wrong, setWrong] = useState(() => getWrongQuestions());
+  const { user } = useAuth();
+  const progressUserId = useMemo(() => getProgressUserId(user), [user]);
+  const [progress, setProgress] = useState(() => getProgress(progressUserId));
+  const [wrong, setWrong] = useState(() => getWrongQuestions(progressUserId));
+
+  useEffect(() => {
+    setProgress(getProgress(progressUserId));
+    setWrong(getWrongQuestions(progressUserId));
+  }, [progressUserId]);
 
   const topics = useMemo(() => Object.entries(progress), [progress]);
 
@@ -101,9 +110,9 @@ export default function ProgressPage() {
   );
 
   const handleRemoveMistake = useCallback((topicId, item) => {
-    const updatedWrongQuestions = removeWrongQuestion(topicId, item);
-    setWrong(updatedWrongQuestions || getWrongQuestions());
-  }, []);
+    const updatedWrongQuestions = removeWrongQuestion(topicId, item, progressUserId);
+    setWrong(updatedWrongQuestions || getWrongQuestions(progressUserId));
+  }, [progressUserId]);
 
   const wrongEntries = useMemo(() => Object.entries(wrong), [wrong]);
 

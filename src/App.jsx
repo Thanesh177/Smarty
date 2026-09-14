@@ -60,6 +60,7 @@ import NewsPage from './pages/NewsPage';
 import ReadBookPage from './pages/ReadBookPage';
 import BookReaderPage from './pages/BookReaderPage';
 import PostAiPage from './pages/PostAiPage';
+import LearningPage from './pages/LearningPage';
 import AdminModerationPage from './pages/AdminModerationPage';
 import { isAdminUser } from './lib/adminAccess';
 import './styles/production-pages.css';
@@ -121,7 +122,7 @@ function AppOpeningScreen({ leaving = false, continuation = false }) {
 }
 
 function OAuthCompletionPage() {
-  const { user, loading, restoreSession } = useAuth();
+  const { user, loading, authError, restoreSession } = useAuth();
   const navigate = useNavigate();
   const [timedOut, setTimedOut] = useState(false);
   const retriedRef = useRef(false);
@@ -167,13 +168,13 @@ function OAuthCompletionPage() {
     navigate(destinationRef.current, { replace: true });
   }, [navigate, user]);
 
-  if (!loading && timedOut) {
+  if (!user && (authError || timedOut)) {
     return (
       <div className="app-page-loader" role="alert">
         <div className="app-page-loader-card">
           <div>
             <strong>Sign-in could not finish</strong>
-            <p>Please try again. Your account was not changed.</p>
+            <p>{authError || 'Please try again. Your account was not changed.'}</p>
           </div>
           <button type="button" onClick={() => navigate('/login', { replace: true })}>
             Back to sign in
@@ -1217,6 +1218,7 @@ useEffect(() => {
                 <Route path="/creator/:userId" element={<CreatorProfilePage />} />
                 <Route path="/reel/:reelId" element={<ReelDetailPage />} />
                 <Route path="/quiz" element={<QuizPage />} />
+                <Route path="/learn" element={<LearningPage />} />
                 <Route path="/game-profile" element={<GameProfile />} />
                 <Route path="/progress" element={<ProgressPage />} />
 

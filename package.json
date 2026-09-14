@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:auth": "node --test src/contexts/AuthContext.test.cjs",
+    "test:learning": "node --test src/lib/learningJourney.test.js",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

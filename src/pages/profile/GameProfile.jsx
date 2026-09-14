@@ -1,18 +1,13 @@
-import { memo, useCallback, useMemo } from "react";
-import { getAchievements } from "../../lib/progressStore";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { getAchievements, getProgress, getProgressUserId } from "../../lib/progressStore";
 import { getAllAchievements } from "../../components/achievements/achievementEngine";
+import { useAuth } from "../../contexts/AuthContext";
 import './GameProfile.css';
-function getProgress() {
-  try {
-    return JSON.parse(localStorage.getItem("smarty-topic-progress") || "{}");
-  } catch {
-    return {};
-  }
-}
 
-function clearAIQuestionCache() {
+function clearAIQuestionCache(userId) {
+  const scopeSuffix = `:${encodeURIComponent(userId)}`;
   Object.keys(localStorage).forEach((key) => {
-    if (key.startsWith("smarty-ai-") || key.startsWith("smarty-active-quiz-")) {
+    if ((key.startsWith("smarty-ai-") || key.startsWith("smarty-active-quiz-")) && key.endsWith(scopeSuffix)) {
       localStorage.removeItem(key);
     }
   });
@@ -90,8 +85,15 @@ const AchievementCard = memo(function AchievementCard({ item, unlocked }) {
 });
 
 export default function GameProfile() {
-  const progress = useMemo(() => getProgress(), []);
-  const achievements = useMemo(() => getAchievements(), []);
+  const { user } = useAuth();
+  const progressUserId = useMemo(() => getProgressUserId(user), [user]);
+  const [progress, setProgress] = useState(() => getProgress(progressUserId));
+  const [achievements, setAchievements] = useState(() => getAchievements(progressUserId));
+
+  useEffect(() => {
+    setProgress(getProgress(progressUserId));
+    setAchievements(getAchievements(progressUserId));
+  }, [progressUserId]);
 
   const totalXP = useMemo(
     () => Object.values(progress).reduce(
@@ -182,7 +184,7 @@ export default function GameProfile() {
       category: "AI",
       icon: "🤖",
       action: () => {
-        clearAIQuestionCache();
+        clearAIQuestionCache(progressUserId);
         window.location.href = "/quiz";
       },
     },
@@ -222,7 +224,7 @@ export default function GameProfile() {
         window.location.href = "/quiz";
       },
     },
-  ], []);
+  ], [progressUserId]);
 
   const unlockedCount = useMemo(
     () => unlocks.filter((item) => totalXP >= item.xp).length,

@@ -1,0 +1,58 @@
+.learn-page { --learn-accent: #8ed7dc; width: min(1120px, 100%); margin: 0 auto; padding: clamp(22px, 4vw, 54px) clamp(18px, 4vw, 48px) 110px; color: #e8f1f4; box-sizing: border-box; }
+.learn-page *, .learning-journey * { box-sizing: border-box; }
+.learn-page a { color: inherit; text-decoration: none; }
+.learn-topline, .learn-section-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.learn-topline a { display: inline-flex; align-items: center; gap: 8px; padding-block: 12px; font-size: .85rem; color: #acbcc7; }
+.learn-hero { padding: clamp(32px, 6vw, 70px) 0 35px; }
+.learn-kicker { color: var(--learn-accent); font-size: .7rem; text-transform: uppercase; letter-spacing: .13em; font-weight: 650; }
+.learn-hero h1 { margin: 16px 0 22px; font-size: clamp(2.7rem, 6vw, 5.2rem); font-weight: 550; line-height: 1.06; letter-spacing: -.055em; }
+.learn-hero h1 em { color: var(--learn-accent); font-style: normal; }
+.learn-hero > p { max-width: 570px; color: #a5b6c3; line-height: 1.75; font-size: 1rem; }
+.learn-stats { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 30px; }
+.learn-stats span { color: #9eb0ba; font-size: .8rem; }
+.learn-stats strong { color: #e8f1f4; font-size: 1.35rem; margin-right: 6px; font-weight: 550; }
+.learn-today { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 16px; margin: 18px 0 46px; }
+.learn-today article { padding: clamp(20px, 3vw, 30px); border-radius: 22px; background: linear-gradient(135deg, #10262c, #0b1821); }
+.learn-page h2 { margin: 12px 0; font-size: clamp(1.35rem, 2.6vw, 1.85rem); font-weight: 550; line-height: 1.25; letter-spacing: -.025em; }
+.learn-page p { line-height: 1.65; color: #a5b6c3; }
+.learn-page button, .learn-page input, .learn-page select { font: inherit; }
+.learn-page button { cursor: pointer; }
+.learn-page button:disabled { cursor: wait; opacity: .55; }
+.learn-primary, .learn-load-more, .learn-status button { display: inline-flex; align-items: center; justify-content: center; gap: 12px; min-height: 46px; padding: 10px 17px; border-radius: 12px; background: #18373f; color: #d5f0f1; border: 0; font-size: .88rem; }
+.learn-review-link { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; text-align: left; padding: 15px 0; color: #dcebef; background: transparent; border: 0; border-bottom: 1px solid #ffffff0e; line-height: 1.45; }
+.learn-page svg { flex-shrink: 0; }
+.learn-catalog { scroll-margin-top: 80px; }
+.learn-section-head { padding-bottom: 18px; }
+.learn-section-head > svg { color: var(--learn-accent); }
+.learn-controls { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(200px, 2fr) minmax(140px, 1fr); gap: 14px; }
+.learn-controls label > span { display: block; color: #93a7b6; font-size: .73rem; margin-bottom: 8px; }
+.learn-controls select, .learn-search > div { width: 100%; min-height: 46px; background: #101e28; color: #dce8ec; border: 1px solid #ffffff0e; border-radius: 11px; padding: 0 12px; }
+.learn-search > div { display: flex; align-items: center; gap: 10px; }
+.learn-search input { width: 100%; min-width: 0; background: transparent; border: 0; color: #e8f1f4; min-height: 44px; font-size: .85rem; }
+.learn-catalog-note { font-size: .83rem; margin: 18px 0 24px; }
+.learn-lessons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.learn-lesson { display: flex; align-items: flex-start; gap: 17px; padding: 24px; border-radius: 20px; background: #101b24; transition: background 180ms ease; min-width: 0; }
+.learn-lesson:hover { background: #152731; }
+.learn-lesson > div { min-width: 0; }
+.learn-lesson-number { color: #71b6c0; font-size: .78rem; padding-top: 4px; font-variant-numeric: tabular-nums; }
+.learn-lesson small { color: #8da7b7; font-size: .69rem; letter-spacing: .02em; }
+.learn-lesson h3 { margin: 10px 0; font-size: 1.12rem; font-weight: 550; line-height: 1.38; overflow-wrap: anywhere; }
+.learn-lesson p { margin: 0 0 17px; font-size: .85rem; }
+.learn-lesson-action { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; color: #9bced5; font-size: .75rem; }
+.learn-load-more { display: flex; margin: 26px auto; }
+.learn-status { padding: 22px 0; }
+.learn-branches { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 26px 0; }
+.learn-branches > span { color: #99acb8; font-size: .8rem; margin-right: 10px; }
+.learn-branches button { display: flex; align-items: center; gap: 9px; padding: 12px 14px; background: #0e2029; color: #b5ced4; border: 0; border-radius: 100px; font-size: .8rem; }
+.learn-notebook { margin-top: 52px; }
+.learn-notebook details { border-bottom: 1px solid #ffffff0e; padding: 20px 0; }
+.learn-notebook summary { display: list-item; cursor: pointer; line-height: 1.5; font-size: .95rem; }
+.learn-notebook summary span { display: block; margin-top: 4px; color: #88a5b0; font-size: .75rem; }
+.learn-notebook a { color: #9bced5; display: inline-flex; gap: 8px; align-items: center; min-height: 44px; font-size: .85rem; }
+.learn-note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.learn-device-note { margin-top: 40px; font-size: .75rem; }
+.learn-page :is(a, button, input, select, summary):focus-visible, .learning-journey :is(a, button, textarea, input):focus-visible { outline: 2px solid #94d9df; outline-offset: 4px; }
+@media (max-width: 700px) { .learn-controls { grid-template-columns: 1fr 1fr; } .learn-search { grid-column: 1 / -1; grid-row: 2; } .learn-lessons { grid-template-columns: 1fr; } .learn-lesson { padding: 22px 19px; gap: 14px; } .learn-hero { padding-top: 28px; } .learn-stats { gap: 18px; } }
+@media (prefers-reduced-motion: reduce) { .learn-lesson { transition: none; } }
+/* Reserve room for Smarty's vertical navigation on narrow screens. */
+@media (max-width: 600px) { .learn-page { padding-right: 68px; } .learn-topline { gap: 10px; } .learn-topline a { font-size: .76rem; } .learn-controls { grid-template-columns: 1fr; } .learn-search { grid-column: auto; grid-row: auto; } .learn-hero h1 { font-size: clamp(2.2rem, 10vw, 3.2rem); } }

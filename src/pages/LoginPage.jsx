@@ -60,6 +60,7 @@ export default function LoginPage() {
   const {
     user,
     loading,
+    authError,
     login,
     confirmLogin,
     beginPasswordReset,
@@ -91,6 +92,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
 
+  useEffect(() => {
+    if (!authError) return;
+    setError(authError);
+    authActionInFlightRef.current = false;
+    setSubmitting(false);
+    setSocialProvider('');
+  }, [authError]);
+
   const updateField = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
@@ -114,6 +123,23 @@ export default function LoginPage() {
     localStorage.removeItem('smarty-post-login-redirect');
     navigate(from, { replace: true });
   }, [from, loading, navigate, user]);
+
+  useEffect(() => {
+    const handleNativeStatus = (event) => {
+      if (!authActionInFlightRef.current) return;
+      const status = event.detail?.status;
+      if (status !== 'failed' && status !== 'cancelled') return;
+      authActionInFlightRef.current = false;
+      setSubmitting(false);
+      setSocialProvider('');
+      setError(status === 'failed'
+        ? (event.detail?.message || 'Sign-in could not be opened. Please try again.')
+        : '');
+      setMessage(status === 'cancelled' ? 'Sign-in cancelled. You can try again when ready.' : '');
+    };
+    window.addEventListener('smarty:native-auth-status', handleNativeStatus);
+    return () => window.removeEventListener('smarty:native-auth-status', handleNativeStatus);
+  }, []);
 
   const continueFromNextStep = useCallback(
     (nextStep) => {

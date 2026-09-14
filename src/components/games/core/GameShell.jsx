@@ -1,8 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { calculateReward } from "./rewardEngine";
-import { updatePlayerStats } from "../../../lib/progressStore";
-
-const PLAYER_STATS_KEY = "smarty-player-stats";
+import { getPlayerStats, getProgressUserId, updatePlayerStats } from "../../../lib/progressStore";
+import { useAuth } from "../../../contexts/AuthContext";
 
 const DEFAULT_PLAYER_STATS = {
   totalXP: 0,
@@ -10,20 +9,6 @@ const DEFAULT_PLAYER_STATS = {
   wins: 0,
   losses: 0,
 };
-
-function getStoredPlayerStats() {
-  try {
-    const raw = localStorage.getItem(PLAYER_STATS_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-
-    return {
-      ...DEFAULT_PLAYER_STATS,
-      ...(parsed && typeof parsed === "object" ? parsed : {}),
-    };
-  } catch {
-    return DEFAULT_PLAYER_STATS;
-  }
-}
 
 function normalizeRewardPayload(payload = {}) {
   return {
@@ -39,6 +24,8 @@ export default function GameShell({
   children,
   onComplete,
 }) {
+  const { user } = useAuth();
+  const progressUserId = useMemo(() => getProgressUserId(user), [user]);
   const [finished, setFinished] = useState(false);
   const finishedRef = useRef(false);
 
@@ -48,7 +35,7 @@ export default function GameShell({
 
       const { success, message, streak } = normalizeRewardPayload(payload);
       const reward = calculateReward({ success, mode, streak });
-      const currentStats = getStoredPlayerStats();
+      const currentStats = { ...DEFAULT_PLAYER_STATS, ...getPlayerStats(progressUserId) };
 
       const nextStats = {
         ...currentStats,
@@ -62,7 +49,7 @@ export default function GameShell({
       };
 
       try {
-        updatePlayerStats(nextStats);
+        updatePlayerStats(nextStats, progressUserId);
       } catch (error) {
         console.error("Failed to update player stats:", error);
       }
@@ -81,7 +68,7 @@ export default function GameShell({
         stats: nextStats,
       });
     },
-    [mode, onComplete, title]
+    [mode, onComplete, progressUserId, title]
   );
 
   if (typeof children !== "function") {

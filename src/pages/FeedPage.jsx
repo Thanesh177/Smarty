@@ -39,6 +39,12 @@ import { postApi, creatorApi, chatApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import useFeed from '../hooks/useFeed';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  MAIN_TOPICS,
+  MAIN_TOPIC_LABELS,
+  getMainTopicDefinition,
+  postMatchesMainTopic,
+} from '../data/topicTaxonomy';
 import './FeedPage.css';
 import './FeedPageFinal.css';
 
@@ -461,6 +467,30 @@ const SMARTY_FEATURES = [
 
 const getTopicVisualMeta = (topicName, index = 0) => {
   const normalized = normalizeTopic(topicName);
+  const mainTopic = getMainTopicDefinition(topicName);
+
+  if (mainTopic) {
+    const mainTopicIcons = {
+      technology: Cpu,
+      engineering: Code2,
+      'science-mathematics': Microscope,
+      'life-sciences': HeartPulse,
+      'earth-space': Globe2,
+      'mind-health': Brain,
+      'money-business': TrendingUp,
+      'food-agriculture': Lightbulb,
+      history: Compass,
+      'society-ideas': UsersRound,
+      'arts-design': Sparkles,
+      community: UsersRound,
+    };
+
+    return {
+      icon: mainTopicIcons[mainTopic.id] || Sparkles,
+      label: mainTopic.eyebrow,
+      description: mainTopic.description,
+    };
+  }
 
   const topicPalettes = {
     all: {
@@ -546,59 +576,6 @@ const getTopicVisualMeta = (topicName, index = 0) => {
     ...visual,
     description: getTopicDescription(topicName),
   };
-};
-
-const uniqueTopicList = (values = []) => {
-  const topicMap = new Map();
-
-  values.forEach((value) => {
-    const topicValue = getTopicValue(value);
-
-    if (!topicValue) return;
-
-    const key = getCanonicalTopic(topicValue);
-
-    if (!key || topicMap.has(key)) return;
-
-    topicMap.set(key, topicValue);
-  });
-
-  return Array.from(topicMap.values()).sort((a, b) =>
-    a.localeCompare(b)
-  );
-};
-
-const TOPIC_CATALOG_CACHE_KEY = 'smarty.topicCatalog.v2';
-
-const DEFAULT_TOPIC_CATALOG = uniqueTopicList(
-  Object.keys(TOPIC_DESCRIPTIONS)
-    .filter((topic) => topic !== 'all')
-    .map((topic) => topic
-      .split('-')
-      .filter(Boolean)
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ')),
-);
-
-const readCachedTopicCatalog = () => {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const cached = JSON.parse(localStorage.getItem(TOPIC_CATALOG_CACHE_KEY) || '[]');
-    return Array.isArray(cached)
-      ? uniqueTopicList(cached).filter((topic) => normalizeTopic(topic) !== 'all')
-      : [];
-  } catch {
-    return [];
-  }
-};
-
-const cacheTopicCatalog = (topics) => {
-  try {
-    localStorage.setItem(TOPIC_CATALOG_CACHE_KEY, JSON.stringify(uniqueTopicList(topics)));
-  } catch {
-    // Storage can be unavailable in private or restricted WebViews.
-  }
 };
 
 const TopicLaunchCard = memo(function TopicLaunchCard({
@@ -749,7 +726,15 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
   const filteredCatalogTopics = useMemo(() => {
     const query = topicQuery.trim().toLowerCase();
     if (!query) return topics;
-    return topics.filter((topic) => String(topic).toLowerCase().includes(query));
+    return topics.filter((topic) => {
+      if (String(topic).toLowerCase().includes(query)) return true;
+
+      const mainTopic = getMainTopicDefinition(topic);
+      if (!mainTopic) return false;
+
+      return [mainTopic.domain, mainTopic.eyebrow, ...mainTopic.topics]
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
   }, [topicQuery, topics]);
   const catalogStoryGroups = useMemo(() => {
     return filteredCatalogTopics.length > 0 ? [filteredCatalogTopics] : [];
@@ -1514,7 +1499,7 @@ function TopicScrollExperience({ topics, loading, error, onRetry, onSelect, onNa
               <span>Choose your path</span>
             </div>
             <div className="topic-product-mobile-route" aria-hidden="true">
-              <span><strong>{filteredCatalogTopics.length || DEFAULT_TOPIC_CATALOG.length}</strong> topics</span>
+              <span><strong>{filteredCatalogTopics.length || MAIN_TOPICS.length}</strong> topic worlds</span>
               <i />
               <span><strong>{SMARTY_DESTINATIONS.length}</strong> ways to learn</span>
             </div>
@@ -2053,7 +2038,8 @@ const FeedPostCard = memo(function FeedPostCard({
         )}
 
         <div className="post-learn-more-hint">
-          Click to learn more about this
+          <span>Open to learn how it works</span>
+          <Link to={`/learn?topic=${encodeURIComponent(post.topic || 'General Knowledge')}`} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} style={{ color: '#9acfd8', marginLeft: 12 }}>More like this →</Link>
         </div>
       </div>
     </article>
@@ -2168,13 +2154,6 @@ const suppressTopicClickRef = useRef(false);
   const [translating, setTranslating] = useState({});
   const [showTranslated, setShowTranslated] = useState({});
   const [selectedTopic, setSelectedTopic] = useState('');
-  const [allTopics, setAllTopics] = useState(() => {
-    const cachedTopics = readCachedTopicCatalog();
-    return cachedTopics.length > 0 ? cachedTopics : DEFAULT_TOPIC_CATALOG;
-  });
-  const [topicsLoading, setTopicsLoading] = useState(false);
-  const [topicsError, setTopicsError] = useState('');
-  const [topicsReloadKey, setTopicsReloadKey] = useState(0);
   const [canvasViewportWidth, setCanvasViewportWidth] = useState(
     () =>
       typeof window === 'undefined'
@@ -2946,49 +2925,6 @@ useEffect(() => {
   }, [posts]);
 
 
-  useEffect(() => {
-  let cancelled = false;
-
-  async function loadTopics() {
-    try {
-      setTopicsLoading(true);
-      setTopicsError('');
-
-      const data = await postApi.getTopics();
-
-      const nextTopics = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.topics)
-          ? data.topics
-          : [];
-
-      if (!cancelled && nextTopics.length > 0) {
-        const normalizedTopics = uniqueTopicList(nextTopics)
-          .filter((topic) => normalizeTopic(topic) !== 'all');
-        setAllTopics(normalizedTopics);
-        cacheTopicCatalog(normalizedTopics);
-      }
-    } catch (err) {
-      console.warn('Live topic refresh unavailable; using the local catalog.', err);
-      if (!cancelled) {
-        setAllTopics((currentTopics) => (
-          currentTopics.length > 0 ? currentTopics : DEFAULT_TOPIC_CATALOG
-        ));
-        setTopicsError('');
-      }
-    } finally {
-      if (!cancelled) setTopicsLoading(false);
-    }
-  }
-
-  loadTopics();
-
-  return () => {
-    cancelled = true;
-  };
-}, [topicsReloadKey]);
-
-
   const handleTranslate = useCallback(async (post, lang = 'Hindi') => {
     const postId = getPostId(post);
     if (!postId || translating[postId]) return;
@@ -3056,16 +2992,7 @@ useEffect(() => {
 
 
 
-const topics = useMemo(() => {
-  const postTopics = visiblePosts.flatMap((post) => {
-    const values = getPostTopics(post);
-    return values.length > 0 ? values : [];
-  });
-  const mergedTopics = uniqueTopicList([...allTopics, ...postTopics])
-    .filter((topic) => normalizeTopic(topic) !== 'all');
-
-  return ['All', ...mergedTopics];
-}, [allTopics, visiblePosts]);
+const topics = useMemo(() => ['All', ...MAIN_TOPIC_LABELS], []);
 
 const launchTopics = useMemo(() => topics, [topics]);
 
@@ -3150,6 +3077,10 @@ const filteredPosts = useMemo(() => {
 
   return visiblePosts.filter((post) => {
     const postTopics = getPostTopics(post);
+
+    if (getMainTopicDefinition(selectedTopic)) {
+      return postMatchesMainTopic(post, selectedTopic, postTopics);
+    }
 
     if (postTopics.length === 0) {
       return areTopicsEquivalent(selectedTopic, 'Smarty');
@@ -3256,15 +3187,16 @@ useEffect(() => {
     decodedTopic = routeTopic;
   }
 
+  const parentTopic = getMainTopicDefinition(decodedTopic)?.label;
   const matchingTopic = topics.find((item) =>
     areTopicsEquivalent(
       getTopicValue(item),
-      decodedTopic
+      parentTopic || decodedTopic
     )
   );
 
   const nextTopic =
-    getTopicValue(matchingTopic) || decodedTopic;
+    getTopicValue(matchingTopic) || parentTopic || decodedTopic;
 
   setSelectedTopic((currentTopic) => {
     if (
@@ -4035,8 +3967,10 @@ return () => {
   
 const selectTopic = useCallback(
   (item, source = 'topic-pill') => {
-    const nextTopic =
+    const requestedTopic =
       getTopicValue(item) || 'All';
+    const nextTopic =
+      getMainTopicDefinition(requestedTopic)?.label || requestedTopic;
 
     const canonicalNextTopic =
       getCanonicalTopic(nextTopic);
@@ -4661,9 +4595,9 @@ handleComments,
 {!selectedTopic && (
   <TopicScrollExperience
     topics={launchTopics}
-    loading={loading || topicsLoading}
-    error={topicsError}
-    onRetry={() => setTopicsReloadKey((value) => value + 1)}
+    loading={loading}
+    error={error}
+    onRetry={refreshFeed}
     onSelect={handleStoryTopicSelect}
     onNavigate={navigate}
   />
@@ -4724,7 +4658,7 @@ handleComments,
           </div>
         </div>
 
-        {(loading || topicsLoading) &&
+        {loading &&
         launchTopics.length === 0 ? (
           <div
             className="topic-launch-loading"

@@ -18,6 +18,7 @@ import {
 import { postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import LearningJourneyPanel from '../components/learning/LearningJourneyPanel';
+import { getLearningGuide } from '../data/learningGuides';
 import './PostAiPage.css';
 
 const getDetailedExplanation = (value) => {
@@ -26,6 +27,23 @@ const getDetailedExplanation = (value) => {
     ? text
     : '';
 };
+
+const DETAILED_EXPLANATION_VERSION = 3;
+const EXPLANATION_SECTION_NAMES = [
+  'Core idea',
+  'Simple explanation',
+  'Essential terms',
+  'Key terms',
+  'How it works',
+  'Worked example',
+  'Real-life example',
+  'Common misconception',
+  'Limits and edge cases',
+  'Why it matters',
+  'What to learn next',
+  'Remember this',
+  'Final takeaway',
+];
 
 const isLongDetailedExplanation = (text) => {
   const clean = String(text || '').trim();
@@ -38,52 +56,76 @@ const isLongDetailedExplanation = (text) => {
   );
 };
 
+const renderTextBlocks = (value, keyPrefix) => String(value || '')
+  .trim()
+  .split(/\n{2,}/g)
+  .map((part) => part.trim())
+  .filter(Boolean)
+  .map((part, index) => {
+    const lines = part.split('\n').map((line) => line.trim()).filter(Boolean);
+    const isBulleted = lines.length > 0 && lines.every((line) => /^[-•*]\s+/.test(line));
+    const isNumbered = lines.length > 0 && lines.every((line) => /^\d+[.)]\s+/.test(line));
+
+    if (isBulleted || isNumbered) {
+      const List = isNumbered ? 'ol' : 'ul';
+      return (
+        <List key={`${keyPrefix}-list-${index}`}>
+          {lines.map((line, lineIndex) => (
+            <li key={`${keyPrefix}-${lineIndex}-${line.slice(0, 24)}`}>
+              {line.replace(isNumbered ? /^\d+[.)]\s+/ : /^[-•*]\s+/, '')}
+            </li>
+          ))}
+        </List>
+      );
+    }
+
+    return <p key={`${keyPrefix}-paragraph-${index}`}>{part}</p>;
+  });
+
 const renderFormattedParagraphs = (value, className = 'post-ai-paragraphs') => {
   const text = String(value || '').trim();
 
   if (!text) return null;
 
-  const sectionNames = 'Simple explanation|Why it matters|How it works|Real-life example|Final takeaway';
-  const normalized = text
-    .replace(/\r/g, '')
-    .replace(new RegExp(`\\s+(?=(${sectionNames})\\s*:)`, 'gi'), '\n\n');
-  const paragraphs = normalized
-    .split(/\n{2,}/g)
-    .map((part) => String(part || '').trim())
-    .filter(Boolean);
+  const sectionPattern = new RegExp(
+    `^(${EXPLANATION_SECTION_NAMES.join('|')})\\s*:?\\s*(.*)$`,
+    'i'
+  );
+  const sections = [];
+  let activeSection = null;
+
+  text.replace(/\r/g, '').split('\n').forEach((rawLine) => {
+    const line = rawLine.trim();
+    const heading = line.match(sectionPattern);
+
+    if (heading) {
+      activeSection = { heading: heading[1], lines: heading[2] ? [heading[2]] : [] };
+      sections.push(activeSection);
+      return;
+    }
+
+    if (!activeSection) {
+      activeSection = { heading: '', lines: [] };
+      sections.push(activeSection);
+    }
+    activeSection.lines.push(rawLine);
+  });
 
   return (
     <div className={className}>
-      {paragraphs.map((paragraph, index) => {
-        const sectionMatch = paragraph.match(
-          new RegExp(`^(${sectionNames})\\s*:?\\s*([\\s\\S]*)$`, 'i')
-        );
-
-        if (sectionMatch) {
+      {sections.map((section, index) => {
+        const sectionText = section.lines.join('\n').trim();
+        if (section.heading) {
           return (
-            <section className="post-ai-text-section" key={`${sectionMatch[1]}-${index}`}>
-              <h3>{sectionMatch[1]}</h3>
-              {sectionMatch[2] && <p>{sectionMatch[2]}</p>}
+            <section className="post-ai-text-section" key={`${section.heading}-${index}`}>
+              <h3>{section.heading}</h3>
+              <div className="post-ai-text-section-body">
+                {renderTextBlocks(sectionText, `section-${index}`)}
+              </div>
             </section>
           );
         }
-
-        const lines = paragraph.split('\n').map((line) => line.trim()).filter(Boolean);
-        const isList = lines.length > 1 && lines.every((line) => /^[-•*]\s+/.test(line));
-
-        if (isList) {
-          return (
-            <ul key={`list-${index}`}>
-              {lines.map((line, lineIndex) => (
-                <li key={`${line.slice(0, 24)}-${lineIndex}`}>
-                  {line.replace(/^[-•*]\s+/, '')}
-                </li>
-              ))}
-            </ul>
-          );
-        }
-
-        return <p key={`${paragraph.slice(0, 24)}-${index}`}>{paragraph}</p>;
+        return renderTextBlocks(sectionText, `intro-${index}`);
       })}
     </div>
   );
@@ -91,7 +133,9 @@ const renderFormattedParagraphs = (value, className = 'post-ai-paragraphs') => {
 
 const getUsableDetailedExplanation = (value) => {
   const text = getDetailedExplanation(value);
-  return isLongDetailedExplanation(text) ? text : '';
+  const version = Number(value?.aiDetailedExplanationVersion || 0);
+  const isCurrent = value?.isLearningGuide || version >= DETAILED_EXPLANATION_VERSION;
+  return isCurrent && isLongDetailedExplanation(text) ? text : '';
 };
 
 const PostAiMessage = memo(function PostAiMessage({ message }) {
@@ -104,15 +148,24 @@ const PostAiMessage = memo(function PostAiMessage({ message }) {
 
 export default function PostAiPage() {
   const { postId } = useParams();
+  const { user } = useAuth();
+  return <PostStudyRoom key={`${user?.sub || user?.userId || user?.id || 'guest'}:${postId}`} />;
+}
+
+function PostStudyRoom() {
+  const pageRef = useRef(null);
+  useEffect(() => { pageRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' }); }, []);
+  const { postId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const mountedRef = useRef(true);
+  const askLockRef = useRef(false);
   const messagesRef = useRef(null);
   const premiumCloseRef = useRef(null);
   const { user } = useAuth();
 
-  const postFromState = useMemo(() => location.state?.post || null, [location.state]);
-  const creatorName = location.state?.creatorName || 'Smarty creator';
+  const postFromState = useMemo(() => getLearningGuide(postId) || location.state?.post || null, [location.state, postId]);
+  const creatorName = postFromState?.isLearningGuide ? 'Smarty learning guide' : location.state?.creatorName || 'Smarty creator';
 
   const [post, setPost] = useState(postFromState);
   const [explanation, setExplanation] = useState(() => getUsableDetailedExplanation(postFromState));
@@ -124,6 +177,10 @@ export default function PostAiPage() {
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [deepPreviewOpen, setDeepPreviewOpen] = useState(false);
   const [premiumDialogOpen, setPremiumDialogOpen] = useState(false);
+  const [guideMeta, setGuideMeta] = useState(() => ({
+    cached: Boolean(getUsableDetailedExplanation(postFromState)),
+    persisted: Boolean(getUsableDetailedExplanation(postFromState)),
+  }));
 
   const userId = useMemo(
     () => user?.sub || user?.userId || user?.id || user?.username || '',
@@ -133,7 +190,7 @@ export default function PostAiPage() {
   const title = useMemo(() => post?.title || 'Post explanation', [post]);
   const body = useMemo(() => post?.body || '', [post]);
   const topicLabel = useMemo(
-    () => post?.subTopic || post?.subtopic || post?.topic || 'Focused learning',
+    () => post?.subTopic || post?.subtopic || post?.focus || post?.title || post?.topic || 'this concept',
     [post]
   );
 
@@ -176,10 +233,11 @@ export default function PostAiPage() {
     return Math.max(2, Math.min(12, Math.ceil(words / 180)));
   }, [body, displayExplanation]);
   const suggestedQuestions = useMemo(() => [
-    `Explain the key mechanism in ${topicLabel} step by step.`,
-    `Give me a concrete real-world example of ${topicLabel}.`,
-    `What is the most common misunderstanding about ${topicLabel}?`,
-    'Ask me one question to check what I understood.',
+    { label: 'Start with the basics', question: `Teach the prerequisites for ${topicLabel} using the source lesson. Define essential terms, then connect them to this mechanism.` },
+    { label: 'Show each step', question: `Explain ${topicLabel} as a cause-and-effect sequence. Explain why each step leads to the next, and distinguish assumptions from facts.` },
+    { label: 'Work through an example', question: `Give one worked example of ${topicLabel}. Walk through it, then ask me to predict what changes if one input changes. Do not give the prediction answer yet.` },
+    { label: 'Clear up a misconception', question: `Explain one common misunderstanding of ${topicLabel} and a boundary where this explanation stops applying. Identify anything not supported by the source.` },
+    { label: 'Connect the next idea', question: `Which specific concept is useful after ${topicLabel}? Explain the link, the prerequisite, and a question to explore next. Stay in the same subject.` },
   ], [topicLabel]);
   const deepDiveSteps = useMemo(() => [
     {
@@ -244,15 +302,21 @@ export default function PostAiPage() {
   }, [asking, messages]);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadExplanation() {
       try {
         setLoading(true);
         setStatus('');
 
-        const existingDetailedExplanation = getUsableDetailedExplanation(post);
+        const sourcePost = postFromState || await postApi.getSingleReel(postId);
+        if (cancelled || !mountedRef.current) return;
+        if (!sourcePost) throw new Error('Post not found.');
+        setPost(sourcePost);
+        const existingDetailedExplanation = getUsableDetailedExplanation(sourcePost);
 
         if (existingDetailedExplanation) {
           setExplanation(existingDetailedExplanation);
+          setGuideMeta({ cached: true, persisted: true });
           setLoading(false);
           return;
         }
@@ -261,10 +325,10 @@ export default function PostAiPage() {
           postId,
           id: postId,
           reelId: postId,
-          title,
-          body,
-          topic: post?.topic || '',
-          subTopic: post?.subTopic || post?.subtopic || '',
+          title: sourcePost.title || '',
+          body: sourcePost.body || sourcePost.description || '',
+          topic: sourcePost.topic || '',
+          subTopic: sourcePost.subTopic || sourcePost.subtopic || '',
           mode: 'detailed',
         };
 
@@ -276,7 +340,7 @@ export default function PostAiPage() {
           ? await postApi.getPostDetails(detailsPayload)
           : await postApi.getAiDetails(detailsPayload);
 
-        if (!mountedRef.current) return;
+        if (cancelled || !mountedRef.current) return;
 
         const nextExplanationCandidate =
           getUsableDetailedExplanation(data?.post) ||
@@ -291,30 +355,38 @@ export default function PostAiPage() {
             ...(prev || {}),
             ...data.post,
             aiDetailedExplanation: nextExplanation,
+            aiDetailedExplanationVersion:
+              data?.post?.aiDetailedExplanationVersion || data?.aiDetailedExplanationVersion || 0,
           }));
         }
 
         setExplanation(nextExplanation);
+        setGuideMeta({
+          cached: data?.cached === true,
+          persisted: data?.persisted !== false && Boolean(nextExplanation),
+        });
 
         if (!nextExplanation) {
           setStatus('The learning guide is not available for this post yet.');
         }
       } catch (err) {
         console.error('Load AI explanation failed:', err);
-        if (mountedRef.current) {
+        if (!cancelled && mountedRef.current) {
           setStatus(readableError(err, 'Could not load AI explanation.'));
         }
       } finally {
-        if (mountedRef.current) setLoading(false);
+        if (!cancelled && mountedRef.current) setLoading(false);
       }
     }
 
     loadExplanation();
-  }, [loadAttempt, postId, readableError]);
+    return () => { cancelled = true; };
+  }, [loadAttempt, postId, postFromState, readableError]);
 
   const askQuestion = useCallback(async (value) => {
     const cleanQuestion = String(value || '').trim();
-    if (!cleanQuestion || asking) return;
+    if (!cleanQuestion || askLockRef.current || cleanQuestion.length > 2000) return;
+    askLockRef.current = true;
 
     setMessages((prev) => [
       ...prev,
@@ -328,6 +400,16 @@ export default function PostAiPage() {
     setAsking(true);
 
     try {
+      const guidePrompt = post?.isLearningGuide && suggestedQuestions.findIndex((item) => item.question === cleanQuestion);
+      if (typeof guidePrompt === 'number' && guidePrompt >= 0) {
+        const sectionIndex = [0, 1, 2, 3][guidePrompt];
+        const nextGuide = getLearningGuide(`smarty-guide-${post.nextGuides?.[0] || ''}`);
+        const answer = guidePrompt === 4
+          ? (nextGuide ? `Next, explore “${nextGuide.title}”. ${nextGuide.body} Open it in Your next connection above.` : `Continue with ${post.relatedTopics?.[0] || post.topic}. Use Your next connection above to choose a specific lesson.`)
+          : `${post.sections[sectionIndex][0]}: ${post.sections[sectionIndex][1]}`;
+        setMessages((prev) => [...prev, { role: 'ai', text: answer }]);
+        return;
+      }
       const data = await postApi.askPostDoubt({
         postId,
         id: postId,
@@ -365,9 +447,10 @@ export default function PostAiPage() {
         ]);
       }
     } finally {
+      askLockRef.current = false;
       if (mountedRef.current) setAsking(false);
     }
-  }, [asking, body, displayExplanation, post, postId, readableError, title, userId]);
+  }, [asking, body, displayExplanation, post, postId, readableError, suggestedQuestions, title, userId]);
 
   const askDoubt = useCallback((event) => {
     event.preventDefault();
@@ -396,7 +479,7 @@ export default function PostAiPage() {
   }, [askQuestion, question]);
 
   return (
-    <main className="post-ai-page">
+    <main ref={pageRef} className="post-ai-page">
       <section className="post-ai-shell">
         <nav className="post-ai-topline" aria-label="Lesson navigation">
           <button type="button" className="post-ai-back" onClick={goBack}>
@@ -409,17 +492,17 @@ export default function PostAiPage() {
             Understand · step 2 of 3
           </span>
 
-          <Link className="post-ai-comments" to={`/comments/${postId}`}>
+          {!post?.isLearningGuide && <Link className="post-ai-comments" to={`/comments/${postId}`}>
             <MessageCircle size={17} aria-hidden="true" />
             Discussion
-          </Link>
+          </Link>}
         </nav>
 
         <header className="post-ai-hero">
           <div className="post-ai-hero-copy">
             <p className="post-ai-eyebrow">
               <BrainCircuit size={15} aria-hidden="true" />
-              AI study room
+              {post?.isLearningGuide ? 'Smarty learning guide' : 'Study room'}
             </p>
             <h1>{title || 'Post explanation'}</h1>
             <div className="post-ai-meta">
@@ -435,6 +518,12 @@ export default function PostAiPage() {
           </div>
         </header>
 
+        <section className="post-study-objective" aria-label="Learning objective">
+          <span>By the end of this lesson</span>
+          <p>{post?.objective || `Explain how ${topicLabel} works, use it in an example, and identify one limit or open question.`}</p>
+          <Link to={`/learn?topic=${encodeURIComponent(post?.topic || '')}`}>More in this subject <ChevronRight size={15} /></Link>
+        </section>
+
         <div className="post-ai-workspace">
           <article className="post-ai-card post-ai-explainer">
             <div className="post-ai-section-head">
@@ -446,7 +535,11 @@ export default function PostAiPage() {
                 <h2>Understand how it works</h2>
               </div>
               <small className={loading ? 'is-working' : ''}>
-                {loading ? 'Building guide…' : displayExplanation ? 'Ready' : 'Not available'}
+                {loading
+                  ? 'Preparing guide…'
+                  : displayExplanation
+                    ? guideMeta.cached ? 'Loaded from library' : guideMeta.persisted ? 'Saved to library' : 'Ready'
+                    : 'Not available'}
               </small>
             </div>
 
@@ -457,7 +550,7 @@ export default function PostAiPage() {
                 <div className="post-ai-skeleton is-short" />
                 <div className="post-ai-skeleton post-ai-skeleton-title" />
                 <div className="post-ai-skeleton" />
-                <p>Building a focused explanation from this post…</p>
+                <p>Checking your saved guide, then building it only if needed…</p>
               </div>
             ) : displayExplanation ? (
               renderFormattedParagraphs(
@@ -502,6 +595,11 @@ export default function PostAiPage() {
             </article>
           </aside>
         </div>
+
+        {Array.isArray(post?.sources) && post.sources.length > 0 && <section className="post-study-sources" aria-label="Sources and further reading">
+          <span>Check the source. Go deeper.</span>
+          {post.sources.filter((source) => /^https?:\/\//i.test(source?.url || '')).map((source) => <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">{source.label || source.url}<ChevronRight size={14} /></a>)}
+        </section>}
 
         <section className={`post-ai-deeper${deepPreviewOpen ? ' is-open' : ''}`} aria-labelledby="post-ai-deeper-title">
           <div className="post-ai-deeper-intro">
@@ -586,7 +684,7 @@ export default function PostAiPage() {
                 <h2 id="post-ai-chat-title">Ask what the post leaves open</h2>
               </div>
             </div>
-            <p>Use a prompt below or ask in your own words. Answers stay grounded in this lesson.</p>
+            <p>Choose how you want to learn, or ask in your own words. AI explanations can make mistakes; compare important details with the source.</p>
           </div>
 
           {messages.length === 0 && (
@@ -594,12 +692,12 @@ export default function PostAiPage() {
               {suggestedQuestions.map((suggestion, index) => (
                 <button
                   type="button"
-                  key={suggestion}
-                  onClick={() => askQuestion(suggestion)}
+                  key={suggestion.label}
+                  onClick={() => askQuestion(suggestion.question)}
                   disabled={asking}
                 >
                   <span>{String(index + 1).padStart(2, '0')}</span>
-                  {suggestion}
+                  {suggestion.label}
                 </button>
               ))}
             </div>
@@ -627,6 +725,7 @@ export default function PostAiPage() {
             <textarea
               rows="1"
               value={question}
+              maxLength={2000}
               onChange={handleQuestionChange}
               onKeyDown={handleQuestionKeyDown}
               placeholder="Ask about a mechanism, term, or example…"
