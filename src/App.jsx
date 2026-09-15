@@ -1036,7 +1036,7 @@ useEffect(() => {
 
       {!isAuthPage && <InstallPrompt />}
 
-      <div className="app-shell">
+      <div className={`app-shell ${location.pathname === '/feed' && !new URLSearchParams(location.search).get('topic') ? 'is-smarty-landing' : ''}`}>
           <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
@@ -1179,8 +1179,8 @@ useEffect(() => {
                   }
                 />
 
-                <Route path="/feed" element={<FeedPage />} />
-                <Route path="/feed/:topic" element={<FeedPage />} />
+                <Route path="/feed" element={<FeedPage onOpenSearch={openUniversalSearch} />} />
+                <Route path="/feed/:topic" element={<FeedPage onOpenSearch={openUniversalSearch} />} />
 
                 <Route path="/booksinfo" element={<Booksinfo />} />
                 <Route path="/bookinfo" element={<Booksinfo />} />
