@@ -41,31 +41,31 @@ function AttentionDiagram() {
       <svg viewBox="0 0 460 195" fill="none" aria-hidden="true">
         <defs>
           <linearGradient id="sl-connection" x1="65" y1="100" x2="400" y2="100" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#83ccb6" stopOpacity=".08" />
-            <stop offset=".55" stopColor="#b2f5d7" />
-            <stop offset="1" stopColor="#83ccb6" stopOpacity=".25" />
+            <stop stopColor="var(--ui-accent)" stopOpacity=".08" />
+            <stop offset=".55" stopColor="var(--ui-accent)" />
+            <stop offset="1" stopColor="var(--ui-accent)" stopOpacity=".25" />
           </linearGradient>
         </defs>
         <g stroke="url(#sl-connection)" strokeWidth="1.25">
           <path d="M68 40C140 40 147 97 214 97" /><path d="M68 97H214" />
           <path d="M68 154C140 154 147 97 214 97" /><path d="M246 97H389" />
         </g>
-        <path className="sl-signal" d="M68 40C140 40 147 97 214 97H389" stroke="#c4ffe5" strokeWidth="2" strokeDasharray="12 350" />
-        <g fill="#101c1a" stroke="#36524a">
+        <path className="sl-signal" d="M68 40C140 40 147 97 214 97H389" stroke="var(--ui-accent-hover)" strokeWidth="2" strokeDasharray="12 350" />
+        <g fill="var(--ui-control-bg)" stroke="var(--ui-accent-line)">
           <rect x="12" y="22" width="58" height="36" rx="9" /><rect x="12" y="79" width="58" height="36" rx="9" />
           <rect x="12" y="136" width="58" height="36" rx="9" />
           <rect x="203" y="70" width="54" height="54" rx="16" />
-          <rect x="365" y="76" width="81" height="42" rx="10" fill="#c6f7df" stroke="#c6f7df" />
+          <rect x="365" y="76" width="81" height="42" rx="10" fill="var(--ui-brand-bg)" stroke="var(--ui-brand-bg)" />
         </g>
-        <g fontFamily="inherit" fontSize="14" textAnchor="middle" fill="#c0d0ca">
+        <g fontFamily="inherit" fontSize="14" textAnchor="middle" fill="var(--ui-secondary)">
           <text x="41" y="45">The</text><text x="41" y="102">sky</text><text x="41" y="159">is</text>
-          <text x="405" y="102" fill="#13281e" fontWeight="650">blue</text>
+          <text x="405" y="102" fill="var(--ui-accent-ink)" fontWeight="650">blue</text>
         </g>
-        <g stroke="#bcebd5" strokeWidth="1.3">
+        <g stroke="var(--ui-accent)" strokeWidth="1.3">
           <path d="M217 97h26M230 84v26M221 88l18 18M221 106l18-18" />
-          <circle cx="230" cy="97" r="7" fill="#142620" />
+          <circle cx="230" cy="97" r="7" fill="var(--ui-control-hover)" />
         </g>
-        <g fontSize="10" fill="#729085" textAnchor="middle" fontFamily="inherit">
+        <g fontSize="10" fill="var(--ui-faint)" textAnchor="middle" fontFamily="inherit">
           <text x="230" y="147">ATTENTION</text><text x="405" y="143">NEXT TOKEN</text>
         </g>
       </svg>

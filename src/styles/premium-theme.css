@@ -7,30 +7,42 @@
 
 :root {
   color-scheme: dark;
-  --ui-bg: #05090d;
-  --ui-bg-deep: #030609;
-  --ui-surface: rgba(14, 22, 29, 0.94);
-  --ui-surface-raised: rgba(19, 29, 37, 0.96);
-  --ui-surface-soft: rgba(211, 230, 235, 0.045);
-  --ui-surface-hover: rgba(211, 230, 235, 0.075);
-  --ui-surface-pressed: rgba(211, 230, 235, 0.11);
-  --ui-line: rgba(210, 231, 236, 0.09);
-  --ui-line-strong: rgba(210, 231, 236, 0.17);
-  --ui-text: #f1f5f6;
-  --ui-muted: #99a8ae;
-  --ui-faint: #69777d;
-  --ui-accent: #9dd9e5;
-  --ui-accent-strong: #d9f2f6;
-  --ui-accent-ink: #071116;
+  --ui-bg: #0a101b;
+  --ui-bg-deep: #0a101b;
+  --ui-bg-rgb: 10, 16, 27;
+  --ui-surface: #121d2d;
+  --ui-surface-rgb: 18, 29, 45;
+  --ui-surface-raised: #19283b;
+  --ui-surface-soft: rgba(219, 231, 247, 0.045);
+  --ui-surface-hover: rgba(219, 231, 247, 0.075);
+  --ui-surface-pressed: rgba(219, 231, 247, 0.11);
+  --ui-line: rgba(219, 231, 247, 0.09);
+  --ui-line-strong: rgba(219, 231, 247, 0.17);
+  --ui-text: #edf4ff;
+  --ui-secondary: #c6d5e8;
+  --ui-muted: #9cacbf;
+  --ui-faint: #889bb2;
+  --ui-label: #b0c2d9;
+  --ui-accent: #9bcaff;
+  --ui-accent-strong: #9bcaff;
+  --ui-accent-rgb: 155, 202, 255;
+  --ui-accent-hover: #bfdfff;
+  --ui-accent-ink: #10233c;
+  --ui-accent-soft: #1b3350;
+  --ui-accent-line: #496e96;
+  --ui-control-bg: #0e1725;
+  --ui-control-hover: #1b2c43;
+  --ui-control-line: #2c415a;
+  --ui-brand-bg: #d5e8ff;
   --ui-danger: #f2a2a9;
-  --ui-success: #9dd8bd;
-  --ui-radius: 14px;
-  --ui-radius-large: 18px;
-  --ui-radius-small: 10px;
+  --ui-success: #a6d6b5;
+  --ui-radius: 10px;
+  --ui-radius-large: 14px;
+  --ui-radius-small: 7px;
   --ui-gutter: clamp(16px, 2.8vw, 42px);
   --ui-section-space: clamp(28px, 4.5vw, 64px);
   --ui-shadow-float: 0 18px 48px rgba(0, 0, 0, 0.28);
-  --ui-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ui-ease: cubic-bezier(.2, .7, .2, 1);
 }
 
 html {
@@ -54,7 +66,7 @@ body {
   position: relative;
   isolation: isolate;
   background:
-    radial-gradient(ellipse 78% 42% at 50% -16%, rgba(98, 170, 187, 0.085), transparent 68%),
+    radial-gradient(ellipse 78% 42% at 50% -16%, rgba(var(--ui-accent-rgb), 0.085), transparent 68%),
     var(--ui-bg) !important;
 }
 
@@ -78,7 +90,7 @@ body {
 .content {
   color: var(--ui-text);
   background: transparent !important;
-  scrollbar-color: rgba(193, 217, 222, 0.2) transparent;
+  scrollbar-color: rgba(var(--ui-accent-rgb), 0.2) transparent;
   scrollbar-width: thin;
 }
 
@@ -97,17 +109,17 @@ body {
 :where(.chat-page .messages, .rooms-page .messages, .menu-panel)::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(193, 217, 222, 0.22);
+  background: rgba(var(--ui-accent-rgb), 0.22);
   background-clip: padding-box;
 }
 
 :where(
-  .books-page, .reader-page, .read-books-page, .news-page,
+  .books-page, .read-books-page, .news-page,
   .feed-topics-page, .saved-page, .profile-page,
   .creator-profile-container, .follow-requests-page, .chat-page,
   .rooms-page, .comments-page, .reel-detail-page, .post-ai-page,
   .create-page, .creator-dashboard-page, .quiz-page, .progress-page,
-  .learning-page, .legal-page, .login-page, .register-page, .auth-shell,
+  .learning-page, .learn-page, .notification-settings-page, .legal-page, .login-page, .register-page, .auth-shell,
   .room-invite-page, .admin-moderation-page
 ) {
   color: var(--ui-text);
@@ -119,7 +131,7 @@ body {
   .saved-page, .profile-page, .creator-profile-container,
   .follow-requests-page, .comments-page, .reel-detail-page,
   .post-ai-page, .create-page, .creator-dashboard-page,
-  .quiz-page, .progress-page, .learning-page, .legal-page, .login-page,
+  .quiz-page, .progress-page, .learning-page, .learn-page, .notification-settings-page, .legal-page, .login-page,
   .register-page, .room-invite-page, .admin-moderation-page
 ) {
   width: min(1480px, 100%);
@@ -131,7 +143,7 @@ body {
   .saved-page, .profile-page, .creator-profile-container,
   .follow-requests-page, .comments-page, .reel-detail-page,
   .post-ai-page, .create-page, .creator-dashboard-page,
-  .quiz-page, .progress-page, .learning-page, .legal-page, .login-page,
+  .quiz-page, .progress-page, .learning-page, .learn-page, .notification-settings-page, .legal-page, .login-page,
   .register-page, .room-invite-page, .admin-moderation-page
 ) :where(h1, h2, h3) {
   color: var(--ui-text);
@@ -144,7 +156,7 @@ body {
   .saved-page, .profile-page, .creator-profile-container,
   .follow-requests-page, .comments-page, .reel-detail-page,
   .post-ai-page, .create-page, .creator-dashboard-page,
-  .quiz-page, .progress-page, .learning-page, .legal-page, .login-page,
+  .quiz-page, .progress-page, .learning-page, .learn-page, .notification-settings-page, .legal-page, .login-page,
   .register-page, .room-invite-page, .admin-moderation-page
 ) :where(p, small, time) {
   color: var(--ui-muted);
@@ -157,7 +169,7 @@ body {
 ) {
   color: var(--ui-muted) !important;
   font-size: 0.69rem !important;
-  font-weight: 650 !important;
+  font-weight: 550 !important;
   letter-spacing: 0.095em !important;
   text-transform: uppercase;
 }
@@ -181,7 +193,7 @@ body {
   border: 0 !important;
   border-radius: var(--ui-radius) !important;
   background: var(--ui-surface) !important;
-  box-shadow: inset 0 0 0 1px rgba(213, 232, 237, 0.045) !important;
+  box-shadow: inset 0 0 0 1px rgba(219, 231, 247, 0.045) !important;
 }
 
 /* Only transient UI floats. Regular cards should not look elevated. */
@@ -191,7 +203,7 @@ body {
 ) {
   border: 1px solid var(--ui-line) !important;
   border-radius: var(--ui-radius-large) !important;
-  background: rgba(12, 19, 25, 0.985) !important;
+  background: var(--ui-surface) !important;
   box-shadow: var(--ui-shadow-float) !important;
   backdrop-filter: blur(18px) saturate(1.05);
   -webkit-backdrop-filter: blur(18px) saturate(1.05);
@@ -211,11 +223,11 @@ body {
 
 /* Controls remain visually quiet until interaction. */
 :where(
-  .books-page, .reader-page, .read-books-page, .news-page,
+  .books-page, .read-books-page, .news-page,
   .feed-topics-page, .saved-page, .profile-page, .creator-profile-container,
   .follow-requests-page, .chat-page, .rooms-page, .comments-page,
   .post-ai-page, .create-page, .creator-dashboard-page, .quiz-page,
-  .learning-page, .legal-page, .login-page, .register-page,
+  .learning-page, .learn-page, .notification-settings-page, .legal-page, .login-page, .register-page,
   .room-invite-page, .admin-moderation-page
 ) :where(
   input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
@@ -223,18 +235,18 @@ body {
 ) {
   border: 1px solid transparent !important;
   border-radius: var(--ui-radius-small) !important;
-  background: #0d151b !important;
+  background: var(--ui-control-bg) !important;
   color: var(--ui-text) !important;
-  box-shadow: inset 0 0 0 1px rgba(211, 230, 235, 0.055) !important;
+  box-shadow: inset 0 0 0 1px rgba(219, 231, 247, 0.055) !important;
   transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease !important;
 }
 
 :where(
-  .books-page, .reader-page, .read-books-page, .news-page,
+  .books-page, .read-books-page, .news-page,
   .feed-topics-page, .saved-page, .profile-page, .creator-profile-container,
   .follow-requests-page, .chat-page, .rooms-page, .comments-page,
   .post-ai-page, .create-page, .creator-dashboard-page, .quiz-page,
-  .learning-page, .legal-page, .login-page, .register-page,
+  .learning-page, .learn-page, .notification-settings-page, .legal-page, .login-page, .register-page,
   .room-invite-page, .admin-moderation-page
 ) :where(input, textarea)::placeholder {
   color: var(--ui-faint) !important;
@@ -242,17 +254,17 @@ body {
 }
 
 :where(
-  .books-page, .reader-page, .read-books-page, .news-page,
+  .books-page, .read-books-page, .news-page,
   .feed-topics-page, .saved-page, .profile-page, .creator-profile-container,
   .follow-requests-page, .chat-page, .rooms-page, .comments-page,
   .post-ai-page, .create-page, .creator-dashboard-page, .quiz-page,
-  .learning-page, .legal-page, .login-page, .register-page,
+  .learning-page, .learn-page, .notification-settings-page, .legal-page, .login-page, .register-page,
   .room-invite-page, .admin-moderation-page
 ) :where(input, textarea, select):focus {
   outline: none !important;
-  border-color: rgba(157, 217, 229, 0.5) !important;
-  background: #101a21 !important;
-  box-shadow: 0 0 0 3px rgba(157, 217, 229, 0.08) !important;
+  border-color: rgba(var(--ui-accent-rgb), 0.5) !important;
+  background: var(--ui-control-bg) !important;
+  box-shadow: 0 0 0 3px rgba(var(--ui-accent-rgb), 0.08) !important;
 }
 
 /* Compact actions. Cards and large interactive tiles are intentionally excluded. */
@@ -268,10 +280,10 @@ body {
   border: 1px solid transparent !important;
   border-radius: 9px !important;
   background: var(--ui-surface-soft) !important;
-  color: #dce5e8 !important;
+  color: var(--ui-secondary) !important;
   box-shadow: none !important;
   font-size: 0.8rem;
-  font-weight: 650;
+  font-weight: 550;
   letter-spacing: -0.008em;
   transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease !important;
 }
@@ -292,7 +304,7 @@ body {
 ) {
   border-color: var(--ui-line) !important;
   background: transparent !important;
-  color: #c8d3d6 !important;
+  color: var(--ui-secondary) !important;
 }
 
 :where(.content, .menu-panel) :where(
@@ -313,7 +325,7 @@ body {
   ):hover {
     border-color: var(--ui-line) !important;
     background: var(--ui-surface-hover) !important;
-    color: #f5f8f9 !important;
+    color: var(--ui-text) !important;
   }
 
   :where(.content, .menu-panel, .reminder-popup-card) :where(
@@ -322,7 +334,7 @@ body {
     button[type='submit']:not(.composer-icon-btn)
   ):hover {
     border-color: transparent !important;
-    background: #ecfafc !important;
+    background: var(--ui-accent-hover) !important;
     color: var(--ui-accent-ink) !important;
   }
 }
@@ -335,13 +347,13 @@ body {
 }
 
 :where(.content, .menu-panel) :where(button, a, input, textarea, select):focus-visible {
-  outline: 2px solid rgba(157, 217, 229, 0.72) !important;
+  outline: 2px solid rgba(var(--ui-accent-rgb), 0.72) !important;
   outline-offset: 2px !important;
 }
 
 /* Icon-only actions use one predictable footprint. */
 :where(.content, .menu-panel) :where(
-  .icon-btn, .reader-icon-btn, .composer-icon-btn, .back-btn,
+  .icon-btn, .reader-icon-btn, .composer-icon-btn,
   .reel-back-btn, .search-clear-btn, .post-more-button,
   .active-room-info-close, .close-members, .standalone-media-close
 ) {
@@ -355,13 +367,13 @@ body {
   border: 1px solid transparent !important;
   border-radius: 9px !important;
   background: transparent !important;
-  color: #c5d0d4 !important;
+  color: var(--ui-secondary) !important;
   box-shadow: none !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
   :where(.content, .menu-panel) :where(
-    .icon-btn, .reader-icon-btn, .composer-icon-btn, .back-btn,
+    .icon-btn, .reader-icon-btn, .composer-icon-btn,
     .reel-back-btn, .search-clear-btn, .post-more-button,
     .active-room-info-close, .close-members, .standalone-media-close
   ):hover {
@@ -373,8 +385,8 @@ body {
 
 /* Navigation and conversation shells use the same flat material. */
 .topbar.glass-topbar {
-  border-bottom: 1px solid rgba(210, 231, 236, 0.065) !important;
-  background: rgba(4, 8, 12, 0.9) !important;
+  border-bottom: 1px solid rgba(219, 231, 247, 0.065) !important;
+  background: rgba(var(--ui-bg-rgb), 0.94) !important;
   box-shadow: none !important;
   backdrop-filter: blur(16px) saturate(1.08) !important;
   -webkit-backdrop-filter: blur(16px) saturate(1.08) !important;
@@ -384,7 +396,7 @@ body {
 .chat-page .chat-sidebar, .chat-page .chat-window,
 .rooms-page .sidebar, .rooms-page .chat {
   border-color: var(--ui-line) !important;
-  background: rgba(8, 14, 19, 0.94) !important;
+  background: var(--ui-control-bg) !important;
   box-shadow: none !important;
 }
 
@@ -393,14 +405,14 @@ body {
   height: 38px;
   border: 1px solid var(--ui-line) !important;
   border-radius: 10px !important;
-  background: rgba(211, 230, 235, 0.035) !important;
+  background: rgba(219, 231, 247, 0.035) !important;
   box-shadow: none !important;
 }
 
 .topbar .hamburger-line {
   width: 15px;
   height: 1.5px;
-  background: #dce5e8;
+  background: var(--ui-secondary);
   box-shadow: none;
 }
 
@@ -435,7 +447,7 @@ body {
 .login-page .register-card,
 .auth-loading-card {
   border-radius: 16px !important;
-  background: rgba(11, 18, 24, 0.96) !important;
+  background: var(--ui-surface) !important;
   box-shadow: inset 0 0 0 1px var(--ui-line), 0 18px 54px rgba(0, 0, 0, 0.22) !important;
 }
 
@@ -461,7 +473,7 @@ body {
   border: 1px solid var(--ui-line) !important;
   border-radius: 10px !important;
   background: transparent !important;
-  color: #e3eaec !important;
+  color: var(--ui-secondary) !important;
   box-shadow: none !important;
 }
 
@@ -481,15 +493,15 @@ body {
 
 :where(.section-tabs, .saved-toolbar) button[aria-selected='true'],
 :where(.section-tabs, .saved-toolbar) button.active {
-  border-color: rgba(157, 217, 229, 0.18) !important;
-  background: rgba(157, 217, 229, 0.1) !important;
+  border-color: rgba(var(--ui-accent-rgb), 0.18) !important;
+  background: rgba(var(--ui-accent-rgb), 0.1) !important;
   color: var(--ui-accent-strong) !important;
 }
 
 :where(.badge, [class$='-badge'], [class*='status-badge']) {
   border: 0 !important;
   border-radius: 6px !important;
-  background: rgba(211, 230, 235, 0.07) !important;
+  background: rgba(219, 231, 247, 0.07) !important;
   box-shadow: none !important;
 }
 
@@ -509,7 +521,7 @@ body {
 
   .app-shell {
     background:
-      radial-gradient(ellipse 105% 36% at 50% -12%, rgba(98, 170, 187, 0.075), transparent 70%),
+      radial-gradient(ellipse 105% 36% at 50% -12%, rgba(var(--ui-accent-rgb), 0.075), transparent 70%),
       var(--ui-bg) !important;
   }
 
@@ -524,7 +536,7 @@ body {
   }
 
   :where(.content, .menu-panel) :where(
-    .icon-btn, .reader-icon-btn, .composer-icon-btn, .back-btn,
+    .icon-btn, .reader-icon-btn, .composer-icon-btn,
     .reel-back-btn, .search-clear-btn, .post-more-button,
     .active-room-info-close, .close-members, .standalone-media-close
   ) {
@@ -541,7 +553,7 @@ body {
     .saved-page, .profile-page, .creator-profile-container,
     .follow-requests-page, .comments-page, .reel-detail-page,
     .post-ai-page, .create-page, .creator-dashboard-page,
-    .quiz-page, .progress-page, .learning-page, .legal-page, .login-page,
+    .quiz-page, .progress-page, .learning-page, .learn-page, .notification-settings-page, .legal-page, .login-page,
     .register-page, .room-invite-page, .admin-moderation-page
   ) {
     padding-inline: 14px;

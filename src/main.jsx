@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import './index.css';
+// The shared product language follows every route stylesheet and the reset.
+import './styles/premium-theme.css';
+import './styles/product-theme.css';
 import 'aws-amplify/auth/enable-oauth-listener';
 import {
   QueryClient,

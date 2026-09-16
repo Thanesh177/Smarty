@@ -1,0 +1,605 @@
+/*
+ * One product, one visual language.
+ * Tokens live in premium-theme.css and are also used by SmartyLanding.
+ * This adapter follows the legacy route styles. Selectors name actual UI
+ * components so media, game state and reading preferences keep their behavior.
+ */
+:root {
+  --bg: var(--ui-bg);
+  --card: var(--ui-surface);
+  --card-border: var(--ui-line);
+  --text-soft: var(--ui-muted);
+  --accent: var(--ui-accent);
+  --accent-2: var(--ui-accent);
+  --page-bg: var(--ui-bg);
+  --page-bg-raised: var(--ui-surface);
+  --page-text: var(--ui-text);
+  --page-muted: var(--ui-muted);
+  --page-subtle: var(--ui-faint);
+  --page-accent: var(--ui-accent);
+  --page-line: var(--ui-line);
+  --page-hover: var(--ui-surface-hover);
+  --page-glass: rgba(var(--ui-surface-rgb), .93);
+  --page-glass-strong: rgba(var(--ui-surface-rgb), .98);
+  --page-radius: var(--ui-radius);
+  --ui-content-width: 1240px;
+  --ui-control-height: 44px;
+}
+
+body { color: var(--ui-text); }
+button, input, select, textarea { font-family: inherit; }
+::selection { background: var(--ui-accent-line); color: var(--ui-text); }
+input, select, textarea { accent-color: var(--ui-accent); }
+
+.app-shell { background: var(--ui-bg) !important; }
+.app-shell::before, .app-shell::after { display: none; }
+.app-shell .content { color: var(--ui-text); }
+
+/* Page frames. Conversation panes and the book reader own their dimensions. */
+.app-shell .content :is(
+  .books-page, .read-books-page, .news-page, .feed-topics-page,
+  .saved-page, .profile-page, .creator-profile-container,
+  .follow-requests-page, .comments-page, .reel-detail-page,
+  .post-ai-page, .create-page, .creator-dashboard-page, .quiz-page,
+  .learn-page, .legal-page, .notification-settings-page, .admin-moderation-page,
+  .login-page, .room-invite-page
+) {
+  color: var(--ui-text);
+  background: transparent !important;
+  max-width: var(--ui-content-width);
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+.app-shell .content :is(
+  .books-page, .read-books-page, .news-page, .feed-topics-page,
+  .saved-page, .profile-page, .follow-requests-page, .create-page,
+  .creator-dashboard-page, .quiz-page, .learn-page, .legal-page,
+  .notification-settings-page, .admin-moderation-page
+) {
+  width: 100% !important;
+  margin-inline: auto !important;
+  padding: clamp(24px, 3.5vw, 48px) var(--ui-gutter) calc(88px + env(safe-area-inset-bottom)) !important;
+}
+
+.app-shell .content :is(
+  .quiz-page, .profile-page, .saved-page, .post-ai-page, .create-page,
+  .read-books-page, .feed-topics-page, .notification-settings-page,
+  .creator-dashboard-page, .legal-page
+)::before,
+.app-shell .content :is(
+  .quiz-page, .profile-page, .saved-page, .create-page, .feed-topics-page
+)::after { display: none !important; }
+
+/* Typography: editorial headers, readable content, restrained labels. */
+.app-shell .content :is(
+  .books-page, .read-books-page, .news-page, .feed-topics-page,
+  .saved-page, .profile-page, .creator-profile-container,
+  .follow-requests-page, .comments-page, .reel-detail-page, .post-ai-page,
+  .create-page, .creator-dashboard-page, .quiz-page, .learn-page,
+  .legal-page, .notification-settings-page, .admin-moderation-page, .login-page
+) :is(h1, h2, h3) {
+  color: var(--ui-text);
+  font-weight: 550;
+  letter-spacing: -.035em;
+  text-shadow: none;
+}
+
+.app-shell .content :is(
+  .news-hero, .read-books-hero, .books-hero, .feed-topics-hero,
+  .saved-hero, .quiz-hero, .progress-hero, .dashboard-hero,
+  .notification-settings-hero, .admin-moderation-hero, .create-hero,
+  .post-studio-header, .follow-requests-header
+) {
+  min-height: 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--ui-line) !important;
+  border-radius: 0 !important;
+  padding: 12px 0 28px !important;
+  margin-bottom: 28px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-shell .content :is(
+  .news-hero, .read-books-hero, .books-hero, .feed-topics-hero,
+  .saved-hero, .quiz-hero, .progress-hero, .dashboard-hero,
+  .notification-settings-hero, .admin-moderation-hero, .create-hero,
+  .post-studio-header, .follow-requests-header
+) h1 {
+  font-size: clamp(2rem, 4vw, 3.5rem) !important;
+  font-weight: 550 !important;
+  line-height: 1.1 !important;
+  letter-spacing: -.055em !important;
+  margin-block: 10px 14px;
+  color: var(--ui-text);
+}
+
+.app-shell .content :is(
+  .news-hero, .read-books-hero, .books-hero, .feed-topics-hero,
+  .saved-hero, .quiz-hero, .progress-hero, .dashboard-hero,
+  .notification-settings-hero, .admin-moderation-hero, .create-hero,
+  .post-studio-header, .follow-requests-header, .learn-hero
+) p {
+  max-width: 62ch;
+  color: var(--ui-muted);
+  font-size: .9375rem;
+  font-weight: 400;
+  line-height: 1.75;
+}
+
+.app-shell .content :is(
+  .news-hero, .read-books-hero, .books-hero, .feed-topics-hero,
+  .saved-hero, .quiz-hero, .progress-hero, .dashboard-hero
+)::after { display: none; }
+
+.app-shell .content :is(
+  .quiz-kicker, .news-kicker, .read-books-kicker, .feed-topics-kicker,
+  .learn-kicker, .post-ai-eyebrow, .post-studio-eyebrow,
+  .notification-settings-kicker, .profile-eyebrow, .dashboard-eyebrow
+) {
+  color: var(--ui-label) !important;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0;
+  padding: 0;
+  font-size: .6875rem !important;
+  line-height: 1.5;
+  font-weight: 550 !important;
+  letter-spacing: .12em !important;
+  box-shadow: none !important;
+}
+
+/* Flat, quietly outlined surfaces. Never applied to media or playing cards. */
+.app-shell .content :is(
+  .news-card, .news-daily-brief, .news-section-digest-card,
+  .books-card, .books-hero-card, .books-discover-panel, .read-book-card,
+  .feed-topic-card, .saved-card, .saved-summary,
+  .profile-card, .profile-post-card, .mini-post-card, .stat-card, .friend-search-card,
+  .private-card, .approved-creator-card, .request-card, .request-empty-card,
+  .comment-card, .comments-empty, .comments-loading,
+  .reel-content-panel, .reel-comments, .post-ai-card, .post-ai-original,
+  .post-ai-lesson-map, .post-ai-chat, .post-ai-deeper, .post-ai-connection,
+  .create-side, .post-setting-card, .post-editor, .post-media-section,
+  .edit-preview-card, .tip-card, .current-stage-card,
+  .dashboard-stat, .dashboard-panel, .dashboard-post-card, .analytics-card,
+  .topic-card, .question-card, .result-card, .profile-overview-card,
+  .unlock-section, .mistake-review-card, .review-panel, .streak-card,
+  .progress-insight, .quiz-next-move, .learn-lesson, .learn-today article,
+  .learning-journey, .notification-master-card, .notification-settings-group,
+  .notification-device-row, .notification-save-bar, .moderation-case-card,
+  .admin-user-result, .friend-result-card, .room-invite-card, .brain-game, .boss-stage,
+  .admin-account-tools, .moderation-summary > div, .game-profile-stat-card,
+  .learning-next-card, .post-study-objective, .post-study-sources
+) {
+  border: 1px solid var(--ui-line) !important;
+  border-radius: var(--ui-radius) !important;
+  background: var(--ui-surface) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.app-shell .content :is(
+  .feed-topic-card, .topic-card, .profile-card, .streak-card,
+  .post-ai-card, .post-ai-deeper, .post-setting-card
+)::before,
+.app-shell .content :is(.feed-topic-card, .topic-card, .streak-card, .post-ai-deeper)::after {
+  display: none;
+}
+
+.app-shell .content :is(.feed-topics-grid, .topic-grid, .news-grid, .learn-lessons) {
+  gap: clamp(14px, 1.6vw, 22px);
+}
+
+/* Inputs keep a single visible outline, including composite search controls. */
+.app-shell .content :is(
+  .learn-controls, .notification-settings-page, .create-page,
+  .profile-page, .admin-moderation-page, .login-page, .post-ai-page
+) :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), select, textarea) {
+  background: var(--ui-control-bg) !important;
+  border: 1px solid var(--ui-control-line) !important;
+  border-radius: var(--ui-radius-small) !important;
+  box-shadow: none !important;
+  color: var(--ui-text) !important;
+}
+
+.app-shell .content :is(input, textarea, select):focus-visible {
+  outline: 2px solid var(--ui-accent) !important;
+  outline-offset: 2px !important;
+}
+
+.app-shell .content :is(
+  .news-search-control, .read-books-search-box, .learn-search > div,
+  .chat-search, .room-search-wrap, .topic-search-input
+) {
+  background: var(--ui-control-bg) !important;
+  border: 1px solid var(--ui-control-line) !important;
+  border-radius: var(--ui-radius-small) !important;
+  box-shadow: none !important;
+  color: var(--ui-muted);
+}
+
+.app-shell .content :is(
+  .news-search-control, .read-books-search-box, .learn-search,
+  .chat-search, .room-search-wrap, .topic-search-input
+) input {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  outline: none !important;
+}
+
+.app-shell .content :is(
+  .news-search-control, .read-books-search-box, .learn-search > div,
+  .chat-search, .room-search-wrap, .topic-search-input
+):focus-within { border-color: var(--ui-accent) !important; }
+
+/* Named actions, not all buttons: switches, answer tiles, media and games
+   retain the shape and hit areas required by their interaction. */
+.app-shell .content :is(
+  .primary-btn, .btn-primary, .secondary-btn, .ghost-btn, .back-btn,
+  .profile-btn, .profile-mini-btn, .publish-btn, .submit-answer-btn,
+  .refresh-news-btn, .learn-primary, .learn-load-more, .learn-status button,
+  .read-book-actions a, .read-book-actions button, .news-actions a, .news-actions button,
+  .profile-actions button, .profile-actions a, .profile-edit-btn,
+  .profile-saved-btn, .profile-dashboard-btn,
+  .notification-device-row button, .notification-save-bar button,
+  .room-invite-join-btn, .room-invite-secondary-btn,
+  .approve-btn, .reject-btn, .post-ai-deeper-toggle, .post-ai-back, .post-ai-comments,
+  .books-actions button, .books-discover-actions button, .books-empty-state button,
+  .learning-primary-action, .learning-secondary-action,
+  .moderation-load-more button, .admin-moderation-hero > button
+) {
+  min-height: var(--ui-control-height);
+  border: 1px solid var(--ui-line-strong) !important;
+  border-radius: var(--ui-radius-small) !important;
+  background: var(--ui-surface-raised) !important;
+  color: var(--ui-secondary) !important;
+  padding: 10px 16px;
+  font-size: .8125rem;
+  font-weight: 550;
+  line-height: 1.5;
+  text-shadow: none;
+  box-shadow: none !important;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease !important;
+}
+
+.app-shell .content :is(.back-btn, .post-ai-back, .post-ai-comments) {
+  width: auto;
+  min-width: 0;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.app-shell .content :is(
+  .primary-btn, .btn-primary, .publish-btn, .submit-answer-btn, .learn-primary,
+  .room-invite-join-btn, .notification-save-bar button, .learning-primary-action,
+  .books-actions button:not(.secondary), .books-empty-state button
+) {
+  background: var(--ui-accent) !important;
+  border-color: var(--ui-accent) !important;
+  color: var(--ui-accent-ink) !important;
+}
+
+.app-shell .content :is(.secondary-btn, .ghost-btn, .room-invite-secondary-btn) {
+  background: transparent !important;
+}
+
+/* Compact selection states shared by filters, tabs, and visibility controls. */
+.app-shell .content :is(
+  .section-tabs button, .category-btn, .access-filter-btn, .saved-toolbar button,
+  .learn-branches button, .feed-inner-topics button, .post-visibility-toggle button,
+  .room-privacy-toggle button, .auth-mode-option
+) {
+  border-radius: 7px !important;
+  color: var(--ui-muted) !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-weight: 500 !important;
+  min-height: 40px;
+  transition: background-color 180ms, color 180ms, border-color 180ms !important;
+}
+
+.app-shell .content :is(
+  .section-tabs, .saved-toolbar, .feed-inner-topics, .post-visibility-toggle,
+  .room-privacy-toggle, .auth-mode-switch, .category-bar, .access-filter-bar
+) :is(button.active, button.is-active, button[aria-selected='true'], button[aria-pressed='true']) {
+  color: var(--ui-accent) !important;
+  background: var(--ui-accent-soft) !important;
+  border-color: var(--ui-accent-line) !important;
+}
+
+/* Topic discovery, library and daily news. */
+.app-shell .content :is(.read-books-page, .news-page) {
+  --discover-bg: var(--ui-bg);
+  --discover-surface: var(--ui-surface);
+  --discover-surface-hover: var(--ui-surface-raised);
+  --discover-text: var(--ui-text);
+  --discover-muted: var(--ui-muted);
+  --discover-subtle: var(--ui-faint);
+  --discover-accent: var(--ui-accent);
+  --discover-line: var(--ui-line);
+}
+.app-shell .content .feed-topic-card { min-height: 218px; gap: 20px; padding: 24px; }
+.app-shell .content .feed-topic-card-copy { gap: 10px; }
+.app-shell .content .feed-topic-card-copy strong { font-size: 1.35rem; line-height: 1.25; font-weight: 550; letter-spacing: -.035em; }
+.app-shell .content .feed-topic-card-copy > span { color: var(--ui-muted); font-size: .875rem; line-height: 1.65; }
+.app-shell .content :is(.feed-topic-index, .feed-topic-count, .feed-topic-card-copy small, .feed-topic-card-footer > span) { color: var(--ui-muted); font-weight: 500; }
+.app-shell .content .feed-topic-card-footer { border-color: var(--ui-line); }
+.app-shell .content .feed-topic-card-footer svg { color: var(--ui-accent); }
+.app-shell .content .read-books-search { top: 12px; border: 1px solid var(--ui-line); border-radius: 10px; background: rgba(var(--ui-surface-rgb), .96); box-shadow: none; }
+.app-shell .content :is(.news-controls, .book-filters) select { min-height: 44px; background: var(--ui-control-bg) !important; border: 1px solid var(--ui-control-line) !important; }
+.app-shell .content .news-card-body { padding: 22px; }
+.app-shell .content .news-card h3 { font-size: 1.125rem; font-weight: 550; line-height: 1.4; }
+.app-shell .content .news-card p { color: var(--ui-muted); font-size: .875rem; line-height: 1.7; }
+.app-shell .content .news-card-source { color: var(--ui-label); font-weight: 500; }
+.app-shell .content .news-daily-brief { padding: clamp(20px, 3vw, 34px); }
+.app-shell .content .news-brief-copy h2 { font-size: clamp(1.7rem, 3vw, 2.5rem); line-height: 1.15; font-weight: 550; }
+.app-shell .content :is(.news-brief-highlights, .news-brief-takeaways, .news-brief-themes, .news-coverage-map) { background: var(--ui-control-bg); border: 1px solid var(--ui-line); border-radius: 8px; box-shadow: none; }
+.app-shell .content :is(.missing-news-image, .book-cover-placeholder) { background: var(--ui-surface-raised); color: var(--ui-label); }
+.app-shell .content .read-book-body h3 { font-weight: 550; line-height: 1.4; }
+.app-shell .content .read-book-actions :is(a, button) { padding-inline: 12px; }
+.app-shell .content .books-hero > div:first-child { background: transparent !important; border: 0 !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; }
+.app-shell .content .books-hero > div:first-child::after, .app-shell .content .books-hero-card::after { display: none; }
+.app-shell .content .books-pill { color: var(--ui-label); background: transparent; border: 0; padding: 0; font-size: .6875rem; font-weight: 550; letter-spacing: .12em; }
+.app-shell .content :is(.books-quick-strip button, .books-stat-row > div) { background: var(--ui-control-bg) !important; border: 1px solid var(--ui-line) !important; border-radius: 8px !important; box-shadow: none !important; }
+.app-shell .content .books-quick-strip button::after { display: none; }
+.app-shell .content .books-quick-strip button strong { color: var(--ui-text); font-weight: 550; }
+.app-shell .content .book-glow { color: var(--ui-accent); background: var(--ui-control-hover); border-radius: 10px; box-shadow: none; }
+.app-shell .content .news-location-controls { background: rgba(var(--ui-surface-rgb), .96) !important; border: 1px solid var(--ui-line) !important; border-radius: 10px; box-shadow: none !important; }
+
+/* The feed stays full-height; only the material and controls change. */
+.app-shell .snap-feed-page.has-inner-feed { background: var(--ui-bg) !important; }
+.app-shell .snap-feed-page.has-inner-feed::before,
+.app-shell .snap-feed-page.has-inner-feed::after { display: none; }
+.app-shell .content .feed-inner-header { background: rgba(var(--ui-bg-rgb), .96) !important; border-color: var(--ui-line) !important; box-shadow: none !important; }
+.app-shell .content .feed-inner-title h1 { font-weight: 550; color: var(--ui-text); }
+.app-shell .content .feed-inner-title p { color: var(--ui-muted); }
+.app-shell .content .snap-post { color: var(--ui-text); background: var(--ui-bg) !important; box-shadow: none !important; border-color: var(--ui-line) !important; }
+.app-shell .content .snap-post::before { display: none; }
+.app-shell .content .post-topic { color: var(--ui-accent) !important; background: var(--ui-control-hover) !important; border-color: var(--ui-line) !important; font-weight: 550; }
+.app-shell .content .post-author { color: var(--ui-muted); }
+.app-shell .content .post-actions .icon-action-btn { color: var(--ui-secondary) !important; background: transparent !important; border: 1px solid var(--ui-line) !important; border-radius: 8px !important; box-shadow: none !important; }
+.app-shell .content .post-actions .icon-action-btn.saved { color: var(--ui-accent) !important; background: var(--ui-accent-soft) !important; border-color: var(--ui-accent-line) !important; }
+.app-shell .content :is(.translate-dropdown, .translated-box, .simple-explanation, .ai-loading-box, .feed-inner-state) { color: var(--ui-text); background: var(--ui-surface) !important; border-color: var(--ui-line) !important; box-shadow: none !important; border-radius: 10px; }
+
+/* Learning, explanations, quizzes and progress share the same accents. */
+.app-shell .content .learn-page { --learn-accent: var(--ui-accent); }
+.app-shell .content .learning-journey { --learning-accent: var(--ui-accent); }
+.app-shell .content .post-ai-page { --post-ai-accent: var(--ui-accent); --post-ai-accent-rgb: var(--ui-accent-rgb); --post-ai-ink: var(--ui-text); }
+.app-shell .content .learn-hero { padding-block: 28px; }
+.app-shell .content .learn-hero h1 { font-size: clamp(2.3rem, 5vw, 4rem); }
+.app-shell .content :is(.learn-lesson-number, .learn-lesson-action, .learn-notebook a, .learn-section-head > svg) { color: var(--ui-accent); }
+.app-shell .content .post-ai-signal-core { background: var(--ui-control-hover); color: var(--ui-accent); border-radius: 12px; box-shadow: none; }
+.app-shell .content :is(.post-ai-card, .post-ai-chat) { padding: clamp(20px, 3vw, 32px) !important; }
+.app-shell .content .post-ai-section-head h2 { font-size: 1.25rem; }
+.app-shell .content .post-ai-text-section { border-color: var(--ui-line); }
+.app-shell .content :is(.post-ai-msg, .learning-next-foundation, .learning-step-icon) { background: var(--ui-control-hover); border-color: var(--ui-accent-line); color: var(--ui-secondary); box-shadow: none; }
+.app-shell .content .post-ai-msg.mine { background: var(--ui-accent-soft); }
+.app-shell .content .learning-next-card.is-recommended { border-color: var(--ui-accent-line) !important; background: var(--ui-control-hover) !important; }
+.app-shell .content :is(.learning-next-open, .learning-journey-topic, .learning-next-card-label em, .learning-related button) { background: var(--ui-accent-soft); border-color: var(--ui-accent-line); color: var(--ui-accent); border-radius: 6px; font-weight: 500; }
+.app-shell .content :is(.learning-next-card-label small, .learning-next-question b, .learning-next-foundation > span) { color: var(--ui-label); font-weight: 550; }
+.app-shell .content .learning-next-card-copy > strong { color: var(--ui-text); font-weight: 550; }
+.app-shell .content :is(.learning-next-detail, .learning-next-foundation p, .learning-next-question) { color: var(--ui-muted); }
+.app-shell .content .learning-next-route > span { background: var(--ui-control-bg); color: var(--ui-label); border-radius: 6px; }
+.app-shell .content .learning-journey-steps::before { background: var(--ui-line-strong); }
+.app-shell .content :is(.post-ai-text-section p, .post-ai-text-section li, .post-ai-original-paragraphs p) { color: var(--ui-secondary); }
+.app-shell .content .quiz-hero { gap: 28px; }
+.app-shell .content .topic-card { padding: 24px; transform: none; }
+.app-shell .content .topic-card h3 { font-size: 1.2rem; font-weight: 550; }
+.app-shell .content .topic-card > strong { color: var(--ui-accent); font-weight: 500; }
+.app-shell .content :is(.mini-progress-track, .progress-track) { background: var(--ui-accent-soft); box-shadow: none; }
+.app-shell .content :is(.mini-progress-fill, .progress-fill) { background: var(--ui-accent); box-shadow: none; }
+.app-shell .content :is(.quiz-hero-metrics span, .quiz-session-stats span, .level-badge) { background: var(--ui-surface-raised) !important; border-color: var(--ui-line) !important; color: var(--ui-muted) !important; border-radius: 6px; font-weight: 500; }
+.app-shell .content .question-card { padding: clamp(20px, 4vw, 38px); }
+.app-shell .content .option-btn { min-height: 52px; padding: 14px 18px; text-align: left; border: 1px solid var(--ui-line-strong) !important; border-radius: 8px !important; background: var(--ui-control-bg) !important; color: var(--ui-text) !important; font-weight: 500; line-height: 1.5; box-shadow: none !important; }
+.app-shell .content .option-btn.selected { border-color: var(--ui-accent) !important; background: var(--ui-accent-soft) !important; color: var(--ui-text) !important; }
+.app-shell .content .option-btn.correct { border-color: #85b896 !important; background: #213c2a !important; color: #c1e9ce !important; }
+.app-shell .content .option-btn.wrong { border-color: #d69a9f !important; background: #3c2429 !important; color: #ffd1d5 !important; }
+.app-shell .content .option-btn:disabled { opacity: .65 !important; }
+.app-shell .content .option-btn:is(.selected, .correct, .wrong):disabled { opacity: 1 !important; }
+.app-shell .content .answer-feedback { border-radius: 10px; box-shadow: none; }
+.app-shell .content .answer-feedback.correct { background: #152c1e; color: #c1e9ce; border-color: #436e50; }
+.app-shell .content .answer-feedback.wrong { background: #302025; color: #ffd1d5; border-color: #795057; }
+
+/* Post studio, profiles, support and settings. */
+.app-shell .content .post-studio { width: min(940px, 100%); margin-inline: auto; }
+.app-shell .content .post-studio-form { border: 0 !important; background: transparent !important; box-shadow: none !important; }
+.app-shell .content :is(.post-setting-card, .post-editor, .post-media-section) { padding: 22px; }
+.app-shell .content .post-title-input { font-weight: 500; }
+.app-shell .content .post-media-empty { border-color: var(--ui-control-line); background: var(--ui-control-bg); border-radius: 8px; box-shadow: none; }
+.app-shell .content :is(.post-media-icon, .notification-setting-icon) { color: var(--ui-accent); background: var(--ui-accent-soft); border-radius: 8px; }
+.app-shell .content .post-studio-footer { border-color: var(--ui-line); }
+.app-shell .content .profile-hero { background: transparent !important; box-shadow: none !important; border: 0 !important; border-bottom: 1px solid var(--ui-line) !important; border-radius: 0 !important; }
+.app-shell .content .profile-hero::before, .app-shell .content .profile-hero::after { display: none; }
+.app-shell .content .profile-card h3 { font-weight: 550; }
+.app-shell .content :is(.comments-topbar, .comments-composer, .comment-input-wrapper) { background: var(--ui-surface) !important; border-color: var(--ui-line); box-shadow: none !important; }
+.app-shell .content :is(.admin-moderation-icon, .admin-user-avatar) { color: var(--ui-accent); background: var(--ui-accent-soft); border-radius: 9px; }
+.app-shell .content :is(.admin-user-search button, .admin-user-result > button) { color: var(--ui-accent-ink); background: var(--ui-accent); border-radius: 7px; font-weight: 550; }
+.app-shell .content .moderation-status-tabs button { color: var(--ui-muted); background: transparent; border-radius: 7px; }
+.app-shell .content .moderation-status-tabs button.active { color: var(--ui-accent); background: var(--ui-accent-soft); }
+.app-shell .content .notification-settings-hero h1 { max-width: 650px; }
+.app-shell .content :is(.notification-category-row, .notification-compact-row, .notification-group-heading) { border-color: var(--ui-line); }
+.app-shell .content :is(.notification-category-row, .notification-compact-row, .notification-master-card) p { color: var(--ui-muted); line-height: 1.6; }
+.notification-toggle[aria-checked='true'], .notification-toggle.is-on { background: var(--ui-accent) !important; }
+.app-shell .content .legal-page { max-width: 900px; }
+.app-shell .content .legal-page h1 { font-size: clamp(2rem, 4vw, 3.25rem); line-height: 1.15; margin-bottom: 24px; }
+.app-shell .content .legal-page h2 { margin-top: 30px; font-size: 1.2rem; }
+.app-shell .content .legal-page :is(p, li) { color: var(--ui-label); line-height: 1.8; }
+.app-shell .content .legal-page a { color: var(--ui-accent); text-underline-offset: 4px; }
+
+/* Authentication: familiar provider controls, matching product surfaces. */
+.app-shell .content .login-hero { background: transparent; }
+.app-shell .content .login-hero h1 { font-size: clamp(2.4rem, 4.8vw, 4.4rem); line-height: 1.08; font-weight: 550; color: var(--ui-text); }
+.app-shell .content :is(.login-card, .register-card, .auth-loading-card) { border: 1px solid var(--ui-line) !important; background: var(--ui-surface) !important; border-radius: 14px !important; box-shadow: none !important; }
+.app-shell .content :is(.login-highlights > div, .auth-mode-switch) { background: var(--ui-control-bg) !important; border: 1px solid var(--ui-line) !important; border-radius: 8px; box-shadow: none; }
+.app-shell .content .login-highlights strong { color: var(--ui-accent); font-weight: 550; }
+.app-shell .content .login-card-header h2 { font-weight: 550; }
+.app-shell .content .login-page :is(.google-login-btn, .apple-login-btn) { min-height: 44px; border: 1px solid var(--ui-control-line) !important; border-radius: 7px !important; background: var(--ui-control-bg) !important; color: var(--ui-text) !important; font-weight: 550; box-shadow: none !important; transform: none; }
+.app-shell .content .login-page :is(.auth-recovery-link, .auth-inline-action, .register-signin-link) { color: var(--ui-secondary) !important; }
+.app-shell .content .auth-mode-switch .auth-mode-option.active { color: var(--ui-accent) !important; background: var(--ui-accent-soft) !important; border-color: var(--ui-accent-line) !important; }
+.app-shell .content .login-page :is(.auth-recovery-link, .auth-inline-action) { min-height: 44px; }
+.app-shell .content .login-page input { font-weight: 450 !important; }
+.app-shell .content .login-page .auth-password-toggle { min-width: 48px; min-height: 44px; color: var(--ui-accent) !important; background: transparent !important; font-weight: 500; }
+.app-shell .content .login-page .login-pill { background: transparent; color: var(--ui-label); border: 0; padding-inline: 0; font-size: .75rem; font-weight: 550; box-shadow: none; }
+
+/* Conversation geometry, scrolling and media remain owned by chat styles. */
+.app-shell .content .chat-page {
+  --chat-canvas: var(--ui-bg);
+  --chat-sidebar: var(--ui-control-bg);
+  --chat-surface: var(--ui-surface);
+  --chat-surface-hover: var(--ui-surface-raised);
+  --chat-ink: var(--ui-text);
+  --chat-muted: var(--ui-muted);
+  --chat-accent: var(--ui-accent);
+  --chat-line: var(--ui-line);
+}
+.app-shell .content :is(.chat-page, .rooms-page) { background: var(--ui-bg) !important; color: var(--ui-text); }
+.app-shell .content :is(.chat-window-top, .chat-header, .composer-shell, .rooms-page .input) { background: var(--ui-surface) !important; border-color: var(--ui-line) !important; box-shadow: none !important; }
+.app-shell .content :is(.chat-sidebar, .chat-window, .rooms-page .sidebar, .rooms-page .chat) { background: var(--ui-control-bg) !important; border-color: var(--ui-line) !important; box-shadow: none !important; }
+.app-shell .content :is(.chat-sidebar-heading h1, .rooms-sidebar-heading h1, .chat-info h2) { color: var(--ui-text); font-weight: 550; }
+.app-shell .content .chat-page .message:not(:has(.message-media-preview, .audio-mini-card)) { background: var(--ui-surface-raised) !important; color: var(--ui-text) !important; }
+.app-shell .content .chat-page .message.mine:not(:has(.message-media-preview, .audio-mini-card)) { background: var(--ui-accent-soft) !important; }
+.app-shell .content .rooms-page .msg:not(:has(.room-message-media-tap)) { background: var(--ui-surface-raised) !important; color: var(--ui-text) !important; }
+.app-shell .content .rooms-page .msg.mine:not(:has(.room-message-media-tap)) { background: var(--ui-accent-soft) !important; }
+.app-shell .content :is(.message-form, .rooms-page .input) button[type='submit'] { background: var(--ui-accent) !important; color: var(--ui-accent-ink) !important; border-radius: 8px !important; box-shadow: none !important; }
+.app-shell .content :is(.chat-list-item.active, .rooms-page .room-item.active) { background: var(--ui-control-hover) !important; }
+.app-shell .content :is(.date-divider span, .room-date-divider span) { background: var(--ui-surface-raised) !important; color: var(--ui-muted) !important; }
+.app-shell .content .chat-empty-state::before { background: var(--ui-control-hover); color: var(--ui-accent); box-shadow: none; }
+
+/* Navigation, menus and dialogs also use the landing's material. */
+.app-shell .topbar.glass-topbar { border: 1px solid var(--ui-line) !important; background: rgba(var(--ui-surface-rgb), .96) !important; border-radius: 16px; box-shadow: none !important; contain: none; transform: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.app-shell .topbar :is(.quick-icon-link, .hamburger-btn) { background: transparent !important; color: var(--ui-secondary) !important; border: 1px solid transparent !important; box-shadow: none !important; border-radius: 9px !important; }
+.app-shell .topbar :is(.quick-icon-link.active, .hamburger-btn.is-open) { color: var(--ui-accent) !important; background: var(--ui-accent-soft) !important; }
+.app-shell .topbar .brand-actions { background: transparent !important; border: 0 !important; border-radius: 14px; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.app-shell .topbar .quick-icon-link svg { color: inherit; }
+.app-shell .topbar, .app-shell .topbar .navbar-menu { contain: none; will-change: auto; }
+.app-shell .topbar .menu-panel { position: fixed !important; right: calc(80px + env(safe-area-inset-right)) !important; bottom: calc(16px + env(safe-area-inset-bottom)) !important; }
+.app-shell .smarty-brand-mark, .menu-panel .smarty-brand-mark { background: var(--ui-brand-bg) !important; color: var(--ui-accent-ink) !important; border-radius: 10px !important; border: 0 !important; box-shadow: none !important; }
+.app-shell .smarty-brand-mark::before, .app-shell .smarty-brand-mark::after,
+.menu-panel .smarty-brand-mark::before, .menu-panel .smarty-brand-mark::after { display: none; }
+.app-shell .smarty-brand-copy strong, .menu-panel .smarty-brand-copy strong { font-weight: 550; letter-spacing: -.055em; }
+.menu-panel, .universal-search-panel, .profile-modal, .members-card,
+.moderation-dialog, .chat-block-dialog, .post-safety-menu,
+.active-room-info-panel, .chat-actions-menu, .message-options-menu,
+.room-card-menu-popover, .active-room-menu-popover, .topic-search-menu,
+.reminder-popup-card, .install-popup, .terms-modal-card,
+.post-ai-premium-dialog, .moderation-decision-dialog {
+  color: var(--ui-text) !important;
+  background: var(--ui-surface) !important;
+  border: 1px solid var(--ui-control-line) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--ui-shadow-float) !important;
+}
+.menu-panel :is(.menu-header, .menu-footer, .menu-section) { border-color: var(--ui-line); }
+.menu-panel :is(.menu-section a, .menu-link-btn) { color: var(--ui-secondary); font-weight: 500; }
+.menu-panel :is(.menu-section a.active, .menu-section a:hover, .menu-link-btn:hover) { background: var(--ui-accent-soft) !important; color: var(--ui-accent) !important; }
+.menu-panel .login-pill { background: var(--ui-accent) !important; color: var(--ui-accent-ink) !important; border-radius: 7px; font-weight: 550; box-shadow: none; }
+.universal-search-input-row { color: var(--ui-label); border-color: var(--ui-line); }
+.universal-search-input-row input { color: var(--ui-text); font-weight: 450; }
+.universal-search-input-row input::placeholder { color: var(--ui-muted); }
+.universal-search-filters { border-color: var(--ui-line); }
+.universal-search-filters button { color: var(--ui-muted); font-weight: 500; }
+.universal-search-filters button.active, .universal-search-filters button[aria-selected='true'] { color: var(--ui-accent); background: var(--ui-accent-soft); }
+.universal-search-panel :is(button, a, input):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+
+/* Safety feedback must remain distinct from the primary accent. */
+.app-shell .content :is(.danger, .btn-delete-chat, .btn-block, .delete-room-btn,
+  .delete-post-btn, .profile-delete-account-btn, .moderation-remove-btn, .reject-btn),
+.menu-panel .logout-pill {
+  background: #322126 !important;
+  border-color: #664049 !important;
+  color: #f2b5be !important;
+  box-shadow: none !important;
+}
+.app-shell .topbar .nav-badge { color: var(--ui-accent-ink) !important; background: var(--ui-accent) !important; }
+
+/* The default reader follows the app. User-selected paper/sepia modes remain. */
+.app-shell .content .reader-theme-dark { background: var(--ui-bg) !important; color: var(--ui-text); }
+.app-shell .content .reader-theme-dark::before { display: none; }
+.app-shell .content .reader-theme-dark .reader-surface-card { background: var(--ui-surface) !important; border: 1px solid var(--ui-line); border-radius: 10px; box-shadow: none; backdrop-filter: none; }
+.app-shell .content .reader-theme-dark :is(.reader-icon-btn, .menu-btn, .reader-menu button, .reader-controls button, .reader-retry-btn) { background: var(--ui-control-hover) !important; color: var(--ui-secondary) !important; border-color: var(--ui-line) !important; border-radius: 7px; box-shadow: none; }
+.app-shell .content .reader-theme-dark .reader-content { color: var(--ui-secondary); }
+.app-shell .content .reader-theme-dark :is(.reader-hero-copy h1, .reader-progress-text strong, .reader-focus-strip strong) { color: var(--ui-text); font-weight: 550; }
+.app-shell .content .reader-theme-dark :is(.reader-hero-copy p, .reader-progress-text span, .reader-focus-strip span) { color: var(--ui-muted); }
+.app-shell .content .reader-theme-light { background: #f1f3ee !important; color-scheme: light; }
+.app-shell .content .reader-theme-sepia { background: #29251e !important; }
+.app-shell .content .reader-theme-light :is(.reader-icon-btn, .menu-btn, .reader-menu button, .reader-controls button, .reader-retry-btn) { background: #dfe7dc !important; color: #233b2d !important; border-color: #b4c2b1 !important; box-shadow: none !important; }
+.app-shell .content .reader-theme-sepia :is(.reader-icon-btn, .menu-btn, .reader-menu button, .reader-controls button, .reader-retry-btn) { background: #3c3328 !important; color: #e6ddcb !important; border-color: #685c48 !important; box-shadow: none !important; }
+
+/* Opening and loading surfaces do not flash a different palette. */
+.app-opening-screen, .app-page-loader, .reader-loading { background: var(--ui-bg) !important; color: var(--ui-text); }
+.app-opening-atmosphere { background: radial-gradient(ellipse at center, rgba(var(--ui-accent-rgb), .1), transparent 65%) !important; }
+.app-opening-mark { background: var(--ui-brand-bg) !important; color: var(--ui-accent-ink) !important; border-color: transparent !important; box-shadow: none !important; }
+.app-opening-progress { color: var(--ui-accent); }
+.app-page-loader-card, .reader-loading-card { background: var(--ui-surface); color: var(--ui-text); border-color: var(--ui-line); box-shadow: none; border-radius: 12px; }
+
+@media (hover: hover) and (pointer: fine) {
+  .app-shell .content :is(.feed-topic-card, .topic-card, .learn-lesson, .saved-card, .news-card, .read-book-card):hover {
+    background: var(--ui-control-hover) !important;
+    border-color: var(--ui-accent-line) !important;
+    box-shadow: none !important;
+  }
+  .app-shell .content :is(.primary-btn, .btn-primary, .publish-btn, .submit-answer-btn, .learn-primary):hover:not(:disabled) {
+    color: var(--ui-accent-ink) !important;
+    background: var(--ui-accent-hover) !important;
+    border-color: var(--ui-accent-hover) !important;
+  }
+  .app-shell .content .option-btn:hover:not(:disabled):not(.selected) { background: var(--ui-accent-soft) !important; border-color: var(--ui-accent) !important; }
+  .app-shell .topbar :is(.quick-icon-link, .hamburger-btn):hover { background: var(--ui-control-hover) !important; color: var(--ui-accent) !important; }
+}
+
+@media (max-width: 820px) {
+  :root { --ui-radius: 10px; --ui-radius-large: 14px; --ui-control-height: 44px; }
+  .app-shell .content .post-ai-page {
+    width: 100%;
+    padding-inline: var(--ui-gutter) !important;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+  }
+  .app-shell .content :is(.news-hero, .read-books-hero, .feed-topics-hero, .quiz-hero, .saved-hero, .notification-settings-hero) { padding-bottom: 22px; margin-bottom: 22px; }
+  .app-shell .content .feed-topics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-shell .content .feed-topic-card { min-height: 218px; padding: 20px; }
+  .app-shell .content .feed-topic-card-copy strong { font-size: 1.125rem; }
+  .app-shell .content :is(.topic-grid, .news-grid) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .app-shell .content :is(.post-setting-card, .post-editor, .post-media-section) { padding: 18px; }
+  .app-shell .content .read-books-search { top: 8px; }
+  /* A bottom dock leaves the full reading/form width usable on small screens. */
+  .app-shell .topbar.glass-topbar {
+    right: auto !important;
+    left: calc(50% - 149px) !important;
+    bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+    width: 298px;
+    max-width: calc(100% - 24px);
+  }
+  .app-shell .topbar .topbar-row { flex-direction: row !important; align-items: center !important; gap: 0; }
+  .app-shell .topbar .brand-actions { flex-direction: row !important; gap: 4px !important; padding: 6px !important; }
+  .app-shell .topbar :is(.quick-icon-link, .hamburger-btn) { width: 44px; height: 44px; min-width: 44px; }
+  .app-shell .topbar .menu-panel { left: 50% !important; right: auto !important; bottom: calc(84px + env(safe-area-inset-bottom)) !important; transform: translateX(-50%) !important; width: min(350px, calc(100vw - 32px)) !important; max-height: calc(100dvh - 110px) !important; }
+}
+
+@media (max-width: 560px) {
+  .app-shell .content .feed-topics-grid { grid-template-columns: minmax(0, 1fr); }
+  .app-shell .content :is(.topic-grid, .news-grid) { grid-template-columns: minmax(0, 1fr) !important; }
+  .app-shell .content .feed-topic-card { min-height: 192px; gap: 16px; }
+  .app-shell .content .feed-topic-card-copy strong { font-size: 1.25rem; }
+  .app-shell .content :is(.news-hero, .read-books-hero, .books-hero, .feed-topics-hero, .saved-hero, .quiz-hero, .progress-hero, .dashboard-hero, .notification-settings-hero, .admin-moderation-hero) h1 { font-size: 2rem !important; }
+  .app-shell .content :is(.news-card-body, .learn-lesson, .topic-card, .question-card) { padding: 20px; }
+  .app-shell .content :is(.learn-controls, .notification-settings-page, .create-page, .login-page, .profile-page) :is(input, textarea, select) { font-size: 16px; }
+  .app-shell .content .option-btn { padding: 14px 16px; min-height: 52px; }
+  .app-shell .content :is(.icon-btn, .composer-icon-btn, .post-more-button, .search-clear-btn) { min-width: 44px; width: 44px; min-height: 44px; height: 44px; }
+  .app-shell .content :is(.news-controls, .post-settings-grid, .learn-controls) { min-width: 0; }
+  .app-shell .content .notification-device-row { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .content :is(.feed-topic-card, .topic-card, .news-card, .read-book-card, .learn-lesson) { transition: none !important; transform: none !important; }
+}

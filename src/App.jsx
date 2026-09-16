@@ -65,7 +65,6 @@ import AdminModerationPage from './pages/AdminModerationPage';
 import { isAdminUser } from './lib/adminAccess';
 import './styles/production-pages.css';
 import './styles/ipad.css';
-import './styles/premium-theme.css';
 
 const GLOBAL_PULL_REFRESH_RATIO = 0.4;
 
