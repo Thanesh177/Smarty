@@ -9,6 +9,14 @@ const normalizeTopicKey = (value) =>
 
 export const MAIN_TOPICS = [
   {
+    id: 'news',
+    label: 'News',
+    domain: 'Current affairs',
+    eyebrow: 'The world today',
+    description: 'A daily world briefing, clear sector summaries, and original reporting to explore.',
+    topics: ['World News', 'Current Affairs', 'Daily Briefing'],
+  },
+  {
     id: 'technology',
     label: 'Technology',
     domain: 'Digital systems',

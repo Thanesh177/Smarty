@@ -42,7 +42,7 @@ import ProgressPage from './pages/progress/ProgressPage';
 import GameProfile from './pages/profile/GameProfile';
 import CommentsPage from './pages/CommentsPage';
 import EditPostPage from './pages/EditPostPage';
-import FeedPage from './pages/FeedPage';
+import FeedEntry from './components/FeedEntry';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProfilePage from './pages/ProfilePage';
@@ -1179,8 +1179,8 @@ useEffect(() => {
                   }
                 />
 
-                <Route path="/feed" element={<FeedPage onOpenSearch={openUniversalSearch} />} />
-                <Route path="/feed/:topic" element={<FeedPage onOpenSearch={openUniversalSearch} />} />
+                <Route path="/feed" element={<FeedEntry onOpenSearch={openUniversalSearch} />} />
+                <Route path="/feed/:topic" element={<FeedEntry onOpenSearch={openUniversalSearch} />} />
 
                 <Route path="/booksinfo" element={<Booksinfo />} />
                 <Route path="/bookinfo" element={<Booksinfo />} />

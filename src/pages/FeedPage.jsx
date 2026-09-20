@@ -2993,9 +2993,8 @@ const handleTopicPillSelect = useCallback(
 );
 
 const handleBackToTopics = useCallback(() => {
-  setSelectedTopic('');
   setRenderLimit(INITIAL_RENDER_LIMIT);
-  navigate('/feed');
+  navigate('/topics');
 }, [navigate]);
 
 const handleFeedRetry = useCallback(() => {

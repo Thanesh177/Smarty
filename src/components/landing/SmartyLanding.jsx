@@ -10,13 +10,13 @@ import SmartyBrand from '../SmartyBrand';
 import { MAIN_TOPICS, getMainTopicDefinition } from '../../data/topicTaxonomy';
 import './SmartyLanding.css';
 
-const TOPIC_ICONS = [Cpu, Wrench, FlaskConical, HeartPulse, Globe2, Brain,
+const TOPIC_ICONS = [Newspaper, Cpu, Wrench, FlaskConical, HeartPulse, Globe2, Brain,
   TrendingUp, Sprout, Landmark, UsersRound, Palette, MessageCircle];
 
 const FEATURES = [
   { name: 'Your learning feed', text: 'Small reads. Specific ideas. Follow the subjects that make you curious.', route: '/feed?topic=All', icon: BookOpen, kind: 'read', label: 'Discover something', sample: 'Why does a touch screen know where you tapped?' },
   { name: 'Quizzes & games', text: 'Put an idea to the test, find the gaps, and come back a little sharper.', route: '/quiz', icon: Gamepad2, kind: 'play', label: 'Make it stick', sample: 'A little challenge goes a long way.' },
-  { name: 'News, with context', text: 'A daily briefing and stories from the countries and regions you care about.', route: '/news', icon: Newspaper, kind: 'news', label: 'Stay in the picture', sample: 'The day, made easier to understand.' },
+  { name: 'News, with context', text: 'A daily world briefing, sector summaries, and original stories to explore.', route: '/feed?topic=News', icon: Newspaper, kind: 'news', label: 'Stay in the picture', sample: 'The day, made easier to understand.' },
   { name: 'A place to read', text: 'Find a book, settle into a longer read, and follow your curiosity further.', route: '/read-books', icon: BookOpen, kind: 'books', label: 'Take your time', sample: 'There is always another chapter.' },
 ];
 

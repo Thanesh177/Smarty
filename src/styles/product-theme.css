@@ -621,6 +621,30 @@ input, select, textarea { accent-color: var(--ui-accent); }
   text-indent: 0;
   overflow-wrap: break-word;
 }
+
+.app-shell .content .feed-news-topic { overflow: visible; height: auto; min-height: 100%; }
+.app-shell .content .feed-news-topic .feed-inner-header { position: sticky; top: 0; }
+.app-shell .content .feed-news-topic .feed-inner-title { display: block; }
+.app-shell .content .feed-news-topic .feed-inner-title p {
+  white-space: normal; font-size: .8125rem; line-height: 1.5; margin-top: 5px;
+}
+.app-shell .content .feed-news-topic .feed-inner-back,
+.app-shell .content .feed-news-topic .topic-pill { text-decoration: none; }
+.app-shell .content .feed-news-topic .topic-pill {
+  display: inline-flex; align-items: center; min-height: 44px !important; flex-shrink: 0;
+}
+.app-shell .content .feed-news-topic .feed-inner-topics { height: auto; padding-block: 6px !important; }
+.app-shell .content .news-feed-briefing { padding-top: 20px; }
+.app-shell .content .news-feed-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 16px; margin-bottom: 24px;
+}
+.app-shell .content .news-feed-toolbar > div { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.app-shell .content :is(.news-feed-link, .news-feed-toolbar a) {
+  display: inline-flex; align-items: center; min-height: 44px;
+  color: var(--ui-accent); font-size: .875rem; text-decoration: none;
+}
+.app-shell .content .news-feed-briefing .news-daily-brief { margin-top: 0; }
 .app-shell .content :is(.news-page, .post-ai-page, .learn-page, .legal-page) p + p {
   margin-block-start: var(--ui-copy-space);
 }

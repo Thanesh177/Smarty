@@ -2,7 +2,8 @@
 
 ## Behavior
 
-- The news page includes a world briefing alongside country/state news. World coverage explicitly collects World, Politics, Business, Technology, Science, Health, Environment, Education, Sports, Culture, and Justice.
+- New device/browser visits see the full landing page once. Later entry through `/` or `/feed` opens `/feed?topic=All`; explicit topic links are preserved. The device preference is separate from login state. The native app’s returning launch URL also points to the All feed, requiring an updated iOS build for installations using the previous `/topics` URL.
+- The feed’s News topic (`/feed?topic=News`) includes the world briefing and section summaries. World coverage explicitly collects World, Politics, Business, Technology, Science, Health, Environment, Education, Sports, Culture, and Justice. The News page retains country/state browsing and original stories, with links between the two views.
 - Only timestamped reports from the past 24 hours enter fresh world and local briefings. Duplicates are removed and world sectors are balanced before the 60-story limit. Unavailable sectors are identified rather than invented. Source-based fallback highlights are explicitly distinguished from AI summaries.
 - AI targets a 220–320-word overview and 50–90 words per sector, shortened when evidence is limited. Paragraphs, source links, and source-based fallback summaries remain available if AI cannot complete. Summaries remain cached in DailyNews for 20 minutes; the browser cache is versioned separately.
 - `Daily_content` changes in place to 08:00, 14:00, and 20:00 Asia/Calcutta (IST), with one learning post per invocation and no flexible delay. The existing reminder schedule is unchanged.
@@ -25,7 +26,7 @@ Local verification on 2026-09-20: 12 news tests, 11 generated-content tests, and
 
 The broader learning-journey suite has one existing failure (8 of 9 pass): its recommendation question assertion expects “behave differently” while the unchanged implementation returns “Predict first…”. Neither that implementation nor its test was changed in this release.
 
-- Check a local country/state view and the separate world briefing on phone, tablet, and desktop.
+- Check a local country/state view and the feed’s News topic on phone, tablet, and desktop.
 - Verify original report links, sector selection, refresh, and a failed-provider fallback.
 - After the next scheduled run, verify exactly one new `scheduled-learning-…` post. Replaying that same scheduled timestamp must return the saved post without another AI call.
 - Monitor generation failures and duration after deployment. Briefings must disclose limited coverage instead of suggesting that every world event is covered.
