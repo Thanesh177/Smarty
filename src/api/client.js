@@ -163,7 +163,7 @@ const HACKER_NEWS_BASE_URL =
 const SPACEFLIGHT_NEWS_BASE_URL =
   import.meta.env.VITE_SPACEFLIGHT_NEWS_BASE_URL ||
   'https://api.spaceflightnewsapi.net/v4';
-const NEWS_API_TIMEOUT = Number(import.meta.env.VITE_NEWS_API_TIMEOUT || 25000);
+const NEWS_API_TIMEOUT = Number(import.meta.env.VITE_NEWS_API_TIMEOUT || 30000);
 
 const getStoredToken = () => {
   try {

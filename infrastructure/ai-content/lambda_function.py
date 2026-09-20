@@ -9,6 +9,7 @@ import logging
 import urllib.request
 import urllib.parse
 from collections import Counter
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import boto3
@@ -1135,7 +1136,24 @@ def get_fallback_image():
     return random.choice(FALLBACK_IMAGES)
 
 
-def create_post():
+def scheduled_post_id(event):
+    """Use the scheduled instant, not the delivery ID, across scheduler retries."""
+    if event.get("source") != "smarty.learning.schedule":
+        return None
+    if event.get("requestContext") or event.get("httpMethod"):
+        raise ValueError("Scheduled generation cannot be requested through HTTP")
+    scheduled_time = datetime.fromisoformat(str(event.get("scheduledTime", "")).replace("Z", "+00:00"))
+    if scheduled_time.tzinfo is None:
+        raise ValueError("The scheduled learning post requires a timezone")
+    canonical_time = scheduled_time.astimezone(timezone.utc).isoformat()
+    return "scheduled-learning-" + hashlib.sha256(canonical_time.encode("utf-8")).hexdigest()[:32]
+
+
+def create_post(publication_id=None):
+    if publication_id:
+        existing = table.get_item(Key={"id": publication_id}, ConsistentRead=True).get("Item")
+        if existing:
+            return response(200, {"message": "This scheduled lesson was already published", "post": existing})
     recent_posts = paginated_scan_recent_posts()
     content_angle = choose_content_angle(recent_posts)
     ai_post = None
@@ -1196,7 +1214,7 @@ def create_post():
 
     now_number = int(time.time() * 1000)
     now_string = str(now_number)
-    reel_id = str(uuid.uuid4())
+    reel_id = publication_id or str(uuid.uuid4())
 
     ai_detailed_explanation = generate_detailed_explanation(
         title,
@@ -1241,10 +1259,15 @@ def create_post():
         ),
     }
 
-    table.put_item(
-        Item=item,
-        ConditionExpression=Attr("id").not_exists(),
-    )
+    try:
+        table.put_item(Item=item, ConditionExpression=Attr("id").not_exists())
+    except table.meta.client.exceptions.ConditionalCheckFailedException:
+        if not publication_id:
+            raise
+        existing = table.get_item(Key={"id": publication_id}, ConsistentRead=True).get("Item")
+        if not existing:
+            raise
+        return response(200, {"message": "This scheduled lesson was already published", "post": existing})
 
     if ai_detailed_explanation:
         try:
@@ -1571,9 +1594,11 @@ def lambda_handler(event, context):
         if route.endswith("/posts/ask-doubt") or route.endswith("/ask-doubt"):
             return handle_ask_doubt(event)
 
-        return create_post()
+        return create_post(publication_id=scheduled_post_id(event))
 
     except ClientError as e:
+        if event.get("source") == "smarty.learning.schedule":
+            raise
         error = e.response.get("Error", {})
         logger.error("AWS ClientError: %s", error)
 
@@ -1584,6 +1609,8 @@ def lambda_handler(event, context):
         })
 
     except BotoCoreError as e:
+        if event.get("source") == "smarty.learning.schedule":
+            raise
         logger.error("AWS BotoCoreError: %s", str(e))
 
         return response(500, {
@@ -1592,6 +1619,8 @@ def lambda_handler(event, context):
         })
 
     except Exception as e:
+        if event.get("source") == "smarty.learning.schedule":
+            raise
         logger.exception("ERROR: %s", str(e))
 
         return response(500, {

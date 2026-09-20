@@ -10,7 +10,7 @@ import {
 import './NewsPage.css';
 import './LibraryNewsTheme.css';
 
-const CACHE_PREFIX = 'smarty_location_news_v19_';
+const CACHE_PREFIX = 'smarty_location_news_v20_';
 const CACHE_TTL = 1000 * 60 * 15;
 const CACHE_STALE_TTL = 1000 * 60 * 60 * 48;
 const PAGE_SIZE = 9;
@@ -174,18 +174,23 @@ const SectionTab = memo(function SectionTab({ section, active, onSelect }) {
   );
 });
 
-const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSection }) {
+const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSection, world = false }) {
   if (!summary) return null;
+  const titleId = world ? 'world-brief-title' : 'daily-brief-title';
+  const paragraphs = summary.overviewParagraphs?.length
+    ? summary.overviewParagraphs : [summary.overview];
 
   return (
-    <section className="news-daily-brief" aria-labelledby="daily-brief-title">
+    <section className="news-daily-brief" aria-labelledby={titleId}>
       <div className="news-brief-lead">
         <div className="news-brief-copy">
           <span className="news-brief-eyebrow">{summary.eyebrow || "Today's briefing"}</span>
-          <h2 id="daily-brief-title">
+          <h2 id={titleId}>
             {summary.title || `${locationLabel} at a glance`}
           </h2>
-          <p>{summary.overview}</p>
+          <div className="news-brief-prose">
+            {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+          </div>
 
           <dl className="news-brief-stats">
             <div>
@@ -293,7 +298,7 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
       </div>
 
       {summary.sectionDigests?.length > 0 && (
-        <details className="news-section-digest">
+        <details className="news-section-digest" open={world || undefined}>
           <summary>
             <span>
               <strong>Read the section-by-section briefing</strong>
@@ -304,7 +309,7 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
           <header>
             <span className="news-brief-section-kicker">The deeper read</span>
             <h3>The whole day, in a few minutes</h3>
-            <p>Each summary considers every story in that coverage area. Open a section only when you want the full reporting.</p>
+            <p>Read the main developments in each sector, with the original reports linked for more context.</p>
           </header>
 
           <div className="news-section-digest-grid">
@@ -321,6 +326,18 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
                 </div>
 
                 <p>{digest.summary}</p>
+
+                {digest.topStories?.length > 0 && (
+                  <ul className="news-digest-sources" aria-label={`${digest.section} source reports`}>
+                    {digest.topStories.slice(0, 3).map(story => (
+                      <li key={story.id || story.news_link}>
+                        <a href={story.news_link} target="_blank" rel="noopener noreferrer">
+                          {story.title}<small>{story.source}</small>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
                 {digest.themes?.length > 0 && (
                   <div className="news-digest-themes" aria-label={`${digest.section} themes`}>
@@ -339,6 +356,9 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
           </div>
         </details>
       )}
+      {summary.unavailableSectors?.length > 0 && (
+        <p className="news-inline-notice">No verified recent stories available for: {summary.unavailableSectors.join(', ')}.</p>
+      )}
     </section>
   );
 });
@@ -350,6 +370,10 @@ export default function NewsPage() {
   const [country, setCountry] = useState(initialCountry);
   const [region, setRegion] = useState(() => getSavedRegion(initialCountry));
   const [newsData, setNewsData] = useState(null);
+  const [worldData, setWorldData] = useState(null);
+  const [worldLoading, setWorldLoading] = useState(false);
+  const [worldError, setWorldError] = useState('');
+  const [worldRetry, setWorldRetry] = useState(0);
   const [search, setSearch] = useState(
     () => new URLSearchParams(location.search).get('search') || ''
   );
@@ -368,6 +392,8 @@ export default function NewsPage() {
   const requestIdRef = useRef(0);
   const mountedRef = useRef(true);
   const abortControllerRef = useRef(null);
+  const pendingWorldSectionRef = useRef(false);
+  const showWorldBriefing = country !== 'GLOBAL';
   const savedStorageKey = useMemo(() => {
     const accountId = user?.userId || user?.sub || user?.id || user?.email || 'guest';
     return `smarty-saved-news-v1-${encodeURIComponent(String(accountId))}`;
@@ -464,6 +490,35 @@ export default function NewsPage() {
   useEffect(() => {
     fetchNews(country, region);
   }, [country, fetchNews, region]);
+
+  useEffect(() => {
+    if (!showWorldBriefing) return undefined;
+    const cached = getCachedNews('GLOBAL', '');
+    setWorldError('');
+    setWorldLoading(false);
+    if (cached) setWorldData(cached.news);
+    if (cached?.isFresh && !worldRetry) return undefined;
+    const controller = new AbortController();
+    setWorldLoading(!cached);
+    newsApi.getLatestNews({ country: 'GLOBAL', region: '', lang: 'english', signal: controller.signal })
+      .then(data => {
+        if (controller.signal.aborted) return;
+        setWorldData(data);
+        setCachedNews('GLOBAL', '', data);
+      })
+      .catch(error => {
+        if (!controller.signal.aborted) setWorldError('The world briefing could not be refreshed. Please try again.');
+      })
+      .finally(() => { if (!controller.signal.aborted) setWorldLoading(false); });
+    return () => controller.abort();
+  }, [showWorldBriefing, worldRetry]);
+
+  useEffect(() => {
+    if (!pendingWorldSectionRef.current || country !== 'GLOBAL' || loading || !newsData) return;
+    pendingWorldSectionRef.current = false;
+    const frame = requestAnimationFrame(() => newsStoriesRef.current?.scrollIntoView({ block: 'start', behavior: 'auto' }));
+    return () => cancelAnimationFrame(frame);
+  }, [country, newsData, loading]);
 
   const regionOptions = useMemo(() => NEWS_REGIONS[country] || [], [country]);
   const sections = useMemo(() => {
@@ -627,7 +682,7 @@ export default function NewsPage() {
         <div>
           <span className="news-kicker">Daily intelligence</span>
           <h1>Know what matters, where it matters.</h1>
-          <p>Choose a country or state for a focused daily briefing, then explore every story.</p>
+          <p>A fuller picture of the world, followed by the news closer to you. Read the briefings, then explore the original reporting.</p>
           {lastUpdated && (
             <span className="last-updated">Updated at {lastUpdated}</span>
           )}
@@ -636,7 +691,7 @@ export default function NewsPage() {
         <button
           type="button"
           className="refresh-news-btn"
-          onClick={() => fetchNews(country, region, true)}
+          onClick={() => { fetchNews(country, region, true); setWorldRetry(value => value + 1); }}
           disabled={loading || refreshing}
           aria-label="Refresh current news"
         >
@@ -681,6 +736,27 @@ export default function NewsPage() {
         </label>
       </div>
 
+      {showWorldBriefing && (
+        <section className="news-world-section" aria-label="World news across sectors">
+          <div className="news-world-heading">
+            <div><span className="news-kicker">Beyond your borders</span><h2>Your world briefing</h2></div>
+            {worldData?.generatedAt && <time dateTime={worldData.generatedAt}>{new Date(worldData.generatedAt).toLocaleDateString()} · {formatUpdatedAt(worldData.generatedAt)}</time>}
+          </div>
+          {worldLoading && <p className="news-status" role="status">Gathering the world’s latest developments…</p>}
+          {worldError && <div className="news-inline-notice" role="status"><p>{worldError}</p><button type="button" onClick={() => setWorldRetry(value => value + 1)}>Retry world briefing</button></div>}
+          {worldData && (
+            <details className="news-world-disclosure" open>
+              <summary>World summary · {worldData.dailySummary?.sectionCount || 0} sectors</summary>
+              {worldData.notice && <p className="news-inline-notice">{worldData.notice}</p>}
+              <DailyBrief summary={worldData.dailySummary} locationLabel="Worldwide" world onSelectSection={section => {
+                pendingWorldSectionRef.current = true;
+                setNewsData(null); setCountry('GLOBAL'); setRegion(''); setSearch(''); setSelectedSection(section);
+              }} />
+            </details>
+          )}
+        </section>
+      )}
+
       {(fromCache || newsData?.notice) && !loading && (
         <p className="cache-note">
           {newsData?.notice || 'Showing your latest saved briefing.'}
@@ -713,6 +789,7 @@ export default function NewsPage() {
             summary={newsData.dailySummary}
             locationLabel={locationLabel}
             onSelectSection={handleBriefSectionSelect}
+            world={country === 'GLOBAL'}
           />
 
           <div ref={newsStoriesRef} className="news-story-anchor" aria-hidden="true" />

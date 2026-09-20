@@ -70,6 +70,7 @@ const GLOBAL_PULL_REFRESH_RATIO = 0.4;
 
 function hasStoredAuthToken() {
   return Boolean(
+    localStorage.getItem('eduscroll_token') ||
     localStorage.getItem('eduscroll_access_token') ||
     localStorage.getItem('accessToken') ||
     localStorage.getItem('idToken') ||

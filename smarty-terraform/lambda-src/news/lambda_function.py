@@ -25,13 +25,27 @@ GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 GOOGLE_NEWS_URL = "https://news.google.com/rss"
 HACKER_NEWS_URL = "https://hn.algolia.com/api/v1/search"
 SPACEFLIGHT_NEWS_URL = "https://api.spaceflightnewsapi.net/v4/articles/"
-CACHE_VERSION = 19
+CACHE_VERSION = 20
 CACHE_TTL_SECONDS = 20 * 60
 STALE_TTL_SECONDS = 48 * 60 * 60
 MAX_ARTICLES = 60
 MIN_ARTICLES = 4
 MAX_PROVIDER_RESPONSE_BYTES = 3 * 1024 * 1024
 BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-micro-v1:0")
+
+WORLD_SECTORS = {
+    "World": "international diplomacy conflict humanitarian",
+    "Politics": "world elections parliament government policy",
+    "Business": "global economy markets trade finance",
+    "Technology": "technology artificial intelligence cybersecurity",
+    "Science": "science research discovery space",
+    "Health": "public health medical research disease",
+    "Environment": "climate environment conservation weather",
+    "Education": "education universities schools students",
+    "Sports": "international sports tournament championship",
+    "Culture": "arts culture film music books",
+    "Justice": "human rights courts justice law",
+}
 
 STOP_WORDS = frozenset({
     "about", "after", "again", "against", "amid", "among", "another",
@@ -173,9 +187,9 @@ AWS_CONFIG = Config(
 DYNAMODB = boto3.resource("dynamodb", region_name=REGION, config=AWS_CONFIG)
 NEWS_CACHE = DYNAMODB.Table(NEWS_TABLE)
 BEDROCK_CONFIG = Config(
-    retries={"total_max_attempts": 2, "mode": "adaptive"},
+    retries={"total_max_attempts": 1, "mode": "adaptive"},
     connect_timeout=2,
-    read_timeout=5,
+    read_timeout=12,
 )
 BEDROCK_RUNTIME = boto3.client(
     "bedrock-runtime",
@@ -298,7 +312,7 @@ def fetch_json(url, params, timeout=6):
         return json.loads(payload.decode("utf-8"))
 
 
-def fetch_xml(url, params):
+def fetch_xml(url, params, timeout=6):
     request_url = f"{url}?{urllib.parse.urlencode(params)}"
     request = urllib.request.Request(
         request_url,
@@ -307,7 +321,7 @@ def fetch_xml(url, params):
             "Accept": "application/rss+xml, application/xml, text/xml",
         },
     )
-    with urllib.request.urlopen(request, timeout=6) as provider_response:
+    with urllib.request.urlopen(request, timeout=timeout) as provider_response:
         payload = provider_response.read(MAX_PROVIDER_RESPONSE_BYTES + 1)
         if len(payload) > MAX_PROVIDER_RESPONSE_BYTES:
             raise ValueError("News provider response exceeded the safe size limit.")
@@ -437,6 +451,8 @@ def normalize_google_articles(root, location, limit=MAX_ARTICLES):
 
 
 def fetch_google_articles(location):
+    if location["countryCode"] == "GLOBAL":
+        return fetch_world_sector_articles(location)
     country_code = location["countryCode"] if location["countryCode"] != "GLOBAL" else "US"
     params = {
         "hl": f"en-{country_code}",
@@ -452,12 +468,37 @@ def fetch_google_articles(location):
     return normalize_google_articles(fetch_xml(endpoint, params), location, article_limit)
 
 
+def fetch_world_sector_articles(location):
+    """Collect each sector explicitly so a busy news cycle cannot hide others."""
+    def fetch_sector(section, terms):
+        root = fetch_xml(f"{GOOGLE_NEWS_URL}/search", {
+            "q": f"({' OR '.join(terms.split())}) when:1d",
+            "hl": "en-US", "gl": "US", "ceid": "US:en",
+        }, timeout=3)
+        articles = normalize_google_articles(root, location, limit=8)
+        cutoff = time.time() - 24 * 60 * 60
+        return [dict(article, section=section) for article in articles
+                if cutoff <= article_timestamp(article) <= time.time() + 300]
+
+    collected = {}
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {executor.submit(fetch_sector, sector, terms): sector
+                   for sector, terms in WORLD_SECTORS.items()}
+        for future in as_completed(futures):
+            sector = futures[future]
+            try:
+                collected[sector] = future.result()
+            except (urllib.error.URLError, TimeoutError, ValueError, ET.ParseError):
+                LOGGER.warning("World news source unavailable for sector %s", sector)
+    return [article for sector in WORLD_SECTORS for article in collected.get(sector, [])]
+
+
 def fetch_gdelt_articles(location):
     provider_data = fetch_json(GDELT_URL, {
         "query": build_gdelt_query(location),
         "mode": "artlist",
         "maxrecords": MAX_ARTICLES,
-        "timespan": "2d",
+        "timespan": "1d",
         "sort": "datedesc",
         "format": "json",
     }, timeout=8)
@@ -557,7 +598,7 @@ def similar_headlines(first_title, second_title):
     return containment >= 0.84 or jaccard >= 0.7
 
 
-def merge_articles(*article_groups):
+def merge_articles(*article_groups, limit=MAX_ARTICLES):
     merged = []
     seen_urls = set()
     seen_titles = set()
@@ -584,10 +625,30 @@ def merge_articles(*article_groups):
         seen_titles.add(title_key)
         seen_headlines.append(title)
         merged.append(article)
-        if len(merged) >= MAX_ARTICLES:
+        if len(merged) >= limit:
             return merged
 
     return merged
+
+
+def current_articles(articles):
+    now = time.time()
+    return [article for article in articles
+            if now - 24 * 60 * 60 <= article_timestamp(article) <= now + 300]
+
+
+def balance_world_articles(articles):
+    groups = {}
+    for article in current_articles(articles):
+        groups.setdefault(article["section"], []).append(article)
+    balanced = []
+    for index in range(MAX_ARTICLES):
+        for section in [*WORLD_SECTORS, *sorted(set(groups) - set(WORLD_SECTORS))]:
+            if index < len(groups.get(section, [])):
+                balanced.append(groups[section][index])
+                if len(balanced) == MAX_ARTICLES:
+                    return balanced
+    return balanced
 
 
 def natural_join(values):
@@ -769,7 +830,7 @@ def representative_articles(articles, limit=4):
 
 
 def build_extractive_summary(articles, location, section_digests):
-    representatives = representative_articles(articles, limit=4)
+    representatives = representative_articles(articles, limit=max(8, len(section_digests)))
     development_sentences = [headline_sentence(article) for article in representatives]
     if development_sentences:
         overview = " ".join(development_sentences)
@@ -782,7 +843,7 @@ def build_extractive_summary(articles, location, section_digests):
             "summary": headline_sentence(article, 240),
             "stories": [story_reference(article)],
         }
-        for article in representatives[:3]
+        for article in representatives[:6]
     ]
 
     section_summaries = {}
@@ -792,7 +853,7 @@ def build_extractive_summary(articles, location, section_digests):
 
     for digest in section_digests:
         section_articles = articles_by_section.get(digest["section"], [])
-        section_sentences = [headline_sentence(article, 180) for article in section_articles[:3]]
+        section_sentences = [headline_sentence(article, 260) for article in section_articles[:5]]
         if section_sentences:
             section_summaries[digest["section"]] = " ".join(section_sentences)
 
@@ -925,7 +986,7 @@ def section_summary_is_grounded(summary, section, articles):
 
 
 def validate_editorial_summary(data, articles, section_names):
-    overview = compact_text(data.get("overview"), 1400)
+    overview = compact_text(data.get("overview"), 3400)
     if len(overview) < 80:
         raise ValueError("The generated daily overview was incomplete.")
 
@@ -958,7 +1019,7 @@ def validate_editorial_summary(data, articles, section_names):
     valid_sections = set(section_names)
     for item in data.get("sections", []):
         section = compact_text(item.get("section"), 40)
-        summary = compact_text(item.get("summary"), 480)
+        summary = compact_text(item.get("summary"), 1600)
         if section not in valid_sections or len(summary) < 25:
             continue
 
@@ -986,20 +1047,20 @@ def generate_editorial_summary(articles, location, section_names):
             )
 
     section_field_instructions = "\n".join(
-        f"SECTION_{index}_SUMMARY: 1 or 2 factual sentences about {section} only"
+        f"SECTION_{index}_SUMMARY: 3 to 5 factual sentences, 50 to 90 words about {section} only; shorter if sources are limited"
         for index, section in enumerate(section_names, start=1)
     )
     prompt = f"""
 Create the daily news briefing for {location['label']} from every headline below.
 
 Return exactly these single-line fields, in this order, with no JSON, bullets, markdown, or extra text:
-OVERVIEW: 4 to 6 connected factual sentences, 100 to 160 words total
+OVERVIEW: 8 to 12 connected factual sentences, 220 to 320 words total; shorter if sources are limited
 TAKEAWAY_1_TITLE: 2 to 6 words
-TAKEAWAY_1_SUMMARY: one factual sentence
+TAKEAWAY_1_SUMMARY: two factual sentences
 TAKEAWAY_2_TITLE: 2 to 6 words
-TAKEAWAY_2_SUMMARY: one factual sentence
+TAKEAWAY_2_SUMMARY: two factual sentences
 TAKEAWAY_3_TITLE: 2 to 6 words
-TAKEAWAY_3_SUMMARY: one factual sentence
+TAKEAWAY_3_SUMMARY: two factual sentences
 {section_field_instructions}
 
 Requirements:
@@ -1011,6 +1072,7 @@ Requirements:
 - Include one summary for every section in this list: {json.dumps(section_names, ensure_ascii=False)}.
 - Every section summary must use only headlines carrying that exact section label.
 - Use only facts explicitly present in the supplied headlines. Do not infer causes, outcomes, motives, or background.
+- Length targets are maximum guidance, never permission to repeat or invent details. Summarize distinct developments and retain meaningful names, figures, and locations when supplied.
 - Do not turn two separate headlines into a causal claim unless a supplied headline explicitly states that relationship.
 - Attribute allegations, criticism, estimates, and disputed claims to the person or source named in the headline.
 - Name concrete events. Avoid vague conclusions such as "making strides", "several developments", or "working on initiatives".
@@ -1030,12 +1092,14 @@ HEADLINES
                 )
             }],
             messages=[{"role": "user", "content": [{"text": prompt}]}],
-            inferenceConfig={"maxTokens": 700, "temperature": 0.1},
+            inferenceConfig={"maxTokens": 3000, "temperature": 0.1},
         )
         response_text = "".join(
             block.get("text", "")
             for block in response.get("output", {}).get("message", {}).get("content", [])
         )
+        if response.get("stopReason") == "max_tokens":
+            raise ValueError("The generated briefing was truncated; using source headlines instead.")
         summary = validate_editorial_summary(
             parse_editorial_fields(response_text, section_names),
             articles,
@@ -1062,7 +1126,7 @@ HEADLINES
 def build_section_digest(section, articles, location):
     sources = {article.get("source") for article in articles if article.get("source")}
     themes = build_themes(articles, location, limit=3)
-    summary = " ".join(headline_sentence(article, 180) for article in articles[:3])
+    summary = " ".join(headline_sentence(article, 260) for article in articles[:5])
 
     return {
         "section": section,
@@ -1070,7 +1134,7 @@ def build_section_digest(section, articles, location):
         "sourceCount": len(sources),
         "summary": summary,
         "themes": themes,
-        "topStories": [story_reference(article) for article in articles[:3]],
+        "topStories": [story_reference(article) for article in articles[:5]],
     }
 
 
@@ -1109,12 +1173,19 @@ def build_daily_summary(articles, location):
             digest["summary"] = generated_summary
 
     return {
-        "eyebrow": "Complete daily briefing",
-        "title": f"The day in {location['label']}",
+        "eyebrow": "World briefing" if location["countryCode"] == "GLOBAL" else "Daily briefing",
+        "title": "The world, sector by sector" if location["countryCode"] == "GLOBAL" else f"The day in {location['label']}",
         "overview": editorial_summary["overview"],
+        "overviewParagraphs": [
+            " ".join(sentences[index:index + 3])
+            for sentences in [re.split(r"(?<=[.!?])\s+(?=[A-Z])", editorial_summary["overview"])]
+            for index in range(0, len(sentences), 3)
+        ],
         "analysisStatement": (
-            f"Synthesized from all {len(articles)} collected headlines. "
-            "Open the linked reports for full context."
+            f"Based on {len(articles)} collected reports from the past 24 hours. "
+            + ("AI-assisted summary; open the linked reports for full context."
+               if editorial_summary["summaryMode"] == "editorial"
+               else "Source-based highlights are shown while the AI briefing is unavailable.")
         ),
         "coverageWindow": "Past 24 hours",
         "highlights": [
@@ -1128,6 +1199,8 @@ def build_daily_summary(articles, location):
         "keyTakeaways": editorial_summary["keyTakeaways"],
         "summaryMode": editorial_summary["summaryMode"],
         "sectionDigests": section_digests,
+        "unavailableSectors": [sector for sector in WORLD_SECTORS if sector not in articles_by_section]
+        if location["countryCode"] == "GLOBAL" else [],
         "coverageBreakdown": [
             {
                 "section": digest["section"],
@@ -1208,11 +1281,15 @@ def build_payload(location):
     ]
 
     articles = merge_articles(
-        provider_results.get("google", []),
-        provider_results.get("gdelt", []),
-        provider_results.get("hacker-news", []),
-        provider_results.get("spaceflight-news", []),
+        current_articles(provider_results.get("google", [])),
+        current_articles(provider_results.get("gdelt", [])),
+        current_articles(provider_results.get("hacker-news", [])),
+        current_articles(provider_results.get("spaceflight-news", [])),
+        limit=240 if location["countryCode"] == "GLOBAL" else MAX_ARTICLES,
     )
+
+    if location["countryCode"] == "GLOBAL":
+        articles = balance_world_articles(articles)
 
     if not articles:
         raise RuntimeError("The news providers returned no current stories.")

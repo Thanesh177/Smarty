@@ -24,9 +24,14 @@
   --page-radius: var(--ui-radius);
   --ui-content-width: 1240px;
   --ui-control-height: 44px;
+  --ui-body-size: clamp(1rem, .97rem + .12vw, 1.0625rem);
+  --ui-caption-size: .8125rem;
+  --ui-copy-leading: 1.75;
+  --ui-copy-measure: 70ch;
+  --ui-copy-space: 1em;
 }
 
-body { color: var(--ui-text); }
+body { color: var(--ui-text); font-size: var(--ui-body-size); line-height: 1.6; }
 button, input, select, textarea { font-family: inherit; }
 ::selection { background: var(--ui-accent-line); color: var(--ui-text); }
 input, select, textarea { accent-color: var(--ui-accent); }
@@ -602,4 +607,95 @@ input, select, textarea { accent-color: var(--ui-accent); }
 
 @media (prefers-reduced-motion: reduce) {
   .app-shell .content :is(.feed-topic-card, .topic-card, .news-card, .read-book-card, .learn-lesson) { transition: none !important; transform: none !important; }
+}
+
+/* Reading rhythm shared by full pages; game boards and reader font settings
+   retain their own sizing. Use paragraph spacing rather than leading spaces. */
+.app-shell .content :is(.news-page, .books-page, .read-books-page,
+  .feed-topics-page, .saved-page, .profile-page, .creator-profile-container,
+  .comments-page, .reel-detail-page, .post-ai-page, .create-page,
+  .creator-dashboard-page, .quiz-page, .learn-page, .legal-page,
+  .notification-settings-page, .admin-moderation-page, .login-page) p {
+  font-size: var(--ui-body-size);
+  line-height: var(--ui-copy-leading);
+  text-indent: 0;
+  overflow-wrap: break-word;
+}
+.app-shell .content :is(.news-page, .post-ai-page, .learn-page, .legal-page) p + p {
+  margin-block-start: var(--ui-copy-space);
+}
+.app-shell .content :is(.post-ai-page, .learn-page, .legal-page, .reel-detail-page) :is(ul, ol) {
+  padding-inline-start: 1.5em;
+  line-height: var(--ui-copy-leading);
+}
+.app-shell .content :is(.post-ai-page, .legal-page, .reel-detail-page) li + li {
+  margin-block-start: .5em;
+}
+.app-shell .content :is(.post-body, .reel-body, .message-text, .comment-text) {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.app-shell .content :is(.news-card-body, .read-book-card, .books-card,
+  .feed-topic-card, .learn-lesson, .question-card) {
+  padding: clamp(18px, 2vw, 28px);
+}
+.app-shell .content :is(.news-card-meta, .news-card-source, .last-updated,
+  .news-provider-note, .news-digest-card-topline small, .news-brief-stats dt,
+  .news-analysis-scope, .feed-topic-card-footer, .feed-topic-count) {
+  font-size: var(--ui-caption-size);
+  line-height: 1.55;
+}
+.app-shell .content :is(.news-grid, .feed-topics-grid, .read-books-grid) {
+  gap: clamp(18px, 2vw, 28px);
+}
+.app-shell .content .news-brief-prose { max-width: var(--ui-copy-measure); }
+.app-shell .content .news-brief-prose p { margin: 0 0 1em; color: var(--ui-secondary); }
+.app-shell .content .news-brief-lead { align-items: start; gap: clamp(24px, 4vw, 48px); }
+.app-shell .content .news-section-digest-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px;
+}
+.app-shell .content .news-section-digest-card { padding: clamp(20px, 2.4vw, 30px); min-width: 0; }
+.app-shell .content .news-section-digest-card > p { color: var(--ui-secondary); margin-block: 18px; }
+.app-shell .content .news-digest-card-topline { flex-wrap: wrap; gap: 8px 12px; }
+.app-shell .content .news-digest-card-topline strong { font-size: 1.125rem; }
+.app-shell .content .news-digest-sources { list-style: none; padding: 0; margin: 20px 0; }
+.app-shell .content .news-digest-sources li + li { margin-top: 12px; }
+.app-shell .content .news-digest-sources a {
+  display: block; color: var(--ui-secondary); font-size: .875rem;
+  line-height: 1.55; text-decoration: none; padding-block: 8px;
+  border-top: 1px solid var(--ui-line); overflow-wrap: anywhere;
+}
+.app-shell .content .news-digest-sources small {
+  display: block; color: var(--ui-muted); margin-top: 4px; font-size: .8125rem;
+}
+.app-shell .content .news-digest-sources a:hover { color: var(--ui-accent); }
+.app-shell .content .news-world-section { margin-block: var(--ui-section-space); }
+.app-shell .content .news-world-heading {
+  display: flex; align-items: end; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; margin-bottom: 20px;
+}
+.app-shell .content .news-world-heading h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin: 8px 0 0; }
+.app-shell .content .news-world-heading time { color: var(--ui-muted); font-size: .8125rem; }
+.app-shell .content .news-world-disclosure > summary {
+  color: var(--ui-accent); padding-block: 14px; cursor: pointer;
+  font-size: .9375rem; line-height: 1.6;
+}
+.app-shell .content .news-section-digest summary { padding-block: 18px; }
+.app-shell .content .news-section-digest-card > button {
+  font-size: .875rem; min-height: 44px; line-height: 1.5;
+}
+.app-shell .content :is(.news-actions, .section-tabs) :is(button, a) {
+  font-size: .875rem; min-height: 44px; line-height: 1.5;
+}
+.app-shell .content :is(.news-brief-section-kicker, .news-brief-eyebrow) {
+  font-size: .75rem; line-height: 1.5;
+}
+.app-shell .content .news-brief-takeaways li { align-items: start; gap: 14px; }
+.app-shell .content .news-brief-takeaways li p { margin-top: 8px; }
+@media (max-width: 680px) {
+  .app-shell .content .news-section-digest-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .app-shell .content .news-brief-lead { grid-template-columns: minmax(0, 1fr); }
+  .app-shell .content :is(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+    font-size: max(16px, 1rem);
+  }
 }

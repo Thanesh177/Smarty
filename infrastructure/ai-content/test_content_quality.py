@@ -79,6 +79,29 @@ LAMBDA = _load_lambda_module()
 
 
 class ContentCatalogTests(unittest.TestCase):
+    def test_scheduled_retries_share_an_id_but_each_daily_slot_is_distinct(self):
+        event = {"source": "smarty.learning.schedule", "scheduledTime": "2026-09-19T02:30:00Z"}
+        first = LAMBDA.scheduled_post_id(event)
+        self.assertEqual(first, LAMBDA.scheduled_post_id(dict(event, attempt=2)))
+        self.assertEqual(first, LAMBDA.scheduled_post_id(dict(event, scheduledTime="2026-09-19T08:00:00+05:30")))
+        self.assertNotEqual(first, LAMBDA.scheduled_post_id(dict(event, scheduledTime="2026-09-19T08:30:00Z")))
+        self.assertIsNone(LAMBDA.scheduled_post_id({}))
+
+    def test_published_scheduled_post_is_reused_without_generating_again(self):
+        saved = {"id": "scheduled-test", "title": "A saved lesson"}
+        with (mock.patch.object(LAMBDA, "table") as table,
+              mock.patch.object(LAMBDA, "generate_specific_post") as generate):
+            table.get_item.return_value = {"Item": saved}
+            result = LAMBDA.create_post(publication_id="scheduled-test")
+        self.assertEqual(result["statusCode"], 200)
+        generate.assert_not_called()
+
+    def test_scheduled_failure_raises_so_lambda_can_retry(self):
+        event = {"source": "smarty.learning.schedule", "scheduledTime": "2026-09-19T02:30:00Z"}
+        with mock.patch.object(LAMBDA, "create_post", side_effect=RuntimeError("Try again")):
+            with self.assertRaisesRegex(RuntimeError, "Try again"):
+                LAMBDA.lambda_handler(event, None)
+
     @staticmethod
     def complete_explanation():
         sentence = (

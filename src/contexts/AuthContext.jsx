@@ -192,6 +192,16 @@ function isRunningInsideNativeApp() {
   );
 }
 
+function isConfirmedSignedOutError(error) {
+  const message = `${error?.name || ''} ${error?.message || ''}`;
+
+  return (
+    message.includes('UserUnAuthenticatedException') ||
+    message.includes('needs to be authenticated') ||
+    message.includes('No current user')
+  );
+}
+
 function getCognitoLogoutUrl() {
   const cognitoDomain = String(
     import.meta.env.VITE_COGNITO_DOMAIN || ''
@@ -342,7 +352,8 @@ async function waitForCognitoSession(attempts = 1, forceRefresh = false) {
       lastError = error;
 
       if (attempt < attempts - 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 220));
+        const retryDelay = Math.min(220 * (attempt + 1), 880);
+        await new Promise((resolve) => window.setTimeout(resolve, retryDelay));
       }
     }
   }
@@ -599,19 +610,21 @@ export function AuthProvider({ children }) {
           }
         }
 
-        await establishSession({ attempts: isWebOAuthReturn ? 14 : 1 });
+        const hasRememberedNativeIdentity = Boolean(getNativeCachedIdentity());
+        const restoreAttempts = isWebOAuthReturn
+          ? 14
+          : isRunningInsideNativeApp() && hasRememberedNativeIdentity
+            ? 4
+            : 1;
+
+        await establishSession({ attempts: restoreAttempts });
       } catch (err) {
         if (bootRevision !== sessionRevisionRef.current || err.name === 'StaleAuthOperation') return;
-        const message = err?.name || err?.message || '';
-
-        const isUnauthenticated =
-          String(message).includes('UserUnAuthenticatedException') ||
-          String(message).includes('needs to be authenticated') ||
-          String(message).includes('No current user');
+        const isUnauthenticated = isConfirmedSignedOutError(err);
 
         if (!isUnauthenticated) {
           console.error('Auth init failed:', err);
-          setAuthError('Your session could not be restored. Please sign in again.');
+          setAuthError('Your saved session is temporarily unavailable. Check your connection and try again.');
         }
 
         const nativeCachedUser = getNativeCachedIdentity();
@@ -624,9 +637,14 @@ export function AuthProvider({ children }) {
         if (canRetryNativeSession) {
           setUser(nativeCachedUser);
           setAuthError('');
-        } else {
+        } else if (isUnauthenticated || err?.invalidSession) {
           clearAuthStorage();
           setUser(null);
+        } else {
+          // A startup timeout or temporary network failure is not a logout.
+          // Preserve the persisted Cognito/native records so the next restore
+          // can continue the same account instead of forcing sign-in again.
+          setUser(getVerifiedNativeCachedUser());
         }
       } finally {
         if (bootRevision === sessionRevisionRef.current) setLoading(false);

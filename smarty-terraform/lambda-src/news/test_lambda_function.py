@@ -75,6 +75,65 @@ def make_article(identifier, title, section, published_at, source="Test Wire"):
 
 
 class NewsLambdaTests(unittest.TestCase):
+    def test_daily_window_excludes_undated_stale_and_future_reports(self):
+        now = news.datetime.now(news.timezone.utc)
+        articles = [make_article("current", "Current news", "World", now.isoformat()),
+                    make_article("undated", "Unknown date", "World", ""),
+                    make_article("old", "Old news", "World", "2020-01-01T00:00:00Z"),
+                    make_article("future", "Future news", "World", "2099-01-01T00:00:00Z")]
+        self.assertEqual([item["id"] for item in news.current_articles(articles)], ["current"])
+
+    def test_world_balance_keeps_small_sectors_and_rejects_old_reports(self):
+        now = news.datetime.now(news.timezone.utc).isoformat()
+        old = "2020-01-01T00:00:00Z"
+        articles = [make_article(str(i), f"Business development {i}", "Business", now)
+                    for i in range(80)]
+        articles += [make_article(sector, f"New {sector} development", sector, now)
+                     for sector in news.WORLD_SECTORS if sector != "Business"]
+        articles.append(make_article("old", "Outdated report", "World", old))
+        balanced = news.balance_world_articles(articles)
+        self.assertEqual(len(balanced), news.MAX_ARTICLES)
+        self.assertEqual(set(item["section"] for item in balanced), set(news.WORLD_SECTORS))
+        self.assertNotIn("old", [item["id"] for item in balanced])
+
+    def test_world_feeds_fetch_every_sector_and_survive_one_failed_source(self):
+        location = news.make_location("GLOBAL", "")
+        now = news.datetime.now(news.timezone.utc).isoformat()
+        article = make_article("one", "New development", "World", now)
+        def fetch(url, params, timeout):
+            self.assertEqual(timeout, 3)
+            self.assertIn("when:1d", params["q"])
+            if "climate" in params["q"]:
+                raise TimeoutError()
+            return params
+        with (patch.object(news, "fetch_xml", side_effect=fetch) as fetcher,
+              patch.object(news, "normalize_google_articles", return_value=[article])):
+            articles = news.fetch_google_articles(location)
+        self.assertEqual(fetcher.call_count, len(news.WORLD_SECTORS))
+        self.assertEqual(len(articles), len(news.WORLD_SECTORS) - 1)
+        self.assertNotIn("Environment", [item["section"] for item in articles])
+
+    def test_long_editorial_sections_are_not_cut_to_the_old_short_limit(self):
+        title = "Researchers map a deep ocean habitat"
+        article = make_article("science", title, "Science", "")
+        paragraph = (title + ". ") * 15
+        result = news.validate_editorial_summary({
+            "overview": paragraph * 3,
+            "sections": [{"section": "Science", "summary": paragraph}],
+        }, [article], ["Science"])
+        self.assertGreater(len(result["overview"]), 1400)
+        self.assertGreater(len(result["sectionSummaries"]["Science"]), 480)
+
+    def test_briefing_marks_unavailable_sectors_and_keeps_source_links(self):
+        location = news.make_location("GLOBAL", "")
+        article = make_article("science", "Researchers map a deep ocean habitat", "Science", "")
+        with patch.object(news, "generate_editorial_summary", return_value=None):
+            result = news.build_daily_summary([article], location)
+        self.assertIn("Health", result["unavailableSectors"])
+        self.assertNotIn("Science", result["unavailableSectors"])
+        self.assertTrue(result["overviewParagraphs"])
+        self.assertEqual(result["sectionDigests"][0]["topStories"][0]["news_link"], article["news_link"])
+
     def test_classifier_prioritizes_specific_sections_and_word_variants(self):
         self.assertEqual(
             news.classify_article("Government opens hospitals for cancer patients"),
@@ -136,9 +195,10 @@ class NewsLambdaTests(unittest.TestCase):
         self.assertNotIn("stories from", summary["overview"])
 
     def test_partial_provider_result_still_returns_a_briefing(self):
+        now = news.datetime.now(news.timezone.utc).isoformat()
         articles = [
-            make_article("one", "State opens a new public hospital", "Health", ""),
-            make_article("two", "University launches a robotics lab", "Technology", ""),
+            make_article("one", "State opens a new public hospital", "Health", now),
+            make_article("two", "University launches a robotics lab", "Technology", now),
         ]
         location = news.make_location("IN", "Tamil Nadu")
 
@@ -153,6 +213,7 @@ class NewsLambdaTests(unittest.TestCase):
         self.assertEqual(payload["status"], 200)
         self.assertEqual(len(payload["articles"]), 2)
         self.assertTrue(payload["dailySummary"]["overview"])
+        self.assertIn("Source-based highlights", payload["dailySummary"]["analysisStatement"])
 
     def test_handler_supports_rest_method_and_rejects_non_get(self):
         response = news.lambda_handler({"httpMethod": "POST"}, None)

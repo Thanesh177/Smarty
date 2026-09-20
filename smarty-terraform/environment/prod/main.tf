@@ -430,7 +430,7 @@ module "lambda" {
     "news" = {
       runtime     = "python3.12"
       handler     = "lambda_function.lambda_handler"
-      timeout     = 20
+      timeout     = 28
       memory_size = 256
       role_arn    = "arn:aws:iam::147179611217:role/service-role/news-role-507fc3ni"
       filename    = "../../lambda-zips/news.zip"
@@ -807,10 +807,16 @@ module "scheduler" {
 
   schedules = {
     Daily_content = {
-      schedule_expression          = "rate(1 days)"
+      schedule_expression          = "cron(0 8,14,20 * * ? *)"
       schedule_expression_timezone = "Asia/Calcutta"
       target_arn                   = "arn:aws:lambda:us-east-1:147179611217:function:AIcontent"
       role_arn                     = "arn:aws:iam::147179611217:role/service-role/Smarty_Daily_Content"
+      flexible_window_minutes      = 0
+      input = jsonencode({
+        source        = "smarty.learning.schedule"
+        scheduledTime = "<aws.scheduler.scheduled-time>"
+        scheduleArn   = "<aws.scheduler.schedule-arn>"
+      })
     }
 
     Daily_remainder = {
