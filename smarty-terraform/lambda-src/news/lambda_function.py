@@ -17,6 +17,7 @@ import xml.etree.ElementTree as ET
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
+from generation_cache import GenerationBusy, generation_lease
 
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
@@ -25,7 +26,7 @@ GDELT_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 GOOGLE_NEWS_URL = "https://news.google.com/rss"
 HACKER_NEWS_URL = "https://hn.algolia.com/api/v1/search"
 SPACEFLIGHT_NEWS_URL = "https://api.spaceflightnewsapi.net/v4/articles/"
-CACHE_VERSION = 20
+CACHE_VERSION = 22
 CACHE_TTL_SECONDS = 20 * 60
 STALE_TTL_SECONDS = 48 * 60 * 60
 MAX_ARTICLES = 60
@@ -215,7 +216,7 @@ def json_default(value):
 def api_response(status_code, body):
     return {
         "statusCode": status_code,
-        "headers": HEADERS,
+        "headers": HEADERS if status_code == 200 and body.get("cacheStatus") != "stale-cache" else {**HEADERS, "Cache-Control": "no-store"},
         "body": json.dumps(body, ensure_ascii=False, default=json_default),
     }
 
@@ -258,23 +259,23 @@ def make_cache_key(location):
 
 def get_cached(cache_key):
     try:
-        return NEWS_CACHE.get_item(Key={"date": cache_key}).get("Item")
+        return NEWS_CACHE.get_item(Key={"date": cache_key}, ConsistentRead=True).get("Item")
     except ClientError as error:
         LOGGER.warning(json.dumps({
             "event": "news_cache_read_failed",
             "code": error.response.get("Error", {}).get("Code", "Unknown"),
         }))
-        return None
+        raise
 
 
-def set_cached(cache_key, payload):
+def set_cached(cache_key, payload, fresh_until=None):
     now = int(time.time())
     try:
         NEWS_CACHE.put_item(Item={
             "date": cache_key,
             "cacheVersion": CACHE_VERSION,
             "payload": payload,
-            "freshUntil": now + CACHE_TTL_SECONDS,
+            "freshUntil": fresh_until if fresh_until is not None else now + CACHE_TTL_SECONDS,
             "expiresAt": now + STALE_TTL_SECONDS,
             "updatedAt": datetime.now(timezone.utc).isoformat(),
         })
@@ -283,6 +284,7 @@ def set_cached(cache_key, payload):
             "event": "news_cache_write_failed",
             "code": error.response.get("Error", {}).get("Code", "Unknown"),
         }))
+        raise
 
 
 def build_gdelt_query(location):
@@ -830,7 +832,7 @@ def representative_articles(articles, limit=4):
 
 
 def build_extractive_summary(articles, location, section_digests):
-    representatives = representative_articles(articles, limit=max(8, len(section_digests)))
+    representatives = representative_articles(articles, limit=max(12, len(section_digests)))
     development_sentences = [headline_sentence(article) for article in representatives]
     if development_sentences:
         overview = " ".join(development_sentences)
@@ -853,7 +855,7 @@ def build_extractive_summary(articles, location, section_digests):
 
     for digest in section_digests:
         section_articles = articles_by_section.get(digest["section"], [])
-        section_sentences = [headline_sentence(article, 260) for article in section_articles[:5]]
+        section_sentences = [headline_sentence(article, 320) for article in section_articles[:8]]
         if section_sentences:
             section_summaries[digest["section"]] = " ".join(section_sentences)
 
@@ -876,8 +878,9 @@ def parse_editorial_fields(raw_text, section_names):
         "TAKEAWAY_3_TITLE",
         "TAKEAWAY_3_SUMMARY",
         *{
-            f"SECTION_{index}_SUMMARY"
+            f"SECTION_{index}_{field}"
             for index in range(1, len(section_names) + 1)
+            for field in ("SUMMARY", "CONTEXT", "NEXT")
         },
     }
     fields = {}
@@ -904,6 +907,8 @@ def parse_editorial_fields(raw_text, section_names):
         {
             "section": section,
             "summary": fields.get(f"SECTION_{index}_SUMMARY", ""),
+            "context": fields.get(f"SECTION_{index}_CONTEXT", ""),
+            "next": fields.get(f"SECTION_{index}_NEXT", ""),
         }
         for index, section in enumerate(section_names, start=1)
     ]
@@ -986,9 +991,13 @@ def section_summary_is_grounded(summary, section, articles):
 
 
 def validate_editorial_summary(data, articles, section_names):
-    overview = compact_text(data.get("overview"), 3400)
+    overview = compact_text(data.get("overview"), 5200)
     if len(overview) < 80:
         raise ValueError("The generated daily overview was incomplete.")
+    if not section_summary_is_grounded(overview, "Overview", [
+        {**article, "section": "Overview"} for article in articles
+    ]):
+        raise ValueError("The daily overview could not be grounded in the supplied reporting.")
 
     takeaways = []
     takeaway_sections = set()
@@ -1016,20 +1025,27 @@ def validate_editorial_summary(data, articles, section_names):
         })
 
     section_summaries = {}
+    section_context = {}
     valid_sections = set(section_names)
     for item in data.get("sections", []):
         section = compact_text(item.get("section"), 40)
-        summary = compact_text(item.get("summary"), 1600)
+        summary = compact_text(item.get("summary"), 2400)
         if section not in valid_sections or len(summary) < 25:
             continue
 
         if section_summary_is_grounded(summary, section, articles):
             section_summaries[section] = summary
+            section_context[section] = {}
+            for field in ("context", "next"):
+                detail = compact_text(item.get(field), 500)
+                if len(detail) >= 25 and section_summary_is_grounded(detail, section, articles):
+                    section_context[section][field] = detail
 
     return {
         "overview": overview,
         "keyTakeaways": takeaways,
         "sectionSummaries": section_summaries,
+        "sectionContext": section_context,
         "summaryMode": "editorial",
     }
 
@@ -1047,14 +1063,18 @@ def generate_editorial_summary(articles, location, section_names):
             )
 
     section_field_instructions = "\n".join(
-        f"SECTION_{index}_SUMMARY: 3 to 5 factual sentences, 50 to 90 words about {section} only; shorter if sources are limited"
+        f"SECTION_{index}_SUMMARY: 6 to 9 factual sentences, 120 to 180 words about {section} only; shorter if sources are limited\n"
+        f"SECTION_{index}_CONTEXT: one sentence explaining a reported consequence or who is affected; leave empty if not stated\n"
+        f"SECTION_{index}_NEXT: one sentence about a stated next step or unresolved issue; leave empty if not stated"
         for index, section in enumerate(section_names, start=1)
     )
     prompt = f"""
-Create the daily news briefing for {location['label']} from every headline below.
+Create a self-contained daily news briefing for {location['label']} using the reporting below.
+Edition date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')} UTC. Reporting covers the preceding 24 hours, not the entire day ahead.
+The reader should understand the main developments without opening another page.
 
 Return exactly these single-line fields, in this order, with no JSON, bullets, markdown, or extra text:
-OVERVIEW: 8 to 12 connected factual sentences, 220 to 320 words total; shorter if sources are limited
+OVERVIEW: 12 to 18 connected factual sentences, 350 to 450 words total; shorter if sources are limited
 TAKEAWAY_1_TITLE: 2 to 6 words
 TAKEAWAY_1_SUMMARY: two factual sentences
 TAKEAWAY_2_TITLE: 2 to 6 words
@@ -1065,12 +1085,17 @@ TAKEAWAY_3_SUMMARY: two factual sentences
 
 Requirements:
 - Explain what happened today. Do not describe counts, coverage volume, recurring words, or the process of analyzing news.
+- Explain who did what, where, and what changed. Use clear language for a reader unfamiliar with the subject; avoid unexplained jargon.
+- Do not output publisher lists, URLs, source labels, or instructions to read an article. Keep named attribution when necessary for allegations or disputed claims.
+- Explain consequences and next steps only if reported; never speculate to fill the CONTEXT or NEXT fields.
+- Do not imply every world event is covered. Do not describe older events as happening today simply because they were reported today.
 - Synthesize duplicate headlines into one development and cover the most consequential distinct events.
 - The overview must mention at least one concrete development from every supplied section, combining related items where useful.
 - Include exactly 3 takeaways.
 - Choose the 3 takeaways from 3 different sections.
 - Include one summary for every section in this list: {json.dumps(section_names, ensure_ascii=False)}.
 - Every section summary must use only headlines carrying that exact section label.
+- Lead each section with the main development, then explain other distinct developments, the people or places affected, and any stated next steps. Include context and significance only when explicitly supported by the supplied headlines.
 - Use only facts explicitly present in the supplied headlines. Do not infer causes, outcomes, motives, or background.
 - Length targets are maximum guidance, never permission to repeat or invent details. Summarize distinct developments and retain meaningful names, figures, and locations when supplied.
 - Do not turn two separate headlines into a causal claim unless a supplied headline explicitly states that relationship.
@@ -1092,7 +1117,7 @@ HEADLINES
                 )
             }],
             messages=[{"role": "user", "content": [{"text": prompt}]}],
-            inferenceConfig={"maxTokens": 3000, "temperature": 0.1},
+            inferenceConfig={"maxTokens": min(5000, 1400 + 320 * len(section_names)), "temperature": 0.1},
         )
         response_text = "".join(
             block.get("text", "")
@@ -1123,10 +1148,15 @@ HEADLINES
         return None
 
 
+def summary_paragraphs(text):
+    sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z])", str(text or "").strip())
+    return [" ".join(sentences[index:index + 3]) for index in range(0, len(sentences), 3) if sentences[index]]
+
+
 def build_section_digest(section, articles, location):
     sources = {article.get("source") for article in articles if article.get("source")}
     themes = build_themes(articles, location, limit=3)
-    summary = " ".join(headline_sentence(article, 260) for article in articles[:5])
+    summary = " ".join(headline_sentence(article, 320) for article in articles[:8])
 
     return {
         "section": section,
@@ -1165,22 +1195,26 @@ def build_daily_summary(articles, location):
         editorial_summary["keyTakeaways"] = extractive_summary["keyTakeaways"]
 
     for digest in section_digests:
+        digest["summaryMode"] = "editorial" if (
+            editorial_summary["summaryMode"] == "editorial"
+            and digest["section"] in editorial_summary["sectionSummaries"]
+        ) else "extractive"
+        detail = editorial_summary.get("sectionContext", {}).get(digest["section"], {})
+        digest["context"] = detail.get("context", "")
+        digest["next"] = detail.get("next", "")
         generated_summary = (
             editorial_summary["sectionSummaries"].get(digest["section"])
             or extractive_summary["sectionSummaries"].get(digest["section"])
         )
         if generated_summary:
             digest["summary"] = generated_summary
+        digest["summaryParagraphs"] = summary_paragraphs(digest["summary"])
 
     return {
         "eyebrow": "World briefing" if location["countryCode"] == "GLOBAL" else "Daily briefing",
-        "title": "The world, sector by sector" if location["countryCode"] == "GLOBAL" else f"The day in {location['label']}",
+        "title": "Your daily world briefing" if location["countryCode"] == "GLOBAL" else f"The day in {location['label']}",
         "overview": editorial_summary["overview"],
-        "overviewParagraphs": [
-            " ".join(sentences[index:index + 3])
-            for sentences in [re.split(r"(?<=[.!?])\s+(?=[A-Z])", editorial_summary["overview"])]
-            for index in range(0, len(sentences), 3)
-        ],
+        "overviewParagraphs": summary_paragraphs(editorial_summary["overview"]),
         "analysisStatement": (
             f"Based on {len(articles)} collected reports from the past 24 hours. "
             + ("AI-assisted summary; open the linked reports for full context."
@@ -1210,6 +1244,34 @@ def build_daily_summary(articles, location):
             for digest in section_digests
         ],
     }
+
+
+def get_world_daily_summary(articles, location):
+    """Publish one shared UTC edition; refreshing headlines never reruns its AI."""
+    now = int(time.time())
+    edition_date = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%d")
+    next_day = (now // 86400 + 1) * 86400
+    key = f"world-briefing-v{CACHE_VERSION}#{edition_date}#english"
+    cached = get_cached(key)
+    if cached and int(cached.get("freshUntil", 0)) > now and cached.get("payload"):
+        return cached["payload"]
+
+    # Fail closed on database/lease failures rather than generating per visitor.
+    with generation_lease(NEWS_CACHE, "date", key):
+        cached = get_cached(key)
+        if cached and int(cached.get("freshUntil", 0)) > int(time.time()) and cached.get("payload"):
+            return cached["payload"]
+        summary = build_daily_summary(articles, location)
+        summary.update({
+            "editionDate": edition_date,
+            "editionTimezone": "UTC",
+            "generatedAt": datetime.fromtimestamp(now, timezone.utc).isoformat(),
+            "nextEditionAt": datetime.fromtimestamp(next_day, timezone.utc).isoformat(),
+        })
+        # Temporary AI failures can recover later; never freeze a fallback all day.
+        fresh_until = next_day if summary["summaryMode"] == "editorial" else min(next_day, now + CACHE_TTL_SECONDS)
+        set_cached(key, summary, fresh_until=fresh_until)
+        return summary
 
 
 def build_payload(location):
@@ -1304,7 +1366,8 @@ def build_payload(location):
     return {
         "status": 200,
         "location": {key: value for key, value in location.items() if key != "gdeltCountry"},
-        "dailySummary": build_daily_summary(articles, location),
+        "dailySummary": get_world_daily_summary(articles, location)
+        if location["countryCode"] == "GLOBAL" else build_daily_summary(articles, location),
         "articles": articles,
         "sections": sections,
         "sources": sources,
@@ -1338,7 +1401,10 @@ def lambda_handler(event, context):
         return api_response(400, {"error": str(error)})
 
     cache_key = make_cache_key(location)
-    cached = get_cached(cache_key)
+    try:
+        cached = get_cached(cache_key)
+    except ClientError:
+        return api_response(503, {"error": "Saved news is temporarily unavailable. Please retry shortly.", "retryable": True})
     now = int(time.time())
 
     if cached and int(cached.get("freshUntil", 0)) > now and cached.get("payload"):
@@ -1347,8 +1413,12 @@ def lambda_handler(event, context):
         return api_response(200, payload)
 
     try:
-        payload = build_payload(location)
-        set_cached(cache_key, payload)
+        with generation_lease(NEWS_CACHE, "date", cache_key):
+            latest = get_cached(cache_key)
+            if latest and int(latest.get("freshUntil", 0)) > int(time.time()) and latest.get("payload"):
+                return api_response(200, {**latest["payload"], "cacheStatus": "fresh-cache"})
+            payload = build_payload(location)
+            set_cached(cache_key, payload)
         LOGGER.info(json.dumps({
             "event": "news_refresh_succeeded",
             "country": location["countryCode"],
@@ -1356,6 +1426,12 @@ def lambda_handler(event, context):
             "articleCount": len(payload["articles"]),
         }))
         return api_response(200, payload)
+    except GenerationBusy:
+        if cached and int(cached.get("expiresAt", 0)) > now and cached.get("payload"):
+            return api_response(200, {**cached["payload"], "cacheStatus": "stale-cache", "notice": "Updating this briefing. Showing the latest saved edition."})
+        result = api_response(503, {"error": "This briefing is being prepared. Please try again shortly.", "retryable": True})
+        result["headers"] = {**result["headers"], "Retry-After": "3"}
+        return result
     except (
         urllib.error.URLError,
         TimeoutError,

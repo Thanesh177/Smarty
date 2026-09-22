@@ -411,7 +411,6 @@ const nativeSessionError = (message, code = '') => {
   error.code = code;
   error.invalidSession = [
     'invalid_grant',
-    'invalid_client',
     'identity_mismatch',
   ].includes(code);
   return error;
@@ -436,6 +435,7 @@ export const persistNativeRefreshSession = (
   localStorage.setItem(NATIVE_REFRESH_TOKEN_KEY, refreshToken);
   localStorage.setItem(NATIVE_REFRESH_SUBJECT_KEY, subject);
   nativeSessionGeneration += 1;
+  nativeRefreshPromise = null;
   return true;
 };
 
@@ -524,9 +524,18 @@ export const refreshNativeSession = async () => {
       data = {};
     }
 
+    // An older request must never delete a newer account's refresh session,
+    // even when the old request fails after the user signed in again.
+    if (generation !== nativeSessionGeneration) {
+      throw nativeSessionError(
+        'The saved session changed while it was being restored.',
+        'session_changed'
+      );
+    }
+
     if (!response.ok) {
       const code = String(data?.error || `http_${response.status}`);
-      if (code === 'invalid_grant' || code === 'invalid_client') {
+      if (code === 'invalid_grant') {
         clearNativeRefreshSession();
       }
 
@@ -535,13 +544,6 @@ export const refreshNativeSession = async () => {
           ? 'Your saved session is no longer valid. Please sign in again.'
           : 'The sign-in service could not restore your session. Please try again.',
         code
-      );
-    }
-
-    if (generation !== nativeSessionGeneration) {
-      throw nativeSessionError(
-        'The saved session was cleared while it was being restored.',
-        'session_changed'
       );
     }
 

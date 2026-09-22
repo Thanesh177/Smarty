@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import FeedPage from '../pages/FeedPage';
@@ -22,8 +22,14 @@ function InitialVisit({ onOpenSearch }) {
 }
 
 function NewsFeed() {
+  const pageRef = useRef(null);
+  useEffect(() => {
+    const scroller = pageRef.current?.closest('.content');
+    scroller?.scrollTo({ top: 0, behavior: 'instant' });
+    return () => scroller?.scrollTo({ top: 0, behavior: 'instant' });
+  }, []);
   return (
-    <main className="snap-feed-page has-inner-feed feed-news-topic">
+    <main ref={pageRef} className="has-inner-feed feed-news-topic">
       <header className="feed-inner-header">
         <div className="feed-inner-heading">
           <Link className="feed-inner-back" to="/topics"><ArrowLeft size={17} /><span>Topics</span></Link>

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createRequestCache } from '../lib/requestCache';
 import { getLearningGuide } from '../data/learningGuides';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { endpoints } from './endpoints';
@@ -114,8 +115,10 @@ let cachedAuthToken = '';
 let cachedAuthTokenAt = 0;
 let pendingAuthTokenPromise = null;
 let authTokenGeneration = 0;
+const readCache = createRequestCache();
 
 const resetAuthTokenCache = () => {
+  readCache.clear();
   authTokenGeneration += 1;
   cachedAuthToken = '';
   cachedAuthTokenAt = 0;
@@ -466,11 +469,12 @@ const buildClientDailySummary = (articles, location) => {
   }, {});
   const sourceCount = new Set(articles.map((article) => article.source).filter(Boolean)).size;
   const representatives = [];
+  const representativeLimit = Math.max(12, Object.keys(grouped).length);
   Object.values(grouped).forEach((items) => {
-    if (items[0] && representatives.length < 4) representatives.push(items[0]);
+    if (items[0] && representatives.length < representativeLimit) representatives.push(items[0]);
   });
   articles.forEach((article) => {
-    if (representatives.length < 4 && !representatives.includes(article)) {
+    if (representatives.length < representativeLimit && !representatives.includes(article)) {
       representatives.push(article);
     }
   });
@@ -482,7 +486,9 @@ const buildClientDailySummary = (articles, location) => {
     section,
     storyCount: items.length,
     sourceCount: new Set(items.map((item) => item.source).filter(Boolean)).size,
-    summary: items.slice(0, 3).map((item) => sentence(item.title)).join(' '),
+    summary: items.slice(0, 8).map((item) => sentence(item.title)).join(' '),
+    summaryParagraphs: Array.from({ length: Math.ceil(Math.min(items.length, 8) / 3) }, (_, index) =>
+      items.slice(index * 3, Math.min(index * 3 + 3, 8)).map(item => sentence(item.title)).join(' ')),
     themes: [],
     topStories: items.slice(0, 3).map(articleReference),
   }));
@@ -491,6 +497,8 @@ const buildClientDailySummary = (articles, location) => {
     eyebrow: "Today's briefing",
     title: `The day in ${location.label || 'Worldwide'}`,
     overview: representatives.map((article) => sentence(article.title)).join(' '),
+    overviewParagraphs: Array.from({ length: Math.ceil(representatives.length / 3) }, (_, index) =>
+      representatives.slice(index * 3, index * 3 + 3).map(article => sentence(article.title)).join(' ')),
     analysisStatement: 'A concise digest of the latest available reporting.',
     coverageWindow: 'Latest available',
     highlights: representatives.map(articleReference),
@@ -687,8 +695,8 @@ export const newsApi = {
     const dailySummary = primaryPayload?.dailySummary && !usedBrowserFallback
       ? {
           ...primaryPayload.dailySummary,
-          storyCount: articles.length,
-          sourceCount: sources.size,
+          storyCount: primaryPayload.dailySummary.storyCount ?? articles.length,
+          sourceCount: primaryPayload.dailySummary.sourceCount ?? sources.size,
         }
       : fallbackSummary;
     const sourceList = primaryPayload?.sources?.length && !usedBrowserFallback
@@ -2252,8 +2260,10 @@ async toggleSave(reelId) {
       return [];
     }
 
-    const { data } = await api.get(endpoints.topics.all);
-    return normalizeList(data);
+    return readCache.get('topics', async () => {
+      const { data } = await api.get(endpoints.topics.all);
+      return normalizeList(data);
+    });
   },
 
   async getComments(reelId) {

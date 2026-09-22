@@ -1056,7 +1056,7 @@ useEffect(() => {
                 title="Search"
                 onClick={openUniversalSearch}
               >
-                <Search size={20} strokeWidth={2.15} />
+                <Search size={16} strokeWidth={2.15} />
               </button>
 
               <NavLink
@@ -1076,7 +1076,7 @@ useEffect(() => {
                   });
                 }}
               >
-                <House size={20} strokeWidth={2.2} />
+                <House size={16} strokeWidth={2.2} />
               </NavLink>
               <button
                 type="button"
@@ -1095,7 +1095,7 @@ useEffect(() => {
                   navigate('/login', { state: { from: '/profile' } });
                 }}
               >
-                <CircleUserRound size={21} strokeWidth={2.15} />
+                <CircleUserRound size={16} strokeWidth={2.15} />
               </button>
 
               <NavLink
@@ -1108,7 +1108,7 @@ useEffect(() => {
                 }
                 title={totalUnread > 0 ? `Chat · ${totalUnread} unread` : 'Chat'}
               >
-                <MessagesSquare size={21} strokeWidth={2.15} />
+                <MessagesSquare size={16} strokeWidth={2.15} />
                 {totalUnread > 0 && (
                   <span className="nav-badge" aria-hidden="true">
                     {totalUnread > 99 ? '99+' : totalUnread}

@@ -688,6 +688,14 @@ export function AuthProvider({ children }) {
       }
 
       if (payload.event === 'signedOut') {
+        // Native Google/Apple sessions are owned by the native OAuth flow,
+        // not Amplify's separate email/web session. Its events cannot revoke
+        // the native account (including while its token is refreshing).
+        const nativeIdentity = getNativeCachedIdentity();
+        if (!loggingOutRef.current && isRunningInsideNativeApp() && (
+          pendingNativeState() ||
+          (nativeIdentity && hasNativeRefreshSession(nativeIdentity.sub))
+        )) return;
         invalidatePendingSession();
         clearAuthStorage();
         setUser(null);
@@ -798,6 +806,7 @@ export function AuthProvider({ children }) {
       try {
         return await establishSession({ attempts, forceRefresh });
       } catch (error) {
+        if (error.name === 'StaleAuthOperation') throw error;
         const cachedUser = getNativeCachedIdentity();
 
         if (
@@ -814,6 +823,40 @@ export function AuthProvider({ children }) {
     },
     [establishSession]
   );
+
+  useEffect(() => {
+    let resuming = false;
+    const resume = async () => {
+      if (loggingOutRef.current || resuming ||
+          (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return;
+      // No background requests for guests or while a new OAuth login owns
+      // the screen. A temporary failure keeps the saved refresh session.
+      const identity = getNativeCachedIdentity();
+      if (!identity || pendingNativeState()) return;
+      const revision = sessionRevisionRef.current;
+      resuming = true;
+      try {
+        await restoreSession({ attempts: 3 });
+      } catch (error) {
+        if (revision !== sessionRevisionRef.current || error.name === 'StaleAuthOperation') return;
+        if (error.invalidSession || isConfirmedSignedOutError(error)) {
+          clearAuthStorage();
+          setUser(null);
+          setAuthError('Your session has expired or was revoked. Please sign in again.');
+        }
+      } finally {
+        resuming = false;
+      }
+    };
+    window.addEventListener('online', resume);
+    window.addEventListener('focus', resume);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', resume);
+    return () => {
+      window.removeEventListener('online', resume);
+      window.removeEventListener('focus', resume);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', resume);
+    };
+  }, [restoreSession]);
 
   const logout = async () => {
     if (loggingOutRef.current) return;

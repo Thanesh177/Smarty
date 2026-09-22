@@ -10,7 +10,14 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent / "shared"))
 os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+
+
+class _Predicate:
+    def __init__(self, check): self.check = check
+    def __or__(self, other): return _Predicate(lambda item: self.check(item) or other.check(item))
+    def __and__(self, other): return _Predicate(lambda item: self.check(item) and other.check(item))
 
 
 class _FakeAttr:
@@ -18,14 +25,25 @@ class _FakeAttr:
         self.name = name
 
     def not_exists(self):
-        return ("not_exists", self.name)
+        return _Predicate(lambda item: self.name not in item)
+
+    def exists(self):
+        return _Predicate(lambda item: self.name in item)
 
     def eq(self, value):
-        return ("eq", self.name, value)
+        return _Predicate(lambda item: item.get(self.name) == value)
+
+    def lte(self, value):
+        return _Predicate(lambda item: item.get(self.name, float('inf')) <= value)
+
+    def __or__(self, other):
+        return self
 
 
 class _FakeTable:
     meta = types.SimpleNamespace(client=types.SimpleNamespace())
+
+    def put_item(self, **kwargs): return {}
 
 
 class _FakeDynamoResource:

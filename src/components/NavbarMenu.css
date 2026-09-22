@@ -570,6 +570,11 @@
     animation: none !important;
   }
 
+  .menu-panel {
+    opacity: 1;
+    transform: none;
+  }
+
   .hamburger-btn,
   .hamburger-line,
   .menu-close-btn,

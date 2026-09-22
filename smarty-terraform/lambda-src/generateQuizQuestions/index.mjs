@@ -8,15 +8,15 @@ import {
   GetCommand,
   PutCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const QUESTION_TABLE = process.env.QUESTION_TABLE || "QuizQuestionCache";
 const USER_TABLE = process.env.USER_TABLE || "UserQuizQuestionHistory";
 const MODEL_ID = process.env.MODEL_ID || "amazon.nova-micro-v1:0";
 
-const CACHE_VERSION = 2;
-const CACHE_TTL_SECONDS = 14 * 24 * 60 * 60;
+const CACHE_VERSION = 3;
+const CACHE_TTL_SECONDS = 365 * 24 * 60 * 60;
 const HISTORY_TTL_SECONDS = 365 * 24 * 60 * 60;
 const MAX_HISTORY_ITEMS = 500;
 const MAX_CACHE_QUESTIONS = 80;
@@ -34,6 +34,7 @@ const db = DynamoDBDocumentClient.from(new DynamoDBClient({ region: REGION }), {
 });
 
 const headers = {
+  "Cache-Control": "private, no-store",
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -269,6 +270,7 @@ function getDepthProfile(body) {
 
 async function getUserHistory(userId, topicId) {
   const historyKey = `${userId}#${topicId}`;
+  if (userId === "guest") return { historyKey, seenQuestionIds: [], seenFingerprints: [], recentPrompts: [] };
   const result = await db.send(new GetCommand({
     TableName: USER_TABLE,
     Key: { historyKey },
@@ -283,7 +285,7 @@ async function getUserHistory(userId, topicId) {
   };
 }
 
-function buildCacheKey({ topicId, topicTitle, parentTopic, focus, depth, weakAreas }) {
+export function buildCacheKey({ topicId, topicTitle, parentTopic, focus, depth, weakAreas, sourceTitle = "", sourceBody = "" }) {
   const identity = JSON.stringify({
     version: CACHE_VERSION,
     topicId,
@@ -291,34 +293,67 @@ function buildCacheKey({ topicId, topicTitle, parentTopic, focus, depth, weakAre
     parentTopic,
     focus,
     depth,
-    weakAreas,
+    weakAreas: [...weakAreas].sort(),
+    sourceHash: hashText(JSON.stringify([sourceTitle, sourceBody]), 64),
+    model: MODEL_ID,
   });
 
   return `quiz-v${CACHE_VERSION}-${hashText(identity)}`;
 }
 
-async function getCachedQuestionPool(cacheKey) {
+async function getCachedQuestionPool(cacheKey, forceRead = false) {
   const now = Math.floor(Date.now() / 1000);
   const memoryEntry = memoryCache.get(cacheKey);
 
-  if (memoryEntry?.expiresAt > now && Array.isArray(memoryEntry.questions)) {
+  if (!forceRead && memoryEntry?.expiresAt > now && memoryEntry?.memoryUntil > now && Array.isArray(memoryEntry.questions)) {
     return { questions: memoryEntry.questions, source: "memory-cache" };
   }
 
   const result = await db.send(new GetCommand({
     TableName: QUESTION_TABLE,
     Key: { cacheKey },
+    ConsistentRead: true,
   }));
   const isFresh = Number(result.Item?.expiresAt || 0) > now;
   const questions = isFresh && Array.isArray(result.Item?.questions) ? result.Item.questions : [];
 
   if (questions.length) {
-    memoryCache.set(cacheKey, { questions, expiresAt: result.Item.expiresAt });
+    rememberPool(cacheKey, questions, result.Item.expiresAt);
   } else {
     memoryCache.delete(cacheKey);
   }
 
   return { questions, source: questions.length ? "dynamodb-cache" : "none" };
+}
+
+function rememberPool(cacheKey, questions, expiresAt) {
+  memoryCache.delete(cacheKey);
+  while (memoryCache.size >= 128) memoryCache.delete(memoryCache.keys().next().value);
+  memoryCache.set(cacheKey, { questions, expiresAt, memoryUntil: Math.floor(Date.now() / 1000) + 10 });
+}
+
+async function acquirePoolLease(cacheKey) {
+  const owner = randomUUID();
+  const now = Math.floor(Date.now() / 1000);
+  await db.send(new PutCommand({
+    TableName: QUESTION_TABLE,
+    Item: { cacheKey: `lock#${cacheKey}`, owner, expiresAt: now + 960 },
+    ConditionExpression: 'attribute_not_exists(cacheKey) OR expiresAt <= :now',
+    ExpressionAttributeValues: { ':now': now },
+  }));
+  return owner;
+}
+
+async function releasePoolLease(cacheKey, owner) {
+  try {
+    await db.send(new PutCommand({
+      TableName: QUESTION_TABLE,
+      Item: { cacheKey: `lock#${cacheKey}`, owner, expiresAt: Math.floor(Date.now() / 1000) },
+      ConditionExpression: '#owner = :owner',
+      ExpressionAttributeNames: { '#owner': 'owner' },
+      ExpressionAttributeValues: { ':owner': owner },
+    }));
+  } catch { console.warn('quiz_generation_lease_release_failed'); }
 }
 
 async function saveQuestionPool(cacheKey, metadata, questions) {
@@ -335,7 +370,6 @@ async function saveQuestionPool(cacheKey, metadata, questions) {
 
   const trimmedQuestions = unique.slice(-MAX_CACHE_QUESTIONS);
   const expiresAt = now + CACHE_TTL_SECONDS;
-  memoryCache.set(cacheKey, { questions: trimmedQuestions, expiresAt });
 
   await db.send(new PutCommand({
     TableName: QUESTION_TABLE,
@@ -349,6 +383,8 @@ async function saveQuestionPool(cacheKey, metadata, questions) {
       expiresAt,
     },
   }));
+
+  rememberPool(cacheKey, trimmedQuestions, expiresAt);
 
   return trimmedQuestions;
 }
@@ -438,6 +474,7 @@ function isQuestionAvailable(question, history, excludedFingerprints, excludedPr
 }
 
 async function saveUserHistory(historyKey, userId, topicId, current, selectedQuestions) {
+  if (userId === "guest") return;
   const selectedIds = selectedQuestions.map((question) => question.id);
   const selectedFingerprints = selectedQuestions.map((question) => question.fingerprint);
   const selectedPrompts = selectedQuestions.map((question) => question.q);
@@ -464,7 +501,8 @@ export const handler = async (event) => {
 
   try {
     const body = JSON.parse(event.body || "{}");
-    const userId = cleanText(body.userId || "guest", MAX_USER_ID_LENGTH) || "guest";
+    const claims = event.requestContext?.authorizer?.jwt?.claims || event.requestContext?.authorizer?.claims || {};
+    const userId = cleanText(claims.sub || "guest", MAX_USER_ID_LENGTH) || "guest";
     const topicId = cleanText(body.topicId || "daily", MAX_TOPIC_LENGTH) || "daily";
     const topicTitle = cleanText(body.topicTitle || topicId, MAX_TOPIC_LENGTH) || topicId;
     const parentTopic = cleanText(body.parentTopic || topicTitle, MAX_TOPIC_LENGTH);
@@ -497,6 +535,8 @@ export const handler = async (event) => {
       focus,
       depth: depthProfile.depth,
       weakAreas,
+      sourceTitle,
+      sourceBody,
     });
 
     const cached = await getCachedQuestionPool(cacheKey);
@@ -512,6 +552,15 @@ export const handler = async (event) => {
       excludedPrompts,
     ));
 
+    let leaseOwner;
+    try {
+    if (available.length < requestedCount) {
+      leaseOwner = await acquirePoolLease(cacheKey);
+      // Another worker may have filled the pool since our original read.
+      const latest = await getCachedQuestionPool(cacheKey, true);
+      questionPool = normalizeQuestions(latest.questions, topicId, depthProfile.difficulty);
+      available = questionPool.filter(question => isQuestionAvailable(question, history, clientFingerprints, excludedPrompts));
+    }
     for (let generationAttempt = 0; generationAttempt < 2 && available.length < requestedCount; generationAttempt += 1) {
       const generated = await generateQuestionsWithAI({
         topicId,
@@ -546,6 +595,9 @@ export const handler = async (event) => {
         excludedPrompts,
       ));
     }
+    } finally {
+      if (leaseOwner) await releasePoolLease(cacheKey, leaseOwner);
+    }
 
     if (available.length < 3) {
       return response(503, {
@@ -565,6 +617,9 @@ export const handler = async (event) => {
       questions: selectedQuestions.map(({ legacyId, ...question }) => question),
     });
   } catch (error) {
+    if (error?.name === 'ConditionalCheckFailedException') {
+      return { ...response(503, { error: 'New questions are being prepared. Please try again shortly.', retryable: true }), headers: { ...headers, 'Retry-After': '3' } };
+    }
     console.error("Quiz generation failed", {
       name: error?.name,
       message: error?.message,

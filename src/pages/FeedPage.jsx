@@ -3699,6 +3699,8 @@ style={topicCanvasSurfaceStyle}
             </div>
           </div>
 
+          
+
           <nav
             ref={innerTopicsRef}
             className="feed-inner-topics mobile-topic-scroll"
@@ -3708,6 +3710,8 @@ style={topicCanvasSurfaceStyle}
           >
             {renderedTopics}
           </nav>
+
+          
         </header>
       )}
 

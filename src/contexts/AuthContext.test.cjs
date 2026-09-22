@@ -136,6 +136,55 @@ test('explicit logout removes the persistent native session', async () => {
   assert.equal(app.localStorage.getItem('eduscroll_user'), null);
 });
 
+test('SDK sign-out cannot erase a separate native social session', async () => {
+  const app = await mount({ initialNativeSession: { sub: 'remembered-user', expiresIn: 3600 } });
+  await app.hub({ event: 'signedOut' });
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+  assert.ok(app.localStorage.getItem('smarty-native-refresh-token'));
+});
+
+test('SDK sign-out during native restoration does not cancel it', async () => {
+  const pending = deferred();
+  const app = await mount({ initialNativeSession: { sub: 'remembered-user' }, refresh: () => pending.promise });
+  await app.hub({ event: 'signedOut' });
+  pending.resolve({ id_token: jwt('remembered-user'), access_token: jwt('remembered-user') });
+  await flush();
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+  assert.ok(app.localStorage.getItem('smarty-native-refresh-token'));
+});
+
+test('confirmed email-session sign-out still clears the email account', async () => {
+  const app = await mount({ initialNativeSession: { sub: 'older-user', expiresIn: 3600, withNativeRefresh: false } });
+  await app.hub({ event: 'signedOut' });
+  assert.equal(app.states[0], null);
+  assert.equal(app.localStorage.getItem('eduscroll_user'), null);
+});
+
+test('reconnecting after explicit logout does not silently sign in again', async () => {
+  const app = await mount({ initialNativeSession: { sub: 'remembered-user', expiresIn: 3600 } });
+  await app.value.logout();
+  app.window.dispatchEvent({type:'online'});
+  app.window.dispatchEvent({type:'focus'});
+  await flush();
+  assert.equal(app.states[0], null);
+  assert.equal(app.refreshes, 0);
+});
+
+test('an expired saved session recovers when connectivity returns', async () => {
+  let online = false;
+  const app = await mount({ initialNativeSession: { sub: 'remembered-user' }, refresh: async () => {
+    if (!online) throw Error('Network unavailable');
+    return { id_token: jwt('remembered-user'), access_token: jwt('remembered-user') };
+  } });
+  await flush();
+  online = true;
+  app.window.dispatchEvent({ type: 'online' });
+  await flush(); await flush();
+  assert.equal(app.refreshes, 2);
+  const token = JSON.parse(app.localStorage.getItem('eduscroll_user')).token;
+  assert.ok(JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).exp > Date.now() / 1000);
+});
+
 test('restoration uses the active native identity without waiting on the SDK', async () => {
   const app = await mount(); app.begin('first'); app.callback('first'); await flush();
   const before = app.sdkReads;
@@ -254,6 +303,7 @@ test('API requests prefer the signed-in native account over stale SDK tokens', a
     require: name => {
       if (name === 'axios') return { create: () => ({ interceptors: { request: { use() {} } } }) };
       if (name === 'aws-amplify/auth') return { fetchAuthSession: async () => { sdkReads++; return { tokens: { idToken: { toString: () => jwt('older-user') } } }; } };
+      if (name.includes('requestCache')) return { createRequestCache: () => ({ clear() {} }) };
       return {};
     } });
   assert.equal(await module.exports.testGetAuthToken(), current);
@@ -283,6 +333,7 @@ test('API requests refresh an expired native session without switching accounts'
     require: name => {
       if (name === 'axios') return { create: () => ({ interceptors: { request: { use() {} } } }) };
       if (name === 'aws-amplify/auth') return { fetchAuthSession: async () => { sdkReads++; return {}; } };
+      if (name.includes('requestCache')) return { createRequestCache: () => ({ clear() {} }) };
       if (name.includes('cognito')) return {
         hasNativeRefreshSession: subject => subject === 'remembered-user',
         refreshNativeSession: async () => {

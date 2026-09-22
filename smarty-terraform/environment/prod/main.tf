@@ -584,7 +584,8 @@ module "dynamodb" {
     }
 
     PostAiDoubts = {
-      hash_key = "doubtId"
+      hash_key      = "doubtId"
+      ttl_attribute = "expiresAt"
     }
 
     QuizQuestionCache = {
@@ -617,7 +618,8 @@ module "dynamodb" {
     }
 
     SmartyExplanations = {
-      hash_key = "explanationId"
+      hash_key      = "explanationId"
+      ttl_attribute = "expiresAt"
     }
 
     SmartyTranslations = {

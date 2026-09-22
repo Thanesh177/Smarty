@@ -58,35 +58,8 @@ function getCleanProfileName(profile) {
   return 'User';
 }
 
-const AnimatedStatNumber = memo(function AnimatedStatNumber({ value }) {
-  const target = Number(value || 0);
-  const [displayValue, setDisplayValue] = useState(0);
-
-  useEffect(() => {
-    let frameId;
-    const duration = 2000;
-    const startTime = performance.now();
-    const startValue = displayValue;
-    const change = target - startValue;
-
-    const tick = (now) => {
-      const progress = Math.min(1, (now - startTime) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayValue(Math.round(startValue + change * eased));
-
-      if (progress < 1) {
-        frameId = requestAnimationFrame(tick);
-      }
-    };
-
-    frameId = requestAnimationFrame(tick);
-
-    return () => {
-      if (frameId) cancelAnimationFrame(frameId);
-    };
-  }, [target]);
-
-  return <>{displayValue}</>;
+const StatNumber = memo(function StatNumber({ value }) {
+  return <>{Number(value || 0).toLocaleString()}</>;
 });
 
 const ProfilePostCard = memo(function ProfilePostCard({ post, label, onOpen, onEdit, editable = true }) {
@@ -813,7 +786,10 @@ const handleDeleteAccount = useCallback(async () => {
   if (loading) {
     return (
       <main className="profile-page">
-        <p className="status">Loading profile...</p>
+        <div className="profile-loading" role="status" aria-label="Loading your profile">
+          <div className="profile-loading-avatar" aria-hidden="true" />
+          <div><h1>Your space</h1><p>Getting your profile ready…</p></div>
+        </div>
       </main>
     );
   }
@@ -858,20 +834,20 @@ const handleDeleteAccount = useCallback(async () => {
             <span className="avatar-edit-overlay">Edit</span>
           </button>
 
-          <div>
+          <div className="profile-identity-copy">
             <span className="profile-pill">Your profile</span>
             <h1>{displayName}</h1>
             <p className="profile-email">{profile?.email}</p>
-            <p className="profile-bio">Learn. Share. Grow with Smarty.</p>
+            <p className="profile-bio">Your ideas, discoveries, and people.</p>
 
             <div className="profile-action-row">
-<button
-  type="button"
-  className="profile-edit-btn"
-  onClick={openProfileEditor}
->
-  Edit
-</button>
+              <button
+                type="button"
+                className="profile-edit-btn"
+                onClick={openProfileEditor}
+              >
+                Edit profile
+              </button>
 
               <button
                 type="button"
@@ -888,26 +864,23 @@ const handleDeleteAccount = useCallback(async () => {
               >
                 Saved
               </button>
-
             </div>
-
-
           </div>
         </div>
 
         <div className="profile-stats">
           <div className="stat-card">
-            <strong><AnimatedStatNumber value={myPosts.length} /></strong>
+            <strong><StatNumber value={myPosts.length} /></strong>
             <span>Posts</span>
           </div>
 
           <div className="stat-card">
-            <strong><AnimatedStatNumber value={myPublicPosts.length} /></strong>
+            <strong><StatNumber value={myPublicPosts.length} /></strong>
             <span>Public</span>
           </div>
 
           <div className="stat-card">
-            <strong><AnimatedStatNumber value={following.length} /></strong>
+            <strong><StatNumber value={following.length} /></strong>
             <span>Following</span>
           </div>
         </div>
@@ -915,10 +888,11 @@ const handleDeleteAccount = useCallback(async () => {
 
       {status && <p className="status">{status}</p>}
 
-      <section className="profile-tabs">
+      <nav className="profile-tabs" aria-label="Profile sections">
         <button
           type="button"
           className={tab === 'overview' ? 'active' : ''}
+          aria-pressed={tab === 'overview'}
           onClick={() => setTab('overview')}
         >
           Overview
@@ -927,6 +901,7 @@ const handleDeleteAccount = useCallback(async () => {
         <button
           type="button"
           className={tab === 'public' ? 'active' : ''}
+          aria-pressed={tab === 'public'}
           onClick={() => setTab('public')}
         >
           Public
@@ -935,6 +910,7 @@ const handleDeleteAccount = useCallback(async () => {
         <button
           type="button"
           className={tab === 'private' ? 'active' : ''}
+          aria-pressed={tab === 'private'}
           onClick={() => setTab('private')}
         >
           Private
@@ -943,20 +919,27 @@ const handleDeleteAccount = useCallback(async () => {
         <button
           type="button"
           className={tab === 'approved' || tab === 'approved-private' ? 'active' : ''}
+          aria-pressed={tab === 'approved' || tab === 'approved-private'}
           onClick={() => setTab('approved')}
         >
           Friends
         </button>
-      </section>
+      </nav>
 
       {tab === 'overview' && (
         <section className="profile-content">
-          <div className="profile-card">
-            <h3>About</h3>
-            <p>Manage your content, update your profile, and explore creators.</p>
+          <div className="profile-card profile-library-card">
+            <span className="profile-card-kicker">Your library</span>
+            <h3>Make an idea your own.</h3>
+            <p>Save something worth revisiting, or share what you’ve learned.</p>
+            <div className="profile-shortcuts">
+              <button type="button" onClick={() => navigate('/saved')}>Saved posts <span aria-hidden="true">↗</span></button>
+              <button type="button" onClick={() => navigate('/create')}>Write a post <span aria-hidden="true">↗</span></button>
+            </div>
           </div>
 
-          <div className="profile-card">
+          <div className="profile-card profile-account-card">
+            <span className="profile-card-kicker">Profile details</span>
             <h3>Account</h3>
 
             <div className="detail-row">
@@ -970,13 +953,18 @@ const handleDeleteAccount = useCallback(async () => {
             </div>
           </div>
 
-          <div className="profile-card">
-            <h3>Tips</h3>
-            <p>Strong titles + clean visuals = better engagement.</p>
+          <div className="profile-card profile-learning-card">
+            <span className="profile-card-kicker">Keep exploring</span>
+            <h3>Pick up your next idea.</h3>
+            <p>Follow a learning path or test what you remember.</p>
+            <div className="profile-shortcuts">
+              <button type="button" onClick={() => navigate('/learn')}>Learning paths <span aria-hidden="true">↗</span></button>
+              <button type="button" onClick={() => navigate('/quiz')}>Take a quiz <span aria-hidden="true">↗</span></button>
+            </div>
           </div>
 
           <div className="profile-card profile-delete-card">
-            <span className="profile-delete-card-kicker">Danger zone</span>
+            <span className="profile-delete-card-kicker">Account controls</span>
             <h3>Delete account</h3>
             <p>
               Permanently remove your Smarty account and associated account data.

@@ -16,6 +16,7 @@ import boto3
 from boto3.dynamodb.conditions import Attr
 from botocore.config import Config
 from botocore.exceptions import ClientError, BotoCoreError
+from generation_cache import GenerationBusy, generation_lease
 
 from content_catalog import (
     BASE_TOPICS,
@@ -95,6 +96,7 @@ doubts_table = dynamodb.Table(DOUBTS_TABLE_NAME)
 explanations_table = dynamodb.Table(EXPLANATIONS_TABLE_NAME)
 
 HEADERS = {
+    "Cache-Control": "private, no-store",
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
     "Access-Control-Allow-Headers": "Content-Type,Authorization",
@@ -233,8 +235,6 @@ def get_user_id(event, body=None):
         or jwt_claims.get("username")
         or rest_claims.get("sub")
         or rest_claims.get("username")
-        or body.get("userId")
-        or body.get("authorId")
         or "anonymous-user"
     )
 
@@ -298,10 +298,16 @@ def get_post(post_id, consistent_read=False):
         return None
 
     try:
-        return table.get_item(
+        post = table.get_item(
             Key={"id": post_id},
             ConsistentRead=consistent_read
         ).get("Item")
+        if post and (
+            str(post.get("visibility", "")).lower().startswith("moderation_")
+            or str(post.get("moderationStatus", "")).lower() in {"pending", "removed"}
+        ):
+            return None
+        return post
     except Exception as e:
         logger.error("GET POST ERROR: %s", str(e))
         return None
@@ -1306,16 +1312,19 @@ def explanation_source_hash(post):
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
-def explanation_cache_id(post_id):
-    return f"post#{post_id}#v{EXPLANATION_SCHEMA_VERSION}"[:500]
+def explanation_cache_id(post_id, source_hash):
+    identity = f"{post_id}|{source_hash}|{DETAILS_MODEL_ID}"
+    return f"post#v{EXPLANATION_SCHEMA_VERSION}#" + hashlib.sha256(identity.encode()).hexdigest()
 
 
 def read_explanation_cache(post_id, source_hash):
     item = explanations_table.get_item(
-        Key={"explanationId": explanation_cache_id(post_id)},
+        Key={"explanationId": explanation_cache_id(post_id, source_hash)},
         ConsistentRead=True,
     ).get("Item")
     if not item:
+        return ""
+    if int(item.get("expiresAt") or 0) <= int(time.time()):
         return ""
     if item.get("sourceHash") != source_hash:
         return ""
@@ -1329,7 +1338,7 @@ def persist_post_explanation(post_id, post, explanation, source_hash):
     now_number = int(time.time() * 1000)
     now_string = str(now_number)
     cache_item = {
-        "explanationId": explanation_cache_id(post_id),
+        "explanationId": explanation_cache_id(post_id, source_hash),
         "postId": str(post_id),
         "sourceHash": source_hash,
         "schemaVersion": EXPLANATION_SCHEMA_VERSION,
@@ -1337,21 +1346,30 @@ def persist_post_explanation(post_id, post, explanation, source_hash):
         "explanation": explanation,
         "createdAt": now_number,
         "updatedAt": now_number,
+        "expiresAt": int(time.time()) + 365 * 24 * 60 * 60,
     }
 
     explanations_table.put_item(Item=cache_item)
+    unchanged = Attr("id").exists()
+    for field in ("title", "body", "topic", "subTopic", "contentAngle"):
+        unchanged = unchanged & (Attr(field).eq(post[field]) if field in post else Attr(field).not_exists())
     table.update_item(
         Key={"id": post.get("id", post_id)},
+        ConditionExpression=unchanged,
         UpdateExpression="""
             SET aiDetailedExplanation = :e,
                 aiDetailedExplanationUpdatedAt = :t,
                 aiDetailedExplanationVersion = :v,
+                aiDetailedExplanationSourceHash = :hash,
+                aiDetailedExplanationModelId = :model,
                 updatedAt = :u
         """,
         ExpressionAttributeValues={
             ":e": explanation,
             ":t": now_number,
             ":v": EXPLANATION_SCHEMA_VERSION,
+            ":hash": source_hash,
+            ":model": DETAILS_MODEL_ID,
             ":u": now_string,
         },
     )
@@ -1359,11 +1377,22 @@ def persist_post_explanation(post_id, post, explanation, source_hash):
 
 def ensure_post_explanation(post_id, post):
     source_hash = explanation_source_hash(post)
+    cached = read_explanation_cache(post_id, source_hash)
+    if cached:
+        return cached, True, True
+    with generation_lease(explanations_table, "explanationId", explanation_cache_id(post_id, source_hash)):
+        return _ensure_post_explanation(post_id, post)
+
+
+def _ensure_post_explanation(post_id, post):
+    source_hash = explanation_source_hash(post)
     saved_explanation = str(post.get("aiDetailedExplanation") or "").strip()
     saved_version = int(post.get("aiDetailedExplanationVersion") or 0)
 
     if (
         saved_version == EXPLANATION_SCHEMA_VERSION
+        and post.get("aiDetailedExplanationSourceHash") == source_hash
+        and post.get("aiDetailedExplanationModelId") == DETAILS_MODEL_ID
         and is_complete_detailed_explanation(saved_explanation)
     ):
         try:
@@ -1381,14 +1410,7 @@ def ensure_post_explanation(post_id, post):
             )
         return saved_explanation, True, True
 
-    try:
-        cached_explanation = read_explanation_cache(post_id, source_hash)
-    except ClientError as error:
-        logger.warning(
-            "AI explanation cache read failed: %s",
-            error.response.get("Error", {}).get("Code", "unknown"),
-        )
-        cached_explanation = ""
+    cached_explanation = read_explanation_cache(post_id, source_hash)
 
     if cached_explanation:
         try:
@@ -1473,6 +1495,8 @@ def handle_ask_doubt(event):
         return response(400, {"error": "Invalid JSON body"})
 
     user_id = get_user_id(event, body)
+    if user_id == "anonymous-user":
+        return response(401, {"error": "Please sign in to ask a question."})
     post_id = body.get("postId") or body.get("id") or body.get("reelId")
     question = normalize_text(body.get("question") or "", 700)
 
@@ -1482,23 +1506,35 @@ def handle_ask_doubt(event):
     if not question:
         return response(400, {"error": "Missing question"})
 
-    post = get_post(post_id)
+    post = get_post(post_id, consistent_read=True)
 
     if not post:
         return response(404, {"error": "Post not found"})
 
     normalized_question = re.sub(r"\s+", " ", question.casefold()).strip()
-    question_hash = hashlib.sha256(
-        normalized_question.encode("utf-8")
-    ).hexdigest()[:24]
-    doubt_id = f"{user_id}#{post_id}#{question_hash}"[:500]
+    question_hash = hashlib.sha256(normalized_question.encode("utf-8")).hexdigest()
+    # Exact-question reuse only. Personal questions stay account-scoped; no
+    # approximate/semantic matching that could leak one user's question.
+    public_post = str(post.get("visibility", "")).lower() == "public"
+    personal = re.search(r"\b(i|me|my|mine|we|our|patient|client)\b|@|https?://|\d{7,}", normalized_question)
+    scope = "shared" if public_post and not personal else f"user:{user_id}"
+    identity = "|".join((scope, str(post_id), explanation_source_hash(post), DETAILS_MODEL_ID, question_hash))
+    doubt_id = "answer-v2#" + hashlib.sha256(identity.encode()).hexdigest()
+    existing = doubts_table.get_item(Key={"doubtId": doubt_id}, ConsistentRead=True).get("Item")
+    if existing and existing.get("answer") and int(existing.get("expiresAt") or 0) > int(time.time()):
+        return response(200, {"answer": existing["answer"], "cached": True, "alreadyAsked": True})
+    with generation_lease(doubts_table, "doubtId", doubt_id):
+        return answer_doubt(post, post_id, question, question_hash, doubt_id, user_id, scope)
+
+
+def answer_doubt(post, post_id, question, question_hash, doubt_id, user_id, scope):
 
     existing = doubts_table.get_item(
         Key={"doubtId": doubt_id},
-        ConsistentRead=False,
+        ConsistentRead=True,
     ).get("Item")
 
-    if existing:
+    if existing and existing.get("answer") and int(existing.get("expiresAt") or 0) > int(time.time()):
         return response(200, {
             "answer": existing.get("answer", ""),
             "alreadyAsked": True,
@@ -1547,15 +1583,18 @@ Student doubt:
         doubts_table.put_item(
             Item={
                 "doubtId": doubt_id,
-                "userId": user_id,
+                **({"userId": user_id} if scope != "shared" else {}),
+                "cacheScope": scope,
+                "sourceHash": explanation_source_hash(post),
                 "postId": post_id,
                 "questionHash": question_hash,
                 "question": question,
                 "answer": answer,
                 "modelId": DETAILS_MODEL_ID,
                 "createdAt": now_number,
+                "expiresAt": int(time.time()) + 365 * 24 * 60 * 60,
             },
-            ConditionExpression=Attr("doubtId").not_exists(),
+            ConditionExpression=Attr("doubtId").not_exists() | Attr("expiresAt").lte(int(time.time())),
         )
     except doubts_table.meta.client.exceptions.ConditionalCheckFailedException:
         existing = doubts_table.get_item(
@@ -1594,7 +1633,18 @@ def lambda_handler(event, context):
         if route.endswith("/posts/ask-doubt") or route.endswith("/ask-doubt"):
             return handle_ask_doubt(event)
 
-        return create_post(publication_id=scheduled_post_id(event))
+        publication_id = scheduled_post_id(event)
+        if publication_id:
+            with generation_lease(explanations_table, "explanationId", publication_id):
+                return create_post(publication_id=publication_id)
+        return create_post()
+
+    except GenerationBusy:
+        if event.get("source") == "smarty.learning.schedule":
+            raise
+        result = response(503, {"error": "This content is being prepared. Please try again shortly.", "retryable": True})
+        result["headers"] = {**HEADERS, "Retry-After": "3"}
+        return result
 
     except ClientError as e:
         if event.get("source") == "smarty.learning.schedule":
