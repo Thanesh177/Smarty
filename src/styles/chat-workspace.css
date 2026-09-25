@@ -1,0 +1,174 @@
+/* Final, chat-only presentation layer after the shared product theme.
+   Native scrolling, message delivery and media playback stay unchanged. */
+.app-shell .content .chat-page {
+  padding: 0 !important;
+  grid-template-columns: clamp(290px, 28vw, 360px) minmax(0, 1fr) !important;
+}
+.app-shell .content .chat-page .chat-sidebar {
+  padding: 28px 18px 18px !important;
+  background: var(--ui-bg) !important;
+}
+.app-shell .content .chat-page .chat-sidebar-heading {
+  padding: 0 8px 24px;
+  align-items: flex-start;
+}
+.app-shell .content .chat-page .chat-sidebar-heading h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -.045em;
+  margin-top: 8px;
+}
+.app-shell .content .chat-page .chat-sidebar-heading p {
+  margin: 9px 0 0;
+  color: var(--ui-muted);
+  font-size: .8125rem;
+  line-height: 1.5;
+}
+.app-shell .content .chat-page .chat-sidebar-heading > span {
+  margin-top: 28px;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+}
+.app-shell .content .chat-page .chat-search {
+  grid-template-columns: minmax(0, 1fr) 44px !important;
+  gap: 0 !important;
+  border: 1px solid var(--ui-line) !important;
+  border-radius: 14px !important;
+  background: var(--ui-control-bg) !important;
+  overflow: hidden;
+}
+.app-shell .content .chat-page .chat-search:focus-within {
+  border-color: var(--ui-accent-line) !important;
+}
+.app-shell .content .chat-page .chat-search input {
+  height: 46px !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+}
+.app-shell .content .chat-page .chat-search button {
+  display: grid;
+  place-items: center;
+  height: 46px !important;
+  min-width: 44px;
+  padding: 0 !important;
+  color: var(--ui-accent) !important;
+  background: transparent !important;
+}
+.app-shell .content .chat-page .chat-list { gap: 4px; padding: 8px 0 24px; }
+.app-shell .content .chat-page .chat-list h3 { margin: 8px 10px 12px; font-weight: 500; }
+.app-shell .content .chat-page .chat-list-item {
+  padding: 14px 10px !important;
+  border-radius: 14px !important;
+  min-height: 78px;
+}
+.app-shell .content .chat-page .chat-list-item.active {
+  background: var(--ui-accent-soft) !important;
+  box-shadow: inset 2px 0 var(--ui-accent) !important;
+}
+.app-shell .content .chat-page .chat-list-item .chat-content strong { font-size: .9375rem !important; font-weight: 550 !important; }
+.app-shell .content .chat-page .chat-list-item .chat-open-chat-btn { border: 0 !important; background: transparent !important; box-shadow: none !important; }
+.app-shell .content .chat-page .chat-list-item .chat-preview > span:first-child { max-width: none; flex: 1; }
+.app-shell .content .chat-page .chat-list-item .chat-preview > span { font-size: .8125rem !important; line-height: 1.5; }
+.app-shell .content .chat-page .chat-list-item .chat-preview .unread-badge {
+  color: var(--ui-accent-ink) !important;
+  background: var(--ui-accent) !important;
+  min-width: 20px;
+}
+.app-shell .content .chat-page .chat-window {
+  display: flex !important;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
+  background: var(--ui-bg) !important;
+}
+.app-shell .content .chat-page .chat-window-top {
+  flex: 0 0 auto;
+  min-height: 78px !important;
+  padding: 14px clamp(18px, 3vw, 40px) !important;
+  background: var(--ui-bg) !important;
+}
+.app-shell .content .chat-page .chat-info h2 { font-size: 1rem !important; font-weight: 550 !important; }
+.app-shell .content .chat-page .chat-context-label { margin-top: 5px; font-size: .75rem !important; }
+.app-shell .content .chat-page .chat-more-btn { display: grid; place-items: center; width: 44px !important; height: 44px !important; }
+.app-shell .content .chat-page .messages {
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 24px max(22px, calc((100% - 820px) / 2)) 24px !important;
+  scroll-padding-bottom: 24px !important;
+  background: var(--ui-bg) !important;
+}
+.app-shell .content .chat-page .message {
+  margin-top: 8px !important;
+  margin-bottom: 8px !important;
+  padding: 12px 15px 9px !important;
+  max-width: min(78%, 570px) !important;
+}
+.app-shell .content .chat-page .message p { font-size: .9375rem !important; line-height: 1.6 !important; }
+.app-shell .content .chat-page .message .timestamp { font-size: .6875rem !important; margin-top: 7px !important; color: var(--ui-muted) !important; }
+.app-shell .content .chat-page .message-menu-wrap { position: absolute; bottom: 5px; right: 6px; margin: 0 !important; }
+.app-shell .content .chat-page .message-menu-btn { width: 32px !important; height: 32px !important; min-height: 32px !important; min-width: 32px !important; padding: 0 !important; }
+.app-shell .content .chat-page .message .timestamp { padding-right: 26px; min-height: 14px; }
+.app-shell .content .chat-page .message:has(.message-media-preview, .audio-mini-card) {
+  padding: 0 !important;
+  background: transparent !important;
+}
+.app-shell .content .chat-page .message:has(.message-media-preview) > p { padding-top: 9px; }
+.app-shell .content .chat-page .composer-shell {
+  position: relative !important;
+  inset: auto !important;
+  transform: none !important;
+  flex: 0 0 auto !important;
+  align-self: center;
+  width: min(820px, calc(100% - 40px)) !important;
+  margin: 0 0 max(20px, env(safe-area-inset-bottom, 0px)) !important;
+  padding: 7px !important;
+  border-radius: 18px !important;
+  background: var(--ui-control-bg) !important;
+  backdrop-filter: none !important;
+}
+.app-shell .content .chat-page .message-form { display: flex !important; gap: 4px !important; }
+.app-shell .content .chat-page .message-form input:not([type='file']) { flex: 1; width: 0; height: 44px !important; font-size: 16px !important; }
+.app-shell .content .chat-page .message-form button {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 44px !important;
+  height: 44px !important;
+  border-radius: 12px !important;
+  padding: 0 10px !important;
+  background: transparent !important;
+  color: var(--ui-muted) !important;
+}
+.app-shell .content .chat-page .message-form button[type='submit'] { background: var(--ui-accent) !important; color: var(--ui-accent-ink) !important; }
+.app-shell .content .chat-page .message-form .recording { color: #f4a9a9 !important; max-width: none; gap: 4px; }
+.app-shell .content .chat-page .chat-empty-state { max-width: 400px; margin: auto; padding: 32px; text-align: center; }
+.app-shell .content .chat-page .chat-empty-state::before { content: none; }
+.app-shell .content .chat-page .chat-empty-symbol { display: grid; place-items: center; width: 72px; height: 72px; margin: 0 auto 24px; border-radius: 24px; color: var(--ui-accent); background: var(--ui-accent-soft); }
+.app-shell .content .chat-page .chat-empty-state h2 { font-size: 1.5rem; font-weight: 550; letter-spacing: -.035em; margin-bottom: 12px; }
+.app-shell .content .chat-page .chat-empty-state p { font-size: .9375rem; line-height: 1.7; }
+.app-shell .content .chat-page .chat-start-conversation { display: inline-flex; align-items: center; gap: 9px; margin-top: 26px; min-height: 44px; padding: 0 17px; border: 1px solid var(--ui-line); border-radius: 12px; background: var(--ui-control-bg); color: var(--ui-accent); cursor: pointer; }
+.app-shell .content .chat-page :is(button, input):focus-visible { outline: 2px solid var(--ui-accent) !important; outline-offset: 3px; }
+.app-shell .content .chat-page .chat-search input:focus-visible { outline: none !important; }
+.chat-search-spinner { animation: chat-search-turn .8s linear infinite; }
+@keyframes chat-search-turn { to { transform: rotate(360deg); } }
+@media (max-width: 860px) {
+  .app-shell .content .chat-page { grid-template-columns: minmax(0, 1fr) !important; }
+  .app-shell .content .chat-page .chat-sidebar { padding: max(24px, env(safe-area-inset-top, 0px)) 16px 14px !important; }
+  .app-shell .content .chat-page:not(.mobile-chat-open) .chat-window { display: none !important; }
+  .app-shell .content .chat-page.mobile-chat-open .chat-window { display: flex !important; }
+  .app-shell .content .chat-page.mobile-chat-open .chat-sidebar { display: none !important; }
+  .app-shell .content .chat-page .chat-window-top { min-height: 70px !important; padding: 10px 12px !important; }
+  .app-shell .content .chat-page .mobile-chat-back-btn { display: grid !important; place-items: center; width: 44px !important; height: 44px !important; }
+  .app-shell .content .chat-page .messages { padding: 16px 14px 18px !important; }
+  .app-shell .content .chat-page .message { max-width: 86% !important; }
+  .app-shell .content .chat-page .composer-shell { width: calc(100% - 20px) !important; margin-bottom: max(10px, env(safe-area-inset-bottom, 0px)) !important; padding: 5px !important; }
+  .app-shell .content .chat-page .chat-list { padding-right: 58px; }
+}
+@media (max-width: 360px) {
+  .app-shell .content .chat-page .message-form { flex-wrap: wrap; }
+  .app-shell .content .chat-page .message-form .voice-cancel-btn { order: -1; margin-left: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .chat-search-spinner { animation: none; } }

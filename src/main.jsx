@@ -6,6 +6,7 @@ import './index.css';
 // The shared product language follows every route stylesheet and the reset.
 import './styles/premium-theme.css';
 import './styles/product-theme.css';
+import './styles/chat-workspace.css';
 import 'aws-amplify/auth/enable-oauth-listener';
 import {
   QueryClient,

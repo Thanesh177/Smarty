@@ -2,6 +2,9 @@
 
 ## Changes
 
+- Native Google/Apple restoration now uses the saved refresh session even when the separate UI profile cache is missing. It rebuilds the profile only from the validated refresh response, without falling through to an unrelated Amplify account.
+- Email users reopening offline retain the remembered account view and renew on reconnect. Expired tokens remain expired and cannot authorize API requests. Confirmed revocation still clears the account.
+- Concurrent renewal requests share one operation, including forced refresh calls, to avoid competing refreshes.
 - Amplify email/web sign-out events no longer erase the independent native Google/Apple refresh session, including during startup refresh. Explicit app logout still clears both stores.
 - Refresh responses check session ownership before handling errors. A delayed failure from an older account cannot clear a newer login; new logins do not reuse an old account's pending refresh.
 - Service configuration and network failures preserve the native refresh record. Confirmed revocation and identity mismatches invalidate it.

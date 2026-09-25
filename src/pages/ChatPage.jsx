@@ -15,10 +15,13 @@ import {
   LoaderCircle,
   Maximize2,
   Mic,
+  MessagesSquare,
+  MoreHorizontal,
   Paperclip,
   Pause,
   Play,
   SendHorizontal,
+  Search,
   Volume2,
   VolumeX,
   X,
@@ -269,7 +272,7 @@ function normalizeChatRecord(chat) {
 function getDayLabel(timestamp) {
   const numericTimestamp = Number(timestamp);
   const date = new Date(
-    numericTimestamp > 0 && numericTimestamp < 1e12
+    !Number.isFinite(numericTimestamp) ? timestamp : numericTimestamp > 0 && numericTimestamp < 1e12
       ? numericTimestamp * 1000
       : numericTimestamp
   );
@@ -293,7 +296,7 @@ function getDayLabel(timestamp) {
 function formatMessageTime(timestamp) {
   const numericTimestamp = Number(timestamp);
   const date = new Date(
-    numericTimestamp > 0 && numericTimestamp < 1e12
+    !Number.isFinite(numericTimestamp) ? timestamp : numericTimestamp > 0 && numericTimestamp < 1e12
       ? numericTimestamp * 1000
       : numericTimestamp
   );
@@ -2085,6 +2088,7 @@ const renderedChatList = useMemo(
           <button
             type="button"
             className="chat-content chat-open-chat-btn"
+            aria-current={active ? 'true' : undefined}
             onClick={() => openChat(chat)}
           >
             <strong>
@@ -2619,6 +2623,7 @@ const runDeleteChat = useCallback(() => {
           <div>
             <span>Inbox</span>
             <h1>Messages</h1>
+            <p>A good conversation starts here.</p>
           </div>
           <span aria-label={`${chats.length} conversations`}>{chats.length}</span>
         </header>
@@ -2627,13 +2632,14 @@ const runDeleteChat = useCallback(() => {
   <form className="chat-search" onSubmit={searchUsers}>
     <input
       placeholder="Search people..."
+      type="search"
       value={query}
       autoComplete="off"
       aria-label="Search users"
       onChange={handleQueryChange}
     />
-    <button type="submit" disabled={!query.trim() || isSearchingUsers}>
-      {isSearchingUsers ? 'Searching…' : 'Search'}
+    <button type="submit" aria-label={isSearchingUsers ? 'Searching people' : 'Search people'} disabled={!query.trim() || isSearchingUsers}>
+      {isSearchingUsers ? <LoaderCircle size={18} className="chat-search-spinner" aria-hidden="true" /> : <Search size={18} aria-hidden="true" />}
     </button>
   </form>
 
@@ -2686,7 +2692,7 @@ const runDeleteChat = useCallback(() => {
         <div className="chat-list">
           <h3>Recent</h3>
           {chats.length === 0 ? (
-            <p className="empty-chat">No chats yet.</p>
+            <p className="empty-chat">Your conversations will live here. Search for someone to say hello.</p>
           ) : (
             renderedChatList
           )}
@@ -2696,8 +2702,12 @@ const runDeleteChat = useCallback(() => {
 <section className="chat-window" onDrop={handleDrop} onDragOver={handleDragOver}>
         {!activeChat ? (
           <div className="chat-empty-state">
-            <h2>Select a chat</h2>
-            <p>Your private messages will appear here.</p>
+            <span className="chat-empty-symbol" aria-hidden="true"><MessagesSquare size={30} strokeWidth={1.4} /></span>
+            <h2>Room for a conversation.</h2>
+            <p>Share a discovery, ask a question, or pick up where you left off.</p>
+            <button className="chat-start-conversation" type="button" onClick={() => searchAreaRef.current?.querySelector('input')?.focus()}>
+              <Search size={16} aria-hidden="true" /> Find someone
+            </button>
           </div>
         ) : (
           <>
@@ -2705,6 +2715,7 @@ const runDeleteChat = useCallback(() => {
               <button
                 type="button"
                 className="mobile-chat-back-btn"
+                aria-label="Back to conversations"
                 onClick={closeMobileChat}
               >
                 <ArrowLeft size={19} aria-hidden="true" />
@@ -2744,7 +2755,7 @@ const runDeleteChat = useCallback(() => {
     aria-label="Chat actions"
     aria-expanded={actionsOpen}
   >
-    ⋮
+    <MoreHorizontal size={21} aria-hidden="true" />
   </button>
 
   {actionsOpen && (
@@ -3007,6 +3018,7 @@ const runDeleteChat = useCallback(() => {
 
     <input
       placeholder={isBlocked ? 'Unblock this user to send messages' : 'Type a message...'}
+      aria-label="Message"
       value={text}
       onChange={handleTextChange}
       onFocus={handleTextFocus}
@@ -3016,11 +3028,13 @@ const runDeleteChat = useCallback(() => {
     <button
   type="button"
   className={isRecording ? 'voice-btn recording' : 'voice-btn'}
+  aria-label={isRecording ? 'Stop voice recording' : 'Record voice message'}
+  title={isRecording ? 'Stop recording' : 'Voice message'}
   onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
   disabled={isBlocked || isUploading}
 >
   <Mic size={16} aria-hidden="true" />
-  <span>{isRecording ? `Stop ${recordingSeconds}s` : 'Voice'}</span>
+  {isRecording && <span>{recordingSeconds}s</span>}
 </button>
 {isRecording && (
   <button
@@ -3033,9 +3047,8 @@ const runDeleteChat = useCallback(() => {
   </button>
 )}
     
-<button type="submit" disabled={isBlocked || isUploading || (!text.trim() && !selectedMedia)}>
+<button type="submit" aria-label="Send message" disabled={isBlocked || isUploading || (!text.trim() && !selectedMedia)}>
   <SendHorizontal size={16} aria-hidden="true" />
-  <span>Send</span>
 </button>
   </form>
 </div>

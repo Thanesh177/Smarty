@@ -196,6 +196,10 @@ function isConfirmedSignedOutError(error) {
   const message = `${error?.name || ''} ${error?.message || ''}`;
 
   return (
+    error?.invalidSession === true ||
+    ['NotAuthorizedException', 'TokenRevokedException', 'UserNotFoundException',
+      'PasswordResetRequiredException', 'UserNotConfirmedException',
+      'RefreshTokenReuseException'].includes(error?.name) ||
     message.includes('UserUnAuthenticatedException') ||
     message.includes('needs to be authenticated') ||
     message.includes('No current user')
@@ -239,7 +243,7 @@ function mapCognitoUser(currentUser, session) {
     (currentUserId && currentUserId !== sessionSubject) ||
     !isCurrentJwt(idToken || accessToken, sessionSubject)
   ) {
-    throw new Error('Cognito session identity could not be verified.');
+    throw Object.assign(new Error('Cognito session identity could not be verified.'), { invalidSession: true });
   }
 
   const email =
@@ -313,7 +317,7 @@ function mapNativeTokens(tokens, cachedUser = null) {
     (cachedSubject && cachedSubject !== subject) ||
     !isCurrentJwt(idToken || accessToken, subject)
   ) {
-    throw new Error('The restored session identity could not be verified.');
+    throw Object.assign(new Error('The restored session identity could not be verified.'), { invalidSession: true });
   }
 
   const email = payload.email || cachedUser?.email || '';
@@ -508,7 +512,7 @@ export function AuthProvider({ children }) {
       return nativeUser;
     }
     if (isRunningInsideNativeApp() && pendingNativeState()) throw staleAuthOperation();
-    if (!forceRefresh && sessionRestorePromiseRef.current) {
+    if (sessionRestorePromiseRef.current) {
       return sessionRestorePromiseRef.current;
     }
 
@@ -516,8 +520,8 @@ export function AuthProvider({ children }) {
     const restorePromise = (async () => {
       const cachedNativeIdentity = getNativeCachedIdentity();
       if (
-        cachedNativeIdentity &&
-        hasNativeRefreshSession(cachedNativeIdentity.sub)
+        isRunningInsideNativeApp() &&
+        hasNativeRefreshSession()
       ) {
         const nativeTokens = await withAuthDeadline(
           refreshNativeSession(),
@@ -548,9 +552,9 @@ export function AuthProvider({ children }) {
       return authUser;
     })();
 
-    if (!forceRefresh) {
-      sessionRestorePromiseRef.current = restorePromise;
-    }
+    // Renewal is shared even for forceRefresh callers. Parallel refreshes can
+    // otherwise compete when the provider rotates a refresh token.
+    sessionRestorePromiseRef.current = restorePromise;
 
     try {
       return await restorePromise;
@@ -644,7 +648,9 @@ export function AuthProvider({ children }) {
           // A startup timeout or temporary network failure is not a logout.
           // Preserve the persisted Cognito/native records so the next restore
           // can continue the same account instead of forcing sign-in again.
-          setUser(getVerifiedNativeCachedUser());
+          // Keep the remembered mobile account visible while offline. This is
+          // not an authorization grant: API requests still require a fresh JWT.
+          setUser(nativeCachedUser);
         }
       } finally {
         if (bootRevision === sessionRevisionRef.current) setLoading(false);
@@ -673,13 +679,12 @@ export function AuthProvider({ children }) {
       }
 
       if (payload.event === 'signInWithRedirect_failure') {
-        const cachedNativeUser = getNativeCachedIdentity();
         if (
           isRunningInsideNativeApp() &&
           (
             pendingNativeState() ||
             getVerifiedNativeCachedUser() ||
-            (cachedNativeUser && hasNativeRefreshSession(cachedNativeUser.sub))
+            hasNativeRefreshSession()
           )
         ) return;
         invalidatePendingSession();
@@ -691,10 +696,9 @@ export function AuthProvider({ children }) {
         // Native Google/Apple sessions are owned by the native OAuth flow,
         // not Amplify's separate email/web session. Its events cannot revoke
         // the native account (including while its token is refreshing).
-        const nativeIdentity = getNativeCachedIdentity();
         if (!loggingOutRef.current && isRunningInsideNativeApp() && (
           pendingNativeState() ||
-          (nativeIdentity && hasNativeRefreshSession(nativeIdentity.sub))
+          hasNativeRefreshSession()
         )) return;
         invalidatePendingSession();
         clearAuthStorage();
@@ -811,8 +815,7 @@ export function AuthProvider({ children }) {
 
         if (
           cachedUser &&
-          hasNativeRefreshSession(cachedUser.sub) &&
-          !error?.invalidSession
+          !isConfirmedSignedOutError(error)
         ) {
           setUser(cachedUser);
           return cachedUser;
@@ -832,7 +835,7 @@ export function AuthProvider({ children }) {
       // No background requests for guests or while a new OAuth login owns
       // the screen. A temporary failure keeps the saved refresh session.
       const identity = getNativeCachedIdentity();
-      if (!identity || pendingNativeState()) return;
+      if ((!identity && !hasNativeRefreshSession()) || pendingNativeState()) return;
       const revision = sessionRevisionRef.current;
       resuming = true;
       try {
@@ -893,7 +896,7 @@ export function AuthProvider({ children }) {
 
   const refreshToken = async () => {
     const authUser = await restoreSession({ forceRefresh: true, attempts: 3 });
-    return authUser?.token || null;
+    return isCurrentJwt(authUser?.token, authUser?.sub) ? authUser.token : null;
   };
 
   const value = useMemo(

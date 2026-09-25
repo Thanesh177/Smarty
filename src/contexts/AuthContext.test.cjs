@@ -28,6 +28,10 @@ async function mount({ restore, exchange, refresh, initialNativeSession, initial
       localStorage.setItem('smarty-native-refresh-token', 'fixture-refresh-token');
       localStorage.setItem('smarty-native-refresh-subject', subject);
     }
+    if (initialNativeSession.withoutProfile) {
+      localStorage.removeItem('eduscroll_user');
+      localStorage.removeItem('eduscroll_token');
+    }
   }
   if (pendingState) for (const store of [localStorage, sessionStorage]) {
     store.setItem('smarty-native-oauth-state', pendingState);
@@ -73,7 +77,7 @@ async function mount({ restore, exchange, refresh, initialNativeSession, initial
         },
         hasNativeRefreshSession: subject => Boolean(
           localStorage.getItem('smarty-native-refresh-token') &&
-          localStorage.getItem('smarty-native-refresh-subject') === subject
+          (!subject || localStorage.getItem('smarty-native-refresh-subject') === subject)
         ),
         clearNativeRefreshSession: () => {
           localStorage.removeItem('smarty-native-refresh-token');
@@ -236,16 +240,116 @@ test('email session restoration retries a temporary failure on relaunch', async 
   assert.equal(JSON.parse(app.localStorage.getItem('eduscroll_user')).sub, 'older-user');
 });
 
-test('offline email restoration preserves saved records without trusting an expired token', async () => {
+test('offline email restoration keeps the remembered account without renewing its expired token', async () => {
   const app = await mount({
     initialNativeSession: { sub: 'older-user', withNativeRefresh: false },
     restore: () => { throw Error('Network unavailable'); },
   });
   await waitForBootstrap(app);
   assert.equal(app.sdkReads, 4);
-  assert.equal(app.states[0], null);
+  assert.equal(app.states[0]?.sub, 'older-user');
   assert.equal(JSON.parse(app.localStorage.getItem('eduscroll_user')).sub, 'older-user');
   assert.ok(app.localStorage.getItem('eduscroll_token'));
+  const payload = JSON.parse(Buffer.from(app.states[0].token.split('.')[1], 'base64url'));
+  assert.ok(payload.exp < Date.now() / 1000, 'offline UI must not manufacture a valid token');
+});
+
+test('native refresh restores the account even if the separate profile cache is missing', async () => {
+  const app = await mount({ initialNativeSession: { sub: 'remembered-user', withoutProfile: true } });
+  await flush();
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+  assert.equal(app.refreshes, 1);
+  assert.equal(app.sdkReads, 0);
+});
+
+test('a missing profile and temporary refresh failure do not erase the saved session', async () => {
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user', withoutProfile: true },
+    refresh: async () => { throw Error('Network unavailable'); },
+  });
+  await flush();
+  assert.ok(app.localStorage.getItem('smarty-native-refresh-token'));
+  assert.equal(app.states[0], null, 'do not invent an identity without a profile or successful refresh');
+});
+
+test('concurrent forced renewal requests share one refresh operation', async () => {
+  const pending = deferred();
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user', expiresIn: 3600 },
+    refresh: () => pending.promise,
+  });
+  const first = app.value.restoreSession({ forceRefresh: true });
+  const second = app.value.restoreSession({ forceRefresh: true });
+  pending.resolve({ id_token: jwt('remembered-user'), access_token: jwt('remembered-user') });
+  await Promise.all([first, second]);
+  assert.equal(app.refreshes, 1);
+});
+
+test('email renewal recovers the same account after reopening offline and reconnecting', async () => {
+  let online = false;
+  const app = await mount({
+    initialNativeSession: { sub: 'older-user', withNativeRefresh: false },
+    restore: () => {
+      if (!online) throw Error('Network unavailable');
+      return { userId: 'older-user' };
+    },
+  });
+  await waitForBootstrap(app);
+  assert.equal(app.states[0]?.sub, 'older-user');
+  online = true;
+  app.window.dispatchEvent({ type: 'online' });
+  await flush(); await flush();
+  const payload = JSON.parse(Buffer.from(app.states[0].token.split('.')[1], 'base64url'));
+  assert.ok(payload.exp > Date.now() / 1000);
+  assert.equal(app.states[0].sub, 'older-user');
+});
+
+test('confirmed email revocation never uses the offline remembered account', async () => {
+  const app = await mount({
+    initialNativeSession: { sub: 'older-user', withNativeRefresh: false },
+    restore: () => {
+      const error = Error('Revoked'); error.name = 'NotAuthorizedException'; throw error;
+    },
+  });
+  await waitForBootstrap(app);
+  assert.equal(app.states[0], null);
+  assert.equal(app.localStorage.getItem('eduscroll_user'), null);
+});
+
+test('missing-profile recovery retries after reconnect without an unrelated SDK account', async () => {
+  let online = false;
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user', withoutProfile: true },
+    refresh: async () => {
+      if (!online) throw Error('Network unavailable');
+      return { id_token: jwt('remembered-user'), access_token: jwt('remembered-user') };
+    },
+  });
+  await app.hub({ event: 'signedOut' });
+  online = true;
+  app.window.dispatchEvent({ type: 'online' });
+  await flush(); await flush();
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+  assert.equal(app.sdkReads, 0);
+});
+
+test('offline recovery never returns an expired token as a successful renewal', async () => {
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user' },
+    refresh: async () => { throw Error('Network unavailable'); },
+  });
+  assert.equal(await app.value.refreshToken(), null);
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+});
+
+test('an identity mismatch cannot fall back to the remembered account', async () => {
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user' },
+    refresh: async () => ({ id_token: jwt('different-user'), access_token: jwt('different-user') }),
+  });
+  await flush();
+  assert.equal(app.states[0], null);
+  assert.equal(app.localStorage.getItem('smarty-native-refresh-token'), null);
 });
 
 test('an invalid remembered session is removed instead of being reused', async () => {
