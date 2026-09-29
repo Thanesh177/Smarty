@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { userApi, postApi, creatorApi, roomApi } from '../api/client';
+import { flushNativeSessionStorage } from '../lib/nativeSessionStorage';
 import './ProfilePage.css';
 
 function getPostImage(post) {
@@ -694,6 +695,7 @@ const handleDeleteAccount = useCallback(async () => {
       );
     }
 
+    await flushNativeSessionStorage();
     window.location.replace('/login?accountDeleted=1');
   } catch (err) {
     console.error('DELETE ACCOUNT ERROR:', err?.response?.data || err);

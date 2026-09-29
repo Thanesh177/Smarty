@@ -1,6 +1,7 @@
 import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
 import { signInWithRedirect } from 'aws-amplify/auth';
+import { flushNativeSessionStorage } from './nativeSessionStorage';
 
 
 const COGNITO_DOMAIN = (
@@ -564,6 +565,10 @@ export const refreshNativeSession = async () => {
     const rotatedRefreshToken = String(data?.refresh_token || '').trim();
     if (rotatedRefreshToken) {
       localStorage.setItem(NATIVE_REFRESH_TOKEN_KEY, rotatedRefreshToken);
+      await flushNativeSessionStorage();
+      if (generation !== nativeSessionGeneration) {
+        throw nativeSessionError('The saved session changed while it was being restored.', 'session_changed');
+      }
     }
 
     return {

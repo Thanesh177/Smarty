@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
@@ -11,6 +11,8 @@ import {
   LogIn,
   Search,
   GraduationCap,
+  Menu,
+  X,
 } from 'lucide-react';
 import './NavbarMenu.css';
 import SmartyBrand from './SmartyBrand';
@@ -19,10 +21,14 @@ import { isAdminUser } from '../lib/adminAccess';
 function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
   const navigate = useNavigate();
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
 
   const closeMenu = useCallback(() => {
     setOpen(false);
+    triggerRef.current?.focus();
   }, []);
 
   const toggleMenu = useCallback(() => {
@@ -38,10 +44,14 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
     if (signingOut) return;
 
     setSigningOut(true);
+    setLogoutError('');
     closeMenu();
 
     try {
       await logout?.();
+    } catch {
+      setLogoutError('Could not finish signing out on this device. Please try again before closing Smarty.');
+      setOpen(true);
     } finally {
       setSigningOut(false);
     }
@@ -52,10 +62,24 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
 
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    const focusable = () => [...(panelRef.current?.querySelectorAll('a[href], button:not(:disabled)') || [])]
+      .filter(element => element.getClientRects().length);
+    const frame = window.requestAnimationFrame(() => focusable()[0]?.focus());
 
     const handleEscape = (event) => {
       if (event.key === 'Escape') {
+        event.preventDefault();
         closeMenu();
+      }
+      if (event.key === 'Tab') {
+        const items = focusable();
+        const first = items[0], last = items[items.length - 1];
+        if (!first) return;
+        if (event.shiftKey && (document.activeElement === first || !panelRef.current?.contains(document.activeElement))) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || !panelRef.current?.contains(document.activeElement))) {
+          event.preventDefault(); first.focus();
+        }
       }
     };
 
@@ -63,6 +87,7 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      window.cancelAnimationFrame(frame);
       window.removeEventListener('keydown', handleEscape);
     };
   }, [closeMenu, open]);
@@ -72,6 +97,7 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
       <button
         type="button"
         className={`hamburger-btn ${open ? 'is-open' : ''}`}
+        ref={triggerRef}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -79,11 +105,10 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
         }}
         aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
         aria-expanded={open}
-        aria-haspopup="dialog"
+        aria-controls={open ? 'smarty-navigation-panel' : undefined}
       >
-        <span className="hamburger-line" />
-        <span className="hamburger-line" />
-        <span className="hamburger-line" />
+        {open ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
+        <span className="nav-control-label" aria-hidden="true">{open ? 'Close' : 'More'}</span>
       </button>
 
       {open && (
@@ -97,6 +122,8 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
         >
           <nav
             className="menu-panel"
+            id="smarty-navigation-panel"
+            ref={panelRef}
             aria-label="Main navigation"
             onClick={(event) => {
               event.stopPropagation();
@@ -193,6 +220,7 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
             </div>
 
             <div className="menu-footer">
+              {logoutError && <p className="status error" role="alert">{logoutError}</p>}
               {user ? (
                 <button
                   type="button"

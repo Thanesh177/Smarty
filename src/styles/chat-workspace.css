@@ -56,13 +56,16 @@
   color: var(--ui-accent) !important;
   background: transparent !important;
 }
-.app-shell .content .chat-page .chat-list { gap: 4px; padding: 8px 0 24px; }
+.app-shell .content .chat-page .chat-list { grid-template-columns: minmax(0, 1fr); min-width: 0; overflow-x: hidden; gap: 4px; padding: 8px 0 24px !important; }
 .app-shell .content .chat-page .chat-list h3 { margin: 8px 10px 12px; font-weight: 500; }
 .app-shell .content .chat-page .chat-list-item {
+  min-width: 0;
   padding: 14px 10px !important;
   border-radius: 14px !important;
   min-height: 78px;
 }
+.app-shell .content .chat-page .chat-item { display: grid; grid-template-columns: 44px minmax(0, 1fr); }
+.app-shell .content .chat-page .chat-open-chat-btn { width: 100%; overflow: hidden; }
 .app-shell .content .chat-page .chat-list-item.active {
   background: var(--ui-accent-soft) !important;
   box-shadow: inset 2px 0 var(--ui-accent) !important;
@@ -92,6 +95,14 @@
 .app-shell .content .chat-page .chat-info h2 { font-size: 1rem !important; font-weight: 550 !important; }
 .app-shell .content .chat-page .chat-context-label { margin-top: 5px; font-size: .75rem !important; }
 .app-shell .content .chat-page .chat-more-btn { display: grid; place-items: center; width: 44px !important; height: 44px !important; }
+.app-shell .content .chat-page .chat-actions-menu button { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.app-shell .content .chat-page .composer-label { display: none; }
+.app-shell .content .chat-page .date-divider { display: flex; justify-content: center; background: transparent; }
+.app-shell .content .chat-page .date-divider span { border-radius: 999px; }
+@media (min-width: 861px) {
+  .app-shell .content .chat-page .message-form button[type='submit'] .composer-label { display: inline; font-size: .8125rem; }
+  .app-shell .content .chat-page .message-form button { gap: 7px !important; }
+}
 .app-shell .content .chat-page .messages {
   flex: 1 1 0;
   min-height: 0;
@@ -165,7 +176,7 @@
   .app-shell .content .chat-page .messages { padding: 16px 14px 18px !important; }
   .app-shell .content .chat-page .message { max-width: 86% !important; }
   .app-shell .content .chat-page .composer-shell { width: calc(100% - 20px) !important; margin-bottom: max(10px, env(safe-area-inset-bottom, 0px)) !important; padding: 5px !important; }
-  .app-shell .content .chat-page .chat-list { padding-right: 58px; }
+  .app-shell .content .chat-page .chat-list { padding-right: 58px !important; }
 }
 @media (max-width: 360px) {
   .app-shell .content .chat-page .message-form { flex-wrap: wrap; }

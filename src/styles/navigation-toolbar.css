@@ -1,0 +1,54 @@
+/* Keep the established bottom-right rail and separate feed search position. */
+.app-shell .topbar.glass-topbar .brand-actions { gap: 2px !important; padding: 4px !important; }
+.app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) {
+  display: flex !important;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  gap: 0 !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 !important;
+  position: relative;
+  transition: background 160ms ease, color 160ms ease;
+}
+.app-shell .topbar.glass-topbar .nav-control-label {
+  display: none;
+  position: absolute;
+  right: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: auto;
+  height: auto;
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 1.1;
+  letter-spacing: .01em;
+  color: inherit;
+  white-space: nowrap;
+  padding: 7px 10px;
+  border: 1px solid var(--ui-line);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  pointer-events: none;
+}
+.app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):focus-visible > .nav-control-label { display: block; }
+@media (hover: hover) {
+  .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):hover > .nav-control-label { display: block; }
+}
+.app-shell .topbar.glass-topbar .nav-create-symbol { font-size: 23px; font-weight: 400; line-height: 18px; height: 18px; }
+.app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) > svg { width: 18px; height: 18px; flex: none; }
+.app-shell .topbar.glass-topbar [aria-current='page'] { color: var(--ui-accent) !important; background: var(--ui-accent-soft) !important; }
+.app-shell .topbar.glass-topbar :is(button, a):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+.app-shell .topbar.glass-topbar .nav-badge { top: 1px; right: 1px; min-width: 15px; height: 15px; font-size: 9px; }
+.app-shell:has(.feed-inner-header) .topbar.glass-topbar .quick-icon-link[aria-label='Search Smarty'] { width: 44px !important; height: 44px !important; min-height: 44px !important; min-width: 44px !important; }
+.app-shell:has(.feed-inner-header) .topbar .quick-icon-link[aria-label='Search Smarty'] .nav-control-label { display: none; }
+@media (max-height: 520px) {
+  .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) { height: 44px !important; min-height: 44px !important; }
+  .app-shell .topbar.glass-topbar .brand-actions { gap: 0 !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) { transition: none; }
+}

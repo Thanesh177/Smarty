@@ -13,14 +13,15 @@ const compiled = transformSync(fs.readFileSync(path.join(__dirname, 'cognito.js'
 const jwt = sub => `fixture.${Buffer.from(JSON.stringify({sub, exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')}.fixture`;
 const tokens = sub => ({id_token:jwt(sub),access_token:jwt(sub),refresh_token:`fixture-refresh-${sub}`});
 const response = (status, body) => ({ok:status===200,status,text:async()=>JSON.stringify(body)});
-function load(fetch) {
+function load(fetch, persist = async () => {}) {
   const values = new Map();
   const store = {getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
   const module = {exports:{}};
   vm.runInNewContext(compiled, {module,exports:module.exports,atob,btoa,URL,URLSearchParams,AbortController,TextEncoder,
     localStorage:store,sessionStorage:store,fetch,
     window:{location:{origin:'https://smarty.wiki',search:''},navigator:{userAgent:'Smarty-iOS'},setTimeout,clearTimeout},
-    console:{warn(){}},require:name=>name==='aws-amplify'?{Amplify:{configure(){}}}:{},
+    console:{warn(){}},require:name=>name==='aws-amplify'?{Amplify:{configure(){}}}:
+      name.includes('nativeSessionStorage')?{flushNativeSessionStorage:persist}:{},
   });
   return {api:module.exports,store};
 }
@@ -62,4 +63,17 @@ test('network failures retain the refresh session for later retry', async()=>{
   api.persistNativeRefreshSession(tokens('one'),'one');
   await assert.rejects(api.refreshNativeSession(),error=>error.code==='network_error');
   assert.equal(api.hasNativeRefreshSession('one'),true);
+});
+
+test('a rotated session cannot overwrite a new login while its durable write finishes', async()=>{
+  let release;
+  const saved = new Promise(resolve=>{release=resolve;});
+  const {api,store}=load(async()=>response(200,tokens('old')),()=>saved);
+  api.persistNativeRefreshSession(tokens('old'),'old');
+  const pending=api.refreshNativeSession();
+  await new Promise(resolve=>setImmediate(resolve));
+  api.persistNativeRefreshSession(tokens('new'),'new');
+  release();
+  await assert.rejects(pending,error=>error.code==='session_changed');
+  assert.equal(store.getItem('smarty-native-refresh-subject'),'new');
 });

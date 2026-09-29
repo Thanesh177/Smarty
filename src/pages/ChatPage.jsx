@@ -12,6 +12,7 @@ import { getUserScopedStorageKey } from '../lib/userScopedStorage';
 import {
   ArrowLeft,
   FileText,
+  Flag,
   LoaderCircle,
   Maximize2,
   Mic,
@@ -22,6 +23,8 @@ import {
   Play,
   SendHorizontal,
   Search,
+  ShieldBan,
+  Trash2,
   Volume2,
   VolumeX,
   X,
@@ -774,6 +777,26 @@ export default function ChatPage() {
   const [editingText, setEditingText] = useState('');
   const scrollRef = useRef(null);
   const searchAreaRef = useRef(null);
+  const chatActionsRef = useRef(null);
+  const chatActionsTriggerRef = useRef(null);
+  useEffect(() => {
+    if (!actionsOpen) return undefined;
+    chatActionsRef.current?.querySelector('.chat-actions-menu button')?.focus();
+    const dismissOutside = (event) => {
+      if (!chatActionsRef.current?.contains(event.target)) setActionsOpen(false);
+    };
+    const dismissWithEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      setActionsOpen(false);
+      chatActionsTriggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    document.addEventListener('keydown', dismissWithEscape);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside);
+      document.removeEventListener('keydown', dismissWithEscape);
+    };
+  }, [actionsOpen]);
   const autoStartedRef = useRef(false);
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
@@ -2747,27 +2770,32 @@ const runDeleteChat = useCallback(() => {
                   <span className="chat-context-label">Private conversation</span>
                 )}
               </div>
-<div className="chat-actions dropdown-actions">
+<div className="chat-actions dropdown-actions" ref={chatActionsRef} onBlur={(event) => {
+  if (!event.currentTarget.contains(event.relatedTarget)) setActionsOpen(false);
+}}>
   <button
     type="button"
     className="chat-more-btn"
+    ref={chatActionsTriggerRef}
     onClick={toggleActionsMenu}
     aria-label="Chat actions"
     aria-expanded={actionsOpen}
+    aria-controls={actionsOpen ? 'chat-conversation-actions' : undefined}
+    title="Conversation options"
   >
     <MoreHorizontal size={21} aria-hidden="true" />
   </button>
 
   {actionsOpen && (
-    <div className="chat-actions-menu">
+    <div className="chat-actions-menu" id="chat-conversation-actions" role="group" aria-label="Conversation options">
       <button className="btn-report" type="button" onClick={runReportUser}>
-        Report
+        <Flag size={16} aria-hidden="true" /> Report
       </button>
       <button className="btn-block" type="button" onClick={runBlockUser}>
-        {isBlocked ? 'Unblock' : 'Block'}
+        <ShieldBan size={16} aria-hidden="true" /> {isBlocked ? 'Unblock' : 'Block'}
       </button>
       <button className="btn-delete-chat" type="button" onClick={runDeleteChat}>
-        Delete Chat
+        <Trash2 size={16} aria-hidden="true" /> Delete Chat
       </button>
     </div>
   )}
@@ -2991,7 +3019,7 @@ const runDeleteChat = useCallback(() => {
   </div>
 )}
 
-  <form className="message-form" onSubmit={sendMessage}>
+  <form className="message-form" aria-label="Message composer" onSubmit={sendMessage}>
     <input
       ref={mediaInputRef}
       type="file"
@@ -3010,6 +3038,7 @@ const runDeleteChat = useCallback(() => {
       title="Attach media"
     >
       <Paperclip size={17} aria-hidden="true" />
+      <span className="composer-label" aria-hidden="true">Attach</span>
     </button>
 
     {/* <button type="button" className="composer-icon-btn" onClick={() => setShowComposerTools((prev) => !prev)}>
@@ -3034,6 +3063,7 @@ const runDeleteChat = useCallback(() => {
   disabled={isBlocked || isUploading}
 >
   <Mic size={16} aria-hidden="true" />
+  {!isRecording && <span className="composer-label" aria-hidden="true">Voice</span>}
   {isRecording && <span>{recordingSeconds}s</span>}
 </button>
 {isRecording && (
@@ -3047,8 +3077,9 @@ const runDeleteChat = useCallback(() => {
   </button>
 )}
     
-<button type="submit" aria-label="Send message" disabled={isBlocked || isUploading || (!text.trim() && !selectedMedia)}>
+<button type="submit" aria-label="Send message" title="Send message" disabled={isBlocked || isUploading || (!text.trim() && !selectedMedia)}>
   <SendHorizontal size={16} aria-hidden="true" />
+  <span className="composer-label" aria-hidden="true">Send</span>
 </button>
   </form>
 </div>

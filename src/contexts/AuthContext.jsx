@@ -29,6 +29,7 @@ import {
 } from '../lib/cognito';
 import { removeLegacyAccountCacheKeys } from '../lib/userScopedStorage';
 import { normalizeGroups } from '../lib/adminAccess';
+import { flushNativeSessionStorage } from '../lib/nativeSessionStorage';
 
 const AuthContext = createContext(null);
 
@@ -447,6 +448,8 @@ export function AuthProvider({ children }) {
         throw new Error('A lasting sign-in session could not be created. Please try again.');
       }
       saveAuthUser(authUser);
+      await flushNativeSessionStorage();
+      if (revision !== sessionRevisionRef.current) throw staleAuthOperation();
       clearNativeOAuthStorage(state);
       setUser(authUser);
       setLoading(false);
@@ -534,6 +537,8 @@ export function AuthProvider({ children }) {
 
         const authUser = mapNativeTokens(nativeTokens, cachedNativeIdentity);
         saveAuthUser(authUser);
+        await flushNativeSessionStorage();
+        if (revision !== sessionRevisionRef.current) throw staleAuthOperation();
         setUser(authUser);
         setAuthError('');
         setLoading(false);
@@ -545,6 +550,8 @@ export function AuthProvider({ children }) {
       const authUser = mapCognitoUser(currentUser, session);
 
       saveAuthUser(authUser);
+      await flushNativeSessionStorage();
+      if (revision !== sessionRevisionRef.current) throw staleAuthOperation();
       setUser(authUser);
       setAuthError('');
       setLoading(false);
@@ -693,6 +700,8 @@ export function AuthProvider({ children }) {
       }
 
       if (payload.event === 'signedOut') {
+        // Explicit logout owns its completion, including durable device storage.
+        if (loggingOutRef.current) return;
         // Native Google/Apple sessions are owned by the native OAuth flow,
         // not Amplify's separate email/web session. Its events cannot revoke
         // the native account (including while its token is refreshing).
@@ -868,7 +877,6 @@ export function AuthProvider({ children }) {
     setLoggingOut(true);
     invalidatePendingSession();
     nativeCompletionRef.current = null;
-    setUser(null);
     clearAuthStorage();
 
     sessionStorage.removeItem('smarty-auth-redirecting');
@@ -891,6 +899,16 @@ export function AuthProvider({ children }) {
       ? '/login?loggedOut=1'
       : getCognitoLogoutUrl();
 
+    try {
+      await flushNativeSessionStorage();
+    } catch {
+      loggingOutRef.current = false;
+      setLoggingOut(false);
+      const message = 'Sign-out could not be saved on this device. Please try again before closing Smarty.';
+      setAuthError(message);
+      throw new Error(message);
+    }
+    setUser(null);
     window.location.replace(logoutTarget);
   };
 

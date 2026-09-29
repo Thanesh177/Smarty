@@ -1047,7 +1047,7 @@ useEffect(() => {
               <SmartyBrand compact tagline="Learn with intent" />
             </NavLink>
 
-            <div className="brand-actions">
+            <nav className="brand-actions" aria-label="Quick navigation">
 
               <button
                 type="button"
@@ -1057,6 +1057,7 @@ useEffect(() => {
                 onClick={openUniversalSearch}
               >
                 <Search size={16} strokeWidth={2.15} />
+                <span className="nav-control-label" aria-hidden="true">Search</span>
               </button>
 
               <NavLink
@@ -1077,11 +1078,13 @@ useEffect(() => {
                 }}
               >
                 <House size={16} strokeWidth={2.2} />
+                <span className="nav-control-label" aria-hidden="true">Feed</span>
               </NavLink>
               <button
                 type="button"
                 className="quick-icon-link"
                 aria-label={user ? 'Profile' : 'Sign in'}
+                aria-current={location.pathname === '/profile' ? 'page' : undefined}
                 title={user ? 'Profile' : 'Sign in'}
                 onClick={(event) => {
                   event.preventDefault();
@@ -1096,6 +1099,7 @@ useEffect(() => {
                 }}
               >
                 <CircleUserRound size={16} strokeWidth={2.15} />
+                <span className="nav-control-label" aria-hidden="true">{user ? 'Profile' : 'Sign in'}</span>
               </button>
 
               <NavLink
@@ -1109,6 +1113,7 @@ useEffect(() => {
                 title={totalUnread > 0 ? `Chat · ${totalUnread} unread` : 'Chat'}
               >
                 <MessagesSquare size={16} strokeWidth={2.15} />
+                <span className="nav-control-label" aria-hidden="true">Chat</span>
                 {totalUnread > 0 && (
                   <span className="nav-badge" aria-hidden="true">
                     {totalUnread > 99 ? '99+' : totalUnread}
@@ -1121,9 +1126,11 @@ useEffect(() => {
                 className="quick-icon-link topbar-create-btn"
                 onClick={() => navigate('/create')}
                 aria-label="Create"
+                aria-current={location.pathname === '/create' ? 'page' : undefined}
                 title="Create"
               >
-                +
+                <span className="nav-create-symbol" aria-hidden="true">+</span>
+                <span className="nav-control-label" aria-hidden="true">Post</span>
               </button>
 
 
@@ -1134,7 +1141,7 @@ useEffect(() => {
                 totalUnread={totalUnread}
                 onOpenSearch={openUniversalSearch}
               />
-            </div>
+            </nav>
           </div>
           </header>
 

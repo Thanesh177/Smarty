@@ -2,11 +2,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
+import { initializeNativeSessionStorage } from './lib/nativeSessionStorage';
 import './index.css';
 // The shared product language follows every route stylesheet and the reset.
 import './styles/premium-theme.css';
 import './styles/product-theme.css';
 import './styles/chat-workspace.css';
+import './styles/navigation-toolbar.css';
 import 'aws-amplify/auth/enable-oauth-listener';
 import {
   QueryClient,
@@ -93,25 +95,30 @@ if (!rootElement) {
   throw new Error('Root element not found');
 }
 
-const root = ReactDOM.createRoot(rootElement);
-
-root.render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </QueryClientProvider>
-  </React.StrictMode>
-);
-
-requestAnimationFrame(() => {
+async function mountApp() {
+  // Never render protected routes before the device's saved session is loaded.
+  await initializeNativeSessionStorage();
+  const root = ReactDOM.createRoot(rootElement);
+  root.render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </React.StrictMode>
+  );
   requestAnimationFrame(() => {
-    window.__SMARTY_APP_MOUNTED__ = true;
-    window.dispatchEvent(new Event("smarty:mounted"));
-
-    window.webkit?.messageHandlers?.smartyNative?.postMessage({
-      action: "appReady",
+    requestAnimationFrame(() => {
+      window.__SMARTY_APP_MOUNTED__ = true;
+      window.dispatchEvent(new Event('smarty:mounted'));
+      window.webkit?.messageHandlers?.smartyNative?.postMessage({ action: 'appReady' });
     });
   });
+}
+
+mountApp().catch(() => {
+  // Do not replace a temporarily inaccessible Keychain record with a logout.
+  window.__SMARTY_BOOT_ERROR__ = 'Your saved sign-in could not be restored yet. Unlock your device and reload Smarty. Your session has not been removed.';
+  window.__SMARTY_SHOW_BOOT_ERROR__?.();
 });

@@ -14,7 +14,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const jwt = (sub, nonce, expiresIn = 3600) => `fixture.${Buffer.from(JSON.stringify({ sub, nonce, exp: Math.floor(Date.now() / 1000) + expiresIn })).toString('base64url')}.not-a-real-signature`;
 const storage = () => { const data = new Map(); return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, String(value)), removeItem: key => data.delete(key) }; };
 
-async function mount({ restore, exchange, refresh, initialNativeSession, initialSearch = '', pendingState = '', signInResult = { isSignedIn: true }, signInError } = {}) {
+async function mount({ restore, exchange, refresh, persist, initialNativeSession, initialSearch = '', pendingState = '', signInResult = { isSignedIn: true }, signInError } = {}) {
   const localStorage = storage(), sessionStorage = storage();
   if (initialNativeSession) {
     const subject = initialNativeSession.sub;
@@ -92,6 +92,7 @@ async function mount({ restore, exchange, refresh, initialNativeSession, initial
       };
       if (name.includes('userScopedStorage')) return { removeLegacyAccountCacheKeys() {} };
       if (name.includes('adminAccess')) return { normalizeGroups: () => [] };
+      if (name.includes('nativeSessionStorage')) return { flushNativeSessionStorage: async () => { if (persist) await persist(); } };
       throw Error(`Unmocked import: ${name}`);
     } });
   module.exports.AuthProvider({ children: null });
@@ -108,6 +109,40 @@ test('first native callback completes; duplicate callbacks exchange only once', 
   const app = await mount(); app.begin('first'); app.callback('first'); app.callback('first'); await flush();
   assert.equal(app.exchanges, 1); assert.equal(app.states[0].sub, 'new-user');
   app.callback('first'); await flush(); assert.equal(app.exchanges, 1);
+});
+
+test('native login is not completed before durable session storage acknowledges it', async () => {
+  const saved = deferred();
+  const app = await mount({ persist: () => saved.promise });
+  app.begin('first'); app.callback('first'); await flush();
+  assert.equal(app.states[0], null);
+  saved.resolve(); await flush();
+  assert.equal(app.states[0]?.sub, 'new-user');
+});
+
+test('logout while a durable login write is pending cannot restore the account', async () => {
+  const saved = deferred();
+  const app = await mount({ persist: () => saved.promise });
+  app.begin('first'); app.callback('first'); await flush();
+  const logout = app.value.logout();
+  saved.resolve(); await logout; await flush();
+  assert.equal(app.states[0], null);
+  assert.equal(app.localStorage.getItem('eduscroll_user'), null);
+});
+
+test('failed durable logout retains the retry UI but removes local API credentials', async () => {
+  let unavailable = true;
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user', expiresIn: 3600 },
+    persist: async () => { if (unavailable) throw Error('storage unavailable'); },
+  });
+  await assert.rejects(app.value.logout(), /Sign-out could not be saved/);
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+  assert.equal(app.localStorage.getItem('smarty-native-refresh-token'), null);
+  assert.equal(app.localStorage.getItem('eduscroll_token'), null);
+  unavailable = false;
+  await app.value.logout();
+  assert.equal(app.states[0], null);
 });
 
 test('a stale callback cannot clear the state of a newer attempt', async () => {
