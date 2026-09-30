@@ -72,7 +72,7 @@ const isNativeApp = () => {
     window.__SMARTY_IS_NATIVE_APP__ === true ||
     /;\s*wv\)/i.test(userAgent) ||
     /\bwv\b/i.test(userAgent) ||
-    /Smarty-iOS/i.test(userAgent)
+    /Smarty(?:Android|-iOS)/i.test(userAgent)
   );
 };
 

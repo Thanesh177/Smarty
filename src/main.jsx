@@ -2,7 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
-import { initializeNativeSessionStorage } from './lib/nativeSessionStorage';
 import './index.css';
 // The shared product language follows every route stylesheet and the reset.
 import './styles/premium-theme.css';
@@ -95,9 +94,9 @@ if (!rootElement) {
   throw new Error('Root element not found');
 }
 
-async function mountApp() {
-  // Never render protected routes before the device's saved session is loaded.
-  await initializeNativeSessionStorage();
+function mountApp() {
+  // bootstrap.js restores device storage before importing this module tree,
+  // including the authentication SDK (not merely before React rendering).
   const root = ReactDOM.createRoot(rootElement);
   root.render(
     <React.StrictMode>
@@ -117,8 +116,4 @@ async function mountApp() {
   });
 }
 
-mountApp().catch(() => {
-  // Do not replace a temporarily inaccessible Keychain record with a logout.
-  window.__SMARTY_BOOT_ERROR__ = 'Your saved sign-in could not be restored yet. Unlock your device and reload Smarty. Your session has not been removed.';
-  window.__SMARTY_SHOW_BOOT_ERROR__?.();
-});
+mountApp();

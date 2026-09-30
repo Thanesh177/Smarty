@@ -1,5 +1,21 @@
 # Saved-login restoration fix
 
+## September 29 follow-up: reopening the mobile app
+
+The reported failure affects Google, Apple and email sign-in, not just one provider.
+
+- Reproduced an immediate logged-out screen when a native app reopens an already-consumed OAuth callback, even with a valid saved account. Startup now redeems only the pending attempt's matching state; an old callback instead restores the saved account. Tests cover both current and expired saved tokens and replayed provider errors.
+- Leftover OAuth-attempt state no longer blocks a durable native account's renewal, including foreground recovery. A new login still invalidates previous operations; logout and revocation still clear the session.
+- Added `src/bootstrap.js` as the HTML entry. Device-session restoration now finishes **before importing the app and authentication SDK**, not merely before rendering React. An unavailable device store stops startup safely without initializing an empty auth session. This applies to social and email session records alike.
+- Updated the separate Android project at `/Users/thaneshn/AndroidStudioProjects/SmartyApp`: returning launches open the feed; callbacks are consumed and delivered in-page when possible; callback URLs are no longer logged. Native detection uses the `SmartyAndroid` user agent. Public-domain/relative app links are mapped onto the existing origin to preserve installed users' web storage. Notification targets are restricted to app destinations, and push data is injected only into the app origin rather than exposing a native interface to every frame.
+- The Android origin is intentionally unchanged. Both it and `https://smarty.wiki` were checked and served `index-CCkiUA9X.js`, including the prior persistence fix, before these edits. Therefore an outdated web deployment did not explain the report.
+
+Local verification: 60 authentication/bootstrap/storage tests pass; Android debug build and 5 JVM tests pass. The web production build succeeds. An isolated production-build browser test covers Google and Apple button flows, session persistence, reopening consumed callbacks with both iOS-device-store and Android-web-storage fixtures, and logout followed by relaunch. The real Amplify email SDK also restores synthetic persisted email records on two fresh browser launches. All network traffic in this test is intercepted; no real provider sign-ins or physical-device storage are exercised. No iOS native files were changed in this follow-up. These checks do not prove the exact failure on the user's physical device.
+
+Release this follow-up by deploying **the whole new web build**, including the new bootstrap entry and its dynamically loaded app assets, to both app origins. Rebuild and distribute Android separately for its wrapper changes. An iOS app that already contains the Keychain bridge does not need another native rebuild for this web-only follow-up. Do not uninstall or clear app data when testing an update. Nothing in this local work deploys or updates an installed app automatically.
+
+Acceptance test on each physical platform: Google, Apple where supported, and email separately; sign in; force-close and reopen immediately three times; open Profile/Chat to confirm the same account; repeat after an hour and offline/reconnect; sign out explicitly and confirm reopening stays signed out. Provider expiry/revocation can still legitimately require sign-in. If a failure remains, capture the method, app build, launch URL without callback query parameters, and whether restoration failed before or after the loader. Do not capture tokens or authorization codes.
+
 ## Changes
 
 - Native Google/Apple restoration now uses the saved refresh session even when the separate UI profile cache is missing. It rebuilds the profile only from the validated refresh response, without falling through to an unrelated Amplify account.

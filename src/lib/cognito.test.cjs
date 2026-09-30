@@ -13,18 +13,22 @@ const compiled = transformSync(fs.readFileSync(path.join(__dirname, 'cognito.js'
 const jwt = sub => `fixture.${Buffer.from(JSON.stringify({sub, exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')}.fixture`;
 const tokens = sub => ({id_token:jwt(sub),access_token:jwt(sub),refresh_token:`fixture-refresh-${sub}`});
 const response = (status, body) => ({ok:status===200,status,text:async()=>JSON.stringify(body)});
-function load(fetch, persist = async () => {}) {
+function load(fetch, persist = async () => {}, userAgent = 'Smarty-iOS') {
   const values = new Map();
   const store = {getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
   const module = {exports:{}};
   vm.runInNewContext(compiled, {module,exports:module.exports,atob,btoa,URL,URLSearchParams,AbortController,TextEncoder,
     localStorage:store,sessionStorage:store,fetch,
-    window:{location:{origin:'https://smarty.wiki',search:''},navigator:{userAgent:'Smarty-iOS'},setTimeout,clearTimeout},
+    window:{location:{origin:'https://smarty.wiki',search:''},navigator:{userAgent},setTimeout,clearTimeout},
     console:{warn(){}},require:name=>name==='aws-amplify'?{Amplify:{configure(){}}}:
       name.includes('nativeSessionStorage')?{flushNativeSessionStorage:persist}:{},
   });
   return {api:module.exports,store};
 }
+test('Android is recognized before page scripts without a global JavaScript bridge', () => {
+  const {api} = load(undefined, undefined, 'Mozilla/5.0 SmartyAndroid');
+  assert.equal(api.isNativeCognitoLogin(), true);
+});
 test('delayed refresh failure cannot erase a newer login', async()=>{
   let resolve;
   const {api,store}=load(()=>new Promise(done=>{resolve=done;}));

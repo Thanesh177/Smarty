@@ -514,7 +514,12 @@ export function AuthProvider({ children }) {
       setLoading(false);
       return nativeUser;
     }
-    if (isRunningInsideNativeApp() && pendingNativeState()) throw staleAuthOperation();
+    // A durable account may outlive an interrupted OAuth attempt. Pending
+    // browser state alone must not prevent that account from being renewed.
+    // Starting a new login clears the old account and invalidates this work.
+    if (isRunningInsideNativeApp() && pendingNativeState() && !hasNativeRefreshSession()) {
+      throw staleAuthOperation();
+    }
     if (sessionRestorePromiseRef.current) {
       return sessionRestorePromiseRef.current;
     }
@@ -602,7 +607,13 @@ export function AuthProvider({ children }) {
           localStorage.getItem('smarty-native-oauth-provider') ||
           'social';
 
-        if (isNativeReturn && (nativeCode || nativeProviderError) && hasOAuthState) {
+        // Android can redeliver the launch Intent after process death, and
+        // WebViews can restore a previously consumed callback URL. Only the
+        // attempt that still owns this state may redeem its code. Otherwise
+        // continue normal session restoration, rather than returning logged out.
+        const ownsNativeCallback = hasOAuthState && Boolean(pendingNativeState()) &&
+          params.get('state') === pendingNativeState();
+        if (isNativeReturn && (nativeCode || nativeProviderError) && ownsNativeCallback) {
           try {
             await completeNativeLogin(params);
             sessionStorage.removeItem('smarty-auth-redirecting');
@@ -844,7 +855,8 @@ export function AuthProvider({ children }) {
       // No background requests for guests or while a new OAuth login owns
       // the screen. A temporary failure keeps the saved refresh session.
       const identity = getNativeCachedIdentity();
-      if ((!identity && !hasNativeRefreshSession()) || pendingNativeState()) return;
+      if ((!identity && !hasNativeRefreshSession()) ||
+          (pendingNativeState() && !hasNativeRefreshSession())) return;
       const revision = sessionRevisionRef.current;
       resuming = true;
       try {

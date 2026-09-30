@@ -111,6 +111,46 @@ test('first native callback completes; duplicate callbacks exchange only once', 
   app.callback('first'); await flush(); assert.equal(app.exchanges, 1);
 });
 
+test('reopening a consumed Google callback restores the saved account instead of showing login', async () => {
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user', expiresIn: 3600 },
+    initialSearch: '?platform=android&code=already-consumed&state=old-attempt',
+  });
+  assert.equal(app.exchanges, 0);
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+  assert.equal(app.states[1], false);
+});
+
+test('reopening a consumed callback renews an expired saved Google session', async () => {
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user' },
+    initialSearch: '?native_oauth=ios&code=already-consumed&state=old-attempt',
+  });
+  assert.equal(app.exchanges, 0);
+  assert.equal(app.refreshes, 1);
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+});
+
+test('leftover OAuth state does not block renewal of a durable account', async () => {
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user' },
+    pendingState: 'interrupted-attempt',
+  });
+  assert.equal(app.exchanges, 0);
+  assert.equal(app.refreshes, 1);
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+});
+
+test('replayed callback errors do not erase an existing Google session', async () => {
+  const app = await mount({
+    initialNativeSession: { sub: 'remembered-user', expiresIn: 3600 },
+    initialSearch: '?platform=android&error=access_denied&state=old-attempt',
+  });
+  assert.equal(app.exchanges, 0);
+  assert.equal(app.states[0]?.sub, 'remembered-user');
+  assert.ok(app.localStorage.getItem('smarty-native-refresh-token'));
+});
+
 test('native login is not completed before durable session storage acknowledges it', async () => {
   const saved = deferred();
   const app = await mount({ persist: () => saved.promise });
