@@ -1,5 +1,15 @@
 # Saved-login restoration fix
 
+## Physical-device check: installed native version mismatch
+
+The connected physical iPhone reported **Smarty 1.0, build 1**, while both public app origins served the current `index-YZPhsfJj.js` web entry. The installed app was not a developer build. This verifies a native/web version mismatch; it does not establish what storage code was inside the older binary.
+
+With the user's explicit approval, built the current native project for that phone and installed it **over the existing app**, without uninstalling or clearing its data. The phone now reports **1.0.1, build 2**. The compiled source list includes `Authentication/NativeSessionStore.swift`. This is a development-device install, not an App Store/TestFlight release. Debug-only storage checks report record presence/count and write success without logging keys, identities, token values, or passwords.
+
+Physical-device result: after signing in once on the updated iPhone, the user confirmed that Profile/Chat remained signed in after a process restart. Two consecutive instrumented restarts each reported `read found=true records=5`. A third restart launched successfully without an attached console, leaving the app running normally; its authenticated UI was not separately verified. No account data was deleted and no session values were inspected. This verifies immediate session restoration on this phone, not every provider or device combination.
+
+Other devices still require distribution of the updated native app. Before release, complete the provider-specific, expiry, offline/reconnect, and explicit-logout tests below on iPhone/iPad and Android. No Android device was connected for this physical-device check. The older verification notes below describe earlier stages and do not supersede this result.
+
 ## September 29 follow-up: reopening the mobile app
 
 The reported failure affects Google, Apple and email sign-in, not just one provider.

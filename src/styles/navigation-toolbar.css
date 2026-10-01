@@ -1,4 +1,5 @@
 /* Keep the established bottom-right rail and separate feed search position. */
+.app-shell .topbar.glass-topbar { width: 54px !important; max-width: 54px; border-radius: 14px !important; }
 .app-shell .topbar.glass-topbar .brand-actions { gap: 2px !important; padding: 4px !important; }
 .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) {
   display: flex !important;
@@ -51,4 +52,26 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) { transition: none; }
+}
+/* The same compact right-hand rail on phones, tablets, and desktop. */
+@media (max-width: 900px) {
+  .app-shell .topbar.glass-topbar {
+    left: auto !important; right: calc(8px + env(safe-area-inset-right)) !important;
+    bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+    margin-inline: 0 !important; transform: none !important;
+  }
+  .app-shell .topbar.glass-topbar .topbar-row,
+  .app-shell .topbar.glass-topbar .brand-actions { flex-direction: column !important; }
+  .app-shell .topbar.glass-topbar .brand-actions { gap: 2px !important; padding: 4px !important; }
+  .app-shell .topbar.glass-topbar .menu-panel {
+    left: auto !important; right: calc(70px + env(safe-area-inset-right)) !important;
+    width: min(350px, calc(100vw - 82px - env(safe-area-inset-right))) !important;
+    max-width: none !important; bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+    max-height: calc(100dvh - 32px - env(safe-area-inset-bottom)) !important;
+  }
+  .app-shell .topbar.glass-topbar .nav-control-label { display: none !important; }
+  .app-shell:has(.feed-inner-header) .topbar.glass-topbar .quick-icon-link[aria-label='Search Smarty'] {
+    /* The bar cannot establish a containing block for the fixed search. */
+    position: fixed !important; top: calc(8px + env(safe-area-inset-top)) !important;
+  }
 }

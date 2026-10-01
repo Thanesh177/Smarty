@@ -12,13 +12,32 @@ import './LearningPage.css';
 function LessonLink({ post, progress, index }) {
   const context = getLearningContext(post);
   const minutes = Math.max(2, Math.ceil((context.body + (post.aiDetailedExplanation || '')).split(/\s+/).length / 180));
-  return <Link className="learn-lesson" to={'/post-ai/' + encodeURIComponent(context.postId)} state={{ post, creatorName: post.creatorName || post.author || 'Smarty creator' }}>
+  return <article className="learn-lesson">
     <span className="learn-lesson-number" aria-hidden="true">{progress?.challenge ? <Check size={17} /> : String(index + 1).padStart(2, '0')}</span>
-    <div><small>{context.topic} · {minutes} min{post.isLearningGuide ? ' · Smarty guide' : ''}</small>
-      <h3>{context.title}</h3><p>{post.objective || context.body.slice(0, 150)}</p>
-      <span className="learn-lesson-action">{progress ? getLearningNextStep(progress).label : 'Read · explain · practice'} <ArrowRight size={14} /></span>
+    <div className="learn-lesson-content"><small>{context.topic} · About {minutes} min{post.isLearningGuide ? ' · Smarty guide' : ''}</small>
+      <Link className="learn-lesson-open" to={'/post-ai/' + encodeURIComponent(context.postId)} state={{ post, creatorName: post.creatorName || post.author || 'Smarty creator' }}>
+        <h3>{context.title}</h3><p>{post.objective || context.body.slice(0, 150)}</p>
+        <span className="learn-lesson-action">{progress?.challenge ? 'Revisit the lesson' : progress ? 'Continue reading' : 'Start learning'} <ArrowRight size={14} /></span>
+      </Link>
+      {progress && <div className="learn-lesson-footer">
+        <LessonProgress progress={progress} />
+        {progress.understand && <Link className="learn-practice-link" to={getLearningQuizLocation(context)} state={{ learningContext: context, reviewLesson: Boolean(progress.challenge) }}>
+          {progress.challenge ? 'Practice again' : 'Check understanding'} <ArrowRight size={14} />
+        </Link>}
+      </div>}
     </div>
-  </Link>;
+  </article>;
+}
+
+function LessonProgress({ progress }) {
+  return <ol className="learn-progress-steps" aria-label="Lesson progress">
+    {[['read', 'Read'], ['understand', 'Understand'], ['challenge', 'Practice']].map(([key, label]) =>
+      <li key={key} className={progress?.[key] ? 'is-complete' : ''}>
+        <span aria-hidden="true">{progress?.[key] ? <Check size={11} /> : '·'}</span>
+        {label}<span className="learn-sr-only">{progress?.[key] ? ' complete' : ' not yet complete'}</span>
+      </li>
+    )}
+  </ol>;
 }
 
 export default function LearningPage() {
@@ -55,12 +74,15 @@ export default function LearningPage() {
       seen.add(context.postId);
       if (topic && normalizeLearningTopic(context.topic) !== normalizeLearningTopic(topic)) return false;
       if (filter === 'new' && byId.has(context.postId)) return false;
+      if (filter === 'started' && (!byId.has(context.postId) || byId.get(context.postId).challenge)) return false;
+      if (filter === 'completed' && !byId.get(context.postId)?.challenge) return false;
       return (context.title + ' ' + context.focus + ' ' + context.body).toLowerCase().includes(search.trim().toLowerCase());
     });
   }, [postsQuery.data, topic, filter, byId, search]);
   const due = library.filter((item) => item.nextReviewAt && Date.parse(item.nextReviewAt) <= Date.now());
   const unfinished = library.filter((item) => !item.read || !item.understand || !item.challenge);
   const resume = unfinished[0];
+  const resumeStep = getLearningNextStep(resume);
   const related = topic ? getRelatedLearningTopics({ topic }, 4) : [];
   const review = (item) => navigate(getLearningQuizLocation(item.context), { state: { learningContext: item.context, reviewLesson: true } });
   const chooseTopic = (value) => { setParams(value ? { topic: value } : {}); setSearch(''); setFilter('all'); };
@@ -68,15 +90,18 @@ export default function LearningPage() {
   return <main ref={pageRef} className="learn-page">
     <nav className="learn-topline"><Link to="/feed?topic=All">← All posts</Link><Link to="/topics">Browse topics <Compass size={15} /></Link></nav>
     <header className="learn-hero">
-      <span className="learn-kicker">Your curiosity, connected</span>
-      <h1>One idea opens<br /><em>the next.</em></h1>
-      <p>Understand the moving parts, try a real example, then see what you can recall. Start small and follow what interests you.</p>
+      <span className="learn-kicker">Your learning space</span>
+      <h1>Make time for<br /><em>something new.</em></h1>
+      <p>Take one idea at your own pace. Understand how it works, test what you remember, and follow the next question.</p>
       <div className="learn-stats"><span><strong>{library.length}</strong> started</span><span><strong>{library.filter((item) => item.challenge).length}</strong> quiz checks passed</span><span><strong>{due.length}</strong> ready to revisit</span></div>
     </header>
 
     {(resume || due.length > 0) && <section className="learn-today" aria-label="Continue your learning">
-      {resume && <article><span className="learn-kicker">Pick up where you left off</span><h2>{resume.context.title}</h2><p>{getLearningNextStep(resume).label}</p>
-        <Link className="learn-primary" to={'/post-ai/' + encodeURIComponent(resume.postId)}>Continue lesson <ArrowRight size={17} /></Link>
+      {resume && <article><span className="learn-kicker">Pick up where you left off</span><h2>{resume.context.title}</h2><p>{resumeStep.label}</p>
+        <LessonProgress progress={resume} />
+        <Link className="learn-primary" to={resumeStep.stage === 'challenge' ? getLearningQuizLocation(resume.context) : '/post-ai/' + encodeURIComponent(resume.postId)} state={{ learningContext: resume.context }}>
+          {resumeStep.stage === 'challenge' ? 'Check understanding' : 'Continue lesson'} <ArrowRight size={17} />
+        </Link>
       </article>}
       {due.length > 0 && <article><span className="learn-kicker">Bring it back to mind</span><h2>A little recall goes a long way.</h2>
         {due.slice(0, 3).map((item) => <button className="learn-review-link" key={item.postId} onClick={() => review(item)}><span>{item.context.title}</span><RefreshCw size={16} /></button>)}
@@ -89,9 +114,9 @@ export default function LearningPage() {
       <div className="learn-controls">
         <label><span>Subject</span><select value={topic} onChange={(event) => chooseTopic(event.target.value)}><option value="">All subjects</option>{topics.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
         <label className="learn-search"><span>Find a concept in loaded lessons</span><div><Search size={17} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Try a mechanism, question, or idea" /></div></label>
-        <label><span>Show</span><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All lessons</option><option value="new">Not started yet</option></select></label>
+        <label><span>Show</span><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">All lessons</option><option value="new">Not started yet</option><option value="started">In progress</option><option value="completed">Practice passed</option></select></label>
       </div>
-      <p className="learn-catalog-note">Each guide includes a mechanism, example, takeaway, and focused questions. Community posts open into their own study room.</p>
+      <p className="learn-catalog-note" role="status">{available.length} {available.length === 1 ? 'lesson' : 'lessons'} to explore. Each guide connects an explanation, an example, and a short practice.</p>
       <div className="learn-lessons">{available.map((post, index) => <LessonLink key={getLearningContext(post).postId} post={post} index={index} progress={byId.get(getLearningContext(post).postId)} />)}</div>
       {postsQuery.isPending && <p role="status">Finding more lessons…</p>}
       {postsQuery.isError && <div className="learn-status" role="status"><p>Community posts couldn’t load. Smarty guides are still available.</p><button onClick={() => postsQuery.refetch()}>Try loading posts again</button></div>}

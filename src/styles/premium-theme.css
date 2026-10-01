@@ -7,33 +7,33 @@
 
 :root {
   color-scheme: dark;
-  --ui-bg: #0a101b;
-  --ui-bg-deep: #0a101b;
-  --ui-bg-rgb: 10, 16, 27;
-  --ui-surface: #121d2d;
-  --ui-surface-rgb: 18, 29, 45;
-  --ui-surface-raised: #19283b;
+  --ui-bg: #08090b;
+  --ui-bg-deep: #08090b;
+  --ui-bg-rgb: 8, 9, 11;
+  --ui-surface: #111316;
+  --ui-surface-rgb: 17, 19, 22;
+  --ui-surface-raised: #191c20;
   --ui-surface-soft: rgba(219, 231, 247, 0.045);
   --ui-surface-hover: rgba(219, 231, 247, 0.075);
   --ui-surface-pressed: rgba(219, 231, 247, 0.11);
   --ui-line: rgba(219, 231, 247, 0.09);
   --ui-line-strong: rgba(219, 231, 247, 0.17);
-  --ui-text: #edf4ff;
-  --ui-secondary: #c6d5e8;
-  --ui-muted: #9cacbf;
-  --ui-faint: #889bb2;
-  --ui-label: #b0c2d9;
-  --ui-accent: #9bcaff;
-  --ui-accent-strong: #9bcaff;
-  --ui-accent-rgb: 155, 202, 255;
-  --ui-accent-hover: #bfdfff;
-  --ui-accent-ink: #10233c;
-  --ui-accent-soft: #1b3350;
-  --ui-accent-line: #496e96;
-  --ui-control-bg: #0e1725;
-  --ui-control-hover: #1b2c43;
-  --ui-control-line: #2c415a;
-  --ui-brand-bg: #d5e8ff;
+  --ui-text: #f0f0ed;
+  --ui-secondary: #c9cbce;
+  --ui-muted: #a1a5ad;
+  --ui-faint: #8b919b;
+  --ui-label: #b2b9c2;
+  --ui-accent: #b0c8e4;
+  --ui-accent-strong: #dce5ee;
+  --ui-accent-rgb: 176, 200, 228;
+  --ui-accent-hover: #eef2f6;
+  --ui-accent-ink: #121820;
+  --ui-accent-soft: #1b232d;
+  --ui-accent-line: #3c4d61;
+  --ui-control-bg: #15181c;
+  --ui-control-hover: #20252b;
+  --ui-control-line: #32373f;
+  --ui-brand-bg: #eeefed;
   --ui-danger: #f2a2a9;
   --ui-success: #a6d6b5;
   --ui-radius: 10px;
@@ -65,9 +65,7 @@ body {
 .app-shell {
   position: relative;
   isolation: isolate;
-  background:
-    radial-gradient(ellipse 78% 42% at 50% -16%, rgba(var(--ui-accent-rgb), 0.085), transparent 68%),
-    var(--ui-bg) !important;
+  background: var(--ui-bg) !important;
 }
 
 .app-shell::before,

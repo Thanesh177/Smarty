@@ -840,9 +840,10 @@ const handleDeleteAccount = useCallback(async () => {
             <span className="profile-pill">Your profile</span>
             <h1>{displayName}</h1>
             <p className="profile-email">{profile?.email}</p>
-            <p className="profile-bio">Your ideas, discoveries, and people.</p>
+            <p className="profile-bio">A little more curious, every day.</p>
+          </div>
 
-            <div className="profile-action-row">
+            <div className="profile-action-row" aria-label="Profile actions">
               <button
                 type="button"
                 className="profile-edit-btn"
@@ -867,7 +868,6 @@ const handleDeleteAccount = useCallback(async () => {
                 Saved
               </button>
             </div>
-          </div>
         </div>
 
         <div className="profile-stats">
@@ -932,8 +932,8 @@ const handleDeleteAccount = useCallback(async () => {
         <section className="profile-content">
           <div className="profile-card profile-library-card">
             <span className="profile-card-kicker">Your library</span>
-            <h3>Make an idea your own.</h3>
-            <p>Save something worth revisiting, or share what you’ve learned.</p>
+            <h3>Worth coming back to.</h3>
+            <p>Keep the ideas you love. Share something you’ve learned.</p>
             <div className="profile-shortcuts">
               <button type="button" onClick={() => navigate('/saved')}>Saved posts <span aria-hidden="true">↗</span></button>
               <button type="button" onClick={() => navigate('/create')}>Write a post <span aria-hidden="true">↗</span></button>
@@ -966,8 +966,8 @@ const handleDeleteAccount = useCallback(async () => {
           </div>
 
           <div className="profile-card profile-delete-card">
-            <span className="profile-delete-card-kicker">Account controls</span>
-            <h3>Delete account</h3>
+            <span className="profile-delete-card-kicker">Your choice</span>
+            <h3>Account controls</h3>
             <p>
               Permanently remove your Smarty account and associated account data.
             </p>

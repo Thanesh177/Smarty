@@ -31,6 +31,7 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId 
   const relatedTopics = useMemo(() => getRelatedLearningTopics(post), [post]);
   const [progress, setProgress] = useState(() => readLearningProgress(context.postId, userId));
   const [notice, setNotice] = useState('');
+  const [showAlternatives, setShowAlternatives] = useState(false);
   const library = useLearningLibrary(userId);
   useEffect(() => {
     if (context.postId) setProgress(rememberLearningLesson(context, userId));
@@ -39,7 +40,7 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId 
   const nextPosts = useQuery({
     queryKey: ['learning-next', userId, context.topic],
     queryFn: () => postApi.getFeed({ limit: 20, topic: context.topic }),
-    enabled: Boolean(context.postId) && stage !== 'read', staleTime: 60000, retry: 1,
+    enabled: Boolean(context.postId), staleTime: 60000, retry: 1,
   });
   const nextLessons = useMemo(() => selectNextLessons([...LEARNING_GUIDES, ...(nextPosts.data?.items || [])], context, library), [nextPosts.data, context, library]);
   const nextStep = getLearningNextStep(progress);
@@ -59,9 +60,9 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId 
     <section className="learning-journey" aria-labelledby={titleId}>
       <div className="learning-journey-head">
         <div>
-          <span className="learning-journey-kicker">Turn this idea into understanding</span>
+          <span className="learning-journey-kicker">Make it yours</span>
           <h2 id={titleId}>{context.focus}</h2>
-          <p>Read it. Explain why it works. Try using it without looking back.</p>
+          <p>Take your time. Understand the idea, then see what you remember.</p>
         </div>
         <Link className="learning-journey-topic" to="/learn">My learning <ChevronRight size={13} /></Link>
       </div>
@@ -83,26 +84,21 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId 
         {stage === 'read' && <button type="button" className="learning-secondary-action" onClick={openQuiz}>Test what I know</button>}
       </div>
       {progress.lastScore !== null && <p className="learning-score-note">Last check: {progress.lastScore}%. {progress.challenge ? 'Ready to build on this idea.' : 'Revisit the explanation and practice the parts that felt difficult.'}</p>}
-      {stage !== 'read' && <div className="learning-next-lessons">
-        <span className="learning-journey-kicker">Your next connection</span>
-        <h3>Continue from {context.focus}</h3>
-        <p className="learning-next-intro">Choose the next idea that answers a question this lesson leaves open. Every path explains the bridge before you enter it.</p>
+      <div className="learning-next-lessons">
+        <span className="learning-journey-kicker">Follow your curiosity</span>
+        <h3>One idea leads to another.</h3>
+        <p className="learning-next-intro">A related read, with the connection explained. Pick it up when you’re ready.</p>
         {nextLessons.length > 0 && <div className="learning-next-foundation">
-          <span>What you have established</span>
+          <span>The idea you’re exploring</span>
           <p>{nextLessons[0].foundation}</p>
         </div>}
-        {nextPosts.isPending && nextLessons.length === 0 ? <p role="status">Building your next learning path in {context.topic}…</p> : <div className="learning-next-list">{nextLessons.map(({ post: nextPost, reason, preview, connection, question }, index) => {
+        {nextPosts.isPending && nextLessons.length === 0 ? <p role="status">Finding related reads in {context.topic}…</p> : <div className="learning-next-list">{nextLessons.slice(0, showAlternatives ? 3 : 1).map(({ post: nextPost, reason, preview, connection, question }, index) => {
           const next = getLearningContext(nextPost);
           return <Link className={`learning-next-card${index === 0 ? ' is-recommended' : ''}`} key={next.postId} to={'/post-ai/' + encodeURIComponent(next.postId)} state={{ post: nextPost }}>
             <span className="learning-next-card-copy">
               <span className="learning-next-card-label">
                 <small>{reason}</small>
-                {index === 0 && <em>Best next step</em>}
-              </span>
-              <span className="learning-next-route" aria-label={`From ${context.focus} to ${next.focus}`}>
-                <span><b>Now</b>{context.focus}</span>
-                <ChevronRight size={15} aria-hidden="true" />
-                <span><b>Next</b>{next.focus}</span>
+                {index === 0 && <em>Suggested next</em>}
               </span>
               <strong>{next.title}</strong>
               <span className="learning-next-detail"><b>What this adds</b><span>{preview}</span></span>
@@ -112,9 +108,10 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId 
             <span className="learning-next-open" aria-hidden="true">Continue <ChevronRight size={16} /></span>
           </Link>;
         })}</div>}
+        {nextLessons.length > 1 && <button type="button" className="learning-alternatives" aria-expanded={showAlternatives} onClick={() => setShowAlternatives((value) => !value)}>{showAlternatives ? 'Show the suggested read' : `Explore ${nextLessons.length - 1} other directions`} <ChevronRight size={15} aria-hidden="true" /></button>}
         {!nextPosts.isPending && nextLessons.length === 0 && <p>{nextPosts.isError ? 'Suggestions are unavailable right now. Your progress is saved.' : 'You’ve explored the available suggestions. Pick another concept from this subject.'}</p>}
         <Link to={'/learn?topic=' + encodeURIComponent(context.topic)}>Plan my next lesson <ChevronRight size={16} /></Link>
-      </div>}
+      </div>
       <div className="learning-related"><span><Compass size={15} /> Branch out</span><div>
         {[context.topic, ...relatedTopics].map((topic) => <button type="button" key={topic} onClick={() => navigate('/learn?topic=' + encodeURIComponent(topic))}>{topic}</button>)}
       </div></div>

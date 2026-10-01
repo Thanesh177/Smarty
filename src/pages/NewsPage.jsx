@@ -19,6 +19,20 @@ const SECTION_ICONS = {
   world: Globe2, business: BriefcaseBusiness, technology: Cpu, science: FlaskConical,
   health: HeartPulse, politics: Landmark, environment: Leaf, sports: Trophy,
 };
+const SECTION_SUBJECTS = {
+  world: 'Society', business: 'Economics', technology: 'Technology',
+  science: 'Physics', health: 'Health', politics: 'Politics',
+  environment: 'Environment', sports: 'Fitness', culture: 'Culture',
+};
+
+function NewsLearningLink({ section }) {
+  const subject = SECTION_SUBJECTS[String(section).toLowerCase()];
+  if (!subject) return null;
+  return <Link className="news-learning-link" to={`/learn?topic=${encodeURIComponent(subject)}`}>
+    <span><strong>Understand the bigger picture</strong><small>Explore the ideas behind {section.toLowerCase()} news</small></span>
+    <span aria-hidden="true">→</span>
+  </Link>;
+}
 
 function NewsSectionIcon({ section }) {
   const Icon = SECTION_ICONS[String(section).toLowerCase()] || Newspaper;
@@ -835,6 +849,7 @@ export default function NewsPage({ briefingOnly = false }) {
                     {digest.next && <div><dt>What to watch</dt><dd>{digest.next}</dd></div>}
                   </dl>}
                   <BriefingSources stories={digest.topStories} label={`${digest.section} summary sources`} />
+                  <NewsLearningLink section={digest.section} />
                 </article>
               ))}
             </div>
@@ -859,7 +874,7 @@ export default function NewsPage({ briefingOnly = false }) {
       )}
       <div className="news-hero">
         <div>
-          <span className="news-kicker">Daily intelligence</span>
+          <span className="news-kicker">Stay in the picture</span>
           <h1>The day, in perspective.</h1>
           <p>Start with the day’s briefing, then move through original reporting by place and subject.</p>
           <Link className="news-feed-link" to="/feed?topic=News">Read the world briefing in your feed →</Link>
@@ -982,6 +997,7 @@ export default function NewsPage({ briefingOnly = false }) {
                 </div>
                 <small>{articles.length} {articles.length === 1 ? 'story' : 'stories'}</small>
               </div>
+              {selectedSection !== 'All' && <NewsLearningLink section={selectedSection} />}
               {(search.trim() || selectedSection !== 'All') && (
                 <div className="news-filter-status">
                   <span>{search.trim() ? `Results for “${search.trim()}”` : `${selectedSection} coverage`}</span>

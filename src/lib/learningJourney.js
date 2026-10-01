@@ -230,6 +230,7 @@ const CONNECTION_STOP_WORDS = new Set([
   'these', 'they', 'this', 'through', 'under', 'using', 'very', 'what', 'when',
   'where', 'which', 'while', 'with', 'without', 'would', 'your', 'topic',
   'lesson', 'idea', 'ideas', 'system', 'works', 'work', 'shows', 'learn',
+  'change', 'changes', 'changed', 'understand', 'understanding', 'example',
 ]);
 
 function getConnectionTerms(value) {
@@ -336,7 +337,7 @@ export function selectNextLessons(posts, context, library = [], limit = 3) {
     const question = pathType === 'sequence'
       ? `Before opening it: what part of ${context.focus} do you expect ${candidate.focus} to build on?`
       : pathType === 'deepen'
-        ? `Predict first: if ${termLabel} changed, what would change in ${candidate.focus}?`
+        ? `Looking at ${candidate.focus}, what might behave differently when ${termLabel} changes?`
         : pathType === 'compare'
           ? `What should stay true across both ${context.focus} and ${candidate.focus}?`
           : `Which assumption from ${context.focus} might stop working in ${candidate.focus}?`;

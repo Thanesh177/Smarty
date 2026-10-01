@@ -2646,7 +2646,7 @@ const runDeleteChat = useCallback(() => {
           <div>
             <span>Inbox</span>
             <h1>Messages</h1>
-            <p>A good conversation starts here.</p>
+            <p>Share an idea. Ask a question.</p>
           </div>
           <span aria-label={`${chats.length} conversations`}>{chats.length}</span>
         </header>
@@ -2726,8 +2726,8 @@ const runDeleteChat = useCallback(() => {
         {!activeChat ? (
           <div className="chat-empty-state">
             <span className="chat-empty-symbol" aria-hidden="true"><MessagesSquare size={30} strokeWidth={1.4} /></span>
-            <h2>Room for a conversation.</h2>
-            <p>Share a discovery, ask a question, or pick up where you left off.</p>
+            <h2>Good ideas grow together.</h2>
+            <p>Choose a conversation, or find someone to share a discovery with.</p>
             <button className="chat-start-conversation" type="button" onClick={() => searchAreaRef.current?.querySelector('input')?.focus()}>
               <Search size={16} aria-hidden="true" /> Find someone
             </button>

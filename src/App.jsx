@@ -85,7 +85,7 @@ function PageLoader() {
         <span className="app-page-loader-orb" aria-hidden="true" />
         <div>
           <strong>Loading</strong>
-          <p>Preparing your Smarty space</p>
+          <p>Getting things ready for you.</p>
         </div>
       </div>
     </div>
@@ -100,23 +100,17 @@ function AppOpeningScreen({ leaving = false, continuation = false }) {
       aria-live="polite"
       aria-label="Opening Smarty"
     >
-      <div className="app-opening-atmosphere" aria-hidden="true" />
-
       <div className="app-opening-identity">
         <span className="app-opening-mark" aria-hidden="true">S</span>
         <div className="app-opening-wordmark">
           <strong>Smarty</strong>
-          <span>Learn · Share · Grow</span>
+          <span>A little curiosity, every day.</span>
         </div>
         <span className="app-opening-status">
-          <i aria-hidden="true" />
-          Connecting your space
+          Opening your space
         </span>
+        <span className="app-opening-progress" aria-hidden="true"><span /></span>
       </div>
-
-      <span className="app-opening-progress" aria-hidden="true">
-        <span />
-      </span>
     </div>
   );
 }
@@ -1376,338 +1370,34 @@ function ReminderPopupStyles() {
   return (
     <style>{`
       .app-opening-screen {
-        position: fixed;
-        inset: 0;
-        z-index: 30000;
-        display: grid;
-        place-items: center;
-        overflow: hidden;
-        background: #020810;
-        color: #f0f8fa;
-        opacity: 1;
-        transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1), visibility 420ms linear;
+        position: fixed; inset: 0; z-index: 40000;
+        display: grid; place-items: center; overflow: hidden;
+        background: #08090b; color: #f0f0ed;
+        transition: opacity 220ms ease, visibility 220ms;
       }
-
-      .app-opening-screen::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background:
-          linear-gradient(rgba(184, 226, 234, 0.018) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(184, 226, 234, 0.014) 1px, transparent 1px);
-        background-size: 52px 52px;
-        mask-image: radial-gradient(circle at center, black, transparent 68%);
-        -webkit-mask-image: radial-gradient(circle at center, black, transparent 68%);
-      }
-
-      .app-opening-screen.is-leaving {
-        visibility: hidden;
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      .app-opening-screen.is-leaving .app-opening-identity {
-        transform: scale(1.035);
-        filter: blur(3px);
-      }
-
-      .app-opening-screen.is-continuation .app-opening-atmosphere,
-      .app-opening-screen.is-continuation .app-opening-mark,
-      .app-opening-screen.is-continuation .app-opening-wordmark {
-        animation: none;
-      }
-
-      .app-opening-atmosphere {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: min(720px, 92vw);
-        aspect-ratio: 1;
-        transform: translate(-50%, -50%);
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(72, 178, 202, 0.12), rgba(15, 80, 105, 0.035) 40%, transparent 70%);
-        filter: blur(18px);
-        animation: appOpeningBreathe 1800ms ease-in-out both;
-      }
-
-      .app-opening-atmosphere::before,
-      .app-opening-atmosphere::after {
-        content: '';
-        position: absolute;
-        inset: 14%;
-        border: 1px solid rgba(133, 211, 226, 0.055);
-        border-radius: 50%;
-        transform: rotate(-18deg) scaleY(0.46);
-      }
-
-      .app-opening-atmosphere::after {
-        inset: 25%;
-        border-color: rgba(174, 226, 236, 0.08);
-        transform: rotate(24deg) scaleY(0.62);
-      }
-
-      .app-opening-identity {
-        position: relative;
-        z-index: 1;
-        display: grid;
-        place-items: center;
-        gap: 18px;
-        text-align: center;
-        transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1), filter 420ms ease;
-      }
-
+      .app-opening-screen.is-leaving { opacity: 0; visibility: hidden; pointer-events: none; }
+      .app-opening-identity { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; text-align: center; }
       .app-opening-mark {
-        position: relative;
-        width: 64px;
-        height: 64px;
-        display: grid;
-        place-items: center;
-        border-radius: 20px;
-        background: linear-gradient(145deg, #f3fbfc, #b9e3eb);
-        color: #07121d;
-        font-size: 1.55rem;
-        font-weight: 880;
-        letter-spacing: -0.07em;
-        box-shadow: 0 24px 70px rgba(28, 132, 157, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.82);
-        animation: appOpeningMark 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+        display: grid; place-items: center; width: 56px; height: 56px;
+        margin-bottom: 16px; border-radius: 14px; background: #eeefed;
+        color: #121820; font-size: 27px; font-weight: 650; letter-spacing: -.06em;
       }
-
-      .app-opening-mark::before {
-        content: '';
-        position: absolute;
-        inset: -13px;
-        border-radius: 26px;
-        background: conic-gradient(from 40deg, transparent 0 26%, rgba(134, 222, 239, 0.62) 38%, transparent 49% 78%, rgba(134, 222, 239, 0.24) 90%, transparent);
-        mask: radial-gradient(farthest-side, transparent calc(100% - 1px), #000 0);
-        -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1px), #000 0);
-        pointer-events: none;
-        animation: appOpeningOrbit 5.5s linear infinite;
-      }
-
-      .app-opening-mark::after {
-        content: '';
-        position: absolute;
-        inset: -22px;
-        border: 1px solid rgba(151, 218, 231, 0.07);
-        border-radius: 31px;
-        pointer-events: none;
-      }
-
-      .app-opening-wordmark {
-        display: grid;
-        gap: 5px;
-        animation: appOpeningCopy 680ms 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
-      }
-
-      .app-opening-wordmark strong {
-        color: rgba(242, 249, 251, 0.96);
-        font-size: clamp(1.22rem, 2vw, 1.5rem);
-        font-weight: 760;
-        line-height: 1;
-        letter-spacing: -0.055em;
-      }
-
-      .app-opening-wordmark span {
-        color: rgba(179, 202, 209, 0.48);
-        font-size: 0.61rem;
-        font-weight: 720;
-        letter-spacing: 0.16em;
-        text-transform: uppercase;
-      }
-
-      .app-opening-status {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        margin-top: -8px;
-        color: rgba(166, 195, 203, 0.38);
-        font-size: 0.55rem;
-        font-weight: 680;
-        letter-spacing: 0.08em;
-        animation: appOpeningCopy 680ms 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
-      }
-
-      .app-opening-status i {
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        background: #78d7e8;
-        box-shadow: 0 0 0 4px rgba(93, 202, 222, 0.08), 0 0 14px rgba(93, 202, 222, 0.42);
-        animation: appOpeningSignal 1.4s ease-in-out infinite;
-      }
-
-      .app-opening-progress {
-        position: absolute;
-        bottom: max(34px, calc(env(safe-area-inset-bottom) + 20px));
-        left: 50%;
-        width: 74px;
-        height: 2px;
-        overflow: hidden;
-        transform: translateX(-50%);
-        border-radius: 999px;
-        background: rgba(186, 219, 226, 0.08);
-      }
-
-      .app-opening-progress > span {
-        display: block;
-        width: 100%;
-        height: 100%;
-        border-radius: inherit;
-        background: rgba(186, 231, 239, 0.78);
-        transform-origin: left;
-        animation: appOpeningProgress 1100ms cubic-bezier(0.65, 0, 0.35, 1) both;
-      }
-
-      .app-opening-progress::after {
-        content: '';
-        position: absolute;
-        top: -2px;
-        left: 0;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: #d8f5f8;
-        box-shadow: 0 0 12px rgba(122, 222, 239, 0.7);
-        animation: appOpeningTracer 1100ms cubic-bezier(0.65, 0, 0.35, 1) both;
-      }
-
-      @keyframes appOpeningMark {
-        from { opacity: 0; transform: translateY(8px) scale(0.88); filter: blur(8px); }
-        to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-      }
-
-      @keyframes appOpeningCopy {
-        from { opacity: 0; transform: translateY(8px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-
-      @keyframes appOpeningProgress {
-        from { transform: scaleX(0); opacity: 0.35; }
-        to { transform: scaleX(1); opacity: 1; }
-      }
-
-      @keyframes appOpeningBreathe {
-        from { opacity: 0; transform: translate(-50%, -50%) scale(0.82); }
-        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-      }
-
-      @keyframes appOpeningOrbit {
-        to { transform: rotate(360deg); }
-      }
-
-      @keyframes appOpeningSignal {
-        50% { opacity: 0.45; transform: scale(0.82); }
-      }
-
-      @keyframes appOpeningTracer {
-        from { transform: translateX(0); opacity: 0; }
-        12% { opacity: 1; }
-        to { transform: translateX(68px); opacity: 0.8; }
-      }
-
-      .app-page-loader {
-        width: 100%;
-        min-height: calc(100dvh - 96px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 32px 18px;
-        color: #f8fafc;
-      }
-
-      .app-page-loader-card {
-        display: inline-flex;
-        align-items: center;
-        gap: 14px;
-        padding: 14px 18px;
-        border-radius: 24px;
-        background:
-          radial-gradient(circle at 20% 10%, rgba(56, 189, 248, 0.14), transparent 42%),
-          linear-gradient(180deg, rgba(10, 15, 28, 0.78), rgba(6, 10, 20, 0.9));
-        border: 1px solid rgba(255, 255, 255, 0.07);
-        box-shadow:
-          0 24px 70px rgba(0, 0, 0, 0.34),
-          inset 0 1px 0 rgba(255, 255, 255, 0.06);
-        backdrop-filter: blur(18px) saturate(150%);
-        -webkit-backdrop-filter: blur(18px) saturate(150%);
-      }
-
-      .app-page-loader-orb {
-        width: 34px;
-        height: 34px;
-        border-radius: 999px;
-        background:
-          conic-gradient(from 120deg, rgba(56, 189, 248, 0), rgba(56, 189, 248, 0.95), rgba(34, 197, 94, 0.85), rgba(168, 85, 247, 0.8), rgba(56, 189, 248, 0)),
-          rgba(15, 23, 42, 0.7);
-        position: relative;
-        animation: appLoaderSpin 0.95s linear infinite;
-        box-shadow: 0 0 26px rgba(56, 189, 248, 0.2);
-      }
-
-      .app-page-loader-orb::after {
-        content: '';
-        position: absolute;
-        inset: 4px;
-        border-radius: inherit;
-        background: #07101f;
-      }
-
-      .app-page-loader-card strong {
-        display: block;
-        font-size: 0.92rem;
-        font-weight: 900;
-        letter-spacing: -0.02em;
-        color: rgba(248, 250, 252, 0.96);
-      }
-
-      .app-page-loader-card p {
-        margin: 2px 0 0;
-        font-size: 0.74rem;
-        font-weight: 700;
-        color: rgba(148, 163, 184, 0.9);
-      }
-
-      @keyframes appLoaderSpin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      @media (max-width: 640px) {
-        .app-page-loader {
-          min-height: calc(100dvh - 82px);
-          padding: 24px 14px;
-        }
-
-        .app-page-loader-card {
-          padding: 12px 15px;
-          border-radius: 22px;
-        }
-
-        .app-page-loader-orb {
-          width: 30px;
-          height: 30px;
-        }
-      }
-
+      .app-opening-wordmark { display: contents; }
+      .app-opening-wordmark strong { font-size: 25px; font-weight: 550; line-height: 1.2; letter-spacing: -.055em; }
+      .app-opening-wordmark > span { font-size: 13px; line-height: 1.6; color: #a1a5ad; }
+      .app-opening-status { margin-top: 24px; color: #a1a5ad; font-size: 12px; line-height: 1.6; }
+      .app-opening-progress { position: relative; width: 96px; height: 2px; margin-top: 9px; overflow: hidden; border-radius: 2px; background: #252a31; }
+      .app-opening-progress > span { position: absolute; inset: 0; background: #b0c8e4; transform-origin: left; animation: smartyReadingLine 1.8s ease-in-out infinite; }
+      @keyframes smartyReadingLine { from { transform: translateX(-100%) scaleX(.45); } to { transform: translateX(100%) scaleX(.45); } }
+      .app-page-loader { min-height: 60dvh; display: grid; place-items: center; padding: 24px; }
+      .app-page-loader-card { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; max-width: 360px; padding: 22px; background: transparent; border: 0; box-shadow: none; }
+      .app-page-loader-orb { width: 20px; height: 20px; flex: 0 0 20px; border: 2px solid var(--ui-line-strong); border-top-color: var(--ui-accent); border-radius: 50%; animation: smartyLoaderTurn 1s linear infinite; }
+      .app-page-loader-card strong { font-size: .9375rem; font-weight: 550; color: var(--ui-text); }
+      .app-page-loader-card p { margin: 4px 0 0; color: var(--ui-muted); font-size: .8125rem; line-height: 1.65; }
+      @keyframes smartyLoaderTurn { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) {
-        .app-opening-screen,
-        .app-opening-atmosphere,
-        .app-opening-mark,
-        .app-opening-wordmark,
-        .app-opening-status,
-        .app-opening-status i,
-        .app-opening-mark::before,
-        .app-opening-progress::after,
-        .app-opening-progress > span {
-          animation: none !important;
-          transition-duration: 120ms !important;
-        }
-
-        .app-page-loader-orb {
-          animation: none;
-        }
+        .app-opening-screen { transition: none; }
+        .app-opening-progress > span, .app-page-loader-orb { animation: none; }
       }
       .global-pull-refresh {
         position: fixed;
@@ -2162,13 +1852,13 @@ function AppExperience() {
   useEffect(() => {
     if (loading) return undefined;
 
-    const minimumDisplayTime = 1050;
+    const minimumDisplayTime = 180;
     const remainingTime = Math.max(0, minimumDisplayTime - (Date.now() - openedAtRef.current));
     let removeTimer;
 
     const leaveTimer = window.setTimeout(() => {
       setSplashLeaving(true);
-      removeTimer = window.setTimeout(() => setSplashMounted(false), 440);
+      removeTimer = window.setTimeout(() => setSplashMounted(false), 230);
     }, remainingTime);
 
     return () => {

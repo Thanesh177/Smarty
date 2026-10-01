@@ -2131,3 +2131,154 @@
 body:has(.profile-modal-overlay) {
   overflow: hidden;
 }
+
+/* A personal library, not a dashboard of competing panels. Scoped here to
+   keep profile geometry independent of the shared route adapters. */
+.app-shell .content .profile-page {
+  max-width: 1440px;
+  padding: clamp(24px, 4vw, 56px) var(--ui-gutter) calc(96px + env(safe-area-inset-bottom)) !important;
+}
+.app-shell .content .profile-page .profile-hero {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 30%);
+  padding: 4px 0 32px;
+  gap: clamp(24px, 4vw, 56px);
+  margin-bottom: 20px;
+}
+.app-shell .content .profile-page .profile-left {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 20px 24px;
+  align-items: center;
+}
+.app-shell .content .profile-page .profile-avatar-button {
+  width: 88px;
+  height: 88px;
+  min-width: 88px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--ui-line);
+}
+.app-shell .content .profile-page .profile-left h1 {
+  margin: 6px 0 9px;
+  font-size: clamp(1.65rem, 3vw, 2.6rem);
+  line-height: 1.16;
+  letter-spacing: -.04em;
+}
+.app-shell .content .profile-page .profile-pill {
+  color: var(--ui-muted);
+  font-weight: 500;
+  letter-spacing: .075em;
+  box-shadow: none;
+}
+.app-shell .content .profile-page .profile-bio {
+  margin-top: 9px;
+  color: var(--ui-muted);
+  font-size: .875rem;
+  font-weight: 400;
+}
+.app-shell .content .profile-page .profile-action-row {
+  grid-column: 2;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  gap: 8px;
+}
+.app-shell .content .profile-page .profile-action-row button {
+  min-height: 44px;
+  font-weight: 500;
+  border-radius: 9px;
+  transform: none;
+}
+.app-shell .content .profile-page .profile-stats {
+  width: 100%;
+  max-width: none;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.app-shell .content .profile-page .profile-stats .stat-card {
+  min-height: 76px;
+  padding: 12px 18px;
+  align-items: center;
+  gap: 7px;
+}
+.app-shell .content .profile-page .profile-stats span { color: var(--ui-muted); font-size: .8125rem; }
+.app-shell .content .profile-page .profile-content { gap: 20px; }
+.app-shell .content .profile-page .profile-card {
+  min-height: 220px;
+  padding: clamp(22px, 3vw, 32px);
+  border-color: var(--ui-line) !important;
+  border-radius: 12px !important;
+  transform: none;
+}
+.app-shell .content .profile-page .profile-card p {
+  color: var(--ui-muted);
+  font-size: .9375rem;
+  line-height: 1.65;
+}
+.app-shell .content .profile-page :is(.profile-card-kicker, .profile-delete-card-kicker) {
+  font-size: .6875rem;
+  font-weight: 500;
+  letter-spacing: .08em;
+}
+.app-shell .content .profile-page .profile-shortcuts button { color: var(--ui-text); font-weight: 500; }
+.app-shell .content .profile-page .profile-shortcuts button span { color: var(--ui-muted); }
+.app-shell .content .profile-page .detail-row { padding-block: 14px; }
+.app-shell .content .profile-page .detail-row strong { max-width: 100%; }
+.app-shell .content .profile-page .profile-delete-account-btn { font-size: .8125rem; font-weight: 500; }
+.app-shell .content .profile-page :is(.friend-search-eyebrow, .friend-result-avatar, .approved-avatar, .private-placeholder) {
+  color: var(--ui-accent);
+  background: var(--ui-surface-raised);
+  border-color: var(--ui-line);
+  box-shadow: none;
+  font-weight: 500;
+}
+.app-shell .content .profile-page :is(.friend-result-card, .approved-creator-card):hover { transform: none; }
+.app-shell .content .profile-page .private-grid { grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 20px; }
+.app-shell .content .profile-page :is(.private-card, .post-card-main) { min-height: 0; height: auto; transform: none; }
+.app-shell .content .profile-page .private-card::before { display: none; }
+.app-shell .content .profile-page .private-card img { transform: none; filter: none; }
+.app-shell .content .profile-page :is(.private-card img, .private-placeholder) { height: 180px; }
+.app-shell .content .profile-page .private-info { margin: 0; padding: 18px; }
+.app-shell .content .profile-page .private-info h4 { color: var(--ui-text); font-weight: 500; line-height: 1.45; text-shadow: none; }
+.app-shell .content .profile-page .private-info span { padding: 0; color: var(--ui-muted); background: transparent; font-weight: 400; }
+.app-shell .content .profile-page .edit-post-btn {
+  min-height: 44px;
+  border: 1px solid var(--ui-line);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-weight: 500;
+  backdrop-filter: none;
+}
+.profile-page .profile-modal-overlay { background: rgb(0 0 0 / .7); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.profile-page .profile-modal-header h2 { font-size: 1.35rem; font-weight: 550; }
+.profile-page .profile-modal :is(.profile-modal-header, .profile-modal-footer) { border-color: var(--ui-line); }
+.profile-page .profile-modal :is(.profile-modal-header p, .profile-modal-body p) { color: var(--ui-muted); }
+.profile-page .profile-modal-close { width: 44px; height: 44px; border-radius: 9px; transform: none; }
+.profile-page .profile-modal-footer button { border-radius: 9px; font-size: .875rem; font-weight: 500; }
+.profile-page .profile-modal-cancel { color: var(--ui-text); background: var(--ui-surface-raised); border-color: var(--ui-line); }
+
+@media (max-width: 980px) {
+  .app-shell .content .profile-page .profile-hero { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .app-shell .content .profile-page .profile-stats { max-width: 440px; margin: 0; }
+  .app-shell .content .profile-page .profile-stats .stat-card { align-items: flex-start; }
+  .app-shell .content .profile-page .profile-stats .stat-card:first-child { padding-left: 0; }
+}
+@media (max-width: 680px) {
+  .app-shell .content .profile-page .profile-left { grid-template-columns: 72px minmax(0, 1fr); gap: 20px 16px; }
+  .app-shell .content .profile-page .profile-avatar-button { width: 72px; height: 72px; min-width: 72px; }
+  .app-shell .content .profile-page .profile-action-row { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app-shell .content .profile-page .profile-action-row button { font-size: .8125rem; padding-inline: 6px; }
+  .app-shell .content .profile-page .profile-content { gap: 14px; }
+  .app-shell .content .profile-page .profile-card { min-height: 0; padding: 22px; }
+  .app-shell .content .profile-page .profile-tabs button { padding-inline: 12px; font-weight: 500; }
+  .app-shell .content .profile-page .profile-tabs button:first-child { display: block; }
+  .profile-page .profile-modal-footer { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .profile-page .profile-modal-footer button { padding-inline: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .profile-page :is(.profile-modal, .profile-modal-overlay) { animation: none; }
+}

@@ -55,6 +55,7 @@ test('recommendations exclude the current lesson, duplicates, unrelated and pass
   assert.match(recommendations[0].connection, /Particle scattering/);
   assert.equal(recommendations[0].preview, 'Particle size changes how light is redirected.');
   assert.match(recommendations[0].question, /behave differently/i);
+  assert.doesNotMatch(recommendations[0].question, /changes changes|changes changed/i);
 });
 test('corrupt storage and exhausted quotas do not break learning', () => {
   storage.set(getLearningProgressKey('one', 'a'), 'not json');

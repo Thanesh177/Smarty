@@ -1329,7 +1329,7 @@ const nextLearningMove = useMemo(() => {
     const weakest = [...difficultyResults].sort((left, right) => left.percent - right.percent)[0];
     return {
       eyebrow: "Recommended next",
-      title: `Repair ${missedQuestions.length} knowledge ${missedQuestions.length === 1 ? "gap" : "gaps"}`,
+      title: `Revisit ${missedQuestions.length} ${missedQuestions.length === 1 ? "question" : "questions"}`,
       description: weakest
         ? `Start with the ${weakest.label.toLowerCase()} questions. Read why the correct choice works, then retry only what you missed.`
         : "Review each explanation, explain the idea in your own words, then retry only what you missed.",
@@ -1338,10 +1338,10 @@ const nextLearningMove = useMemo(() => {
 
   return {
     eyebrow: "Recommended next",
-    title: `Move into ${activeChallengeProfile.depth === "Expert" ? "a connected topic" : "deeper reasoning"}`,
+    title: 'Build on what you know.',
     description: activeChallengeProfile.depth === "Expert"
-      ? "You have a strong command of this set. Apply it to a connected subject to strengthen transfer."
-      : "Your next challenge will introduce closer distractors, real examples, and more cause-and-effect reasoning.",
+      ? "You answered this set correctly. Explore a connected idea, then try explaining how the two fit together."
+      : "You answered this set correctly. Read a little further, try another example, or return later to see what you remember.",
   };
 }, [activeChallengeProfile.depth, difficultyResults, missedQuestions.length]);
 
@@ -1536,11 +1536,11 @@ if (topic && bossMode && !finished) {
 
   <section className="quiz-hero">
     <div className="quiz-hero-copy">
-      <span className="quiz-kicker">Play · learn · improve</span>
-      <h1>Turn curiosity into momentum.</h1>
+      <span className="quiz-kicker">A little practice</span>
+      <h1>See what stays with you.</h1>
       <p>
-        Choose a subject and sharpen your knowledge through quick challenges,
-        practical questions, and progress you can see.
+        Pick a subject, try a few questions, and take time with the explanations.
+        A wrong answer is a useful place to start.
       </p>
 
       <div className="quiz-hero-metrics" aria-label="Quiz progress summary">
@@ -1555,7 +1555,7 @@ if (topic && bossMode && !finished) {
           className="profile-btn"
           onClick={() => navigate("/game-profile")}
         >
-          View Game Profile
+          Your progress
         </button>
       </div>
     </div>
@@ -1598,7 +1598,7 @@ if (topic && bossMode && !finished) {
   </div>
 
   <h3>{visitProgress.streak} Day Streak · {totalXP} XP</h3>
-<p>Open Smarty every day, earn XP, and keep the flame alive.</p>
+<p>Every return is a chance to remember a little more. Go at your own pace.</p>
 </div>
 
         </section>
@@ -1627,7 +1627,7 @@ if (topic && bossMode && !finished) {
 
           <p className="quiz-kicker">{topic.emoji} {topic.title}</p>
 
-          <h1>{won ? "Amazing work!" : "Good try — keep improving!"}</h1>
+          <h1>{won ? "That’s progress." : "Keep the useful questions."}</h1>
 
           <div className="score-ring">
 
@@ -1642,9 +1642,9 @@ if (topic && bossMode && !finished) {
 
           <div className="progress-insight">
 
-            <h3> Your Growth Report</h3>
+            <h3>Your practice, at a glance</h3>
 
-            {saving && <p>Saving your progress to AWS...</p>}
+            {saving && <p role="status">Saving your progress…</p>}
 
             {saveError && <p className="save-error">{saveError}</p>}
 
@@ -1697,6 +1697,14 @@ if (topic && bossMode && !finished) {
             <span>{nextLearningMove.eyebrow}</span>
             <h2 id="quiz-next-move-title">{nextLearningMove.title}</h2>
             <p>{nextLearningMove.description}</p>
+            <div className="quiz-next-actions">
+              <button type="button" className="quiz-next-primary" onClick={missedQuestions.length > 0
+                ? startMistakeReview
+                : () => navigate(focusedLearningTopic?.topic ? `/learn?topic=${encodeURIComponent(focusedLearningTopic.topic)}` : '/learn')}>
+                {missedQuestions.length > 0 ? 'Practice missed questions' : 'Find your next lesson'} <span aria-hidden="true">→</span>
+              </button>
+              {focusedLearningTopic?.postId && <button type="button" className="quiz-next-secondary" onClick={returnToFocusedLesson}>Revisit the explanation</button>}
+            </div>
             {difficultyResults.length > 0 && (
               <div className="quiz-difficulty-results" aria-label="Accuracy by difficulty">
                 {difficultyResults.map((item) => (
@@ -1717,16 +1725,6 @@ if (topic && bossMode && !finished) {
           </div>
 
           <div className="result-actions">
-
-            {focusedLearningTopic?.postId && <button type="button" onClick={() => navigate(`/learn?topic=${encodeURIComponent(focusedLearningTopic.topic)}`)}>Choose my next lesson →</button>}
-
-            {focusedLearningTopic?.postId && (
-              <button type="button" onClick={returnToFocusedLesson}>Review Lesson</button>
-            )}
-
-            {missedQuestions.length > 0 && (
-              <button type="button" onClick={startMistakeReview}>Practice Mistakes</button>
-            )}
 
             <button type="button" onClick={() => startQuiz(topic)}>Retry Topic</button>
 
@@ -1811,13 +1809,14 @@ if (topic && bossMode && !finished) {
           <button
             type="button"
             className="profile-mini-btn"
+            aria-label="Open your game progress"
             onClick={() => navigate("/game-profile")}
           >
             🎮
           </button>
         </div>
 
-        <div className="progress-track">
+        <div className="progress-track" role="progressbar" aria-label="Quiz progress" aria-valuemin={0} aria-valuemax={mixedSteps.length} aria-valuenow={index + 1} aria-valuetext={`Question ${index + 1} of ${mixedSteps.length}`}>
 
           <div
 

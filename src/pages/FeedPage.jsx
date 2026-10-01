@@ -1,8 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft,
   ArrowRight,
+  ChevronDown,
+  Languages,
   Bookmark,
   MessageCircle,
   Bot,
@@ -35,6 +36,7 @@ import {
 import SmartyBrand from '../components/SmartyBrand';
 import { postApi, creatorApi, chatApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
+import FeedHeader from '../components/FeedHeader';
 import useFeed from '../hooks/useFeed';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -601,49 +603,12 @@ style={{
 });
 
 
-const TopicPill = memo(function TopicPill({
-  item,
-  active,
-  onSelect,
-}) {
-  const topicName =
-    getTopicValue(item) || 'Topic';
-
-  return (
-  <button
-  type="button"
-  className={
-    active
-      ? 'topic-pill active'
-      : 'topic-pill'
-  }
-  onPointerDown={(event) => {
-    event.stopPropagation();
-  }}
-  onClick={(event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onSelect(topicName);
-  }}
-  title={topicName}
-  aria-selected={active}
-  role="tab"
-  aria-label={`Show ${topicName} posts`}
->
-      <span>
-        {topicName.charAt(0).toUpperCase()}
-      </span>
-
-      <strong>{topicName}</strong>
-    </button>
-  );
-});
-
 // Memoized image component for feed posts with lazy loading and IntersectionObserver
 const FeedImage = memo(function FeedImage({
   src,
   alt,
   index,
+  onError,
 }) {
   const imgRef = useRef(null);
 
@@ -684,6 +649,7 @@ useEffect(() => {
         index < FAST_IMAGE_LIMIT ? 'eager' : 'lazy'
       }
       decoding="async"
+      onError={onError}
       fetchpriority={
         index < FAST_IMAGE_LIMIT
           ? 'high'
@@ -717,18 +683,21 @@ const FeedPostCard = memo(function FeedPostCard({
   onModerate,
   canModerate,
 }) {
-  const hasMedia = Boolean(post.videoUrl || post.imageUrl);
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [post.imageUrl]);
+  const hasMedia = Boolean(post.videoUrl || (post.imageUrl && !imageFailed));
   const hasTranslation = Boolean(translatedText);
   const [actionsOpen, setActionsOpen] = useState(false);
 
   return (
     <article
       id={`post-${postId}`}
-      className={`snap-post ${!post.imageUrl && !post.videoUrl ? 'no-media' : ''}`}
+      className={`snap-post ${!hasMedia ? 'no-media' : ''}`}
       onClick={() => onOpenPost(post, creatorName)}
       role="button"
       tabIndex={0}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           onOpenPost(post, creatorName);
@@ -743,12 +712,14 @@ const FeedPostCard = memo(function FeedPostCard({
               controls
               playsInline
               preload="none"
+              onClick={(event) => event.stopPropagation()}
             />
           ) : (
             <FeedImage
               src={post.imageUrl}
               alt={post.title || 'Post media'}
               index={index}
+              onError={() => setImageFailed(true)}
             />
           )}
         </div>
@@ -859,75 +830,97 @@ const FeedPostCard = memo(function FeedPostCard({
         <p>{isTranslated && translatedText ? translatedText : post.body}</p>
 
         <div className="post-actions">
-          <button
-            type="button"
-            className={isSaved ? 'icon-action-btn saved' : 'icon-action-btn'}
-            disabled={!postId}
-            onClick={(event) => {
-              event.stopPropagation();
-              onSave(postId, isSaved);
-            }}
-            title={isSaved ? 'Saved' : 'Save'}
-            aria-label={isSaved ? 'Saved' : 'Save'}
-          >
-            <Bookmark size={16} strokeWidth={2.25} fill={isSaved ? 'currentColor' : 'none'} />
-          </button>
+          <div className="post-quick-actions" role="group" aria-label="Post actions">
+            <button
+              type="button"
+              className={isSaved ? 'icon-action-btn saved' : 'icon-action-btn'}
+              disabled={!postId}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSave(postId, isSaved);
+              }}
+              title={isSaved ? 'Saved' : 'Save'}
+              aria-label={isSaved ? 'Saved' : 'Save'}
+            >
+              <Bookmark size={16} strokeWidth={2.25} fill={isSaved ? 'currentColor' : 'none'} />
+            </button>
 
+            <button
+              type="button"
+              className="icon-action-btn"
+              disabled={!postId}
+              title="Comments"
+              aria-label="Comments"
+              onClick={(event) => {
+                event.stopPropagation();
+                onComments(postId);
+              }}
+            >
+              <MessageCircle size={16} strokeWidth={2.25} />
+            </button>
 
+            <button
+              type="button"
+              className="icon-action-btn"
+              title="Simplify"
+              aria-label="Simplify"
+              onClick={(event) => {
+                event.stopPropagation();
+                onExplain(post);
+              }}
+              disabled={isExplaining}
+            >
+              {isExplaining ? (
+                <Loader2 size={16} strokeWidth={2.25} className="spin-icon" />
+              ) : (
+                <Bot size={16} strokeWidth={2.25} />
+              )}
+            </button>
+          </div>
 
-          <button
-            type="button"
-            className="icon-action-btn"
-            disabled={!postId}
-            title="Comments"
-            aria-label="Comments"
-            onClick={(event) => {
-              event.stopPropagation();
-              onComments(postId);
-            }}
-          >
-           <MessageCircle size={16} strokeWidth={2.25} />
-          </button>
+          <div className="post-reading-actions" role="group" aria-label="Explore this post">
+            <div className={`post-translate-control${isTranslated ? ' is-translated' : ''}`} title={isTranslating ? 'Translating...' : 'Translate this post'}>
+              <select
+                aria-label="Translate this post"
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) => onTranslateChange(post, event.target.value)}
+                value={isTranslated ? 'translated' : ''}
+                className="translate-dropdown"
+                disabled={isTranslating}
+              >
+                <option value="" disabled>
+                  {isTranslating ? 'Translating...' : 'Translate'}
+                </option>
+                {hasTranslation && <option value="original">Original</option>}
+                {hasTranslation && isTranslated && (
+                  <option value="translated" disabled>
+                    Translated
+                  </option>
+                )}
+                <option value="Hindi">Hindi</option>
+                <option value="Tamil">Tamil</option>
+                <option value="Spanish">Spanish</option>
+                <option value="French">French</option>
+              </select>
+              {isTranslating ? (
+                <Loader2 size={17} className="post-translate-icon spin-icon" aria-hidden="true" />
+              ) : (
+                <Languages size={17} className="post-translate-icon" strokeWidth={1.8} aria-hidden="true" />
+              )}
+              <ChevronDown className="post-translate-chevron" size={14} strokeWidth={1.8} aria-hidden="true" />
+            </div>
 
-          <button
-            type="button"
-            className="icon-action-btn"
-            title="Simplify"
-            aria-label="Simplify"
-            onClick={(event) => {
-              event.stopPropagation();
-              onExplain(post);
-            }}
-            disabled={isExplaining}
-          >
-            {isExplaining ? (
-             <Loader2 size={16} strokeWidth={2.25} className="spin-icon" />
-            ) : (
-              <Bot size={16} strokeWidth={2.25} />
-            )}
-          </button>
-
-          <select
-            onClick={(event) => event.stopPropagation()}
-            onChange={(event) => onTranslateChange(post, event.target.value)}
-            value={isTranslated ? 'translated' : ''}
-            className="translate-dropdown"
-            disabled={isTranslating}
-          >
-            <option value="" disabled>
-               {isTranslating ? 'Translating...' : 'Translate'}
-            </option>
-            {hasTranslation && <option value="original">Original</option>}
-            {hasTranslation && isTranslated && (
-              <option value="translated" disabled>
-                Translated
-              </option>
-            )}
-            <option value="Hindi">Hindi</option>
-            <option value="Tamil">Tamil</option>
-            <option value="Spanish">Spanish</option>
-            <option value="French">French</option>
-          </select>
+            <Link
+              className="post-learning-link"
+              to={`/post-ai/${encodeURIComponent(postId)}`}
+              state={{ post, creatorName }}
+              aria-label={post.title ? `Go deeper: ${post.title}` : 'Go deeper'}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <span>Go deeper</span>
+              <ArrowRight size={16} strokeWidth={1.8} aria-hidden="true" />
+            </Link>
+          </div>
         </div>
 
         {isTranslating && (
@@ -1051,7 +1044,6 @@ const lastCanvasMoveTimeRef = useRef(0);
 const loadMoreRef = useRef(null);
 const feedLoadLockRef = useRef(false);
 const topicCanvasRef = useRef(null);
-const innerTopicsRef = useRef(null);
 const topicCardMetricsRef = useRef([]);
 const feedRef = useRef(null);
 const topicSearchLoadRef = useRef({
@@ -3103,74 +3095,6 @@ const handleTopicClick = useCallback(
     [handleTranslate]
   );
 
-const renderedTopics = useMemo(
-  () =>
-    launchTopics.map((item) => (
-      <TopicPill
-        key={getCanonicalTopic(item)}
-        item={item}
-        active={areTopicsEquivalent(
-          selectedTopic,
-          item
-        )}
-        onSelect={handleTopicPillSelect}
-      />
-    )),
-  [
-    handleTopicPillSelect,
-    selectedTopic,
-    launchTopics,
-  ]
-);
-
-useEffect(() => {
-  const strip = innerTopicsRef.current;
-  if (!strip || !selectedTopic) return undefined;
-
-  const frame = window.requestAnimationFrame(() => {
-    const activePill = strip.querySelector('.topic-pill.active');
-    if (!activePill) return;
-
-    const left = Math.max(
-      0,
-      activePill.offsetLeft - (strip.clientWidth - activePill.offsetWidth) / 2
-    );
-    strip.scrollTo({
-      left,
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
-        ? 'auto'
-        : 'smooth',
-    });
-  });
-
-  return () => window.cancelAnimationFrame(frame);
-}, [selectedTopic, launchTopics.length]);
-
-const handleInnerTopicKeyDown = useCallback((event) => {
-  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-
-  const pills = Array.from(
-    innerTopicsRef.current?.querySelectorAll('.topic-pill') || []
-  );
-  if (pills.length === 0) return;
-
-  const activeIndex = Math.max(
-    0,
-    pills.findIndex((pill) => pill.classList.contains('active'))
-  );
-  const nextIndex = event.key === 'Home'
-    ? 0
-    : event.key === 'End'
-      ? pills.length - 1
-      : event.key === 'ArrowRight'
-        ? (activeIndex + 1) % pills.length
-        : (activeIndex - 1 + pills.length) % pills.length;
-
-  event.preventDefault();
-  pills[nextIndex]?.focus({ preventScroll: true });
-  pills[nextIndex]?.click();
-}, []);
-
 const renderedTopicCanvasTiles = useMemo(
   () =>
     Array.from({ length: 9 }, (_, tileIndex) => {
@@ -3673,46 +3597,10 @@ style={topicCanvasSurfaceStyle}
 )}
 
       {selectedTopic && (
-        <header className="feed-inner-header">
-          <div className="feed-inner-heading">
-            <button
-              type="button"
-              className="feed-inner-back"
-              onClick={handleBackToTopics}
-              aria-label="Back to topics"
-            >
-              <ArrowLeft size={17} strokeWidth={2} />
-              <span>Topics</span>
-            </button>
-
-            <div className="feed-inner-title">
-              <h1>{selectedTopic}</h1>
-              <p>
-                {loading
-                  ? 'Loading posts'
-                  : error
-                    ? 'Feed unavailable'
-                    : `${filteredPosts.length}${nextCursor ? '+' : ''} ${
-                        filteredPosts.length === 1 ? 'post' : 'posts'
-                      }`}
-              </p>
-            </div>
-          </div>
-
-          
-
-          <nav
-            ref={innerTopicsRef}
-            className="feed-inner-topics mobile-topic-scroll"
-            role="tablist"
-            aria-label="Select feed topic"
-            onKeyDown={handleInnerTopicKeyDown}
-          >
-            {renderedTopics}
-          </nav>
-
-          
-        </header>
+        <FeedHeader topic={selectedTopic} onBack={handleBackToTopics}
+          onSelect={handleTopicPillSelect}
+          status={loading ? 'Loading posts' : error ? 'Feed unavailable'
+            : `${filteredPosts.length}${nextCursor ? '+' : ''} ${filteredPosts.length === 1 ? 'post' : 'posts'}`} />
       )}
 
 {selectedTopic && loading && filteredPosts.length === 0 && (

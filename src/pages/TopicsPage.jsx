@@ -1,7 +1,7 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpRight } from "lucide-react";
-import { MAIN_TOPICS } from "../data/topicTaxonomy";
+import { ArrowUpRight, Search, X } from "lucide-react";
+import { MAIN_TOPICS, getMainTopicDefinition } from "../data/topicTaxonomy";
 import "./TopicsPage.css";
 
 const TopicCard = memo(function TopicCard({ topic, onNavigate }) {
@@ -39,6 +39,14 @@ const TopicCard = memo(function TopicCard({ topic, onNavigate }) {
 
 export default function TopicsPage() {
   const navigate = useNavigate();
+  const [search, setSearch] = useState('');
+  const topics = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const matched = getMainTopicDefinition(query);
+    return MAIN_TOPICS.map((topic, order) => ({ ...topic, order })).filter((topic) =>
+      !query || topic.id === matched?.id || [topic.label, topic.description, ...topic.topics].join(' ').toLowerCase().includes(query)
+    );
+  }, [search]);
 
   const handleNavigate = useCallback(
     (topic) => {
@@ -48,25 +56,34 @@ export default function TopicsPage() {
   );
 
   return (
-    <main className="feed-topics-page">
+    <main className="feed-topics-page is-topic-directory">
       <section className="feed-topics-hero">
-        <p className="feed-topics-kicker">SMARTY TOPICS</p>
-        <h1>Choose a world to explore.</h1>
+        <p className="feed-topics-kicker">Follow your curiosity</p>
+        <h1>Find something that draws you in.</h1>
         <p>
-          Start with a broad interest. Smarty brings the related subjects and
-          specific posts together inside one focused feed.
+          Start with an interest. Discover the details, questions, and connections within it.
         </p>
       </section>
 
-      <section className="feed-topics-grid">
-        {MAIN_TOPICS.map((topic, order) => (
+      <div className="topic-directory-tools">
+        <label className="topic-directory-search">
+          <Search size={18} aria-hidden="true" />
+          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a subject. Try AI, sleep, history…" aria-label="Find a subject" />
+          {search && <button type="button" onClick={() => setSearch('')} aria-label="Clear subject search"><X size={17} /></button>}
+        </label>
+        <span role="status">{topics.length} {topics.length === 1 ? 'topic' : 'topics'}</span>
+        <button type="button" className="topic-directory-all" onClick={() => handleNavigate('All')}>All posts <ArrowUpRight size={17} /></button>
+      </div>
+      <section className="feed-topics-grid" aria-label="Learning topics">
+        {topics.map((topic) => (
           <TopicCard
             key={topic.id}
-            topic={{ ...topic, order }}
+            topic={topic}
             onNavigate={handleNavigate}
           />
         ))}
       </section>
+      {topics.length === 0 && <div className="topic-directory-empty"><h2>No topics found.</h2><p>Try a broader subject, or explore the full collection.</p><button type="button" onClick={() => setSearch('')}>Show all topics</button></div>}
     </main>
   );
 }
