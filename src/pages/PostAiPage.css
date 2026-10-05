@@ -1380,9 +1380,70 @@
 .post-study-objective a, .post-study-sources a { color: #9acfd8; text-decoration: none; display: inline-flex; gap: 8px; align-items: center; padding: 12px 0; font-size: .82rem; }
 .post-study-sources { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; margin: 18px 0; }
 .post-study-sources a { overflow-wrap: anywhere; }
+.post-ai-page .post-ai-reading-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+.post-ai-page .post-ai-reading-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 9px 13px;
+  border-radius: 10px;
+  background: #ffffff07;
+  color: #b8cbd7;
+  font-size: .8rem;
+  text-decoration: none;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.post-ai-page .post-ai-reading-nav a:hover { color: #edf4f9; background: #ffffff0c; }
+.post-ai-page .post-ai-reading-nav a:focus-visible { outline: 2px solid #99bddb; outline-offset: 3px; }
+.post-ai-page .post-ai-explanation-paragraphs { gap: 0; }
+.app-shell .content .post-ai-page .post-ai-explanation-paragraphs .post-ai-text-section {
+  padding: clamp(22px, 3vw, 30px) 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  border-bottom: 1px solid #ffffff0b;
+  border-top: 0;
+}
+.app-shell .content .post-ai-page .post-ai-explanation-paragraphs .post-ai-text-section h3 {
+  scroll-margin-top: 24px;
+  color: #b7cfe1;
+  font-size: .86rem;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+.post-ai-page .post-ai-text-section-body { max-width: 68ch; gap: 16px; overflow-wrap: anywhere; }
+.app-shell .content .post-ai-page .post-ai-text-section-body p,
+.app-shell .content .post-ai-page .post-ai-text-section-body li { font-size: clamp(.95rem, 1.1vw, 1.055rem); line-height: 1.85; }
+.app-shell .content .post-ai-page .post-ai-explanation-paragraphs .post-ai-text-section.is-example,
+.app-shell .content .post-ai-page .post-ai-explanation-paragraphs .post-ai-text-section.is-takeaway {
+  margin-block: 12px;
+  padding: clamp(18px, 2.5vw, 26px);
+  border: 0;
+  border-radius: 12px;
+  background: #8caec909;
+}
+.post-ai-page .post-ai-text-section-body ol li + li { margin-top: 18px; }
+.post-ai-page .post-ai-text-section-body ol li::marker { color: #9bbdd8; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  .post-ai-page .post-ai-reading-nav a { transition: none; }
+}
 @media (max-width: 600px) {
-  .post-ai-page { padding-right: 68px !important; }
+  .app-shell .content .post-ai-page.post-ai-page { padding-right: 64px !important; }
   .post-ai-page .post-ai-card, .post-ai-page .post-ai-chat { padding: 18px !important; }
+  .app-shell .content .post-ai-page .post-ai-card.post-ai-explainer {
+    padding: 18px 0 !important;
+    border: 0;
+    background: transparent;
+  }
+  .app-shell .content .post-ai-page .post-ai-explanation-paragraphs .post-ai-text-section.is-example,
+  .app-shell .content .post-ai-page .post-ai-explanation-paragraphs .post-ai-text-section.is-takeaway {
+    padding: 16px 12px;
+  }
   .post-ai-topline { grid-template-columns: 1fr; gap: 8px; }
   .post-ai-progress-label { white-space: normal; line-height: 1.5; }
   .post-ai-comments { justify-self: start; }

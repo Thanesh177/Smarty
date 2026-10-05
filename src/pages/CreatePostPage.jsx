@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import imageCompression from 'browser-image-compression';
 import {
+  ArrowUpRight,
+  Eye,
+  ChevronDown,
+  PenLine,
   Check,
   Globe2,
   ImagePlus,
@@ -11,10 +15,10 @@ import {
   X,
 } from 'lucide-react';
 import { postApi } from '../api/client';
-import './CreatePostPage.css';
-const MAX_IMAGE_SIZE_MB = 12;
-const MAX_VIDEO_SIZE_MB = 250;
-const BYTES_PER_MB = 1024 * 1024;
+import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+import { EMPTY_POST, hasPostDraft, postReadingStats, readPostDraft, savePostDraft, validatePostMedia } from '../lib/postDraft';
+import './CreatePostComposer.css';
 const createSafeId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -87,7 +91,7 @@ const normalizeUploadResponse = (uploadData = {}) => {
 
   return {
     uploadUrl: parsed.uploadUrl || parsed.url || parsed.presignedUrl || '',
-    fileUrl: parsed.fileUrl || parsed.publicUrl || parsed.url || '',
+    fileUrl: parsed.fileUrl || parsed.publicUrl || '',
     key: parsed.key || parsed.fileKey || parsed.imageKey || parsed.videoKey || '',
   };
 };
@@ -155,612 +159,250 @@ const cleanTopic = (value) => String(value || '')
 
 const topicKey = (value) => cleanTopic(value).toLocaleLowerCase();
 
+
 export default function CreatePostPage() {
-  const mountedRef = useRef(true);
-  const activeUploadRef = useRef(null);
-  const resetTimerRef = useRef(null);
-  const mediaInputRef = useRef(null);
-  const topicSearchRef = useRef(null);
+  const { user } = useAuth();
+  const account = user?.userId || user?.sub || user?.id || user?.email || 'guest';
+  return <PostComposer key={account} account={account} user={user} />;
+}
 
-  const [topics, setTopics] = useState([]);
-  const [topicSearchOpen, setTopicSearchOpen] = useState(false);
-  const [activeTopicIndex, setActiveTopicIndex] = useState(-1);
-
-  const [form, setForm] = useState({
-    topic: '',
-    title: '',
-    body: '',
-    visibility: 'public',
-  });
-
-  const [uploadStage, setUploadStage] = useState('');
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [imageFile, setImageFile] = useState(null);
-  const [videoFile, setVideoFile] = useState(null);
-  const [status, setStatus] = useState('');
+function PostComposer({ account, user }) {
+  const [form, setForm] = useState(() => readPostDraft(account));
+  const [draftState, setDraftState] = useState(() => hasPostDraft(form) ? 'restored' : 'empty');
+  const [topics, setTopics] = useState(DEFAULT_TOPICS);
+  const [topicState, setTopicState] = useState('loading');
+  const [topicOpen, setTopicOpen] = useState(false);
+  const [activeTopic, setActiveTopic] = useState(-1);
+  const [view, setView] = useState('write');
+  const [media, setMedia] = useState(null);
+  const [mediaUrl, setMediaUrl] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const [error, setError] = useState('');
+  const [mediaError, setMediaError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [stage, setStage] = useState('');
+  const [published, setPublished] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const mounted = useRef(true);
+  const upload = useRef(null);
+  const submittingRef = useRef(false);
+  const latestForm = useRef(form);
+  const saveTimer = useRef(null);
+  const pendingSave = useRef(false);
+  const topicShell = useRef(null);
+  const topicInput = useRef(null);
+  const fileInput = useRef(null);
+  const bodyInput = useRef(null);
+  const successHeading = useRef(null);
+  const uploadCache = useRef(null);
+  const requestId = useRef(createSafeId());
+  const stats = useMemo(() => postReadingStats(form.body), [form.body]);
+  const exactTopic = topics.find(topic => topicKey(topic) === topicKey(form.topic));
+  const selectedTopic = exactTopic || cleanTopic(form.topic);
+  const matches = useMemo(() => topics.filter(topic => topicKey(topic).includes(topicKey(form.topic)))
+    .sort((a, b) => Number(topicKey(b).startsWith(topicKey(form.topic))) - Number(topicKey(a).startsWith(topicKey(form.topic))))
+    .slice(0, 6), [topics, form.topic]);
+  const canCreate = selectedTopic.length >= 2 && !exactTopic;
+  const choices = canCreate ? [...matches, selectedTopic] : matches;
+  const ready = selectedTopic.length >= 2 && form.title.trim() && form.body.trim();
+  const name = user?.name || user?.username || 'You';
 
-  const imagePreviewUrl = useMemo(() => {
-    if (!imageFile) return '';
-    return URL.createObjectURL(imageFile);
-  }, [imageFile]);
-
+  const persist = useCallback(() => {
+    window.clearTimeout(saveTimer.current);
+    if (!pendingSave.current) return;
+    const ok = savePostDraft(account, latestForm.current);
+    if (ok) pendingSave.current = false;
+    if (mounted.current) setDraftState(ok ? hasPostDraft(latestForm.current) ? 'saved' : 'empty' : 'error');
+  }, [account]);
   useEffect(() => {
-    mountedRef.current = true;
-
-    async function loadTopics() {
-      try {
-        const data = await postApi.getTopics();
-        if (!mountedRef.current) return;
-
-        const topicList = normalizeTopicsResponse(data);
-
-        setTopics(topicList);
-
-      } catch (err) {
-        console.error('Failed to load topics:', err);
-        if (mountedRef.current) {
-          setTopics(DEFAULT_TOPICS);
-          setStatus('Could not load topics from server. Showing default topics.');
-        }
-      }
-    }
-
-    loadTopics();
-
+    mounted.current = true;
+    const hidden = () => { if (document.visibilityState === 'hidden') persist(); };
+    window.addEventListener('pagehide', persist);
+    document.addEventListener('visibilitychange', hidden);
     return () => {
-      mountedRef.current = false;
-      if (activeUploadRef.current) activeUploadRef.current.abort();
-      if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current);
+      mounted.current = false;
+      persist();
+      upload.current?.abort();
+      window.removeEventListener('pagehide', persist);
+      document.removeEventListener('visibilitychange', hidden);
     };
-  }, []);
-
+  }, [persist]);
   useEffect(() => {
-    return () => {
-      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
-    };
-  }, [imagePreviewUrl]);
-
-  useEffect(() => {
-    const closeTopicSearch = (event) => {
-      if (!topicSearchRef.current?.contains(event.target)) {
-        setTopicSearchOpen(false);
-        setActiveTopicIndex(-1);
-      }
-    };
-
-    document.addEventListener('pointerdown', closeTopicSearch);
-    return () => document.removeEventListener('pointerdown', closeTopicSearch);
+    let active = true;
+    postApi.getTopics().then(data => {
+      if (active) { setTopics(normalizeTopicsResponse(data)); setTopicState('ready'); }
+    }).catch(() => { if (active) setTopicState('fallback'); });
+    return () => { active = false; };
   }, []);
+  useEffect(() => {
+    if (!media) { setMediaUrl(''); return; }
+    const url = URL.createObjectURL(media);
+    setMediaUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [media]);
+  useEffect(() => {
+    const close = event => { if (!topicShell.current?.contains(event.target)) { setTopicOpen(false); setActiveTopic(-1); } };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, []);
+  useEffect(() => {
+    if (activeTopic >= 0) document.getElementById('composer-topic-' + activeTopic)?.scrollIntoView({ block: 'nearest' });
+  }, [activeTopic]);
+  useEffect(() => {
+    if (!bodyInput.current || view !== 'write') return;
+    bodyInput.current.style.height = 'auto';
+    bodyInput.current.style.height = Math.min(680, Math.max(240, bodyInput.current.scrollHeight)) + 'px';
+  }, [form.body, view]);
+  useEffect(() => { if (published) successHeading.current?.focus(); }, [published]);
 
-  const selectedTopic = useMemo(() => {
-    const enteredTopic = cleanTopic(form.topic);
-    const existingTopic = topics.find((topic) => topicKey(topic) === topicKey(enteredTopic));
-    return existingTopic || enteredTopic;
-  }, [form.topic, topics]);
-
-  const matchingTopics = useMemo(() => {
-    const query = topicKey(form.topic);
-    const matches = query
-      ? topics.filter((topic) => topicKey(topic).includes(query))
-      : [...topics];
-
-    return matches
-      .sort((a, b) => {
-        if (!query) return a.localeCompare(b);
-        const aStarts = topicKey(a).startsWith(query);
-        const bStarts = topicKey(b).startsWith(query);
-        if (aStarts !== bStarts) return aStarts ? -1 : 1;
-        return a.localeCompare(b);
-      })
-      .slice(0, 8);
-  }, [form.topic, topics]);
-
-  const hasExactTopic = useMemo(
-    () => topics.some((topic) => topicKey(topic) === topicKey(form.topic)),
-    [form.topic, topics]
-  );
-
-  const canCreateTopic = selectedTopic.length >= 2 && !hasExactTopic;
-  const topicChoices = useMemo(
-    () => canCreateTopic ? [...matchingTopics, selectedTopic] : matchingTopics,
-    [canCreateTopic, matchingTopics, selectedTopic]
-  );
-
-  const uploadFile = useCallback(async (file, onProgress) => {
-    if (!file) return { url: '', key: '' };
-
-    const uploadData = normalizeUploadResponse(
-      await postApi.getUploadUrl({
-        fileName: file.name,
-        fileType: file.type || 'application/octet-stream',
-      })
-    );
-
-    if (!uploadData.uploadUrl) {
-      throw new Error('Upload URL was not returned by the server.');
+  const change = (field, value) => {
+    latestForm.current = { ...latestForm.current, [field]: value };
+    pendingSave.current = true;
+    setForm(latestForm.current);
+    setError('');
+    setDraftState('saving');
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(persist, 450);
+  };
+  const chooseTopic = topic => {
+    change('topic', cleanTopic(topic));
+    topicInput.current?.focus();
+    setTopicOpen(false);
+    setActiveTopic(-1);
+  };
+  const topicKeys = event => {
+    if (['Escape', 'Tab'].includes(event.key)) { setTopicOpen(false); setActiveTopic(-1); }
+    if (['ArrowDown', 'ArrowUp'].includes(event.key)) {
+      event.preventDefault(); setTopicOpen(true);
+      setActiveTopic(current => choices.length ? current < 0 ? event.key === 'ArrowDown' ? 0 : choices.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length : -1);
     }
-
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (topicOpen && activeTopic >= 0 && choices[activeTopic]) chooseTopic(choices[activeTopic]);
+      else if (selectedTopic.length >= 2) chooseTopic(selectedTopic);
+    }
+  };
+  const selectMedia = files => {
+    if (submittingRef.current || !files?.length) return;
+    if (files.length > 1) { setMediaError('Add one image or video at a time.'); return; }
+    const message = validatePostMedia(files[0]);
+    if (message) { setMediaError(message); return; }
+    setMedia(files[0]); uploadCache.current = null; setMediaError(''); setError('');
+  };
+  const clearDraft = () => {
+    latestForm.current = { ...EMPTY_POST }; setForm(latestForm.current);
+    pendingSave.current = true;
+    setMedia(null); uploadCache.current = null; requestId.current = createSafeId();
+    setError(''); setMediaError(''); setConfirmClear(false); setView('write'); setTopicOpen(false); persist();
+  };
+  const uploadMedia = async file => {
+    if (uploadCache.current?.file === file) return uploadCache.current.result;
+    setStage('Preparing attachment…');
+    let prepared = file;
+    try { prepared = await compressImage(file); } catch { /* Keep the original if this device cannot compress it. */ }
+    if (!mounted.current) throw new Error('Upload cancelled.');
+    const result = normalizeUploadResponse(await postApi.getUploadUrl({ fileName: prepared.name, fileType: prepared.type }));
+    if (!mounted.current) throw new Error('Upload cancelled.');
+    if (!result.uploadUrl || (!result.fileUrl && !result.key)) throw new Error('Could not prepare the attachment. Please try again.');
+    setStage('Uploading attachment…');
     await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      activeUploadRef.current = xhr;
-
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percent = Math.round((event.loaded / event.total) * 100);
-          onProgress(percent);
-        }
-      };
-
-      xhr.onload = () => {
-        activeUploadRef.current = null;
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`Upload failed: ${xhr.status}`));
-      };
-
-      xhr.onerror = () => {
-        activeUploadRef.current = null;
-        reject(new Error('Upload failed'));
-      };
-
-      xhr.onabort = () => {
-        activeUploadRef.current = null;
-        reject(new Error('Upload cancelled'));
-      };
-
-      xhr.open('PUT', uploadData.uploadUrl);
-      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
-      xhr.send(file);
+      const xhr = new XMLHttpRequest(); upload.current = xhr;
+      xhr.upload.onprogress = event => { if (event.lengthComputable && mounted.current) setProgress(Math.round(event.loaded / event.total * 100)); };
+      const fail = message => { upload.current = null; reject(new Error(message)); };
+      xhr.onload = () => { upload.current = null; xhr.status >= 200 && xhr.status < 300 ? resolve() : fail('The attachment could not be uploaded. Please try again.'); };
+      xhr.onerror = () => fail('Upload interrupted. Check your connection and try again.');
+      xhr.ontimeout = () => fail('Upload timed out. Try a smaller file or a stronger connection.');
+      xhr.onabort = () => fail('Upload cancelled.');
+      xhr.open('PUT', result.uploadUrl); xhr.timeout = 180000;
+      xhr.setRequestHeader('Content-Type', prepared.type); xhr.send(prepared);
     });
-
-    return {
-      url: uploadData.fileUrl,
-      key: uploadData.key,
-    };
-  }, []);
-
-  const resetForm = useCallback(() => {
-    setForm({
-      topic: '',
-      title: '',
-      body: '',
-      visibility: 'public',
-    });
-
-    setImageFile(null);
-    setVideoFile(null);
-    setTopicSearchOpen(false);
-    setActiveTopicIndex(-1);
-    setStatus('');
-  }, []);
-
-  const submit = useCallback(async (event) => {
+    uploadCache.current = { file, result };
+    return result;
+  };
+  const submit = async event => {
     event.preventDefault();
-    if (submitting) return;
-    setSubmitting(true);
-    setStatus('');
-    setUploadProgress(0);
-
-    const topic = selectedTopic;
-    const title = form.title.trim();
-    const body = form.body.trim();
-
-    if (!topic || !title || !body) {
-      setStatus('Please fill topic, headline, and content.');
-      setSubmitting(false);
-      setUploadStage('');
-      return;
-    }
-
+    if (submittingRef.current || !ready) return;
+    submittingRef.current = true; setSubmitting(true); setTopicOpen(false); setError(''); setProgress(0); setStage('Publishing your post…'); persist();
     try {
-      setUploadStage('Preparing files');
-      setUploadProgress(5);
-
-      let imageUrl = '';
-      let imageKey = '';
-      let thumbUrl = '';
-      let thumbKey = '';
-      let videoUrl = '';
-      let videoKey = '';
-
-      if (imageFile) {
-        setUploadStage('Compressing image');
-        setUploadProgress(10);
-
-        const compressedImage = await compressImage(imageFile);
-        if (!mountedRef.current) return;
-
-        setUploadStage('Uploading image');
-        setUploadProgress(0);
-
-        const imageUpload = await uploadFile(compressedImage, setUploadProgress);
-        if (!mountedRef.current) return;
-
-        imageUrl = imageUpload.url;
-        imageKey = imageUpload.key;
-        thumbUrl = imageUpload.url;
-        thumbKey = imageUpload.key;
-      }
-
-      if (videoFile) {
-        setUploadStage('Uploading video');
-        setUploadProgress(0);
-
-        const videoUpload = await uploadFile(videoFile, setUploadProgress);
-        if (!mountedRef.current) return;
-
-        videoUrl = videoUpload.url;
-        videoKey = videoUpload.key;
-      }
-
-      setUploadStage('Publishing post');
-      setUploadProgress(90);
-
-      await postApi.createPost({
-        id: createSafeId(),
-        topic,
-        title,
-        body,
-        likes: 0,
-        visibility: form.visibility,
-        imageUrl,
-        imageKey,
-        thumbUrl,
-        thumbKey,
-        videoUrl,
-        videoKey,
+      const attachment = media ? await uploadMedia(media) : {};
+      if (!mounted.current) return;
+      setStage('Publishing your post…');
+      const image = media?.type.startsWith('image/');
+      const video = media?.type.startsWith('video/');
+      const response = await postApi.createPost({
+        id: requestId.current, topic: selectedTopic, title: form.title.trim(), body: form.body.trim(), likes: 0, visibility: form.visibility,
+        imageUrl: image ? attachment.fileUrl : '', imageKey: image ? attachment.key : '',
+        thumbUrl: image ? attachment.fileUrl : '', thumbKey: image ? attachment.key : '',
+        videoUrl: video ? attachment.fileUrl : '', videoKey: video ? attachment.key : '',
       });
-      if (!mountedRef.current) return;
-
-      setUploadStage('Success');
-      setUploadProgress(100);
-      setStatus('Post created successfully.');
-      resetForm();
-
-      resetTimerRef.current = window.setTimeout(() => {
-        if (!mountedRef.current) return;
-        setSubmitting(false);
-        setUploadStage('');
-        setUploadProgress(0);
-      }, 800);
+      if (!mounted.current) return;
+      const result = typeof response?.body === 'string' ? JSON.parse(response.body) : response;
+      if (result?.success === false || result?.error) throw new Error('The post could not be published. Please try again.');
+      setPublished({ topic: selectedTopic, title: form.title.trim(), visibility: form.visibility }); clearDraft();
     } catch (err) {
-      console.error('Create post failed:', err);
-      if (mountedRef.current) {
-        const message = err?.message === 'Upload cancelled'
-          ? 'Upload cancelled.'
-          : parseApiErrorMessage(err);
-
-        setStatus(`Failed to publish: ${message}`);
-        setSubmitting(false);
-        setUploadStage('');
-        setUploadProgress(0);
+      if (mounted.current) {
+        const message = parseApiErrorMessage(err);
+        setError(typeof message === 'string' ? message.slice(0, 300) : 'Could not publish. Your draft is still here; please try again.');
       }
+    } finally {
+      submittingRef.current = false;
+      if (mounted.current) { setSubmitting(false); setStage(''); }
     }
-  }, [form, imageFile, resetForm, selectedTopic, submitting, uploadFile, videoFile]);
+  };
+  const draftLabel = { empty: 'A fresh page', saving: 'Saving…', saved: 'Draft saved on this device', restored: 'Draft restored · text only', error: 'Draft could not be saved here' }[draftState];
 
-  const handleTopicChange = useCallback((event) => {
-    const nextTopic = event.target.value
-      .replace(/[\u0000-\u001f\u007f]/g, '')
-      .slice(0, 60);
-    setForm((current) => ({ ...current, topic: nextTopic }));
-    setTopicSearchOpen(true);
-    setActiveTopicIndex(-1);
-  }, []);
-
-  const chooseTopic = useCallback((topic) => {
-    const nextTopic = cleanTopic(topic);
-    if (!nextTopic) return;
-    setForm((current) => ({ ...current, topic: nextTopic }));
-    setTopicSearchOpen(false);
-    setActiveTopicIndex(-1);
-  }, []);
-
-  const handleTopicKeyDown = useCallback((event) => {
-    if (event.key === 'Escape') {
-      setTopicSearchOpen(false);
-      setActiveTopicIndex(-1);
-      return;
-    }
-
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      setTopicSearchOpen(true);
-      setActiveTopicIndex((current) => {
-        if (!topicChoices.length) return -1;
-        const direction = event.key === 'ArrowDown' ? 1 : -1;
-        return (current + direction + topicChoices.length) % topicChoices.length;
-      });
-      return;
-    }
-
-    if (event.key === 'Enter' && topicSearchOpen && activeTopicIndex >= 0) {
-      event.preventDefault();
-      chooseTopic(topicChoices[activeTopicIndex]);
-    }
-  }, [activeTopicIndex, chooseTopic, topicChoices, topicSearchOpen]);
-
-  const handleTitleChange = useCallback((event) => {
-    setForm((current) => ({ ...current, title: event.target.value }));
-  }, []);
-
-  const handleBodyChange = useCallback((event) => {
-    setForm((current) => ({ ...current, body: event.target.value }));
-  }, []);
-
-  const handleMediaFileChange = useCallback((event) => {
-  const file = event.target.files?.[0] || null;
-
-  if (!file) {
-    setImageFile(null);
-    setVideoFile(null);
-    return;
-  }
-
-  const fileType = String(file.type || '').toLowerCase();
-
-  if (fileType.startsWith('image/')) {
-    if (file.size > MAX_IMAGE_SIZE_MB * BYTES_PER_MB) {
-      setStatus(`Image must be smaller than ${MAX_IMAGE_SIZE_MB} MB.`);
-      event.target.value = '';
-      return;
-    }
-
-    setStatus('');
-    setImageFile(file);
-    setVideoFile(null);
-    return;
-  }
-
-  if (fileType.startsWith('video/')) {
-    if (file.size > MAX_VIDEO_SIZE_MB * BYTES_PER_MB) {
-      setStatus(`Video must be smaller than ${MAX_VIDEO_SIZE_MB} MB.`);
-      event.target.value = '';
-      return;
-    }
-
-    setStatus('');
-    setVideoFile(file);
-    setImageFile(null);
-    return;
-  }
-
-  setStatus('Please select a valid image or video file.');
-  event.target.value = '';
-}, []);
-
-  const removeMedia = useCallback(() => {
-    setImageFile(null);
-    setVideoFile(null);
-    setStatus('');
-
-    if (mediaInputRef.current) {
-      mediaInputRef.current.value = '';
-    }
-  }, []);
-
-  const setPublicVisibility = useCallback(() => {
-    setForm((current) => ({ ...current, visibility: 'public' }));
-  }, []);
-
-  const setPrivateVisibility = useCallback(() => {
-    setForm((current) => ({ ...current, visibility: 'private' }));
-  }, []);
-
-  const canSubmit = useMemo(
-    () => Boolean(!submitting && selectedTopic.length >= 2 && form.title.trim() && form.body.trim()),
-    [form.body, form.title, selectedTopic, submitting]
-  );
-
-  return (
-    <main className="create-page post-create-page">
-      {submitting && (
-        <div className="upload-loader post-publish-overlay" role="dialog" aria-modal="true" aria-label="Publishing post">
-          <div className="post-publish-card">
-            <div className="post-publish-mark" aria-hidden="true">
-              {uploadStage === 'Success' ? '✓' : <Send size={20} />}
-            </div>
-            <div className="post-publish-copy">
-              <span>Publishing</span>
-              <h3>{uploadStage || 'Preparing your post'}</h3>
-            </div>
-            <div className="progress-track" aria-hidden="true">
-              <div style={{ width: `${uploadProgress}%` }} />
-            </div>
-            <p className="progress-text">{uploadProgress}% complete</p>
-          </div>
+  return <main className="post-composer" aria-labelledby="composer-heading">
+    <header className="composer-heading">
+      <div><span className="composer-kicker"><PenLine size={14} /> NEW POST</span><h1 id="composer-heading">Share an idea.</h1><p>Something you learned. Something worth passing on.</p></div>
+      <span className={'composer-draft is-' + draftState}><span aria-hidden="true" />{draftLabel}</span>
+    </header>
+    {published ? <section className="composer-success">
+      <span className="composer-success-mark"><Check size={26} /></span><span className="composer-kicker">{published.visibility === 'private' ? 'SAVED PRIVATELY' : 'PUBLISHED'}</span>
+      <h2 tabIndex={-1} ref={successHeading}>Your idea is out of the draft.</h2><p>“{published.title}”</p><span>{published.visibility === 'private' ? 'Only you can see this post.' : 'Shared in ' + published.topic + '.'}</span>
+      {draftState === 'error' && <p role="status">Published, but the local draft could not be cleared on this device.</p>}
+      <div><Link className="composer-primary" to={published.visibility === 'private' ? '/profile' : '/feed?topic=' + encodeURIComponent(published.topic)}>{published.visibility === 'private' ? 'Go to my profile' : 'Explore this topic'}<ArrowUpRight size={16} /></Link><button type="button" className="composer-quiet" onClick={() => setPublished(null)}>Write another</button></div>
+    </section> : <form className="composer-layout" onSubmit={submit} aria-busy={submitting}>
+      <section className="composer-paper" aria-label="Post editor">
+        <div className="composer-paper-bar"><div className="composer-view-switch" role="group" aria-label="Editor view"><button type="button" aria-pressed={view === 'write'} onClick={() => setView('write')}><PenLine size={15} />Write</button><button type="button" aria-pressed={view === 'preview'} onClick={() => { setView('preview'); setTopicOpen(false); }}><Eye size={15} />Preview</button></div><span className="composer-read-time">{stats.words ? stats.minutes + ' min read' : 'Your next good idea'}</span></div>
+        {view === 'write' ? <div className="composer-writing" key="write">
+          <div className="composer-label-row"><label htmlFor="composer-title">Headline</label><span>{form.title.length}/140</span></div>
+          <textarea id="composer-title" className="composer-title" rows={2} placeholder="What did you discover?" maxLength={140} value={form.title} disabled={submitting} onChange={event => change('title', event.target.value.replace(/\n/g, ' '))} />
+          <div className="composer-label-row"><label htmlFor="composer-body">The idea</label><span>{stats.words} {stats.words === 1 ? 'word' : 'words'}</span></div>
+          <textarea id="composer-body" ref={bodyInput} className="composer-body" placeholder={'Start with one interesting idea.\n\nExplain how it works, share an example, or tell us what changed your mind.'} maxLength={5000} value={form.body} disabled={submitting} onChange={event => change('body', event.target.value)} aria-describedby="composer-body-count" />
+          <div className="composer-writing-foot"><span>Make it specific. Make it yours.</span><span id="composer-body-count">{form.body.length.toLocaleString()}/5,000</span></div>
+        </div> : <article className="composer-preview" key="preview" aria-label="Post preview">
+          <div className="composer-author"><span aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span><div><strong>{name}</strong><small>{selectedTopic || 'Choose a topic'} · {form.visibility === 'private' ? 'Only you' : 'Public'}</small></div></div>
+          <h2>{form.title.trim() || 'Your headline goes here'}</h2><p className={!form.body.trim() ? 'is-placeholder' : ''}>{form.body.trim() || 'Write your idea to see how it reads.'}</p>
+          {mediaUrl && (media?.type.startsWith('image/') ? <img src={mediaUrl} alt="Attached to this post" /> : <video src={mediaUrl} controls playsInline preload="metadata" />)}
+          <span className="composer-preview-note">Reading preview · nothing is published yet</span>
+        </article>}
+        <div className={'composer-attachment' + (dragging ? ' is-dragging' : '')} onDragOver={event => { event.preventDefault(); if (!submitting) setDragging(true); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }} onDrop={event => { event.preventDefault(); setDragging(false); selectMedia(event.dataTransfer.files); }}>
+          <input ref={fileInput} type="file" accept="image/*,video/*" hidden disabled={submitting} onChange={event => { selectMedia(event.target.files); event.target.value = ''; }} aria-label="Attach an image or video" />
+          {media ? <><div className="composer-attachment-preview">{media.type.startsWith('image/') ? <img src={mediaUrl} alt="Attachment preview" /> : <video src={mediaUrl} controls playsInline preload="metadata" />}</div><div className="composer-file-row"><div><strong>{media.name}</strong><small>{(media.size / 1024 / 1024).toFixed(1)} MB · Attach again if you leave this page</small></div><button type="button" className="composer-icon" aria-label="Remove attachment" disabled={submitting} onClick={() => { setMedia(null); uploadCache.current = null; }}><X size={18} /></button></div></> :
+            <button type="button" className="composer-attach-button" disabled={submitting} onClick={() => fileInput.current?.click()}><span className="composer-attach-icon"><ImagePlus size={21} /></span><span><strong>Add an image or video</strong><small>Optional · drop a file or choose one</small></span><Plus size={18} /></button>}
+          <span className="composer-file-hint">Images up to 12 MB · video up to 250 MB</span>
+          {mediaError && <p className="composer-error" role="alert">{mediaError}</p>}
         </div>
-      )}
-
-      <section className="post-studio">
-        <header className="post-studio-header">
-          <div>
-            <span className="post-studio-eyebrow">New post</span>
-            <h1>Create something worth saving.</h1>
-            <p>Share one clear idea with the people who want to learn it.</p>
-          </div>
-          <span className="post-draft-state"><i aria-hidden="true" /> Draft</span>
-        </header>
-
-        <form className="create-form post-studio-form" onSubmit={submit}>
-          <div className="post-settings-grid">
-            <section className="post-setting-card">
-              <div className="post-field-heading">
-                <label>Topic</label>
-                <span>Where it belongs</span>
-              </div>
-              <div className="topic-search-shell" ref={topicSearchRef}>
-                <div className={`topic-search-input ${topicSearchOpen ? 'is-open' : ''}`}>
-                  <Search size={17} aria-hidden="true" />
-                  <input
-                    id="post-topic"
-                    role="combobox"
-                    aria-label="Search or create a topic"
-                    aria-autocomplete="list"
-                    aria-expanded={topicSearchOpen}
-                    aria-controls="post-topic-results"
-                    aria-activedescendant={activeTopicIndex >= 0 ? `post-topic-option-${activeTopicIndex}` : undefined}
-                    autoComplete="off"
-                    placeholder="Search topics or type a new one"
-                    value={form.topic}
-                    maxLength={60}
-                    disabled={submitting}
-                    onChange={handleTopicChange}
-                    onFocus={() => setTopicSearchOpen(true)}
-                    onKeyDown={handleTopicKeyDown}
-                  />
-                  {hasExactTopic && <Check className="topic-match-check" size={17} aria-label="Available topic" />}
-                </div>
-
-                {topicSearchOpen && (
-                  <div className="topic-search-menu" id="post-topic-results" role="listbox">
-                    {matchingTopics.map((topic, index) => (
-                      <button
-                        type="button"
-                        id={`post-topic-option-${index}`}
-                        role="option"
-                        aria-selected={activeTopicIndex === index}
-                        className={`topic-search-option ${activeTopicIndex === index ? 'is-active' : ''}`}
-                        key={topic}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => chooseTopic(topic)}
-                      >
-                        <span><Search size={14} aria-hidden="true" />{topic}</span>
-                        <small>Available</small>
-                      </button>
-                    ))}
-
-                    {canCreateTopic && (
-                      <button
-                        type="button"
-                        id={`post-topic-option-${matchingTopics.length}`}
-                        role="option"
-                        aria-selected={activeTopicIndex === matchingTopics.length}
-                        className={`topic-search-option is-create ${activeTopicIndex === matchingTopics.length ? 'is-active' : ''}`}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => chooseTopic(selectedTopic)}
-                      >
-                        <span><Plus size={14} aria-hidden="true" />Add “{selectedTopic}”</span>
-                        <small>New topic</small>
-                      </button>
-                    )}
-
-                    {!matchingTopics.length && !canCreateTopic && (
-                      <p className="topic-search-empty">Type at least two characters to add a topic.</p>
-                    )}
-                  </div>
-                )}
-              </div>
-              <p className="post-setting-note topic-field-note">
-                {hasExactTopic ? 'Ready to publish in this topic.' : 'Choose a match or keep typing to create a new topic.'}
-              </p>
-            </section>
-
-            <section className="post-setting-card">
-              <div className="post-field-heading">
-                <label>Audience</label>
-                <span>Who can view it</span>
-              </div>
-              <div className="visibility-toggle post-visibility-toggle">
-                <button type="button" className={form.visibility === 'public' ? 'active' : ''} aria-pressed={form.visibility === 'public'} disabled={submitting} onClick={setPublicVisibility}>
-                  <Globe2 size={16} /> Public
-                </button>
-                <button type="button" className={form.visibility === 'private' ? 'active' : ''} aria-pressed={form.visibility === 'private'} disabled={submitting} onClick={setPrivateVisibility}>
-                  <Lock size={15} /> Private
-                </button>
-              </div>
-              <p className="post-setting-note">
-                {form.visibility === 'public'
-                  ? 'Anyone in Smarty can discover this post.'
-                  : 'Only you can view this post.'}
-              </p>
-            </section>
-          </div>
-
-          <section className="post-editor">
-            <div className="post-field-heading">
-              <label htmlFor="post-headline">Headline</label>
-              <span>{form.title.length}/140</span>
-            </div>
-            <input
-              id="post-headline"
-              className="post-title-input"
-              placeholder="A clear headline for your idea"
-              value={form.title}
-              maxLength={140}
-              disabled={submitting}
-              onChange={handleTitleChange}
-            />
-
-            <div className="post-editor-divider" />
-
-            <div className="post-field-heading">
-              <label htmlFor="post-content">Your idea</label>
-              <span>{form.body.length}/5000</span>
-            </div>
-            <textarea
-              id="post-content"
-              rows="9"
-              placeholder="Explain it naturally. Start with what makes it useful, then add the detail people should remember."
-              value={form.body}
-              maxLength={5000}
-              disabled={submitting}
-              onChange={handleBodyChange}
-            />
-          </section>
-
-          <section className="post-media-section">
-            <div className="post-field-heading">
-              <label>Media</label>
-              <span>Optional · image or video</span>
-            </div>
-            <input
-              ref={mediaInputRef}
-              id="post-media-input"
-              className="post-media-input"
-              type="file"
-              accept="image/*,video/*"
-              disabled={submitting}
-              onChange={handleMediaFileChange}
-            />
-
-            {!imageFile && !videoFile ? (
-              <label className="post-media-empty" htmlFor="post-media-input">
-                <span className="post-media-icon"><ImagePlus size={20} /></span>
-                <span>
-                  <strong>Add a visual</strong>
-                  <small>Choose one image or video</small>
-                </span>
-                <b>Choose file</b>
-              </label>
-            ) : (
-              <div className="post-media-selected">
-                {imageFile ? (
-                  <img src={imagePreviewUrl} alt="Selected media preview" className="post-media-preview" />
-                ) : (
-                  <span className="post-video-preview"><ImagePlus size={22} /></span>
-                )}
-                <div className="post-media-meta">
-                  <strong>{imageFile?.name || videoFile?.name}</strong>
-                  <small>{imageFile ? 'Image ready' : 'Video ready'}</small>
-                </div>
-                <button type="button" className="post-media-remove" onClick={removeMedia} disabled={submitting} aria-label="Remove selected media">
-                  <X size={17} />
-                </button>
-              </div>
-            )}
-          </section>
-
-          <footer className="post-studio-footer">
-            <div className="post-footer-message" aria-live="polite">
-              {status ? <p className="status">{status}</p> : <p>Your post saves as soon as it is published.</p>}
-            </div>
-            <button className="primary-btn publish-btn post-publish-button" disabled={!canSubmit} type="submit">
-              <Send size={16} />
-              {submitting ? 'Publishing' : 'Publish post'}
-            </button>
-          </footer>
-        </form>
       </section>
-    </main>
-  );
+      <aside className="composer-details" aria-label="Post details">
+        <div className="composer-details-heading"><h2>Post details</h2><span>01 / IDEA</span></div>
+        <section className="composer-setting"><label htmlFor="composer-topic">Topic</label><div className="composer-topic-shell" ref={topicShell}>
+          <div className="composer-topic-input"><Search size={16} /><input id="composer-topic" ref={topicInput} role="combobox" aria-label="Search or create a topic" aria-autocomplete="list" aria-controls={topicOpen ? 'composer-topics' : undefined} aria-expanded={topicOpen} aria-activedescendant={topicOpen && activeTopic >= 0 ? 'composer-topic-' + activeTopic : undefined} autoComplete="off" placeholder="Find or add a topic" value={form.topic} maxLength={60} disabled={submitting} onFocus={() => setTopicOpen(true)} onBlur={event => { if (!topicShell.current?.contains(event.relatedTarget)) setTopicOpen(false); }} onChange={event => { change('topic', event.target.value.replace(/[\u0000-\u001f\u007f]/g, '')); setTopicOpen(true); setActiveTopic(-1); }} onKeyDown={topicKeys} />{exactTopic && <Check size={15} aria-label="Existing topic" />}</div>
+          {topicOpen && <div className="composer-topic-menu" id="composer-topics" role="listbox" aria-label="Topics">{choices.map((topic, index) => <button type="button" role="option" tabIndex={-1} id={'composer-topic-' + index} key={topic} aria-selected={activeTopic === index} onMouseDown={event => event.preventDefault()} onClick={() => chooseTopic(topic)}>{canCreate && index === matches.length ? <><Plus size={14} /><span>Add “{topic}”</span></> : <><span>{topic}</span>{topic === exactTopic && <Check size={14} />}</>}</button>)}{!choices.length && <p>Type at least two characters.</p>}</div>}
+        </div><p>{topicState === 'fallback' ? 'Suggestions are offline. You can still enter a topic.' : topicState === 'loading' ? 'Loading topic suggestions…' : canCreate ? 'This topic will be added when you publish.' : 'A specific topic helps the right people find it.'}</p></section>
+        <fieldset className="composer-setting composer-audience" disabled={submitting}><legend>Who can see it?</legend><div role="group" aria-label="Post audience"><button type="button" aria-pressed={form.visibility === 'public'} onClick={() => change('visibility', 'public')}><Globe2 size={16} />Everyone</button><button type="button" aria-pressed={form.visibility === 'private'} onClick={() => change('visibility', 'private')}><Lock size={15} />Only me</button></div><p>{form.visibility === 'public' ? 'Visible to everyone in Smarty.' : 'A private note, just for you.'}</p></fieldset>
+        <details className="composer-writing-tip"><summary>A little writing help<ChevronDown size={15} /></summary><ol><li>Start with one specific idea.</li><li>Explain it in your own words.</li><li>Add an example and credit your sources.</li></ol></details>
+        <div className="composer-publish-area">
+          {error && <p className="composer-error" role="alert">{error}</p>}
+          {submitting && <div className="composer-progress" role="status"><span>{stage}</span>{stage === 'Uploading attachment…' && <><progress max="100" value={progress} aria-label="Attachment upload progress" /><small>{progress}% uploaded</small></>}</div>}
+          <button className="composer-primary" type="submit" disabled={!ready || submitting}><Send size={16} />{submitting ? 'Publishing…' : form.visibility === 'private' ? 'Publish privately' : 'Publish post'}</button>
+          <p className="composer-publish-note">{!ready ? 'Add a headline, your idea, and a topic to publish.' : form.visibility === 'private' ? 'Your private post will appear on your profile.' : 'Share thoughtfully. Keep it useful and respectful.'}</p>
+          {(hasPostDraft(form) || media) && !confirmClear && <button type="button" className="composer-clear" disabled={submitting} onClick={() => setConfirmClear(true)}>Clear draft</button>}
+          {confirmClear && <div className="composer-confirm" role="group" aria-label="Confirm clearing draft"><p>Remove this draft and its attachment?</p><div><button type="button" className="composer-quiet" disabled={submitting} onClick={() => setConfirmClear(false)}>Keep writing</button><button type="button" className="composer-clear" disabled={submitting} onClick={clearDraft}>Clear draft</button></div></div>}
+          <p className="composer-device-note">Text drafts stay on this device. Attachments aren’t saved in drafts.</p>
+        </div>
+      </aside>
+    </form>}
+  </main>;
 }

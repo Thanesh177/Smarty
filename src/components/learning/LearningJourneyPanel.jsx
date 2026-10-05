@@ -59,22 +59,10 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId 
   return (
     <section className="learning-journey" aria-labelledby={titleId}>
       <div className="learning-journey-head">
-        <div>
-          <span className="learning-journey-kicker">Make it yours</span>
-          <h2 id={titleId}>{context.focus}</h2>
-          <p>Take your time. Understand the idea, then see what you remember.</p>
-        </div>
+
         <Link className="learning-journey-topic" to="/learn">My learning <ChevronRight size={13} /></Link>
       </div>
-      <ol className="learning-journey-steps" aria-label="Lesson progress">
-        {STAGES.map((item) => {
-          const Icon = item.icon;
-          return <li key={item.id} className={[progress[item.id] ? 'is-complete' : '', nextStep.stage === item.id ? 'is-current' : ''].join(' ')} aria-current={nextStep.stage === item.id ? 'step' : undefined}>
-            <span className="learning-step-icon" aria-hidden="true">{progress[item.id] ? <Check size={16} /> : <Icon size={16} />}</span>
-            <span><strong>{item.label}{progress[item.id] ? ' · done' : ''}</strong><small>{item.helper}</small></span>
-          </li>;
-        })}
-      </ol>
+
       {!progress.read && <button type="button" className="learning-secondary-action" onClick={() => completeStep('read')}><Check size={16} /> I’ve read the source</button>}
       {notice && <p className="learning-save-notice" role="status">{notice}</p>}
       <div className="learning-journey-actions">

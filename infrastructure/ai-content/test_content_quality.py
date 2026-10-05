@@ -127,8 +127,10 @@ class ContentCatalogTests(unittest.TestCase):
             "and explains why each change produces the next observable result. "
         )
         return "\n\n".join(
-            f"{heading}\n\n{sentence * 6}"
-            for heading in LAMBDA.EXPLANATION_SECTION_HEADINGS
+            f"{heading}\n\n" + (
+                "\n\n".join(f"{index}. {sentence * 2}" for index in range(1, 5))
+                if heading == "How it works" else sentence * 6
+            ) for heading in LAMBDA.EXPLANATION_SECTION_HEADINGS
         ).strip()
 
     def test_catalog_is_broad_and_every_target_is_narrow(self):
@@ -252,6 +254,19 @@ class ContentCatalogTests(unittest.TestCase):
         self.assertIn("Use the exact 9 section headings", captured["prompt"])
         self.assertIn("What to learn next", result)
         self.assertIn("Limits and edge cases", result)
+        self.assertIn("change ONE input", captured["prompt"])
+        self.assertIn("untrusted source material", captured["prompt"])
+        self.assertIn("hypothetical", captured["prompt"])
+
+    def test_missing_or_empty_sections_are_not_saved_as_complete_guides(self):
+        complete = self.complete_explanation()
+        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.replace("Worked example", "A generic example")))
+        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.split("Remember this")[0] + "Remember this\n"))
+        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.replace("1. ", "").replace("2. ", "").replace("3. ", "").replace("4. ", "")))
+
+    def test_old_version_cache_is_not_reused(self):
+        self.assertEqual(LAMBDA.EXPLANATION_SCHEMA_VERSION, 4)
+        self.assertTrue(LAMBDA.explanation_cache_id("post-1", "hash").startswith("post#v4#"))
 
     def test_saved_explanation_is_reused_without_a_second_model_call(self):
         class MemoryTable:

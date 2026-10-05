@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { userApi, postApi, creatorApi, roomApi } from '../api/client';
 import { flushNativeSessionStorage } from '../lib/nativeSessionStorage';
 import './ProfilePage.css';
+import ProfileEditor from '../components/ProfileEditor';
+import DeleteAccountDialog from '../components/DeleteAccountDialog';
+import { Search, X, Users, ArrowUpRight } from 'lucide-react';
+import './CommunityWorkspace.css';
 
 function getPostImage(post) {
   return (
@@ -106,24 +110,24 @@ const ProfilePostCard = memo(function ProfilePostCard({ post, label, onOpen, onE
   );
 });
 
-const FriendResultCard = memo(function FriendResultCard({ item, loadingId, onInvite }) {
-  const itemId = item.userId || item.id || item.sub || item.email;
-  const itemName = item.username || item.name || item.email || 'User';
+const FriendResultCard = memo(function FriendResultCard({ item, loadingId, onInvite, onOpen }) {
+  const [imageFailed,setImageFailed]=useState(false);
+  const itemId = item.userId || item.id || item.sub;
+  const itemName = getCleanProfileName(item);
   const itemInitial = String(itemName).charAt(0).toUpperCase();
 
   return (
     <div className="friend-result-card">
-      <div className="friend-result-avatar">{itemInitial}</div>
-
-      <div>
+      <button type="button" className="friend-result-person" disabled={!itemId} onClick={()=>onOpen(itemId)} aria-label={`View ${itemName} profile`}>
+      <div className="friend-result-avatar">{(item.photoUrl||item.profilePic)&&!imageFailed?<img src={item.photoUrl||item.profilePic} alt="" loading="lazy" onError={()=>setImageFailed(true)}/>:itemInitial}</div><div>
         <strong>{itemName}</strong>
-        <span>{item.email || 'Smarty user'}</span>
-      </div>
+        <span>{item.username ? `@${item.username}` : 'Smarty member'}</span>
+      </div><ArrowUpRight size={14}/></button>
 
       <button
         type="button"
         onClick={() => onInvite(item)}
-        disabled={item.invited || loadingId === itemId}
+        disabled={!itemId || item.invited || Boolean(loadingId)}
       >
         {item.invited ? 'Requested' : loadingId === itemId ? 'Sending...' : 'Follow'}
       </button>
@@ -158,6 +162,8 @@ export default function ProfilePage() {
   const [friendSearch, setFriendSearch] = useState('');
   const [friendResults, setFriendResults] = useState([]);
   const [searchingFriends, setSearchingFriends] = useState(false);
+  const [friendSearchError, setFriendSearchError] = useState('');
+  const [friendSearchComplete, setFriendSearchComplete] = useState(false);
   const [friendActionLoading, setFriendActionLoading] = useState('');
   const [profile, setProfile] = useState(null);
   const [tab, setTab] = useState('overview');
@@ -170,8 +176,13 @@ export default function ProfilePage() {
 const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
 const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
 const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+  const [deleteAccountError, setDeleteAccountError] = useState('');
+  const deletingAccountRef = useRef(false);
   const [editingProfile, setEditingProfile] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileEditorError, setProfileEditorError] = useState('');
+  const editingProfileRef = useRef(false);
+  const savingProfileRef = useRef(false);
   const [newUsername, setNewUsername] = useState('');
   const [newPhoto, setNewPhoto] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
@@ -183,6 +194,7 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const profileLoadIdRef = useRef(0);
   const friendSearchRequestSeqRef = useRef(0);
   const friendSearchTimerRef = useRef(null);
+  const friendActionLockedRef = useRef(false);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
   const [avatarImageLoaded, setAvatarImageLoaded] = useState(false);
 
@@ -252,7 +264,7 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   const runFriendSearch = useCallback(async (searchValue) => {
     const query = String(searchValue || '').trim();
 
-    if (!query) {
+    if (query.length < 2) {
       setFriendResults([]);
       setSearchingFriends(false);
       return;
@@ -263,26 +275,27 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
 
     try {
       setSearchingFriends(true);
-      setStatus('');
+      setFriendSearchError('');setFriendSearchComplete(false);
 
       const data = await withTimeout(roomApi.searchUsers(query), 12000);
       if (!mountedRef.current || requestId !== friendSearchRequestSeqRef.current) return;
 
-      const users = data.users || data || [];
+      const users = normalizeItemsResponse(data,'users');
       const myId = profile?.id || profile?.userId || profile?.sub;
       const myEmail = profile?.email;
 
       setFriendResults(
-        users.filter((item) => {
+        users.filter(Boolean).filter((item,index,array) => {
           const itemId = item.userId || item.id || item.sub;
-          return itemId !== myId && item.email !== myEmail;
+          return Boolean(itemId) && String(itemId) !== String(myId) && (!myEmail || item.email !== myEmail) && array.findIndex(value=>String(value.userId||value.id||value.sub)===String(itemId))===index;
         })
       );
+      setFriendSearchComplete(true);
     } catch (err) {
       console.error(err);
       if (mountedRef.current && requestId === friendSearchRequestSeqRef.current) {
         setFriendResults([]);
-        setStatus(err?.response?.data?.error || 'Search failed');
+        setFriendSearchError('People could not be loaded. Check your connection and try again.');
       }
     } finally {
       if (mountedRef.current && requestId === friendSearchRequestSeqRef.current) {
@@ -310,11 +323,14 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
       friendSearchTimerRef.current = null;
     }
 
-    if (!query) {
+    setFriendSearchError('');setFriendSearchComplete(false);setFriendResults([]);
+    if (query.length < 2) {
       setFriendResults([]);
       setSearchingFriends(false);
       return undefined;
     }
+
+    setSearchingFriends(true);
 
     friendSearchTimerRef.current = window.setTimeout(() => {
       friendSearchTimerRef.current = null;
@@ -330,7 +346,7 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   }, [friendSearch, runFriendSearch]);
 
   async function inviteFriend(targetUser) {
-    if (!targetUser) return;
+    if (!targetUser || friendActionLockedRef.current) return;
 
     const targetId = targetUser.userId || targetUser.id || targetUser.sub;
     if (!targetId) {
@@ -338,11 +354,13 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
       return;
     }
 
+    friendActionLockedRef.current=true;
     try {
       setFriendActionLoading(targetId);
       setStatus('Sending follow request...');
 
       await withTimeout(userApi.followUser(targetId), 12000);
+      if(!mountedRef.current)return;
 
       setStatus('Follow request sent. Waiting for approval.');
       setFriendResults((prev) =>
@@ -354,14 +372,17 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
       );
     } catch (err) {
       console.error(err);
+      if(!mountedRef.current)return;
       setStatus(err?.response?.data?.error || 'Follow request failed');
     } finally {
-      setFriendActionLoading('');
+      friendActionLockedRef.current=false;
+      if(mountedRef.current)setFriendActionLoading('');
     }
   }
 
   async function loadProfileData(options = {}) {
     const { silent = false } = options;
+    if (savingProfileRef.current) return;
     const loadId = profileLoadIdRef.current + 1;
     profileLoadIdRef.current = loadId;
 
@@ -383,7 +404,7 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
       setProfile(me);
 
       const safeUsername = getCleanProfileName(me);
-      setNewUsername(safeUsername);
+      if (!editingProfileRef.current) setNewUsername(safeUsername);
       setLoading(false);
 
       const userId = me.id || me.userId || me.sub;
@@ -419,8 +440,22 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   }
 
   const openProfileEditor = useCallback(() => {
+    setNewUsername(getCleanProfileName(profile));
+    setNewPhoto(null);
+    setPhotoPreview('');
+    setProfileEditorError('');
+    editingProfileRef.current = true;
     setEditingProfile(true);
     setStatus('');
+  }, [profile]);
+
+  const closeProfileEditor = useCallback(() => {
+    if (savingProfileRef.current) return;
+    editingProfileRef.current = false;
+    setEditingProfile(false);
+    setNewPhoto(null);
+    setPhotoPreview('');
+    setProfileEditorError('');
   }, []);
 
   const handlePhotoSelect = useCallback((file) => {
@@ -430,24 +465,24 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
     const maxSize = 6 * 1024 * 1024;
 
     if (!allowedTypes.includes(file.type)) {
-      setStatus('Please choose a JPG, PNG, or WEBP image.');
+      setProfileEditorError('Please choose a JPG, PNG, or WebP image.');
       return;
     }
 
-    if (file.size > maxSize) {
-      setStatus('Profile image must be under 6 MB.');
+    if (!file.size || file.size > maxSize) {
+      setProfileEditorError('Choose a valid profile image under 6 MB.');
       return;
     }
 
-    if (photoPreview) URL.revokeObjectURL(photoPreview);
-
+    setProfileEditorError('');
     setNewPhoto(file);
     setPhotoPreview(URL.createObjectURL(file));
     setCropZoom(1);
     setCropX(50);
     setCropY(50);
     setEditingProfile(true);
-  }, [photoPreview]);
+    editingProfileRef.current = true;
+  }, []);
 
   const startCropDrag = useCallback((event) => {
     const pointer = event.touches?.[0] || event;
@@ -562,11 +597,20 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
   }, [myPosts]);
 
   async function saveProfile() {
+    if (savingProfileRef.current) return;
+    const cleanName = newUsername.trim();
+    if (!cleanName || cleanName.length > 40 || /[\u0000-\u001f\u007f]/.test(cleanName)) {
+      setProfileEditorError('Enter a display name of 1–40 characters.');
+      return;
+    }
+    savingProfileRef.current = true;
+    profileLoadIdRef.current += 1;
     try {
       setSavingProfile(true);
-      setStatus('Saving profile...');
+      setProfileEditorError('');
 
       let photoValue = profile?.photoKey || profile?.photoUrl || profile?.profilePic || '';
+      let uploadedPhotoUrl = '';
 
       if (newPhoto) {
         const croppedPhoto = await createCroppedProfileImage(newPhoto);
@@ -585,7 +629,7 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
           12000
         );
 
-        await withTimeout(
+        const uploaded = await withTimeout(
           fetch(upload.uploadUrl, {
             method: 'PUT',
             body: croppedPhoto,
@@ -593,6 +637,7 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
           }),
           20000
         );
+        if (!uploaded.ok) throw new Error('Your photo could not upload. Please try again.');
 
         photoValue =
           upload.fileKey ||
@@ -608,11 +653,12 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
         if (!photoValue) {
           throw new Error('Upload succeeded but no image key was returned.');
         }
+        uploadedPhotoUrl = upload.fileUrl || upload.mediaUrl || upload.photoUrl || '';
       }
 
       const payload = {
-        username: newUsername.trim(),
-        name: newUsername.trim(),
+        username: cleanName,
+        name: cleanName,
         photoUrl: photoValue,
         profilePic: photoValue,
         photoKey: photoValue,
@@ -624,9 +670,11 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
 
       setProfile((prev) => ({
         ...prev,
+        username: cleanName,
+        name: cleanName,
         ...(updated || {}),
-        photoUrl: updated?.photoUrl || updated?.profilePic || prev?.photoUrl || photoValue,
-        profilePic: updated?.profilePic || updated?.photoUrl || prev?.profilePic || photoValue,
+        photoUrl: updated?.photoUrl || updated?.profilePic || uploadedPhotoUrl || prev?.photoUrl || photoValue,
+        profilePic: updated?.profilePic || updated?.photoUrl || uploadedPhotoUrl || prev?.profilePic || photoValue,
         photoKey: updated?.photoKey || photoValue || prev?.photoKey || '',
         updatedAt: updated?.updatedAt || updatedAt,
       }));
@@ -634,6 +682,7 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
       setAvatarImageFailed(false);
       setAvatarImageLoaded(false);
 
+      editingProfileRef.current = false;
       setEditingProfile(false);
       setNewPhoto(null);
       setPhotoPreview('');
@@ -643,47 +692,58 @@ const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
       setStatus('Profile updated.');
     } catch (err) {
       console.error('PROFILE UPDATE ERROR:', err?.response?.data || err);
-      setStatus(err?.response?.data?.error || err?.message || 'Failed to update profile.');
+      setProfileEditorError(err?.response?.data?.error || err?.message || 'Your profile could not save. Please try again.');
     } finally {
       setSavingProfile(false);
+      savingProfileRef.current = false;
     }
   }
 
   
 
 const openDeleteAccountConfirm = useCallback(() => {
-  if (deleteAccountLoading) return;
+  if (deletingAccountRef.current) return;
 
   setDeleteConfirmationText('');
   setStatus('');
+  setDeleteAccountError('');
   setShowDeleteAccountConfirm(true);
-}, [deleteAccountLoading]);
+}, []);
 
 const closeDeleteAccountConfirm = useCallback(() => {
-  if (deleteAccountLoading) return;
+  if (deletingAccountRef.current) return;
 
   setShowDeleteAccountConfirm(false);
   setDeleteConfirmationText('');
-}, [deleteAccountLoading]);
+  setDeleteAccountError('');
+}, []);
 
 const handleDeleteAccount = useCallback(async () => {
-  if (deleteAccountLoading) return;
+  if (deletingAccountRef.current) return;
 
   if (deleteConfirmationText.trim() !== 'DELETE') {
-    setStatus('Type DELETE exactly to permanently delete your account.');
+    setDeleteAccountError('Type DELETE to confirm account deletion.');
     return;
   }
 
+  deletingAccountRef.current = true;
   try {
     setDeleteAccountLoading(true);
-    setStatus('Deleting your account...');
+    setDeleteAccountError('');
 
     const deleteAccountRequest =
       typeof userApi.deleteAccount === 'function'
         ? userApi.deleteAccount()
         : creatorApi.deleteAccount();
 
-    await withTimeout(deleteAccountRequest, 30000);
+    const response = await withTimeout(deleteAccountRequest, 30000);
+    let result = response;
+    if (typeof response?.body === 'string') {
+      try { result = JSON.parse(response.body); } catch { throw new Error('We could not confirm deletion. Please try again.'); }
+    }
+    if (response?.statusCode >= 400 || result?.success === false || result?.error) {
+      throw new Error(result?.message || result?.error || 'Your account could not be deleted. Please try again.');
+    }
 
     try {
       localStorage.clear();
@@ -695,23 +755,28 @@ const handleDeleteAccount = useCallback(async () => {
       );
     }
 
-    await flushNativeSessionStorage();
+    try {
+      await flushNativeSessionStorage();
+    } catch (storageError) {
+      console.warn('Account deleted, but device storage could not be synchronized:', storageError);
+    }
     window.location.replace('/login?accountDeleted=1');
   } catch (err) {
     console.error('DELETE ACCOUNT ERROR:', err?.response?.data || err);
 
-    setStatus(
+    setDeleteAccountError(
       err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message ||
         'Unable to delete your account. Please try again.'
     );
   } finally {
+    deletingAccountRef.current = false;
     if (mountedRef.current) {
       setDeleteAccountLoading(false);
     }
   }
-}, [deleteAccountLoading, deleteConfirmationText, withTimeout]);
+}, [deleteConfirmationText, withTimeout]);
 
   async function openApprovedCreator(creator) {
     const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
@@ -1012,12 +1077,12 @@ const handleDeleteAccount = useCallback(async () => {
       {tab === 'approved' && (
         <section className="profile-private-posts">
           <div className="friend-search-card">
-            <div>
-              <span className="friend-search-eyebrow">Find your friend</span>
-            </div>
+            <div className="friend-search-heading"><Users size={20}/><div><h2>Find your people.</h2><p>Search for a friend, or someone you’d like to learn from.</p></div></div>
 
             <div className="friend-search-row">
+              <Search size={18} aria-hidden="true"/>
               <input
+                type="search" maxLength={100} autoComplete="off"
                 value={friendSearch}
                 placeholder="Search username or email"
                 aria-label="Search for people"
@@ -1027,10 +1092,13 @@ const handleDeleteAccount = useCallback(async () => {
                 }}
               />
 
-              <button type="button" onClick={searchFriends} disabled={searchingFriends}>
-                {searchingFriends ? 'Searching...' : 'Search'}
-              </button>
+              {friendSearch&&<button type="button" aria-label="Clear people search" onClick={()=>setFriendSearch('')}><X size={17}/></button>}
             </div>
+            <p className="friend-search-feedback" role="status">{searchingFriends?'Finding people…':friendSearchError?'':friendSearchComplete?`${friendResults.length} ${friendResults.length===1?'person':'people'} found`:friendSearch.trim().length===1?'Type at least two characters.':'Search by username or email. Results appear as you type.'}</p>
+            {status&&<p className="friend-search-feedback" role="status">{status}</p>}
+            {friendSearchError&&<div className="community-error" role="alert"><p>{friendSearchError}</p><button type="button" onClick={searchFriends}>Try again</button></div>}
+            {searchingFriends&&<div className="friend-search-skeleton" aria-hidden="true"><i/><i/><i/></div>}
+            {!searchingFriends&&!friendSearchError&&friendSearchComplete&&friendResults.length===0&&<div className="community-empty"><h3>No people found.</h3><p>Try a username or the full email address.</p></div>}
 
             {friendResults.length > 0 && (
               <div className="friend-results-list">
@@ -1043,12 +1111,14 @@ const handleDeleteAccount = useCallback(async () => {
                       item={item}
                       loadingId={friendActionLoading}
                       onInvite={inviteFriend}
+                      onOpen={id=>navigate(`/creator/${encodeURIComponent(id)}`)}
                     />
                   );
                 })}
               </div>
             )}
           </div>
+          <h2 className="friend-following-heading">Following <span>{following.length}</span></h2>
           {following.length === 0 ? (
             <p className="status">You are not following anyone yet.</p>
           ) : (
@@ -1115,214 +1185,31 @@ const handleDeleteAccount = useCallback(async () => {
       )}
 
       {showDeleteAccountConfirm && (
-  <div
-    className="profile-modal-overlay"
-    role="presentation"
-    onClick={closeDeleteAccountConfirm}
-  >
-    <section
-      className="profile-modal profile-edit-box"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Delete account"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="profile-modal-header">
-        <div>
-          <h2>Delete your account</h2>
-          <p>This action is permanent and cannot be undone.</p>
-        </div>
-
-        <button
-          type="button"
-          className="profile-modal-close"
-          onClick={closeDeleteAccountConfirm}
-          disabled={deleteAccountLoading}
-          aria-label="Close delete account confirmation"
-        >
-          ✕
-        </button>
-      </div>
-
-<div className="profile-modal-body">
-  <p>
-    Type <strong>DELETE</strong> to permanently remove your Smarty
-    account and associated account data.
-  </p>
-
-  <input
-    value={deleteConfirmationText}
-    placeholder="Type DELETE"
-    autoComplete="off"
-    autoCapitalize="characters"
-    onChange={(event) =>
-      setDeleteConfirmationText(event.target.value)
-    }
-  />
-
-  {status && (
-    <p className="status" role="alert">
-      {status}
-    </p>
-  )}
-</div>
-
-      <div className="profile-modal-footer">
-        <button
-          type="button"
-          className="profile-modal-cancel"
-          onClick={closeDeleteAccountConfirm}
-          disabled={deleteAccountLoading}
-        >
-          Cancel
-        </button>
-
-        <button
-          type="button"
-          className="profile-delete-account-btn"
-          onClick={handleDeleteAccount}
-          disabled={
-            deleteAccountLoading ||
-            deleteConfirmationText.trim() !== 'DELETE'
-          }
-          aria-busy={deleteAccountLoading}
-        >
-          {deleteAccountLoading ? 'Deleting...' : 'Delete permanently'}
-        </button>
-      </div>
-    </section>
-  </div>
-)}
-
-      {editingProfile && (
-        <div
-          className="profile-modal-overlay"
-          role="presentation"
-          onClick={() => {
-            if (!savingProfile) setEditingProfile(false);
+        <DeleteAccountDialog
+          name={displayName}
+          email={profile?.email}
+          confirmation={deleteConfirmationText}
+          onConfirmationChange={(value) => {
+            setDeleteConfirmationText(value);
+            setDeleteAccountError('');
           }}
-        >
-          <section
-            className="profile-modal profile-edit-box"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Edit profile"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="profile-modal-header">
-              <div>
-                <h2>Update your profile</h2>
-              </div>
-
-              <button
-                type="button"
-                className="profile-modal-close"
-                onClick={() => setEditingProfile(false)}
-                disabled={savingProfile}
-                aria-label="Close edit profile"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="profile-modal-body">
-              <input
-                value={newUsername}
-                placeholder="Username"
-                onChange={(e) => setNewUsername(e.target.value)}
-              />
-
-              <label className="profile-photo-upload">
-                <span>Choose profile image</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handlePhotoSelect(e.target.files?.[0] || null)}
-                />
-              </label>
-
-              {(photoPreview || profile?.photoUrl || profile?.profilePic) && (
-                <div className="profile-crop-box">
-                  <div
-                    className="profile-crop-preview touch-crop-preview"
-                    onPointerDown={startCropDrag}
-                    onPointerMove={moveCropDrag}
-                    onPointerUp={endCropDrag}
-                    onPointerCancel={endCropDrag}
-                    onPointerLeave={endCropDrag}
-                  >
-                    <img
-                      src={photoPreview || profileImageSrc}
-                      alt="Profile crop preview"
-                      draggable="false"
-                      decoding="async"
-                      style={{
-                        transform: `scale(${cropZoom})`,
-                        objectPosition: `${cropX}% ${cropY}%`,
-                        transformOrigin: `${cropX}% ${cropY}%`,
-                      }}
-                    />
-                    <span className="crop-drag-hint">Drag to adjust</span>
-                  </div>
-
-                  <div className="crop-controls">
-                    <label>
-                      Zoom
-                      <input
-                        type="range"
-                        min="1"
-                        max="2.4"
-                        step="0.05"
-                        value={cropZoom}
-                        onChange={(e) => setCropZoom(Number(e.target.value))}
-                      />
-                    </label>
-
-                    <button
-                      type="button"
-                      className="crop-reset-btn"
-                      onClick={() => {
-                        setCropZoom(1);
-                        setCropX(50);
-                        setCropY(50);
-                      }}
-                    >
-                      Reset image position
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="profile-modal-footer">
-              <button
-                type="button"
-                className="profile-modal-cancel"
-                onClick={() => setEditingProfile(false)}
-                disabled={savingProfile}
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                className="profile-modal-save"
-                onClick={saveProfile}
-                disabled={savingProfile}
-              >
-                {savingProfile ? (
-                  <span className="saving-profile-label">
-                    <span className="saving-spinner" />
-                    Updating...
-                  </span>
-                ) : (
-                  'Save Changes'
-                )}
-              </button>
-            </div>
-          </section>
-        </div>
+          busy={deleteAccountLoading}
+          error={deleteAccountError}
+          onClose={closeDeleteAccountConfirm}
+          onDelete={handleDeleteAccount}
+        />
       )}
+
+      {editingProfile && <ProfileEditor
+        name={newUsername} onNameChange={value => { setNewUsername(value); setProfileEditorError(''); }}
+        photo={newPhoto} preview={photoPreview} currentPhoto={profileImageSrc} initials={initials} email={profile?.email}
+        onPhotoSelect={handlePhotoSelect}
+        onPhotoReset={() => { setNewPhoto(null); setPhotoPreview(''); setProfileEditorError(''); }}
+        zoom={cropZoom} x={cropX} y={cropY} onZoomChange={setCropZoom}
+        onCropReset={() => { setCropZoom(1); setCropX(50); setCropY(50); }}
+        onDragStart={startCropDrag} onDragMove={moveCropDrag} onDragEnd={endCropDrag}
+        saving={savingProfile} error={profileEditorError} onSave={saveProfile} onClose={closeProfileEditor}
+      />}
     </main>
   );
 }

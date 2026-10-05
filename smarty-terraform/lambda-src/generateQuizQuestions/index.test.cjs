@@ -8,7 +8,7 @@ const { createHash, randomUUID } = require('node:crypto');
 // or model calls are used. This is a unit harness, not an AWS integration test.
 function harness() {
   const items = new Map();
-  let modelCalls = 0, failWrites = false;
+  let modelCalls = 0, failWrites = false, lastModelInput;
   class Command { constructor(input) { this.input = input; } }
   class GetCommand extends Command {}
   class PutCommand extends Command {}
@@ -27,16 +27,16 @@ function harness() {
     'Which mechanism stores prior attention keys?', 'Why does a capacitor resist voltage changes?',
     'What causes basalt cooling fractures?', 'How can packet loss affect retransmission?',
     'Which evidence supports tectonic plate movement?', 'When does an enzyme bind its substrate?',
-  ].map(q => ({ q, options: ['First', 'Second', 'Third', 'Fourth'], answer: 'First', explanation: 'The first mechanism explains this result.', difficulty: 'Easy' }));
+  ].map(q => ({ q, options: ['First', 'Second', 'Third', 'Fourth'], answer: 'First', explanation: 'The first mechanism explains this result by linking the stated cause to its effect. Check the assumptions first; the other choices do not describe the mechanism under these assumptions.', difficulty: 'Easy' }));
   const context = { process: { env: {} }, console: { warn() {}, error() {} }, TextDecoder, createHash, randomUUID,
-    GetCommand, PutCommand, InvokeModelCommand: Command,
+    GetCommand, PutCommand, ConverseCommand: Command,
     DynamoDBClient: class {}, DynamoDBDocumentClient: { from: () => db },
-    BedrockRuntimeClient: class { async send() { modelCalls++; return { body: Buffer.from(JSON.stringify({ output: { message: { content: [{ text: JSON.stringify({ questions }) }] } } })) }; } },
+    BedrockRuntimeClient: class { async send(command) { modelCalls++; lastModelInput = command.input; return { output: { message: { content: [{ text: JSON.stringify({ questions }) }] } } }; } },
   };
   const source = fs.readFileSync(__dirname + '/index.mjs', 'utf8').replace(/import[\s\S]*?from\s+"[^"]+";/g, '').replace(/export /g, '');
-  vm.runInNewContext(source + '\nglobalThis.api = { handler, buildCacheKey, getCachedQuestionPool, saveQuestionPool, memoryCache };', context);
+  vm.runInNewContext(source + '\nglobalThis.api = { handler, buildCacheKey, getCachedQuestionPool, saveQuestionPool, memoryCache, getDepthProfile, normalizeQuestions };', context);
   const event = (user, body = {}) => ({ requestContext: { http: { method: 'POST' }, authorizer: { jwt: { claims: { sub: user } } } }, body: JSON.stringify({ topicId: 'ai', topicTitle: 'AI', requestedCount: 3, ...body }) });
-  return { ...context.api, items, event, calls: () => modelCalls, failWrites: () => { failWrites = true; } };
+  return { ...context.api, items, event, calls: () => modelCalls, modelInput: () => lastModelInput, failWrites: () => { failWrites = true; } };
 }
 
 test('shared question pool serves different users with one model call', async () => {
@@ -75,4 +75,31 @@ test('body userId cannot impersonate another learner', async () => {
   await h.handler(h.event('alice', { userId: 'bob' }));
   assert(h.items.has('UserQuizQuestionHistory|alice#ai'));
   assert(!h.items.has('UserQuizQuestionHistory|bob#ai'));
+});
+
+test('study paths and exam focus partition the shared pool without partitioning by learner', () => {
+  const h = harness(), base = { topicId: 'technology', depth: 'Foundation', studyTrack: 'college', examTarget: 'Networks' };
+  assert.notEqual(h.buildCacheKey(base), h.buildCacheKey({ ...base, studyTrack: 'government exams' }));
+  assert.notEqual(h.buildCacheKey(base), h.buildCacheKey({ ...base, examTarget: 'Databases' }));
+  assert.equal(h.buildCacheKey(base), h.buildCacheKey({ ...base, examTarget: 'networks' }));
+});
+test('manual foundation selection is respected even for a high-level learner', () => {
+  const h = harness();
+  assert.equal(h.getDepthProfile({ learnerLevel: 20, difficulty: 'Easy', difficultySelection: 'manual' }).difficulty, 'Easy');
+  assert.equal(h.getDepthProfile({ learnerLevel: 20, difficulty: 'Easy' }).difficulty, 'Hard');
+});
+test('AI receives study context, explicit output bounds and untrusted-input safety rules', async () => {
+  const h = harness();
+  assert.equal((await h.handler(h.event('alice', { studyTrack: 'professional skills', examTarget: 'Networking' }))).statusCode, 200);
+  const input = h.modelInput(), prompt = input.messages[0].content[0].text;
+  assert.ok(prompt.includes('professional skills')); assert.ok(prompt.includes('Networking'));
+  assert.ok(prompt.includes('35-80 words')); assert.ok(prompt.includes('intermediate step'));
+  assert.ok(input.system[0].text.includes('untrusted reference data')); assert.equal(input.inferenceConfig.maxTokens,3600);
+});
+test('wrong-level, duplicate-choice and answer-only questions are rejected before caching', () => {
+  const h = harness(), row = { q: 'Which mechanism explains the measured change?', options: ['One','Two','Three','Four'], answer: 'One',
+    explanation: 'The first option correctly connects the observed cause and effect under the stated assumptions. The other options reverse the relationship or depend on information not supplied.', difficulty: 'Hard' };
+  assert.equal(h.normalizeQuestions([row], 'topic', 'Hard').length,1);
+  for (const change of [{difficulty:'Easy'},{options:['One','one','Three','Four']},{explanation:'One is correct.'},{answer:'Missing'}])
+    assert.equal(h.normalizeQuestions([{...row,...change}], 'topic', 'Hard').length,0);
 });

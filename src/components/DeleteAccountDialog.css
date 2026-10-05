@@ -1,0 +1,18 @@
+.account-delete-panel { width: min(440px, 100%); }
+.account-delete-panel .profile-editor-header { align-items: center; padding-bottom: 22px; }
+.account-delete-panel .profile-editor-header > div { display: flex; align-items: center; gap: 12px; }
+.account-delete-icon { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 9px; background: #e994940d; color: #e99494; }
+.account-delete-panel .profile-editor-header h2 { font-size: 20px; }
+.account-delete-identity { display: grid; gap: 6px; margin-bottom: 18px; }
+.account-delete-identity strong { font-size: 14px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.account-delete-identity span { color: var(--ui-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.account-delete-description { color: var(--ui-secondary); font-size: 13px; line-height: 1.8; margin: 0 0 26px; }
+.account-delete-panel .profile-editor-field input { letter-spacing: .08em; }
+.account-delete-panel .account-delete-confirm { background: #b74545; color: #fff; border-color: transparent; }
+.account-delete-panel .account-delete-confirm:hover:not(:disabled) { background: #c65353; }
+.account-delete-panel .account-delete-confirm:disabled { background: #e994940d; border-color: #e9949422; color: #e99494; opacity: .5; }
+.account-delete-progress { display: flex; align-items: center; gap: 9px; margin: 20px 0 0; color: var(--ui-muted); font-size: 12px; line-height: 1.5; }
+.account-delete-progress svg { animation: accountDeleteSpin 1s linear infinite; flex: none; }
+@keyframes accountDeleteSpin { to { transform: rotate(360deg); } }
+@media (max-width: 360px) { .account-delete-panel .profile-editor-footer { gap: 8px; padding-inline: 16px; } .account-delete-panel .profile-editor-footer button { font-size: 12px; padding-inline: 10px; } }
+@media (prefers-reduced-motion: reduce) { .account-delete-progress svg { animation: none; } }

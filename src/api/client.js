@@ -521,6 +521,15 @@ const buildClientDailySummary = (articles, location) => {
 };
 
 export const newsApi = {
+  async getStoryTimeline({ query, year = 'recent', month = 'all', signal } = {}) {
+    const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
+      params: { view: 'story', query, year, month }, signal, timeout: NEWS_API_TIMEOUT,
+    });
+    if (data?.kind !== 'story-timeline' || !Array.isArray(data.articles)) {
+      throw new Error('Story timelines are not available on this server yet. Please try again later.');
+    }
+    return data;
+  },
   async getHackerNews(limit = 12, requestOptions = {}) {
     const { data: storyIds } = await axios.get(
       `${HACKER_NEWS_BASE_URL}/topstories.json`,
@@ -1597,6 +1606,29 @@ async rejectFollowRequest(followerId) {
 
 
 export const readBooksApi = {
+  async getCatalogPage({ search = '', category = '', language = 'en', sort = 'popular', access = 'read', page = 1 } = {}, { signal } = {}) {
+    const safePage = Math.max(1, Math.floor(Number(page) || 1));
+    if (access === 'preview') {
+      const params = new URLSearchParams({ page: String(safePage), limit: '24',
+        fields: 'key,title,author_name,first_publish_year,cover_i,edition_key,ia,ebook_access,public_scan_b,subject,language' });
+      params.set('q', String(search).trim() || category || 'classic literature');
+      if (category) params.set('subject', category);
+      if (language) params.set('lang', language);
+      const { data } = await axios.get(`${OPENLIBRARY_BASE_URL}/search.json?${params}`, { signal, timeout: API_TIMEOUT });
+      const total = Number(data.numFound ?? data.num_found) || 0;
+      // Availability at the provider is not a promise of in-app full text.
+      return { books: this.normalizeOpenLibraryBooks(Array.isArray(data.docs) ? data.docs : []).map(book => ({ ...book, readable: false })),
+        total, nextPage: safePage * 24 < total ? safePage + 1 : null };
+    }
+    const params = new URLSearchParams({ page: String(safePage), mime_type: 'text/plain', copyright: 'false',
+      sort: ['popular', 'ascending', 'descending'].includes(sort) ? sort : 'popular' });
+    if (language) params.set('languages', language);
+    if (String(search).trim()) params.set('search', String(search).trim());
+    if (category) params.set('topic', category);
+    const { data } = await axios.get(`${GUTENDEX_BASE_URL}/books/?${params}`, { signal, timeout: API_TIMEOUT });
+    return { books: this.normalizeGutendexBooks(Array.isArray(data.results) ? data.results : []).filter(book => book.readable),
+      total: Number(data.count) || 0, nextPage: data.next ? safePage + 1 : null };
+  },
   normalizeOpenLibraryBooks(docs = []) {
     return docs.map((book) => {
       const workId = book.key?.replace('/works/', '') || '';
@@ -1814,7 +1846,7 @@ export const readBooksApi = {
     return data.subjects || data.items || data.results || data.data || [];
   },
 
-  async getBookById(id) {
+  async getBookById(id, { signal } = {}) {
     const bookId = String(id || '').trim();
 
     if (!bookId) {
@@ -1824,7 +1856,7 @@ export const readBooksApi = {
     if (/^\d+$/.test(bookId)) {
       const { data } = await axios.get(
         `${GUTENDEX_BASE_URL}/books/${encodeURIComponent(bookId)}/`,
-        { timeout: API_TIMEOUT }
+        { timeout: API_TIMEOUT, signal }
       );
 
       return this.normalizeGutendexBooks([data])[0] || data;
@@ -1832,13 +1864,13 @@ export const readBooksApi = {
 
     const { data } = await axios.get(
       `${OPENLIBRARY_BASE_URL}/works/${encodeURIComponent(bookId)}.json`,
-      { timeout: API_TIMEOUT }
+      { timeout: API_TIMEOUT, signal }
     );
 
     return data;
   },
 
-  async getTextFromGutenberg(gutenbergId) {
+  async getTextFromGutenberg(gutenbergId, { signal } = {}) {
     const bookId = String(gutenbergId || '').trim();
 
     if (!bookId) {
@@ -1848,9 +1880,10 @@ export const readBooksApi = {
     let data;
 
     try {
-      const response = await api.get(`/books/${encodeURIComponent(bookId)}/text`);
+      const response = await api.get(`/books/${encodeURIComponent(bookId)}/text`, { signal });
       data = response.data;
     } catch (error) {
+      if (signal?.aborted) throw error;
       throw new Error(
         error.response?.data?.message ||
           'Readable text is not available for this Gutenberg book.'
@@ -1878,7 +1911,7 @@ export const readBooksApi = {
     return data.text || data.content || '';
   },
 
-  async getTextFromInternetArchive(iaId) {
+  async getTextFromInternetArchive(iaId, { signal } = {}) {
     const archiveId = String(iaId || '').trim();
 
     if (!archiveId) {
@@ -1888,9 +1921,10 @@ export const readBooksApi = {
     let data;
 
     try {
-      const response = await api.get(`/books/${encodeURIComponent(archiveId)}/text`);
+      const response = await api.get(`/books/${encodeURIComponent(archiveId)}/text`, { signal });
       data = response.data;
     } catch (error) {
+      if (signal?.aborted) throw error;
       throw new Error(
         error.response?.data?.message ||
           'Readable Internet Archive text is not available.'
@@ -1918,7 +1952,7 @@ export const readBooksApi = {
     return data.text;
   },
 
-  async getTextFromOpenLibraryWork(workId) {
+  async getTextFromOpenLibraryWork(workId, { signal } = {}) {
     const cleanWorkId = String(workId || '').trim();
 
     if (!cleanWorkId) {
@@ -1927,12 +1961,13 @@ export const readBooksApi = {
 
     const { data } = await axios.get(
       `${OPENLIBRARY_BASE_URL}/works/${encodeURIComponent(cleanWorkId)}/editions.json?limit=50`,
-      { timeout: API_TIMEOUT }
+      { timeout: API_TIMEOUT, signal }
     );
 
     const editions = Array.isArray(data?.entries) ? data.entries : [];
 
     for (const edition of editions) {
+      if (signal?.aborted) throw new Error('Book loading canceled.');
       const iaId =
         edition.ocaid ||
         edition.ia?.[0] ||
@@ -1942,8 +1977,9 @@ export const readBooksApi = {
 
       if (iaId) {
         try {
-          return await this.getTextFromInternetArchive(iaId);
+          return await this.getTextFromInternetArchive(iaId, { signal });
         } catch (error) {
+          if (signal?.aborted) throw error;
           console.info('Internet Archive source unavailable:', error.message);
         }
       }
@@ -1955,8 +1991,9 @@ export const readBooksApi = {
 
       if (gutenbergId) {
         try {
-          return await this.getTextFromGutenberg(gutenbergId);
+          return await this.getTextFromGutenberg(gutenbergId, { signal });
         } catch (error) {
+          if (signal?.aborted) throw error;
           console.info('Gutenberg source unavailable:', error.message);
         }
       }
@@ -1967,7 +2004,7 @@ export const readBooksApi = {
     );
   },
 
-  async getBookText(id) {
+  async getBookText(id, options = {}) {
     const bookId = String(id || '').trim();
 
     if (!bookId) {
@@ -1975,14 +2012,14 @@ export const readBooksApi = {
     }
 
     if (bookId.startsWith('OL') && bookId.endsWith('W')) {
-      return this.getTextFromOpenLibraryWork(bookId);
+      return this.getTextFromOpenLibraryWork(bookId, options);
     }
 
     if (/^\d+$/.test(bookId)) {
-      return this.getTextFromGutenberg(bookId);
+      return this.getTextFromGutenberg(bookId, options);
     }
 
-    return this.getTextFromInternetArchive(bookId);
+    return this.getTextFromInternetArchive(bookId, options);
   },
 };
 
@@ -2069,7 +2106,7 @@ async getPostDetails(payload) {
     post: guide,
     explanation: guide.aiDetailedExplanation,
     aiDetailedExplanation: guide.aiDetailedExplanation,
-    aiDetailedExplanationVersion: 3,
+    aiDetailedExplanationVersion: 4,
     cached: true,
     persisted: true,
   };

@@ -8,8 +8,10 @@ const VISIT_STREAK_KEY = "smarty-visit-streak-v2";
 const GUEST_ID_KEY = "smarty-user-id";
 
 function getStorage() {
-  return typeof window !== "undefined" ? window.localStorage : null;
+  try { return typeof window !== "undefined" ? window.localStorage : null; } catch { return null; }
 }
+
+let memoryGuestId = '';
 
 export function getProgressUserId(userOrId) {
   const supplied = typeof userOrId === "object"
@@ -20,13 +22,16 @@ export function getProgressUserId(userOrId) {
   if (normalized) return normalized;
 
   const storage = getStorage();
-  const existing = storage?.getItem(GUEST_ID_KEY);
+  let existing;
+  try { existing = storage?.getItem(GUEST_ID_KEY); } catch { /* Private storage can be unavailable. */ }
   if (existing) return existing;
+  if (memoryGuestId) return memoryGuestId;
 
   const randomId = globalThis.crypto?.randomUUID
     ? globalThis.crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const created = `guest-${randomId}`;
+  memoryGuestId = created;
 
   try {
     storage?.setItem(GUEST_ID_KEY, created);
@@ -62,7 +67,8 @@ function writeJson(baseKey, value, userOrId) {
 }
 
 export function getProgress(userOrId) {
-  return readJson(PROGRESS_KEY, {}, userOrId);
+  const value = readJson(PROGRESS_KEY, {}, userOrId);
+  return Array.isArray(value) ? {} : value;
 }
 
 export function saveProgress(progress, userOrId) {
@@ -70,7 +76,8 @@ export function saveProgress(progress, userOrId) {
 }
 
 export function getWrongQuestions(userOrId) {
-  return readJson(WRONG_KEY, {}, userOrId);
+  const value = readJson(WRONG_KEY, {}, userOrId);
+  return Array.isArray(value) ? {} : value;
 }
 
 export function getPlayerStats(userOrId) {
@@ -118,7 +125,8 @@ export function removeWrongQuestion(topicId, mistakeToRemove, userOrId) {
 export function saveWrongQuestion(topicId, question, userOrId) {
   const existing = getWrongQuestions(userOrId);
   const normalizedQuestion = String(question?.q || "").trim().toLowerCase();
-  const withoutDuplicate = (existing[topicId] || []).filter(
+  if (!normalizedQuestion) return existing;
+  const withoutDuplicate = (Array.isArray(existing[topicId]) ? existing[topicId] : []).filter(
     (item) => String(item?.q || "").trim().toLowerCase() !== normalizedQuestion,
   );
   const updated = {
@@ -131,6 +139,12 @@ export function saveWrongQuestion(topicId, question, userOrId) {
         answer: question.answer || question.correctAnswer,
         explanation: question.explanation,
         difficulty: question.difficulty,
+        options: Array.isArray(question.options) ? question.options : [],
+        confidence: question.confidence,
+        isCorrect: Boolean(question.isCorrect),
+        topicTitle: question.topicTitle,
+        learningContext: question.learningContext,
+        postId: question.postId,
         savedAt: new Date().toISOString(),
       },
     ].slice(-20),

@@ -8,6 +8,7 @@ import {
   getWrongQuestions,
   saveProgress,
   saveWrongQuestion,
+  removeWrongQuestion,
 } from "../lib/progressStore";
 import { getFocusedQuizId, getLearningContext, recordLearningQuiz } from "../lib/learningJourney";
 import { getLearningGuide, getGuideQuestions } from "../data/learningGuides";
@@ -25,10 +26,16 @@ import {
 } from "../lib/quizQuestionStore";
 import { useAuth } from "../contexts/AuthContext";
 import "./QuizPage.css";
+import "./QuizLearning.css";
+import "./QuizWorkspace.css";
+import { normalizeGeneratedQuestions, needsQuizReview, getQuizResult, getSavedReviewDeck, readQuizFlag, clearQuizFlag } from '../lib/quizLearning.js';
+import { QUIZ_SUBJECTS, SUBJECT_QUESTIONS } from '../data/quizSubjects.js';
 import { checkAchievements } from "../components/achievements/achievementEngine";
 import AchievementToast from "../components/achievements/AchievementToast";
 import useSoundFeedback from "../components/audio/useSoundFeedback";
 import XPOrb from "../components/ui/XPOrb";
+import QuizSubjectArt from '../components/QuizSubjectArt';
+import { ArrowUpRight, SlidersHorizontal, Search, Grid2X2, ChevronDown, Volume2, VolumeX, Check } from 'lucide-react';
 
 
 const BrainGameEngine = lazy(() => import("../components/games/BrainGameEngine"));
@@ -39,7 +46,7 @@ const CAN_USE_REMOTE_QUIZ_API = Boolean(API_BASE_URL) && (
   typeof window === "undefined" || window.location.protocol !== "file:"
 );
 
-const TOPICS = [
+const LEGACY_TOPICS = [
 
   {
 
@@ -200,6 +207,8 @@ const TOPICS = [
 
 ];
 
+const TOPICS = QUIZ_SUBJECTS;
+
 const SHARED_FOUNDATION_QUESTIONS = [
   ["What is the strongest way to verify an unfamiliar claim?", "Compare several independent, credible sources", "Trust the first search result", "Rely on how confident it sounds", "Choose the most shared post", "Independent evidence is more reliable than popularity or confident wording."],
   ["What does correlation between two things prove by itself?", "They are related, but not necessarily causal", "One definitely causes the other", "The data must be false", "Both have the same cause", "Correlation can suggest a relationship, but additional evidence is needed to establish causation."],
@@ -278,6 +287,9 @@ const TOPIC_QUESTION_DATA = {
 };
 
 const createLocalQuestions = (topicId) => {
+  if (SUBJECT_QUESTIONS[topicId]) return SUBJECT_QUESTIONS[topicId].map((question) => ({
+    ...question, fingerprint: getQuestionFingerprint(question),
+  }));
   const rows = [...(TOPIC_QUESTION_DATA[topicId] || []), ...SHARED_FOUNDATION_QUESTIONS];
 
   return rows.slice(0, 5).map(([q, answer, ...rest], index) => {
@@ -305,7 +317,7 @@ const createLocalQuestions = (topicId) => {
 };
 
 const QUESTIONS = Object.fromEntries(
-  TOPICS.map((topic) => [topic.id, createLocalQuestions(topic.id)]),
+  [...TOPICS, ...LEGACY_TOPICS].map((topic) => [topic.id, createLocalQuestions(topic.id)]),
 );
 
 function shuffleItems(items) {
@@ -319,51 +331,20 @@ function shuffleItems(items) {
   return shuffled;
 }
 
-const TopicCard = memo(function TopicCard({ item, progress, onStart }) {
+const TopicCard = memo(function TopicCard({ item, progress, onStart, ordinal }) {
   return (
     <button
       type="button"
-      className={`topic-card ${item.color}`}
+      className="topic-card quiz-subject-card"
       onClick={() => onStart(item)}
       aria-label={`Start ${item.title} quiz`}
     >
-      <div className="topic-card-top">
-        <span className="topic-emoji">{item.emoji}</span>
-
-        <div className="topic-mini-stats">
-          <span className="level-badge">LVL {progress.level}</span>
-
-          <div className="mini-bar-group">
-            <div className="mini-bar-row">
-              <span>Mastery</span>
-              <strong>{progress.bestPercent}%</strong>
-            </div>
-            <div className="mini-progress-track">
-              <div
-                className="mini-progress-fill"
-                style={{ width: `${progress.bestPercent}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="mini-bar-group">
-            <div className="mini-bar-row">
-              <span>XP</span>
-              <strong>{progress.xpInLevel}/100</strong>
-            </div>
-            <div className="mini-progress-track">
-              <div
-                className="mini-progress-fill xp-fill"
-                style={{ width: `${progress.xpInLevel}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
+      <div className="quiz-subject-top"><span>{String(ordinal).padStart(2, '0')}</span><span>{progress.attempts ? 'In practice' : 'Start here'}</span></div>
+      <QuizSubjectArt subject={item.id} />
       <h3>{item.title}</h3>
       <p>{item.desc}</p>
-      <strong>Start challenge →</strong>
+      <div className="quiz-subject-areas">{(item.subjects || []).slice(0, 3).map((area) => <span key={area}>{area}</span>)}</div>
+      <div className="quiz-subject-bottom"><span>{progress.attempts ? `${progress.bestPercent}% best practice` : 'Recall. Reason. Apply.'}</span><span className="quiz-subject-open"><ArrowUpRight size={17} aria-hidden="true" /><span className="sr-only">Start</span></span></div>
     </button>
   );
 });
@@ -375,6 +356,7 @@ const ReviewItem = memo(function ReviewItem({ answer, answerIndex }) {
         <strong>Q{answerIndex + 1}. {answer.q}</strong>
         <p>Your answer: {answer.selected}</p>
         {!answer.isCorrect && <p>Correct answer: {answer.correctAnswer}</p>}
+        {answer.confidence === 'unsure' && <p className="quiz-review-tag">Marked unsure · revisit this idea</p>}
         <small>{answer.explanation}</small>
       </div>
       <span>{answer.isCorrect ? "✅" : "❌"}</span>
@@ -384,8 +366,8 @@ const ReviewItem = memo(function ReviewItem({ answer, answerIndex }) {
 
 const QuizLoadingCard = memo(function QuizLoadingCard({ label = "Loading challenge..." }) {
   return (
-    <div className="ai-loading-card compact-loading-card">
-      <div className="result-animation" />
+    <div className="ai-loading-card compact-loading-card" role="status">
+      <div className="quiz-loading-lines" aria-hidden="true"><span /><span /><span /></div>
       <h2>{label}</h2>
       <p>Preparing your next Smarty challenge.</p>
     </div>
@@ -438,7 +420,7 @@ ai_technology: [
 };
 
 function getChallengeProfile(topicId, progressMap) {
-  const forceHard = localStorage.getItem("smarty-force-hard") === "true";
+  const forceHard = readQuizFlag("smarty-force-hard") === "true";
   const item = progressMap[topicId] || {};
   const bestPercent = Number(item.bestPercent || 0);
   const lastPercent = Number(item.lastPercent ?? item.bestPercent ?? 0);
@@ -498,9 +480,8 @@ function getAdaptiveQuestions(topicId, progressMap, seenFingerprints = []) {
     if (profile.minimumDifficulty === "Medium") return question.difficulty !== "Easy";
     return question.difficulty === "Easy";
   });
-  const remaining = unseen.filter((question) => !preferred.includes(question));
-
-  return [...shuffleItems(preferred), ...shuffleItems(remaining)].slice(0, 5);
+  // Keep the level honest: a short matched set is better than silently filling with easier questions.
+  return shuffleItems(preferred).slice(0, 5);
 }
 
 function getAnswerXP(question, comboCount) {
@@ -515,96 +496,12 @@ function getAnswerXP(question, comboCount) {
   return baseXP + comboBonus;
 }
 
-function normalizeGeneratedQuestions(payload, topicId, {
-  excludedFingerprints = [],
-  fallbackDifficulty = "Adaptive",
-  limit = 5,
-} = {}) {
-  let parsed = payload;
-
-  if (typeof parsed?.body === "string") {
-    try {
-      parsed = JSON.parse(parsed.body);
-    } catch {
-      parsed = payload;
-    }
-  }
-
-  const values = Array.isArray(parsed)
-    ? parsed
-    : Array.isArray(parsed?.questions)
-      ? parsed.questions
-      : Array.isArray(parsed?.items)
-        ? parsed.items
-        : [];
-
-  const normalized = values.map((question, questionIndex) => {
-    const q = String(question?.q || question?.question || question?.prompt || "").trim();
-    const rawOptions = question?.options || question?.choices || question?.answers || [];
-    const seenOptions = new Set();
-    const options = Array.isArray(rawOptions) ? rawOptions
-      .map((option) => String(option?.text || option?.label || option || "")
-        .replace(/^\s*[A-D][.):\-]\s*/i, "")
-        .trim())
-      .filter((option) => {
-        const key = option.toLocaleLowerCase();
-        if (!option || seenOptions.has(key)) return false;
-        seenOptions.add(key);
-        return true;
-      })
-      .slice(0, 4) : [];
-    const rawAnswer = question?.answer ?? question?.correctAnswer ?? question?.correct ?? question?.correctOption;
-    const answerIndex = Number.isInteger(rawAnswer)
-      ? rawAnswer
-      : /^\d+$/.test(String(rawAnswer || "").trim())
-        ? Number(rawAnswer)
-        : /^[A-D]$/i.test(String(rawAnswer || "").trim())
-          ? String(rawAnswer).trim().toUpperCase().charCodeAt(0) - 65
-          : -1;
-    const answerText = String(rawAnswer || "")
-      .replace(/^\s*[A-D][.):\-]\s*/i, "")
-      .trim();
-    const answer = answerIndex >= 0
-      ? options[answerIndex]
-      : options.find((option) => option.toLocaleLowerCase() === answerText.toLocaleLowerCase());
-    const difficultyText = String(question?.difficulty || "").trim().toLocaleLowerCase();
-    const difficulty = difficultyText === "easy"
-      ? "Easy"
-      : difficultyText === "medium"
-        ? "Medium"
-        : difficultyText === "hard"
-          ? "Hard"
-          : fallbackDifficulty;
-
-    if (q.length < 12 || options.length < 3 || !answer || !options.includes(answer)) return null;
-
-    const normalizedQuestion = {
-      id: question?.id || `generated-${topicId}-${questionIndex + 1}`,
-      q,
-      options,
-      answer,
-      explanation: String(
-        question?.explanation || question?.reason || `The correct answer is ${answer}.`,
-      ).trim(),
-      difficulty,
-      source: "generated",
-    };
-
-    return {
-      ...normalizedQuestion,
-      fingerprint: getQuestionFingerprint(normalizedQuestion),
-    };
-  }).filter(Boolean);
-
-  return filterUnseenQuestions(normalized, excludedFingerprints).slice(0, limit);
-}
-
 
 function getGradeMessage(percent) {
 
-  if (percent >= 90) return "Elite performance. You are mastering this topic.";
+  if (percent >= 90) return "This set went well. Try a new application, then revisit it later to check recall.";
 
-  if (percent >= 70) return "Strong work. You are clearly improving.";
+  if (percent >= 70) return "A useful start. Revisit the uncertain ideas before increasing the difficulty.";
 
   if (percent >= 50) return "Good effort. Review the explanations and try again.";
 
@@ -659,6 +556,13 @@ function getTotalXP(progressMap) {
 
 
 export default function QuizPage() {
+  const { user, loading } = useAuth();
+  if (loading) return <main className="quiz-page quiz-workspace"><QuizLoadingCard label="Getting your practice ready…" /></main>;
+  const account = user?.sub || user?.userId || user?.id || user?.username || 'guest';
+  return <QuizSession key={account} />;
+}
+
+function QuizSession() {
 const navigate = useNavigate();
 const location = useLocation();
 const { user } = useAuth();
@@ -666,10 +570,23 @@ const [comboCount, setComboCount] = useState(1);
 const SURVIVAL_TIME = 12;
 const [survivalTimeLeft, setSurvivalTimeLeft] = useState(SURVIVAL_TIME);
 const [newAchievements, setNewAchievements] = useState([]);
-const sounds = useSoundFeedback();
-const survivalMode = useMemo(() => localStorage.getItem("smarty-game-mode") === "survival", []);
+const [soundEnabled, setSoundEnabled] = useState(false);
+const sounds = useSoundFeedback({ enabled: soundEnabled });
+const survivalMode = useMemo(() => readQuizFlag("smarty-game-mode") === "survival", []);
 const [bossMode, setBossMode] = useState(false);
 const [xpGained, setXpGained] = useState(0);
+const [sessionMode, setSessionMode] = useState('practice');
+const [studyTrack, setStudyTrack] = useState('college');
+const [difficultyPreference, setDifficultyPreference] = useState('');
+const [examTarget, setExamTarget] = useState('');
+const [subjectQuery, setSubjectQuery] = useState('');
+const [libraryFilter, setLibraryFilter] = useState('all');
+const [settingsOpen, setSettingsOpen] = useState(() => window.matchMedia('(min-width: 1100px)').matches);
+const [confidence, setConfidence] = useState('unmarked');
+const [reviewFilter, setReviewFilter] = useState('all');
+const [reviewRevision, setReviewRevision] = useState(0);
+const finishRequestRef = useRef('');
+const questionHeadingRef = useRef(null);
 const transitionLockRef = useRef(false);
 const focusedQuizStartedRef = useRef('');
 const quizAttemptRef = useRef('');
@@ -678,6 +595,7 @@ useEffect(() => () => {
   questionRequestRef.current.id += 1;
   questionRequestRef.current.controller?.abort();
   focusedQuizStartedRef.current = '';
+  quizAttemptRef.current = '';
 }, []);
 const learningUserId = user?.sub || user?.userId || user?.id || user?.username || '';
 const quizUserId = useMemo(() => getProgressUserId(user), [user]);
@@ -761,13 +679,16 @@ useEffect(() => {
 const visitProgress = useMemo(() => getVisitStreak(quizUserId), [quizUserId]);
 const totalXP = useMemo(() => getTotalXP(topicProgressMap), [topicProgressMap]);
 const overallLevel = Math.max(1, Math.floor(totalXP / 250) + 1);
-const overallXpPercent = totalXP % 250 ? ((totalXP % 250) / 250) * 100 : totalXP > 0 ? 100 : 0;
     const mixedSteps = useMemo(() => {
   if (!topic) return [];
 
 const quizQuestions = aiQuestions[topic.id] || [];
-const games = GAME_STEPS[topic.id] || [];
-  if (reviewMode) {
+const gameTopic = { technology: 'ai_technology', engineering: 'physics', 'science-mathematics': 'physics',
+  'life-sciences': 'animals', 'earth-space': 'geography_world', 'mind-health': 'memory',
+  'money-business': 'personal_finance', history: 'world_history', 'society-ideas': 'critical_thinking',
+  'arts-design': 'communication', news: 'media_literacy', community: 'communication' }[topic.id] || topic.id;
+const games = GAME_STEPS[gameTopic] || [];
+  if (reviewMode || sessionMode === 'practice') {
     return quizQuestions.map((question) => ({ type: "mcq", ...question }));
   }
   return [
@@ -779,9 +700,7 @@ const games = GAME_STEPS[topic.id] || [];
     quizQuestions[3] && { type: "mcq", ...quizQuestions[3] },
     quizQuestions[4] && { type: "mcq", ...quizQuestions[4] },
   ].filter(Boolean);
-}, [topic, aiQuestions, reviewMode]);
-const streakGoal = 7;
-const streakPercent = Math.min((visitProgress.streak / streakGoal) * 100, 100);
+}, [topic, aiQuestions, reviewMode, sessionMode]);
 
 const topicProgressDetails = useMemo(() => {
   const details = {};
@@ -795,21 +714,24 @@ const topicProgressDetails = useMemo(() => {
 
 
 const renderedReviewItems = useMemo(
-  () => answers.map((answer, answerIndex) => (
+  () => answers.map((answer, answerIndex) => ({ answer, answerIndex }))
+    .filter(({ answer }) => reviewFilter === 'all' || (reviewFilter === 'missed' ? !answer.isCorrect : answer.confidence === 'unsure'))
+    .map(({ answer, answerIndex }) => (
     <ReviewItem
       key={answer.id || `${answer.q}-${answerIndex}`}
       answer={answer}
       answerIndex={answerIndex}
     />
   )),
-  [answers]
+  [answers, reviewFilter]
 );
 
 
   const current = mixedSteps[index];
   const activeChallengeProfile = useMemo(
-    () => getChallengeProfile(topic?.id || '', topicProgressMap),
-    [topic?.id, topicProgressMap],
+    () => ({ ...getChallengeProfile(topic?.id || '', topicProgressMap),
+      ...(topic?.difficultyPreference ? { difficulty: topic.difficultyPreference, depth: { Easy: 'Foundation', Medium: 'Application', Hard: 'Challenge' }[topic.difficultyPreference] } : {}) }),
+    [topic, topicProgressMap],
   );
   const currentTopicHasAIQuestions = topic ? Array.isArray(aiQuestions[topic.id]) && aiQuestions[topic.id].length > 0 : false;
 
@@ -818,8 +740,27 @@ const renderedReviewItems = useMemo(
   ), [current]);
 
   useEffect(() => {
+    if (finished || current?.type !== 'mcq') return;
+    const heading = questionHeadingRef.current;
+    if (!heading) return;
+    heading.focus({ preventScroll: true });
+    const rect = heading.getBoundingClientRect();
+    if (rect.top < 16 || rect.bottom > window.innerHeight * .7) {
+      heading.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    }
+  }, [current?.id, index, finished]);
+
+  useEffect(() => {
     transitionLockRef.current = false;
+    setConfidence('unmarked');
   }, [index, topic?.id]);
+
+  const savedReviews = useMemo(() => Object.entries(getWrongQuestions(quizUserId))
+    .map(([id, records]) => ({ id, records: getSavedReviewDeck(records) }))
+    .filter((entry) => entry.records.length)
+    .map((entry) => ({ ...entry, title: TOPICS.find((item) => item.id === entry.id)?.title
+      || LEGACY_TOPICS.find((item) => item.id === entry.id)?.title || entry.records[0].topicTitle || 'Lesson review' })),
+  [quizUserId, reviewRevision]);
 
   const quizShellExtras = useMemo(() => (
     <>
@@ -835,7 +776,10 @@ const renderedReviewItems = useMemo(
     questionRequestRef.current.controller = controller;
     const isCurrent = () => questionRequestRef.current.id === requestId;
     let selectedTopic = topicDetails || TOPICS.find((item) => item.id === topicId) || { id: topicId };
-    const challengeProfile = getChallengeProfile(topicId, topicProgressMap);
+    const challengeProfile = { ...getChallengeProfile(topicId, topicProgressMap),
+      ...(selectedTopic.difficultyPreference ? { difficulty: selectedTopic.difficultyPreference,
+        minimumDifficulty: selectedTopic.difficultyPreference,
+        depth: { Easy: 'Foundation', Medium: 'Application', Hard: 'Challenge' }[selectedTopic.difficultyPreference] } : {}) };
     const seen = getRecentQuestionFingerprints(quizUserId, topicId);
     const guide = getLearningGuide(selectedTopic.postId);
     setLoadingAI(true);
@@ -845,20 +789,28 @@ const renderedReviewItems = useMemo(
       if (!isCurrent()) return;
       const questions = guide
         ? filterUnseenQuestions(getGuideQuestions(guide.id), selectedTopic.reviewQuestions ? [] : seen)
-            .map((question) => ({ ...question, options: shuffleItems(question.options), fingerprint: getQuestionFingerprint(question) }))
-        : selectedTopic.postId ? [] : getAdaptiveQuestions(topicId, topicProgressMap, seen);
+            .map((question) => ({ ...question, source: selectedTopic.reviewQuestions ? 'review' : question.source,
+              options: shuffleItems(question.options), fingerprint: getQuestionFingerprint(question) }))
+        : selectedTopic.postId ? [] : selectedTopic.reviewQuestions
+          ? shuffleItems(QUESTIONS[topicId] || []).slice(0, 5).map((question) => ({ ...question, options: shuffleItems(question.options), source: 'review' }))
+          : selectedTopic.difficultyPreference
+            ? shuffleItems(filterUnseenQuestions(QUESTIONS[topicId] || [], seen)
+              .filter((question) => question.difficulty === selectedTopic.difficultyPreference)).slice(0, 5)
+              .map((question) => ({ ...question, options: shuffleItems(question.options) }))
+            : getAdaptiveQuestions(topicId, topicProgressMap, seen);
       setAiQuestions((prev) => ({ ...prev, [topicId]: questions }));
       setQuizNotice(questions.length
-        ? (guide ? (selectedTopic.reviewQuestions ? 'Review practice · revisiting this guide’s questions' : 'Guide check · concepts, examples, and limits') : 'Built-in topic questions')
+        ? (selectedTopic.reviewQuestions ? 'Review practice · no new XP or exam-readiness score'
+          : guide ? 'Guide check · concepts, examples, and limits' : 'Original practice bank · general preparation, not a complete exam syllabus')
         : selectedTopic.postId
           ? (guide ? 'You have seen this guide’s questions. Choose review practice to revisit them, or explore a new lesson.'
-            : 'A focused quiz is unavailable right now. Revisit the lesson and your reflection, or try again shortly.')
+            : 'A focused quiz is unavailable right now. Revisit the lesson or try again shortly.')
           : 'No unseen built-in questions remain. Reconnect for a fresh challenge.');
     };
 
     let timeout;
     try {
-      if (guide || !CAN_USE_REMOTE_QUIZ_API) {
+      if (guide || selectedTopic.reviewQuestions || !CAN_USE_REMOTE_QUIZ_API) {
         useLocalQuestions();
         return;
       }
@@ -877,10 +829,11 @@ const renderedReviewItems = useMemo(
         const questions = normalizeGeneratedQuestions(active, topicId, {
           excludedFingerprints: seen,
           fallbackDifficulty: challengeProfile.difficulty,
+          requiredDifficulty: selectedTopic.difficultyPreference || '',
         });
         if (questions.length) {
           setAiQuestions((prev) => ({ ...prev, [topicId]: questions }));
-          setQuizNotice('Continue your unfinished challenge');
+          setQuizNotice('Saved question set · fresh unanswered questions');
           return;
         }
         clearActiveQuiz(quizUserId, topicId);
@@ -895,25 +848,31 @@ const renderedReviewItems = useMemo(
           sourcePostId: selectedTopic.postId || '', sourceTitle: selectedTopic.sourceTitle || '',
           sourceBody: selectedTopic.sourceBody || '',
           difficulty: challengeProfile.difficulty, minimumDifficulty: challengeProfile.minimumDifficulty,
+          difficultySelection: selectedTopic.difficultyPreference ? 'manual' : 'adaptive',
+          studyTrack: selectedTopic.studyTrack || 'college', examTarget: selectedTopic.examTarget || '',
+          subjectAreas: selectedTopic.subjects || [],
           learnerLevel: challengeProfile.level, learnerDepth: challengeProfile.depth,
           questionStyle: selectedTopic.postId
             ? challengeProfile.questionStyle + '. Test the source concept: mechanism, cause and effect, a new example, and a limitation. Do not ask for the post title or generic study advice.'
-            : challengeProfile.questionStyle,
+            : challengeProfile.questionStyle + '. Prepare a learner for ' + (selectedTopic.studyTrack || 'college')
+              + ' study. ' + (selectedTopic.examTarget ? `Requested exam or skill: ${selectedTopic.examTarget}. ` : '')
+              + 'Use specific concepts from this subject, numerical or scenario problems where appropriate, plausible distractors, and worked explanations. Hard questions must require multi-step reasoning, not obscure trivia. Do not claim official syllabus coverage or invent dated current-affairs facts.',
           requestedCount: 5 - collected.length, generationAttempt: attempt,
-          weakAreas: (getWrongQuestions(quizUserId)[topicId] || []).slice(-5).map((item) => item.q),
+          weakAreas: getSavedReviewDeck(getWrongQuestions(quizUserId)[topicId]).slice(-5).map((item) => item.q),
           recentQuestionFingerprints: [...excluded].slice(-100),
           excludeQuestions: getRecentQuestionPrompts(quizUserId, topicId),
         }, { signal: controller.signal });
         if (!isCurrent()) return;
         const batch = normalizeGeneratedQuestions(data, topicId, {
           excludedFingerprints: [...excluded], fallbackDifficulty: challengeProfile.difficulty, limit: 5 - collected.length,
+          requiredDifficulty: selectedTopic.difficultyPreference || '',
         }).filter((question) => !selectedTopic.postId || !/which title|what exact concept|name of (the|this) (post|lesson)/i.test(question.q));
         batch.forEach((question) => { collected.push(question); excluded.add(question.fingerprint); });
       }
       if (!collected.length) throw new Error('No unseen questions available.');
       try { saveActiveQuiz({ userId: quizUserId, topicId, difficulty: challengeProfile.difficulty, contextKey, questions: collected }); } catch { /* A quiz still works when storage is full. */ }
       setAiQuestions((prev) => ({ ...prev, [topicId]: collected }));
-      setQuizNotice(challengeProfile.depth + ' · ' + collected.length + ' fresh questions');
+      setQuizNotice(challengeProfile.depth + ' · ' + collected.length + ' AI practice questions · check important facts against your study material');
     } catch (error) {
       if (isCurrent()) useLocalQuestions();
     } finally {
@@ -924,18 +883,20 @@ const renderedReviewItems = useMemo(
 
   const startQuiz = useCallback((item) => {
     quizAttemptRef.current = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const bossPractice = localStorage.getItem("smarty-boss-practice") === "true";
+    const bossPractice = readQuizFlag("smarty-boss-practice") === "true";
     const isFocusedLesson = Boolean(item?.postId || item?.learningContext?.postId);
-    const shouldStartBoss = !isFocusedLesson && (visitProgress.streak >= 7 || bossPractice);
+    const shouldStartBoss = !isFocusedLesson && bossPractice;
 
     setBossMode(shouldStartBoss);
 
     if (bossPractice) {
-      localStorage.removeItem("smarty-boss-practice");
+      clearQuizFlag("smarty-boss-practice");
     }
 
-    setTopic(item);
-    setReviewMode(false);
+    const sessionTopic = { ...item, studyTrack, examTarget: examTarget.trim().slice(0, 120),
+      difficultyPreference: item.nextDifficulty || difficultyPreference };
+    setTopic(sessionTopic);
+    setReviewMode(Boolean(item.reviewQuestions));
     transitionLockRef.current = false;
     setIndex(0);
     setScore(0);
@@ -949,8 +910,10 @@ const renderedReviewItems = useMemo(
     setLocked(false);
     setXpGained(0);
     setComboCount(1);
-    loadAIQuestions(item.id, item);
-  }, [loadAIQuestions, visitProgress.streak]);
+    setConfidence('unmarked');
+    setReviewFilter('all');
+    loadAIQuestions(item.id, sessionTopic);
+  }, [loadAIQuestions, studyTrack, examTarget, difficultyPreference]);
 
   useEffect(() => {
     if (!focusedLearningTopic) return;
@@ -961,18 +924,28 @@ const renderedReviewItems = useMemo(
   }, [focusedLearningTopic, quizUserId, startQuiz]);
 
 const renderedTopics = useMemo(
-  () => TOPICS.map((item) => (
+  () => TOPICS.filter((item) => {
+    const groups = { stem: ['technology', 'engineering', 'science-mathematics', 'life-sciences', 'earth-space'],
+      people: ['history', 'society-ideas', 'arts-design', 'community'], everyday: ['news', 'mind-health', 'money-business', 'food-agriculture'] };
+    return (libraryFilter === 'all' || groups[libraryFilter]?.includes(item.id))
+      && `${item.title} ${item.desc} ${(item.subjects || []).join(' ')}`.toLocaleLowerCase().includes(subjectQuery.trim().toLocaleLowerCase());
+  }).map((item) => (
     <TopicCard
       key={item.id}
       item={item}
+      ordinal={TOPICS.indexOf(item) + 1}
       progress={topicProgressDetails[item.id]}
       onStart={startQuiz}
     />
   )),
-  [topicProgressDetails, startQuiz]
+  [topicProgressDetails, startQuiz, subjectQuery, libraryFilter]
 );
 
 const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
+  const attemptId = quizAttemptRef.current;
+  if (!attemptId || finishRequestRef.current === attemptId) return;
+  finishRequestRef.current = attemptId;
+  const isCurrent = () => quizAttemptRef.current === attemptId;
   setSaving(true);
   setSaveError("");
   setQuizNotice("");
@@ -980,7 +953,15 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
 
   const userId = quizUserId;
 
-  const percentage = mixedSteps.length ? Math.round((finalScore / mixedSteps.length) * 100) : 0;
+  const result = getQuizResult(finalAnswers);
+  const percentage = result.percent;
+  finalScore = result.correct;
+
+  if (reviewMode) {
+    setQuizNotice('Review complete. Known questions do not award extra XP or change your first-attempt practice score.');
+    setSaving(false);
+    return;
+  }
 
   const finishRewards = () => {
     const unlocked = checkAchievements({
@@ -1043,10 +1024,11 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
   try {
       const data = (await postApi.saveLearningQuiz({
           userId,
+          attemptId,
           topicId: topic.id,
           topicTitle: topic.title,
           score: finalScore,
-          totalQuestions: mixedSteps.length,
+          totalQuestions: result.total,
           percentage,
           xpEarned,
           answers: finalAnswers.map((answer) => ({
@@ -1062,8 +1044,11 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
               answer: answer.correctAnswer,
             }),
             xp: answer.xp || 0,
+            confidence: answer.confidence || 'unmarked',
           })),
       })) || {};
+
+      if (!isCurrent()) return;
 
       setProgress(data);
       const updatedProgress = saveStoredTopicProgress(userId, topic.id, {
@@ -1081,6 +1066,7 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
       setTopicProgressMap(updatedProgress);
       finishRewards();
     } catch (error) {
+      if (!isCurrent()) return;
       const updatedProgress = saveStoredTopicProgress(userId, topic.id, {
         bestScore: Math.max(topicProgressMap[topic.id]?.bestScore || 0, finalScore),
         bestPercent: Math.max(topicProgressMap[topic.id]?.bestPercent || 0, percentage),
@@ -1094,14 +1080,14 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
 
       setTopicProgressMap(updatedProgress);
       finishRewards();
-      setSaveError(error.message || "Could not save quiz progress.");
+      setSaveError('Saved on this device. Your server progress could not be updated.');
     } finally {
-      setSaving(false);
+      if (isCurrent()) setSaving(false);
     }
-  }, [activeChallengeProfile.difficulty, learningUserId, mixedSteps.length, overallLevel, quizUserId, sounds, topic, topicProgressMap, visitProgress.streak]);
+  }, [activeChallengeProfile.difficulty, learningUserId, overallLevel, quizUserId, sounds, topic, topicProgressMap, visitProgress.streak, reviewMode]);
 
 useEffect(() => {
-  if (!topic || finished || !current || !survivalMode || locked || bossMode) return;
+  if (!topic || finished || current?.type !== 'mcq' || !survivalMode || locked || bossMode || reviewMode || sessionMode === 'practice') return;
 
   setSurvivalTimeLeft(SURVIVAL_TIME);
 
@@ -1124,6 +1110,7 @@ useEffect(() => {
           isCorrect: false,
           xp: 0,
           options: currentOptions,
+          confidence: 'unsure', topicTitle: topic.title, postId: topic.postId, learningContext: topic.learningContext,
         };
 
         const nextAnswers = [...answers, timeoutAnswer];
@@ -1147,7 +1134,7 @@ useEffect(() => {
   }, 1000);
 
   return () => clearInterval(timer);
-}, [answers, bossMode, current, currentOptions, finished, index, locked, mixedSteps.length, quizUserId, saveQuizProgress, score, survivalMode, topic]);
+}, [answers, bossMode, current, currentOptions, finished, index, locked, mixedSteps.length, quizUserId, saveQuizProgress, score, survivalMode, topic, reviewMode, sessionMode]);
 
 const submitAnswer = useCallback(() => {
   if (locked || transitionLockRef.current || !selected || !current) return;
@@ -1157,7 +1144,7 @@ const submitAnswer = useCallback(() => {
 
   const isCorrect = selected === current.answer;
 
-  const earnedXP = isCorrect ? getAnswerXP(current, comboCount) : 0;
+  const earnedXP = isCorrect && !reviewMode ? getAnswerXP(current, comboCount) : 0;
 
   if (isCorrect) {
     sounds.correct();
@@ -1183,11 +1170,15 @@ const submitAnswer = useCallback(() => {
       isCorrect,
       xp: earnedXP,
       options: currentOptions,
+      confidence, topicTitle: topic.title, postId: topic.postId, learningContext: topic.learningContext,
     };
 
-  if (!isCorrect && current.type === "mcq") {
+  if (needsQuizReview(answerRecord)) {
     saveWrongQuestion(topic.id, answerRecord, quizUserId);
+  } else if (isCorrect) {
+    removeWrongQuestion(topic.id, answerRecord, quizUserId);
   }
+  setReviewRevision((value) => value + 1);
 
   try { recordQuestionHistory(quizUserId, topic.id, [answerRecord]); } catch { /* An answer still counts if storage is unavailable. */ }
 
@@ -1201,10 +1192,11 @@ const submitAnswer = useCallback(() => {
     correctAnswer: current.answer,
     explanation: current.explanation,
     xp: earnedXP,
+    confidence,
     nextScore,
     nextAnswers,
   });
-}, [answers, comboCount, current, currentOptions, locked, quizUserId, score, selected, showXPGain, sounds, topic]);
+}, [answers, comboCount, current, currentOptions, locked, quizUserId, score, selected, showXPGain, sounds, topic, confidence, reviewMode]);
 
 const advanceAfterAnswer = useCallback(() => {
   if (!answerFeedback || transitionLockRef.current === "advancing") return;
@@ -1257,12 +1249,13 @@ useEffect(() => {
 }, [advanceAfterAnswer, answerFeedback, current?.type, currentOptions, finished, locked, selected, submitAnswer, topic]);
 
 const restart = useCallback(() => {
+  quizAttemptRef.current = '';
   questionRequestRef.current.id += 1;
   questionRequestRef.current.controller?.abort();
   setLoadingAI(false);
   setBossMode(false);
-  localStorage.removeItem("smarty-boss-practice");
-  localStorage.removeItem("smarty-game-mode");
+  clearQuizFlag("smarty-boss-practice");
+  clearQuizFlag("smarty-game-mode");
 
   setTopic(null);
   setReviewMode(false);
@@ -1301,7 +1294,7 @@ const exploreFocusedTopic = useCallback(() => {
 }, [focusedLearningTopic, navigate]);
 
 const missedQuestions = useMemo(
-  () => answers.filter((answer) => !answer.isCorrect && Array.isArray(answer.options) && answer.options.length > 1),
+  () => answers.filter(needsQuizReview),
   [answers],
 );
 
@@ -1331,7 +1324,7 @@ const nextLearningMove = useMemo(() => {
       eyebrow: "Recommended next",
       title: `Revisit ${missedQuestions.length} ${missedQuestions.length === 1 ? "question" : "questions"}`,
       description: weakest
-        ? `Start with the ${weakest.label.toLowerCase()} questions. Read why the correct choice works, then retry only what you missed.`
+        ? `Revisit missed or uncertain answers, including the ${weakest.label.toLowerCase()} questions. Read the reasoning, then test yourself without looking at it.`
         : "Review each explanation, explain the idea in your own words, then retry only what you missed.",
     };
   }
@@ -1345,25 +1338,29 @@ const nextLearningMove = useMemo(() => {
   };
 }, [activeChallengeProfile.depth, difficultyResults, missedQuestions.length]);
 
-const startMistakeReview = useCallback(() => {
-  if (!topic || missedQuestions.length === 0) return;
+const startReview = useCallback((reviewTopic, records) => {
+  if (!reviewTopic || records.length === 0) return;
+  questionRequestRef.current.id += 1;
+  questionRequestRef.current.controller?.abort();
+  setLoadingAI(false);
   quizAttemptRef.current = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
-  const retryQuestions = missedQuestions.map((answer, questionIndex) => ({
+  const retryQuestions = records.map((answer, questionIndex) => ({
     id: `review-${answer.id || questionIndex}-${Date.now()}`,
     q: answer.q,
     options: shuffleItems(answer.options),
-    answer: answer.correctAnswer,
+    answer: answer.correctAnswer || answer.answer,
     explanation: answer.explanation,
     difficulty: answer.difficulty || "Adaptive",
     source: "review",
     fingerprint: answer.fingerprint || getQuestionFingerprint({
       q: answer.q,
-      answer: answer.correctAnswer,
+      answer: answer.correctAnswer || answer.answer,
     }),
   }));
 
-  setAiQuestions((previous) => ({ ...previous, [topic.id]: retryQuestions }));
+  setTopic(reviewTopic);
+  setAiQuestions((previous) => ({ ...previous, [reviewTopic.id]: retryQuestions }));
   setReviewMode(true);
   setBossMode(false);
   setIndex(0);
@@ -1373,25 +1370,27 @@ const startMistakeReview = useCallback(() => {
   setFinished(false);
   setProgress(null);
   setSaveError("");
-  setQuizNotice(`Focused review · ${retryQuestions.length} missed ${retryQuestions.length === 1 ? "question" : "questions"}`);
+  setQuizNotice(`Review practice · ${retryQuestions.length} ${retryQuestions.length === 1 ? "question" : "questions"} · no extra XP`);
   setAnswerFeedback(null);
   setLocked(false);
   setXpGained(0);
   setComboCount(1);
+  setConfidence('unmarked');
+  setReviewFilter('all');
   transitionLockRef.current = false;
-}, [missedQuestions, topic]);
+}, []);
 
-  const finalScore = score;
+const startMistakeReview = useCallback(() => startReview(topic, missedQuestions), [startReview, topic, missedQuestions]);
 
-  const percentage = mixedSteps.length ? Math.round((finalScore / mixedSteps.length) * 100) : 0;
+  const result = getQuizResult(answers);
+  const finalScore = result.correct;
+
+  const percentage = result.percent;
 
   const won = percentage >= (topic?.postId ? 80 : 60);
 
   const xpPreview = answers.reduce((total, answer) => total + (answer.xp || 0), 0);
 
-  const previousScore = progress?.previousScore ?? null;
-
-  const improvement = progress?.improvement ?? (previousScore === null ? 0 : finalScore - previousScore);
 const handleBossComplete = useCallback((result) => {
   if (transitionLockRef.current) return;
   transitionLockRef.current = true;
@@ -1406,7 +1405,7 @@ const handleBossComplete = useCallback((result) => {
     setXpGained(0);
   }
 
-  const bossScore = result.success ? score + 2 : score;
+  const bossScore = result.success ? score + 1 : score;
 
   const nextAnswers = [
     ...answers,
@@ -1425,7 +1424,7 @@ const handleBossComplete = useCallback((result) => {
   setScore(bossScore);
   setAnswers(nextAnswers);
   setBossMode(false);
-  localStorage.removeItem("smarty-boss-practice");
+  clearQuizFlag("smarty-boss-practice");
   setIndex(0);
   setFinished(true);
   saveQuizProgress(bossScore, nextAnswers);
@@ -1473,7 +1472,7 @@ const handleGameComplete = useCallback((result) => {
 
 if (topic && bossMode && !finished) {
   return (
-    <main className="quiz-page">
+    <main className="quiz-page quiz-workspace">
       <section className="question-card">
         <div className="quiz-top-row">
           <button type="button" className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
@@ -1495,14 +1494,15 @@ if (topic && bossMode && !finished) {
 
   if (topic && !currentTopicHasAIQuestions && !finished) {
     return (
-      <main className="quiz-page">
+      <main className="quiz-page quiz-workspace">
         <section className="question-card">
           <div className="quiz-top-row">
             <button type="button" className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
             <span>Smarty Quiz</span>
           </div>
 
-          <div className="ai-loading-card">
+          <div className="ai-loading-card" role="status">
+            {loadingAI && <div className="quiz-loading-lines" aria-hidden="true"><span /><span /><span /></div>}
             <h2>{loadingAI ? "Preparing your quiz..." : "Questions unavailable"}</h2>
             <p>
               {loadingAI
@@ -1514,7 +1514,7 @@ if (topic && bossMode && !finished) {
                 Try Again
               </button>
             )}
-            {!loadingAI && getLearningGuide(topic?.postId) && <button type="button" className="submit-answer-btn" onClick={() => loadAIQuestions(topic.id, { ...topic, reviewQuestions: true })}>Review this guide’s questions</button>}
+            {!loadingAI && (getLearningGuide(topic?.postId) || QUESTIONS[topic.id]?.length > 0) && <button type="button" className="submit-answer-btn" onClick={() => startQuiz({ ...topic, reviewQuestions: true })}>Review available questions</button>}
             {!loadingAI && topic?.postId && <button type="button" className="back-btn" onClick={returnToFocusedLesson}>Return to the lesson</button>}
           </div>
         </section>
@@ -1526,86 +1526,74 @@ if (topic && bossMode && !finished) {
 
     return (
 
-<main className="quiz-page">
-  <button
-    className="back-btn quiz-page-back"
-    onClick={() => navigate(-1)}
-  >
-    <span className="arrow">←</span> Back
-  </button>
-
-  <section className="quiz-hero">
-    <div className="quiz-hero-copy">
-      <span className="quiz-kicker">A little practice</span>
-      <h1>See what stays with you.</h1>
-      <p>
-        Pick a subject, try a few questions, and take time with the explanations.
-        A wrong answer is a useful place to start.
-      </p>
-
-      <div className="quiz-hero-metrics" aria-label="Quiz progress summary">
-        <span><strong>{TOPICS.length}</strong> subjects</span>
-        <span><strong>{overallLevel}</strong> current level</span>
-        <span><strong>{totalXP}</strong> total XP</span>
-      </div>
-
-      <div className="hero-actions">
-        <button
-          type="button"
-          className="profile-btn"
-          onClick={() => navigate("/game-profile")}
-        >
-          Your progress
-        </button>
-      </div>
-    </div>
-
-<div className="streak-card streak-game-card">
-  <div className="streak-card-top">
-    <div className="streak-flame">🔥</div>
-
-<div className="streak-mini-stats">
-  <span className="level-badge">LVL {overallLevel}</span>
-
-  <div className="mini-bar-group">
-    <div className="mini-bar-row">
-      <span>Streak</span>
-      <strong>{visitProgress.streak}/{streakGoal}</strong>
-    </div>
-
-    <div className="mini-progress-track">
-      <div
-        className="mini-progress-fill streak-fill"
-        style={{ width: `${streakPercent}%` }}
-      />
-    </div>
+<main className="quiz-page quiz-workspace">
+  <div className="quiz-masthead">
+    <button type="button" className="quiz-text-control" onClick={() => navigate('/feed?topic=All')}><Grid2X2 size={16} aria-hidden="true" /> Feed</button>
+    <span>Smarty <span aria-hidden="true">/</span> Practice</span>
+    <button type="button" className="quiz-text-control" onClick={() => navigate('/game-profile')}>Your progress <ArrowUpRight size={16} aria-hidden="true" /></button>
   </div>
-
-  <div className="mini-bar-group">
-    <div className="mini-bar-row">
-      <span>Total XP</span>
-      <strong>{totalXP}</strong>
+  <header className="quiz-library-intro">
+    <div><span className="quiz-eyebrow">A little curiosity. A clearer mind.</span><h1>Put what you know<br />to the test.</h1><p>Pick a subject. Think it through. Understand the why.</p></div>
+    <div className="quiz-library-stats" aria-label="Quiz progress summary">
+      <span><strong>{TOPICS.length}</strong> subjects to explore</span>
+      <span><strong>{overallLevel}</strong> current level <span className="quiz-stat-detail">· {totalXP} XP earned</span></span>
+      <span><strong>{visitProgress.streak}</strong> day{visitProgress.streak === 1 ? '' : 's'} of practice</span>
     </div>
-
-    <div className="mini-progress-track">
-      <div
-        className="mini-progress-fill total-xp-fill"
-        style={{ width: `${overallXpPercent}%` }}
-      />
-    </div>
-  </div>
-</div>
-  </div>
-
-  <h3>{visitProgress.streak} Day Streak · {totalXP} XP</h3>
-<p>Every return is a chance to remember a little more. Go at your own pace.</p>
-</div>
-
+  </header>
+  <div className="quiz-library-layout">
+    <aside className="quiz-study-sidebar">
+        <section className={`quiz-practice-setup ${settingsOpen ? 'is-open' : ''}`} aria-labelledby="quiz-setup-title">
+          <button type="button" className="quiz-settings-toggle" aria-expanded={settingsOpen} aria-controls="quiz-settings-body" onClick={() => setSettingsOpen((value) => !value)}><SlidersHorizontal size={16} aria-hidden="true" /><span id="quiz-setup-title">Study setup</span><ChevronDown size={16} aria-hidden="true" /></button>
+          <div id="quiz-settings-body" hidden={!settingsOpen}>
+          <div className="quiz-setup-fields">
+            <label>Preparing for
+              <select value={studyTrack} onChange={(event) => setStudyTrack(event.target.value)}>
+                <option value="college">College study</option><option value="government exams">Government exams</option>
+                <option value="professional skills">Skill exams</option>
+              </select>
+            </label>
+            <label>Question level
+              <select value={difficultyPreference} onChange={(event) => setDifficultyPreference(event.target.value)}>
+                <option value="">Adapt to my progress</option><option value="Easy">Foundation</option>
+                <option value="Medium">Application</option><option value="Hard">Challenge</option>
+              </select>
+            </label>
+            <label><span>Exam or skill <small className="quiz-optional">optional</small></span>
+              <input value={examTarget} onChange={(event) => setExamTarget(event.target.value)} maxLength={120} placeholder="e.g. aptitude, data structures" />
+            </label>
+          </div>
+          <div className="quiz-mode-picker" aria-label="Practice format">
+            <button type="button" aria-pressed={sessionMode === 'practice'} onClick={() => setSessionMode('practice')}>Questions only</button>
+            <button type="button" aria-pressed={sessionMode === 'mixed'} onClick={() => setSessionMode('mixed')}>Questions + games</button>
+          </div>
+          <button type="button" className="quiz-sound-control" aria-pressed={soundEnabled} onClick={() => setSoundEnabled((value) => !value)}>{soundEnabled ? <Volume2 size={16} aria-hidden="true" /> : <VolumeX size={16} aria-hidden="true" />}{soundEnabled ? 'Sound on' : 'Sound off'}</button>
+          <p className="quiz-prep-note">Original and AI practice sets. For general preparation, not an official exam syllabus.</p>
+          </div>
         </section>
+        <p className="quiz-sidebar-note">Knowing the answer is a start.<br />Knowing why is the point.</p>
+    </aside>
+    <div className="quiz-library-main">
+        {savedReviews.length > 0 && <section className="quiz-saved-review" aria-labelledby="quiz-review-title">
+          <div className="quiz-section-heading"><h2 id="quiz-review-title">Worth another look</h2><span>Saved on this device</span></div>
+          <p>Missed and uncertain answers. Revisit them without changing your first-attempt score.</p>
+          <div className="quiz-review-subjects">{savedReviews.map((entry) => <button key={entry.id} type="button" onClick={() => {
+            const first = entry.records[0];
+            startReview(TOPICS.find((item) => item.id === entry.id) || LEGACY_TOPICS.find((item) => item.id === entry.id)
+              || { id: entry.id, title: entry.title, postId: first.postId, learningContext: first.learningContext, emoji: '◎', color: 'cyan' }, entry.records);
+          }}>{entry.title} <span>{entry.records.length}</span><span aria-hidden="true">↗</span></button>)}</div>
+        </section>}
 
-        <section className="topic-grid">
+        <div className="quiz-subject-toolbar">
+          <div><h2>The subject library</h2><span className="quiz-library-count">{renderedTopics.length} of {TOPICS.length} subjects</span></div>
+          <label><Search size={17} aria-hidden="true" /><span className="sr-only">Search quiz subjects</span><input type="search" value={subjectQuery} onChange={(event) => setSubjectQuery(event.target.value)} placeholder="Find your subject" /></label>
+        </div>
+        <div className="quiz-library-filters" aria-label="Filter subjects">{[['all', 'All subjects'], ['stem', 'Science & tech'], ['people', 'People & culture'], ['everyday', 'Everyday knowledge']].map(([id, label]) => <button type="button" key={id} aria-pressed={libraryFilter === id} onClick={() => setLibraryFilter(id)}>{label}</button>)}</div>
+        <section className="topic-grid" aria-label="Quiz subjects">
 {renderedTopics}
+          {renderedTopics.length === 0 && <div className="quiz-empty"><p>No matching subjects.</p><button type="button" onClick={() => { setSubjectQuery(''); setLibraryFilter('all'); }}>Clear search</button></div>}
         </section>
+    </div>
+  </div>
 {quizShellExtras}
       </main>
 
@@ -1619,13 +1607,11 @@ if (topic && bossMode && !finished) {
 
     return (
 
-      <main className="quiz-page">
+      <main className="quiz-page quiz-workspace">
 
         <section className={`result-card ${won ? "win" : "lose"}`}>
 
-          <div className="result-animation">{won ? "🏆" : ""}</div>
-
-          <p className="quiz-kicker">{topic.emoji} {topic.title}</p>
+          <p className="quiz-kicker">{topic.title}{reviewMode ? ' · Review' : ''}</p>
 
           <h1>{won ? "That’s progress." : "Keep the useful questions."}</h1>
 
@@ -1633,12 +1619,13 @@ if (topic && bossMode && !finished) {
 
             <span>{percentage}%</span>
 
-            <small>{finalScore}/{mixedSteps.length}</small>
+            <small>{finalScore}/{result.total}</small>
 
           </div>
 
           <p>{getGradeMessage(percentage)}</p>
-          {topic?.postId && <p>{percentage >= 80 && mixedSteps.length >= 3 ? 'Concept check passed. Revisit it tomorrow, then build on a connected idea.' : 'Review the explanations below. A full check needs at least three questions and 80% correct.'}</p>}
+          {reviewMode && <p>Review only · no additional XP or first-attempt score changes.</p>}
+          {!reviewMode && topic?.postId && <p>{percentage >= 80 && result.total >= 3 ? 'Concept check passed. Revisit it tomorrow, then build on a connected idea.' : 'Review the explanations below. A full check needs at least three questions and 80% correct.'}</p>}
 
           <div className="progress-insight">
 
@@ -1654,7 +1641,7 @@ if (topic && bossMode && !finished) {
 
                 <span>Current Score</span>
 
-                <strong>{finalScore}/{mixedSteps.length}</strong>
+                <strong>{finalScore}/{result.total}</strong>
 
               </div>
 
@@ -1670,17 +1657,17 @@ if (topic && bossMode && !finished) {
 
               <div>
 
-                <span>Improvement</span>
+                <span>Worth reviewing</span>
 
-                <strong>{improvement > 0 ? `+${improvement}` : improvement}</strong>
+                <strong>{missedQuestions.length}</strong>
 
               </div>
 
               <div>
 
-                <span>Best Score</span>
+                <span>Best practice</span>
 
-                <strong>{progress?.bestScore ?? finalScore}</strong>
+                <strong>{topicProgressMap[topic.id]?.bestPercent || 0}%</strong>
 
               </div>
 
@@ -1700,9 +1687,11 @@ if (topic && bossMode && !finished) {
             <div className="quiz-next-actions">
               <button type="button" className="quiz-next-primary" onClick={missedQuestions.length > 0
                 ? startMistakeReview
-                : () => navigate(focusedLearningTopic?.topic ? `/learn?topic=${encodeURIComponent(focusedLearningTopic.topic)}` : '/learn')}>
-                {missedQuestions.length > 0 ? 'Practice missed questions' : 'Find your next lesson'} <span aria-hidden="true">→</span>
+                : () => navigate(`/learn?topic=${encodeURIComponent(focusedLearningTopic?.topic || topic.topic || topic.title)}`)}>
+                {missedQuestions.length > 0 ? 'Practice missed & unsure' : 'Explore this subject'} <span aria-hidden="true">→</span>
               </button>
+              {!reviewMode && percentage >= 80 && activeChallengeProfile.difficulty !== 'Hard' && <button type="button" className="quiz-next-secondary" onClick={() => startQuiz({ ...topic, reviewQuestions: false,
+                nextDifficulty: activeChallengeProfile.difficulty === 'Easy' ? 'Medium' : 'Hard' })}>Try the next level</button>}
               {focusedLearningTopic?.postId && <button type="button" className="quiz-next-secondary" onClick={returnToFocusedLesson}>Revisit the explanation</button>}
             </div>
             {difficultyResults.length > 0 && (
@@ -1718,15 +1707,19 @@ if (topic && bossMode && !finished) {
 
           <div className="review-panel">
 
-            <h3>Review Your Answers</h3>
+            <h3>Your answers & explanations</h3>
+            <div className="quiz-mode-picker" aria-label="Filter answer review">
+              {[['all', 'All'], ['missed', 'Missed'], ['unsure', 'Unsure']].map(([value, label]) => <button type="button" key={value} aria-pressed={reviewFilter === value} onClick={() => setReviewFilter(value)}>{label}</button>)}
+            </div>
 
             {renderedReviewItems}
+            {!renderedReviewItems.length && <p>No answers in this view.</p>}
 
           </div>
 
           <div className="result-actions">
 
-            <button type="button" onClick={() => startQuiz(topic)}>Retry Topic</button>
+            <button type="button" onClick={() => startQuiz({ ...topic, reviewQuestions: false, nextDifficulty: '' })}>New question set</button>
 
             <button type="button" onClick={restart} className="secondary-btn">
               Choose Another Topic
@@ -1750,7 +1743,7 @@ if (topic && bossMode && !finished) {
 
   if (topic && current?.type === "game" && !finished) {
   return (
-    <main className="quiz-page">
+    <main className="quiz-page quiz-workspace">
       <section className="question-card">
         <div className="quiz-top-row">
           <button type="button" className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
@@ -1766,7 +1759,7 @@ if (topic && bossMode && !finished) {
   />
 </div>
 
-{survivalMode && (
+{survivalMode && sessionMode === 'mixed' && !reviewMode && (
   <div className="survival-timer">
     <span>⏱ Survival</span>
     <strong>{survivalTimeLeft}s</strong>
@@ -1793,17 +1786,17 @@ if (topic && bossMode && !finished) {
 
     
 
-    <main className="quiz-page">
+    <main className="quiz-page quiz-workspace">
 
       <section className="question-card">
 
         <div className="quiz-top-row">
           <div className="top-left">
-            <button className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
+            <button className="back-btn" onClick={restart}><Grid2X2 size={16} aria-hidden="true" /> Library</button>
           </div>
 
           <span>
-            Challenge {index + 1}/{mixedSteps.length}
+            {index + 1} / {mixedSteps.length}
           </span>
 
           <button
@@ -1812,7 +1805,7 @@ if (topic && bossMode && !finished) {
             aria-label="Open your game progress"
             onClick={() => navigate("/game-profile")}
           >
-            🎮
+            <ArrowUpRight size={18} aria-hidden="true" />
           </button>
         </div>
 
@@ -1828,18 +1821,18 @@ if (topic && bossMode && !finished) {
 
         </div>
         <div className="quiz-session-stats" aria-label="Current quiz status">
-          <span>{activeChallengeProfile.depth} · {current?.difficulty || activeChallengeProfile.difficulty}</span>
+          <span>{reviewMode ? 'Review practice' : activeChallengeProfile.depth} · {current?.difficulty || activeChallengeProfile.difficulty}</span>
           <span>Score <strong>{score}</strong></span>
           <span className={comboCount > 1 ? "is-active" : ""}>Combo <strong>{comboCount}×</strong></span>
         </div>
-        {quizNotice && <p className="quiz-source-notice">{quizNotice}</p>}
+          {quizNotice && <p className="quiz-source-notice">{quizNotice}</p>}
         {focusedLearningTopic && (
           <div className="focused-quiz-source">
             <span>Focused lesson</span>
             <strong>{focusedLearningTopic.topic}</strong>
           </div>
         )}
-        {survivalMode && (
+        {survivalMode && sessionMode === 'mixed' && !reviewMode && (
   <div className="survival-timer">
     <span>⏱ Survival</span>
     <strong>{survivalTimeLeft}s</strong>
@@ -1848,7 +1841,7 @@ if (topic && bossMode && !finished) {
 
 
         <div key={current?.id || `${topic?.id}-${index}`} className="quiz-question-stage">
-          <h2>{current?.q || "Challenge question"}</h2>
+          <h2 ref={questionHeadingRef} tabIndex={-1}>{current?.q || "Challenge question"}</h2>
 
 <div className="option-list">
   {currentOptions.map((option, optionIndex) => (
@@ -1866,7 +1859,9 @@ if (topic && bossMode && !finished) {
       aria-pressed={selected === option}
       data-key={String.fromCharCode(65 + optionIndex)}
     >
-      {option}
+      <span className="quiz-choice-key" aria-hidden="true">{String.fromCharCode(65 + optionIndex)}</span>
+      <span className="quiz-choice-text">{option}</span>
+      <span className="quiz-choice-indicator" aria-hidden="true">{selected === option && <Check size={15} />}</span>
     </button>
   ))}
 </div>
@@ -1880,8 +1875,8 @@ if (topic && bossMode && !finished) {
     <div className="answer-feedback-heading">
       <span aria-hidden="true">{answerFeedback.isCorrect ? "✓" : "↗"}</span>
       <div>
-        <small>{answerFeedback.isCorrect ? "Strong reasoning" : "Build the connection"}</small>
-        <strong>{answerFeedback.isCorrect ? `Correct · +${answerFeedback.xp} XP` : "Not quite yet"}</strong>
+        <small>{answerFeedback.isCorrect ? (answerFeedback.confidence === 'unsure' ? 'Right answer · revisit the reasoning' : 'Check the reasoning') : 'Build the connection'}</small>
+        <strong>{answerFeedback.isCorrect ? (reviewMode ? 'Correct' : `Correct · +${answerFeedback.xp} XP`) : 'Not quite yet'}</strong>
       </div>
     </div>
     {!answerFeedback.isCorrect && (
@@ -1894,8 +1889,15 @@ if (topic && bossMode && !finished) {
       <span>Why this works</span>
       <p>{answerFeedback.explanation}</p>
     </div>
+    {answerFeedback.confidence === 'unsure' && <p className="quiz-review-tag">Saved for review, even if you answered correctly.</p>}
   </div>
 )}
+
+{!answerFeedback && <div className="quiz-confidence">
+  <span>Still thinking it through?</span>
+  <button type="button" aria-pressed={confidence === 'unsure'} onClick={() => setConfidence((value) => value === 'unsure' ? 'unmarked' : 'unsure')}>Mark as unsure</button>
+  <small>We’ll keep this question for another practice.</small>
+</div>}
 
 {currentOptions.length === 0 && (
   <p className="save-error">
@@ -1910,7 +1912,7 @@ if (topic && bossMode && !finished) {
           disabled={!answerFeedback && (!selected || locked || (current?.options || []).length === 0)}
         >
           {answerFeedback
-            ? (index + 1 === mixedSteps.length ? "View Results" : "Next Challenge")
+            ? (index + 1 === mixedSteps.length ? "View Results" : "Next Question")
             : "Check Answer"}
         </button>
         </div>

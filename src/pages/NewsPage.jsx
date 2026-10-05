@@ -10,6 +10,7 @@ import {
 } from '../data/newsLocations';
 import './NewsPage.css';
 import './LibraryNewsTheme.css';
+import { NewsStoryLink, SavedNewsStories } from '../components/NewsStoryLinks';
 
 const CACHE_PREFIX = 'smarty_location_news_v22_';
 const CACHE_TTL = 1000 * 60 * 15;
@@ -184,6 +185,7 @@ const NewsCard = memo(function NewsCard({ article, index, saved, onToggleSave, o
         <h3>{article.title || 'Untitled news'}</h3>
         <p>{article.summary || `Current reporting from ${article.source || 'this source'}.`}</p>
         <span className="news-card-source">{article.source || 'News source'}</span>
+        <NewsStoryLink story={article} />
 
         <div className="news-actions">
           <a href={article.news_link} target="_blank" rel="noopener noreferrer">
@@ -326,25 +328,7 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
           </div>
         ) : null}
 
-        {summary.coverageBreakdown?.length > 0 && (
-          <div className="news-coverage-map" aria-label="Coverage distribution">
-            <header>
-              <span className="news-brief-section-kicker">Coverage balance</span>
-              <h3>Stories by section</h3>
-            </header>
-            <div className="news-coverage-rows">
-              {summary.coverageBreakdown.map((item) => (
-                <div key={item.section}>
-                  <span>{item.section}</span>
-                  <div aria-hidden="true">
-                    <i style={{ width: `${Math.max(4, item.share)}%` }} />
-                  </div>
-                  <strong>{item.storyCount}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+
       </div>
 
       {showSections && summary.sectionDigests?.length > 0 && (
@@ -894,6 +878,7 @@ export default function NewsPage({ briefingOnly = false }) {
         </button>
       </div>
 
+      <SavedNewsStories />
       <div className="news-controls news-location-controls">
         <label className="news-search-control">
           <span>Search</span>

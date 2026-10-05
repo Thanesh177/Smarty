@@ -2,7 +2,13 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { getAchievements, getProgress, getProgressUserId } from "../../lib/progressStore";
 import { getAllAchievements } from "../../components/achievements/achievementEngine";
 import { useAuth } from "../../contexts/AuthContext";
+import { useNavigate } from 'react-router-dom';
+import { ArrowUpRight, Grid2X2, LockKeyhole, Check } from 'lucide-react';
+import { QUIZ_SUBJECTS } from '../../data/quizSubjects.js';
+import { getWrongQuestions } from '../../lib/progressStore';
 import './GameProfile.css';
+import '../QuizWorkspace.css';
+import '../progress/QuizProgress.css';
 
 function clearAIQuestionCache(userId) {
   const scopeSuffix = `:${encodeURIComponent(userId)}`;
@@ -25,13 +31,14 @@ const UnlockCard = memo(function UnlockCard({ item, totalXP }) {
   const handleUse = useCallback((event) => {
     if (!unlocked) return;
 
-    event.currentTarget.disabled = true;
+    const button = event.currentTarget;
+    button.disabled = true;
 
     try {
       item.action();
     } finally {
       window.setTimeout(() => {
-        if (event.currentTarget) event.currentTarget.disabled = false;
+        if (button.isConnected) button.disabled = false;
       }, 500);
     }
   }, [item, unlocked]);
@@ -42,7 +49,7 @@ const UnlockCard = memo(function UnlockCard({ item, totalXP }) {
       style={{ "--unlock-progress": `${percent}%` }}
     >
       <div className="unlock-card-top">
-        <span>{item.icon}</span>
+        <span aria-hidden="true">{unlocked ? <ArrowUpRight size={18} /> : <LockKeyhole size={16} />}</span>
         <small>{item.category}</small>
       </div>
 
@@ -71,7 +78,7 @@ const AchievementCard = memo(function AchievementCard({ item, unlocked }) {
       className={unlocked ? "unlock-card unlocked" : "unlock-card locked"}
     >
       <div className="unlock-card-top">
-        <span>{item.icon}</span>
+        <span aria-hidden="true">{unlocked ? <Check size={18} /> : <LockKeyhole size={16} />}</span>
         <small>{unlocked ? "Earned" : "Locked"}</small>
       </div>
 
@@ -85,6 +92,7 @@ const AchievementCard = memo(function AchievementCard({ item, unlocked }) {
 });
 
 export default function GameProfile() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const progressUserId = useMemo(() => getProgressUserId(user), [user]);
   const [progress, setProgress] = useState(() => getProgress(progressUserId));
@@ -106,10 +114,8 @@ export default function GameProfile() {
   const levelStats = useMemo(() => {
     const level = Math.max(1, Math.floor(totalXP / 250) + 1);
     const xpRemainder = totalXP % 250;
-    const xpToNextLevel = 250 - (xpRemainder || 250);
-    const levelProgress = Math.min(100, Math.max(0,
-      totalXP > 0 && xpRemainder === 0 ? 100 : (xpRemainder / 250) * 100
-    ));
+    const xpToNextLevel = 250 - xpRemainder;
+    const levelProgress = Math.min(100, Math.max(0, (xpRemainder / 250) * 100));
 
     return { level, xpToNextLevel, levelProgress };
   }, [totalXP]);
@@ -238,9 +244,8 @@ export default function GameProfile() {
 
   const achievementSet = useMemo(() => new Set(achievements.map(a => a.id)), [achievements]);
 
-  const goBack = useCallback(() => {
-    window.history.back();
-  }, []);
+  const studiedSubjects = Object.entries(progress).filter(([, item]) => item && (item.attempts > 0 || item.totalXP > 0));
+  const reviewCount = Object.values(getWrongQuestions(progressUserId)).reduce((sum, items) => sum + (Array.isArray(items) ? items.length : 0), 0);
 
   const renderedUnlocks = useMemo(
     () => unlocks.map((item) => (
@@ -265,90 +270,50 @@ export default function GameProfile() {
   );
 
   return (
-    <main className="quiz-page">
-      <button
-        type="button"
-        className="back-btn"
-        onClick={goBack}
-      >
-        <span className="arrow">←</span> Back
-      </button>
-      <section className="quiz-hero game-profile-hero">
-        <div>
-          <p className="quiz-kicker">GAME PROFILE</p>
-          <h1>Level {levelStats.level} Learner</h1>
-          <p>
-            {totalXP} total XP earned. Keep winning challenges to unlock harder
-            modes, boss levels, review tools, and elite learner rewards.
-          </p>
+    <main className="quiz-page quiz-workspace quiz-progress-workspace">
+      <div className="quiz-masthead">
+        <button type="button" className="quiz-text-control" onClick={() => navigate('/quiz')}><Grid2X2 size={16} aria-hidden="true" /> Quiz library</button>
+        <span>Smarty <span aria-hidden="true">/</span> Your progress</span>
+        <button type="button" className="quiz-text-control" onClick={() => navigate('/progress')}>Review notebook <ArrowUpRight size={16} aria-hidden="true" /></button>
+      </div>
+      <header className="quiz-progress-intro">
+        <span className="quiz-eyebrow">Small steps, lasting knowledge.</span>
+        <h1>Your practice,<br />taking shape.</h1>
+        <p>A record of what you’ve explored, and where to go next.</p>
+      </header>
+      <section className="quiz-progress-summary" aria-label="Practice overview">
+        <div className="quiz-level-summary">
+          <span>Current level</span><strong>{levelStats.level.toString().padStart(2, '0')}</strong>
+          <div className="quiz-level-meta"><span>{totalXP} XP earned</span><span>{levelStats.xpToNextLevel} to level {levelStats.level + 1}</span></div>
+          <div className="profile-level-track" role="progressbar" aria-label="Progress toward next level" aria-valuenow={Math.round(levelStats.levelProgress)} aria-valuemin={0} aria-valuemax={100}><div className="profile-level-fill" style={{ width: `${levelStats.levelProgress}%` }} /></div>
         </div>
-
-        <div className="streak-card streak-game-card game-profile-stat-card">
-          <div className="game-profile-stat-main">
-            <span>Total XP</span>
-            <h3>{totalXP}</h3>
-            <p>{levelStats.xpToNextLevel} XP to next level</p>
-          </div>
-
-          <div className="profile-level-track" aria-label="Level progress">
-            <div
-              className="profile-level-fill"
-              style={{ width: `${levelStats.levelProgress}%` }}
-            />
-          </div>
-
-          <div className="game-profile-stat-row">
-            <small>Level {levelStats.level}</small>
-            <small>{Math.round(levelStats.levelProgress)}%</small>
-          </div>
+        <div className="quiz-progress-facts">
+          <div><strong>{studiedSubjects.length}</strong><span>subjects practiced</span></div>
+          <div><strong>{reviewCount}</strong><span>questions to revisit</span></div>
+          <div><strong>{achievementSet.size}</strong><span>milestones earned</span></div>
         </div>
       </section>
-
-      <section className="profile-overview-grid">
-        <article className="profile-overview-card">
-          <span>🏆</span>
-          <strong>{unlockedCount}/{unlocks.length}</strong>
-          <p>Rewards unlocked</p>
-        </article>
-
-        <article className="profile-overview-card">
-          <span>🎖️</span>
-          <strong>{achievements.length}</strong>
-          <p>Achievements earned</p>
-        </article>
-
-        <article className="profile-overview-card wide-overview-card">
-          <span>🚀</span>
-          <strong>{nextUnlock ? nextUnlock.title : "All unlocked"}</strong>
-          <p>{nextUnlock ? `${nextUnlock.xp - totalXP} XP needed` : "You reached elite status"}</p>
-        </article>
+      <section className="quiz-next-practice">
+        <div><span className="quiz-eyebrow">Your next useful step</span><h2>{reviewCount ? 'Turn a tricky idea into a clear one.' : 'Follow your curiosity into a subject.'}</h2><p>{reviewCount ? 'Revisit missed and uncertain answers. Read the reasoning, then try recalling it without help.' : 'Start with a short question set. Every answer includes the reasoning to help you understand.'}</p></div>
+        <button type="button" className="quiz-progress-primary" onClick={() => navigate(reviewCount ? '/progress' : '/quiz')}>{reviewCount ? 'Review questions' : 'Choose a subject'}<ArrowUpRight size={17} aria-hidden="true" /></button>
       </section>
-
-      <section className="unlock-section">
-        <div className="section-heading-row">
-          <div>
-            <p className="quiz-kicker">UNLOCKS</p>
-            <h2>Unlocked tools</h2>
-          </div>
-        </div>
-
-        <div className="unlock-grid">
-          {renderedUnlocks}
-        </div>
+      <section className="quiz-subject-records" aria-labelledby="practice-record-title">
+        <div className="quiz-progress-section-head"><h2 id="practice-record-title">Your subject record</h2><span>Best practice scores, not exam readiness</span></div>
+        {studiedSubjects.length ? studiedSubjects.map(([id, item]) => <div className="quiz-subject-record" key={id}>
+          <div><strong>{QUIZ_SUBJECTS.find((subject) => subject.id === id)?.title || id.replaceAll('_', ' ').replaceAll('-', ' ')}</strong><span>{item.attempts || 0} practice sets · {item.totalXP || 0} XP</span></div>
+          <div className="quiz-record-score"><span>{Math.min(100, Math.max(0, Number(item.bestPercent) || 0))}%</span><div className="quiz-record-track"><div style={{ width: `${Math.min(100, Math.max(0, Number(item.bestPercent) || 0))}%` }} /></div></div>
+        </div>) : <div className="quiz-progress-empty"><h3>Your first subject starts here.</h3><p>Complete a practice set to build your record. There’s no rush.</p><button type="button" className="quiz-text-control" onClick={() => navigate('/quiz')}>Explore the library <ArrowUpRight size={16} aria-hidden="true" /></button></div>}
       </section>
-
-      <section className="unlock-section">
-        <div className="section-heading-row">
-          <div>
-            <p className="quiz-kicker">BADGES</p>
-            <h2>Achievement badges</h2>
-          </div>
-        </div>
-
-        <div className="unlock-grid">
-          {renderedAchievements}
-        </div>
-      </section>
+      <details className="quiz-progress-details">
+        <summary>Practice extras <span>{unlockedCount} / {unlocks.length} unlocked</span></summary>
+        <p>{nextUnlock ? `Next: ${nextUnlock.title}, at ${nextUnlock.xp} XP.` : 'All practice extras are unlocked.'} Review and difficulty selection are always available in the quiz library.</p>
+        <div className="unlock-grid">{renderedUnlocks}</div>
+      </details>
+      <details className="quiz-progress-details">
+        <summary>Milestones <span>{achievementSet.size} / {allAchievements.length} earned</span></summary>
+        <div className="unlock-grid">{renderedAchievements}</div>
+      </details>
+      <p className="quiz-progress-storage-note">Practice records shown here are saved on this device for your account.</p>
     </main>
   );
 }

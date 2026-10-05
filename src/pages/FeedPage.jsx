@@ -37,6 +37,7 @@ import SmartyBrand from '../components/SmartyBrand';
 import { postApi, creatorApi, chatApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import FeedHeader from '../components/FeedHeader';
+import FeedLearningHome from '../components/FeedLearningHome';
 import useFeed from '../hooks/useFeed';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -3329,7 +3330,7 @@ handleComments,
     <main
       ref={feedRef}
       className={`snap-feed-page ${
-        selectedTopic ? 'has-inner-feed' : 'has-smarty-landing'
+        selectedTopic ? `has-inner-feed ${selectedTopic === 'All' ? 'is-learning-home' : ''}` : 'has-smarty-landing'
       }`}
       style={{ overscrollBehaviorY: 'auto' }}
     >
@@ -3599,17 +3600,18 @@ style={topicCanvasSurfaceStyle}
       {selectedTopic && (
         <FeedHeader topic={selectedTopic} onBack={handleBackToTopics}
           onSelect={handleTopicPillSelect}
+          onOpenSearch={onOpenSearch}
           status={loading ? 'Loading posts' : error ? 'Feed unavailable'
             : `${filteredPosts.length}${nextCursor ? '+' : ''} ${filteredPosts.length === 1 ? 'post' : 'posts'}`} />
       )}
 
-{selectedTopic && loading && filteredPosts.length === 0 && (
+{selectedTopic && selectedTopic !== 'All' && loading && filteredPosts.length === 0 && (
   <div className="feed-inner-loading">
     <FeedSkeleton />
   </div>
 )}
 
-{selectedTopic && error && (
+{selectedTopic && selectedTopic !== 'All' && error && (
   <div
     className="feed-inner-state feed-inner-error"
     role="alert"
@@ -3637,6 +3639,7 @@ style={topicCanvasSurfaceStyle}
 )}
 
 {selectedTopic &&
+  selectedTopic !== 'All' &&
   !loading &&
   !loadingMore &&
   !error &&
@@ -3656,6 +3659,7 @@ style={topicCanvasSurfaceStyle}
   )}
 
 {selectedTopic &&
+  selectedTopic !== 'All' &&
   !loading &&
   !error &&
   filteredPosts.length === 0 &&
@@ -3667,6 +3671,13 @@ style={topicCanvasSurfaceStyle}
 
 {selectedTopic && (
   <section className="snap-feed">
+    {selectedTopic === 'All' && <>
+      <FeedLearningHome />
+      <div className="feed-discovery-heading" id="feed-discovery-heading"><h2>Latest ideas</h2><span>Read · understand · explore</span></div>
+      {loading && !filteredPosts.length && <div className="feed-home-loading" role="status">Finding fresh ideas…<FeedSkeleton /></div>}
+      {error && <div className="feed-home-status" role="status"><p>Posts couldn’t load right now. Please try again.</p><button type="button" onClick={handleFeedRetry}>Try again</button></div>}
+      {!loading && !error && !filteredPosts.length && <div className="feed-home-status"><p>No posts to show yet. Explore a lesson or share something you’ve learned.</p><Link to="/learn">Explore lessons <ArrowRight size={15} /></Link><Link to="/create">Share an idea <ArrowRight size={15} /></Link></div>}
+    </>}
     {renderedPosts}
 
     <div

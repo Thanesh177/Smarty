@@ -164,9 +164,7 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
                 </span>
               </button>
 
-              <NavLink to="/learn" onClick={closeMenu} className="menu-icon-link">
-                <span className="menu-link-left"><GraduationCap size={18} strokeWidth={2.2} /><span>My learning</span></span>
-              </NavLink>
+
 
               <NavLink to="/booksinfo" onClick={closeMenu} className="menu-icon-link">
                 <span className="menu-link-left">

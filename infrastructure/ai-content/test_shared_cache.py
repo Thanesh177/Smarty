@@ -60,6 +60,13 @@ class SharedCacheTests(unittest.TestCase):
             self.ask("bob", "How do attention keys work?")
         self.assertEqual(model.call_count, 2)
 
+    def test_teaching_version_invalidates_old_followup_answers(self):
+        with mock.patch.object(LAMBDA, "call_bedrock_text", return_value="An explanation.") as model:
+            self.ask("alice", "How do attention keys work?")
+            with mock.patch.object(LAMBDA, "EXPLANATION_SCHEMA_VERSION", 5):
+                self.ask("bob", "How do attention keys work?")
+        self.assertEqual(model.call_count, 2)
+
     def test_non_public_post_answers_are_not_shared(self):
         self.post["visibility"] = "private"
         with mock.patch.object(LAMBDA, "call_bedrock_text", return_value="An explanation.") as model:

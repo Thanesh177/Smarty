@@ -19,6 +19,8 @@ import { postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import LearningJourneyPanel from '../components/learning/LearningJourneyPanel';
 import { getLearningGuide } from '../data/learningGuides';
+import { DETAILED_EXPLANATION_VERSION, explanationSections, explanationBlocks } from '../lib/explanationFormat';
+import { createRequestCache } from '../lib/requestCache';
 import './PostAiPage.css';
 
 const getDetailedExplanation = (value) => {
@@ -27,23 +29,6 @@ const getDetailedExplanation = (value) => {
     ? text
     : '';
 };
-
-const DETAILED_EXPLANATION_VERSION = 3;
-const EXPLANATION_SECTION_NAMES = [
-  'Core idea',
-  'Simple explanation',
-  'Essential terms',
-  'Key terms',
-  'How it works',
-  'Worked example',
-  'Real-life example',
-  'Common misconception',
-  'Limits and edge cases',
-  'Why it matters',
-  'What to learn next',
-  'Remember this',
-  'Final takeaway',
-];
 
 const isLongDetailedExplanation = (text) => {
   const clean = String(text || '').trim();
@@ -56,30 +41,22 @@ const isLongDetailedExplanation = (text) => {
   );
 };
 
-const renderTextBlocks = (value, keyPrefix) => String(value || '')
-  .trim()
-  .split(/\n{2,}/g)
-  .map((part) => part.trim())
-  .filter(Boolean)
-  .map((part, index) => {
-    const lines = part.split('\n').map((line) => line.trim()).filter(Boolean);
-    const isBulleted = lines.length > 0 && lines.every((line) => /^[-•*]\s+/.test(line));
-    const isNumbered = lines.length > 0 && lines.every((line) => /^\d+[.)]\s+/.test(line));
-
-    if (isBulleted || isNumbered) {
-      const List = isNumbered ? 'ol' : 'ul';
+const renderTextBlocks = (value, keyPrefix) => explanationBlocks(value)
+  .map((block, index) => {
+    if (block.type !== 'p') {
+      const List = block.type;
       return (
-        <List key={`${keyPrefix}-list-${index}`}>
-          {lines.map((line, lineIndex) => (
+        <List start={block.start} key={`${keyPrefix}-list-${index}`}>
+          {block.items.map((line, lineIndex) => (
             <li key={`${keyPrefix}-${lineIndex}-${line.slice(0, 24)}`}>
-              {line.replace(isNumbered ? /^\d+[.)]\s+/ : /^[-•*]\s+/, '')}
+              {line}
             </li>
           ))}
         </List>
       );
     }
 
-    return <p key={`${keyPrefix}-paragraph-${index}`}>{part}</p>;
+    return <p key={`${keyPrefix}-paragraph-${index}`}>{block.text}</p>;
   });
 
 const renderFormattedParagraphs = (value, className = 'post-ai-paragraphs') => {
@@ -87,38 +64,17 @@ const renderFormattedParagraphs = (value, className = 'post-ai-paragraphs') => {
 
   if (!text) return null;
 
-  const sectionPattern = new RegExp(
-    `^(${EXPLANATION_SECTION_NAMES.join('|')})\\s*:?\\s*(.*)$`,
-    'i'
-  );
-  const sections = [];
-  let activeSection = null;
-
-  text.replace(/\r/g, '').split('\n').forEach((rawLine) => {
-    const line = rawLine.trim();
-    const heading = line.match(sectionPattern);
-
-    if (heading) {
-      activeSection = { heading: heading[1], lines: heading[2] ? [heading[2]] : [] };
-      sections.push(activeSection);
-      return;
-    }
-
-    if (!activeSection) {
-      activeSection = { heading: '', lines: [] };
-      sections.push(activeSection);
-    }
-    activeSection.lines.push(rawLine);
-  });
+  const sections = explanationSections(text);
+  const isLesson = className === 'post-ai-explanation-paragraphs';
 
   return (
     <div className={className}>
       {sections.map((section, index) => {
-        const sectionText = section.lines.join('\n').trim();
+        const sectionText = section.text;
         if (section.heading) {
           return (
-            <section className="post-ai-text-section" key={`${section.heading}-${index}`}>
-              <h3>{section.heading}</h3>
+            <section className={`post-ai-text-section is-${section.kind}`} key={`${section.heading}-${index}`}>
+              <h3 id={isLesson ? section.id : undefined} tabIndex={isLesson ? -1 : undefined}>{section.heading}</h3>
               <div className="post-ai-text-section-body">
                 {renderTextBlocks(sectionText, `section-${index}`)}
               </div>
@@ -160,9 +116,11 @@ function PostStudyRoom() {
   const navigate = useNavigate();
   const mountedRef = useRef(true);
   const askLockRef = useRef(false);
+  const detailRequestsRef = useRef(null);
+  if (!detailRequestsRef.current) detailRequestsRef.current = createRequestCache({ maxEntries: 1 });
   const messagesRef = useRef(null);
   const premiumCloseRef = useRef(null);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const postFromState = useMemo(() => getLearningGuide(postId) || location.state?.post || null, [location.state, postId]);
   const creatorName = postFromState?.isLearningGuide ? 'Smarty learning guide' : location.state?.creatorName || 'Smarty creator';
@@ -232,6 +190,9 @@ function PostStudyRoom() {
     const words = `${body} ${displayExplanation}`.trim().split(/\s+/).filter(Boolean).length;
     return Math.max(2, Math.min(12, Math.ceil(words / 180)));
   }, [body, displayExplanation]);
+  const lessonJumps = useMemo(() => explanationSections(displayExplanation).filter(
+    (section) => ['How it works', 'Worked example', 'Real-life example', 'What to learn next'].includes(section.heading)
+  ), [displayExplanation]);
   const suggestedQuestions = useMemo(() => [
     { label: 'Start with the basics', question: `Teach the prerequisites for ${topicLabel} using the source lesson. Define essential terms, then connect them to this mechanism.` },
     { label: 'Show each step', question: `Explain ${topicLabel} as a cause-and-effect sequence. Explain why each step leads to the next, and distinguish assumptions from facts.` },
@@ -302,6 +263,9 @@ function PostStudyRoom() {
   }, [asking, messages]);
 
   useEffect(() => {
+    // Wait for account restoration before starting an authenticated guide
+    // request. Otherwise the guest room can generate while it is replaced.
+    if (authLoading && !postFromState?.isLearningGuide) return;
     let cancelled = false;
     async function loadExplanation() {
       try {
@@ -336,9 +300,11 @@ function PostStudyRoom() {
           throw new Error('Missing detailed AI endpoint. Add postApi.getPostDetails in client.js and point it to /posts/details.');
         }
 
-        const data = postApi.getPostDetails
-          ? await postApi.getPostDetails(detailsPayload)
-          : await postApi.getAiDetails(detailsPayload);
+        // Share only concurrent requests in this account/post room. The server
+        // remains the durable cache; retries and later opens still validate it.
+        const data = await detailRequestsRef.current.get('details', () => postApi.getPostDetails
+          ? postApi.getPostDetails(detailsPayload)
+          : postApi.getAiDetails(detailsPayload), 0);
 
         if (cancelled || !mountedRef.current) return;
 
@@ -381,7 +347,7 @@ function PostStudyRoom() {
 
     loadExplanation();
     return () => { cancelled = true; };
-  }, [loadAttempt, postId, postFromState, readableError]);
+  }, [authLoading, loadAttempt, postId, postFromState, readableError]);
 
   const askQuestion = useCallback(async (value) => {
     const cleanQuestion = String(value || '').trim();
@@ -553,10 +519,20 @@ function PostStudyRoom() {
                 <p>Checking your saved guide, then building it only if needed…</p>
               </div>
             ) : displayExplanation ? (
-              renderFormattedParagraphs(
+              <>
+              {lessonJumps.length > 0 && <nav className="post-ai-reading-nav" aria-label="Explore the explanation">
+                {lessonJumps.map((section) => <a key={section.id} href={`#${section.id}`} onClick={(event) => {
+                  event.preventDefault();
+                  const target = document.getElementById(section.id);
+                  target?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+                  target?.focus({ preventScroll: true });
+                }}>{section.heading === 'How it works' ? 'The steps' : /example/i.test(section.heading) ? 'See an example' : 'What comes next'}</a>)}
+              </nav>}
+              {renderFormattedParagraphs(
                 displayExplanation,
                 'post-ai-explanation-paragraphs'
-              )
+              )}
+              </>
             ) : !status ? (
               <p className="post-ai-empty-guide">This post does not have a learning guide yet.</p>
             ) : null}
@@ -572,27 +548,9 @@ function PostStudyRoom() {
           </article>
 
           <aside className="post-ai-context" aria-label="Lesson context">
-            {body && (
-              <article className="post-ai-original">
-                <div className="post-ai-context-label">
-                  <BookOpen size={16} aria-hidden="true" />
-                  <span>Source post</span>
-                </div>
-                {renderFormattedParagraphs(body, 'post-ai-original-paragraphs')}
-              </article>
-            )}
 
-            <article className="post-ai-lesson-map">
-              <div className="post-ai-context-label">
-                <Workflow size={16} aria-hidden="true" />
-                <span>Lesson map</span>
-              </div>
-              <ol>
-                <li className="is-complete"><span>01</span><strong>Read the idea</strong></li>
-                <li className="is-current"><span>02</span><strong>Build understanding</strong></li>
-                <li><span>03</span><strong>Challenge yourself</strong></li>
-              </ol>
-            </article>
+
+
           </aside>
         </div>
 

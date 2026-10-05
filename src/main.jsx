@@ -8,6 +8,8 @@ import './styles/premium-theme.css';
 import './styles/product-theme.css';
 import './styles/chat-workspace.css';
 import './styles/navigation-toolbar.css';
+import './styles/feed-learning-home.css';
+import './styles/interface-polish.css';
 import 'aws-amplify/auth/enable-oauth-listener';
 import {
   QueryClient,

@@ -1,376 +1,96 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowUpRight, Bookmark, Search, RotateCcw, X, Play } from 'lucide-react';
 import { postApi } from '../api/client';
-import EmptyState from '../components/EmptyState';
+import { useAuth } from '../contexts/AuthContext';
+import { contentId, contentList, contentTopics, filterContent } from '../lib/communityContent';
 import './SavedPage.css';
-function getPostImage(post) {
-  return (
-    post?.imageUrl ||
-    post?.photoUrl ||
-    post?.thumbnail ||
-    post?.coverImage ||
-    post?.image ||
-    post?.mediaUrl ||
-    ''
-  );
+import './CommunityWorkspace.css';
+
+function SavedCard({post,busy,onOpen,onRemove}) {
+  const [failed,setFailed]=useState(false);
+  const image=post.imageUrl||post.photoUrl||post.thumbnail||post.coverImage||post.image||'';
+  const id=contentId(post),title=post.title||'Saved idea';
+  return <article className="saved-card">
+    <button type="button" className="saved-card-media" aria-label={`Read ${title}`} onClick={()=>onOpen(id)}>
+      {typeof image==='string'&&image&&!failed?<img src={image} alt="" loading="lazy" decoding="async" onError={()=>setFailed(true)}/>:<div className="saved-placeholder"><Bookmark size={28} strokeWidth={1}/><span>{contentTopics(post)[0]||'An idea to keep'}</span></div>}
+      {post.videoUrl&&<span className="saved-video-label"><Play size={12}/>Video</span>}
+    </button>
+    <div className="saved-card-body"><span className="saved-topic">{contentTopics(post).join(' · ')||'Smarty'}</span>
+      <button type="button" className="saved-title-btn" onClick={()=>onOpen(id)}>{title}</button>
+      <p>{post.body||post.description||'Open this saved post to pick up the idea.'}</p>
+      <div className="saved-card-actions"><button type="button" onClick={()=>onOpen(id)}>Read<ArrowUpRight size={15}/></button>
+        <button type="button" className="saved-remove" disabled={busy} aria-label={`Remove ${title} from saved`} onClick={()=>onRemove(post)}><Bookmark size={16} fill="currentColor"/>{busy?'Removing…':'Saved'}</button></div>
+    </div>
+  </article>;
 }
-
-function getSavedPostId(post) {
-  return String(
-    post?.reelId ||
-      post?.postId ||
-      post?.id ||
-      post?.item?.reelId ||
-      post?.item?.postId ||
-      post?.item?.id ||
-      ''
-  ).trim();
-}
-
-const SavedCard = memo(function SavedCard({
-  post,
-  onOpen,
-  onLike,
-  onSave,
-}) {
-  const postId = getSavedPostId(post);
-  const image = getPostImage(post);
-
-  return (
-    <article className="saved-card">
-      <button
-        className="saved-card-media"
-        type="button"
-        onClick={() => onOpen(postId)}
-        disabled={!postId}
-      >
-        {post.videoUrl ? (
-          <video
-            src={post.videoUrl}
-            muted
-            playsInline
-            preload="none"
-          />
-        ) : image ? (
-          <img
-            src={image}
-            alt={post.title || 'Saved post'}
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <div className="saved-placeholder">{post.topic?.[0] || 'S'}</div>
-        )}
-      </button>
-
-      <div className="saved-card-body">
-        <span className="saved-topic">{post.topic || 'Smarty'}</span>
-
-        <button
-          className="saved-title-btn"
-          type="button"
-          onClick={() => onOpen(postId)}
-          disabled={!postId}
-        >
-          {post.title || 'Untitled post'}
-        </button>
-
-        <p>{post.body || post.description || 'No description available.'}</p>
-
-        <div className="saved-card-actions">
-          <button type="button" onClick={() => onLike(postId)}>
-            ❤️ {post.likes || 0}
-          </button>
-
-          <button type="button" onClick={() => onSave(postId)}>
-            ✅ Saved
-          </button>
-
-          <button type="button" onClick={() => onOpen(postId)} disabled={!postId}>
-            Open →
-          </button>
-        </div>
-      </div>
-    </article>
-  );
-});
 export default function SavedPage() {
-  const navigate = useNavigate();
-
-  const mountedRef = useRef(true);
-  const toastTimerRef = useRef(null);
-
-  const [posts, setPosts] = useState([]);
-  const [query, setQuery] = useState('');
-  const [activeTopic, setActiveTopic] = useState('All');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [toast, setToast] = useState('');
-
-  const showToast = (message) => {
-    if (!mountedRef.current) return;
-
-    setToast(message);
-
-    if (toastTimerRef.current) {
-      window.clearTimeout(toastTimerRef.current);
-    }
-
-    toastTimerRef.current = window.setTimeout(() => {
-      if (mountedRef.current) setToast('');
-    }, 1600);
+  const navigate=useNavigate(),{user}=useAuth();
+  const account=String(user?.sub||user?.id||user?.userId||'guest');
+  const [state,setState]=useState({account,posts:[]});
+  const posts=state.account===account?state.posts:[];
+  const [query,setQuery]=useState(''),[topic,setTopic]=useState('All'),[sort,setSort]=useState('recent');
+  const [loading,setLoading]=useState(true),[refreshing,setRefreshing]=useState(false),[error,setError]=useState('');
+  const [busy,setBusy]=useState(''),[notice,setNotice]=useState(''),[removed,setRemoved]=useState(null);
+  const mounted=useRef(false),generation=useRef(0),mutation=useRef(false);
+  const load=useCallback(async(silent=false)=>{
+    if(mutation.current)return;
+    const ticket=++generation.current;
+    setError('');silent?setRefreshing(true):setLoading(true);
+    try{
+      const result=await postApi.getSavedReels();
+      if(mounted.current&&ticket===generation.current)setState({account,posts:contentList(result)});
+    }catch(failure){
+      if(mounted.current&&ticket===generation.current)setError(failure?.response?.status===401?'Sign in to see your saved posts.':'Saved posts could not be updated. Please try again.');
+    }finally{if(mounted.current&&ticket===generation.current){setLoading(false);setRefreshing(false);}}
+  },[account]);
+  useEffect(()=>{
+    mounted.current=true;mutation.current=false;setBusy('');setRemoved(null);setNotice('');setQuery('');setTopic('All');
+    let canceled=false;Promise.resolve().then(()=>{if(!canceled)void load();});
+    return()=>{canceled=true;mounted.current=false;generation.current++;};
+  },[load]);
+  useEffect(()=>{
+    const refresh=event=>event.detail?.waitUntil?.(load(true));
+    window.addEventListener('smarty-global-refresh',refresh);
+    return()=>window.removeEventListener('smarty-global-refresh',refresh);
+  },[load]);
+  const topics=useMemo(()=>['All',...[...new Set(posts.flatMap(contentTopics))].sort()], [posts]);
+  useEffect(()=>{if(!loading&&!topics.includes(topic))setTopic('All');},[loading,topics,topic]);
+  const filtered=useMemo(()=>filterContent(posts,{query,topic,sort}),[posts,query,topic,sort]);
+  const remove=async post=>{
+    if(mutation.current)return;mutation.current=true;setBusy(contentId(post));setNotice('');
+    const ticket=generation.current;
+    try{
+      const result=await postApi.toggleSave(contentId(post));if(result?.success===false)throw new Error('Bookmark update was not accepted.');
+      if(!mounted.current||ticket!==generation.current)return;
+      setState(previous=>({...previous,posts:previous.posts.filter(item=>contentId(item)!==contentId(post))}));setRemoved(post);setNotice('Removed from saved.');
+      window.dispatchEvent(new Event('saved-posts-updated'));
+    }catch{if(mounted.current&&ticket===generation.current)setNotice('This bookmark could not be removed. Try again.');}
+    finally{if(ticket===generation.current){mutation.current=false;if(mounted.current)setBusy('');}}
   };
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    async function loadSavedPosts() {
-      try {
-        setLoading(true);
-        setError('');
-
-        const hasToken = Boolean(
-          localStorage.getItem('eduscroll_token') ||
-          localStorage.getItem('eduscroll_access_token') ||
-          localStorage.getItem('accessToken') ||
-          localStorage.getItem('idToken') ||
-          sessionStorage.getItem('eduscroll_access_token')
-        );
-
-        if (!hasToken) {
-          setError('Please log in to view saved posts.');
-          setLoading(false);
-          return;
-        }
-
-        const data = await postApi.getSavedReels();
-        if (!mountedRef.current) return;
-
-        const savedPosts = Array.isArray(data?.posts)
-          ? data.posts
-          : Array.isArray(data?.reels)
-            ? data.reels
-            : Array.isArray(data)
-              ? data
-              : [];
-
-        setPosts(savedPosts);
-      } catch (err) {
-        console.error('Saved reels error:', err);
-
-        const status = err?.response?.status;
-
-        if (!mountedRef.current) return;
-
-        if (status === 401 || status === 403) {
-          setError('Please log in again to view saved posts.');
-          return;
-        }
-
-        setError('Failed to load saved content.');
-      } finally {
-        if (mountedRef.current) setLoading(false);
-      }
-    }
-
-    loadSavedPosts();
-
-    return () => {
-      mountedRef.current = false;
-      if (toastTimerRef.current) {
-        window.clearTimeout(toastTimerRef.current);
-      }
-    };
-  }, []);
-
-  const topics = useMemo(() => {
-    if (!Array.isArray(posts) || posts.length === 0) {
-      return ['All'];
-    }
-
-    const uniqueTopics = new Set();
-
-    for (const post of posts) {
-      if (!post?.topic) continue;
-      uniqueTopics.add(post.topic.trim());
-    }
-
-    return ['All', ...Array.from(uniqueTopics).sort((a, b) => a.localeCompare(b))];
-  }, [posts]);
-
-  const filteredPosts = useMemo(() => {
-    if (!Array.isArray(posts) || posts.length === 0) return [];
-
-    const normalizedQuery = query.trim().toLowerCase();
-
-    return posts.filter((post) => {
-      const matchesTopic = activeTopic === 'All' || post.topic === activeTopic;
-      if (!matchesTopic) return false;
-
-      if (!normalizedQuery) return true;
-
-      const text = `${post.title || ''} ${post.body || ''} ${post.description || ''} ${post.topic || ''}`.toLowerCase();
-
-      return text.includes(normalizedQuery);
-    });
-  }, [posts, activeTopic, query]);
-
-  const handleLike = useCallback(async (postId) => {
-    if (!postId) return;
-
-    try {
-      await postApi.toggleLike(postId);
-
-      if (!mountedRef.current) return;
-
-      setPosts((prev) =>
-        prev.map((post) => {
-          if (getSavedPostId(post) !== String(postId)) return post;
-
-          const wasLiked = Boolean(post.liked);
-          return {
-            ...post,
-            likes: Math.max(0, Number(post.likes || 0) + (wasLiked ? -1 : 1)),
-            liked: !wasLiked,
-          };
-        })
-      );
-
-      showToast('Liked ❤️');
-    } catch (err) {
-      console.error('Like failed:', err);
-      showToast('Like failed');
-    }
-  }, []);
-
-  const handleSave = useCallback(async (postId) => {
-    if (!postId) return;
-
-    try {
-      await postApi.toggleSave(postId);
-      if (!mountedRef.current) return;
-
-      setPosts((prev) =>
-        prev.filter((post) => getSavedPostId(post) !== String(postId))
-      );
-
-      showToast('Removed from saved');
-    } catch (err) {
-      console.error('Save failed:', err);
-
-      const status = Number(err?.response?.status || 0);
-      if (status === 401 || status === 403) {
-        const returnTo = '/saved';
-
-        try {
-          sessionStorage.setItem('smarty-post-login-redirect', returnTo);
-          localStorage.setItem('smarty-post-login-redirect', returnTo);
-        } catch {
-          // Navigation still works when storage is unavailable.
-        }
-
-        showToast('Your session expired. Sign in again.');
-        navigate('/login', { state: { from: returnTo } });
-        return;
-      }
-
-      showToast('Could not update bookmark. Try again.');
-    }
-  }, [navigate]);
-
-  const handleOpen = useCallback(
-    (postId) => {
-      const normalizedPostId = String(postId || '').trim();
-      if (!normalizedPostId) {
-        showToast('This saved post is unavailable');
-        return;
-      }
-
-      navigate(`/reel/${encodeURIComponent(normalizedPostId)}`);
-    },
-    [navigate]
-  );
-
-  return (
-    <main className="saved-page">
-      {toast && <div className="saved-toast">{toast}</div>}
-
-      <section className="saved-hero">
-        <div className="saved-hero-copy">
-          <span className="saved-pill">Your library</span>
-          <h1>Saved knowledge, ready when you are.</h1>
-          <p>Revisit the educational reels and ideas you bookmarked while scrolling.</p>
-        </div>
-
-        <div className="saved-summary">
-          <strong>{posts.length}</strong>
-          <span>saved items</span>
-        </div>
-      </section>
-
-      <section className="saved-toolbar">
-        <input
-          placeholder="Search saved posts..."
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-
-        <div className="saved-topics">
-          {topics.map((topic) => (
-            <button
-              key={topic}
-              type="button"
-              className={activeTopic === topic ? 'active' : ''}
-              onClick={() => setActiveTopic(topic)}
-            >
-              {topic}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="saved-content">
-        <div className="saved-heading-row">
-          <div>
-            <h2>Saved Content</h2>
-            <p>
-              {filteredPosts.length} item{filteredPosts.length === 1 ? '' : 's'} found
-            </p>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="saved-skeleton-grid">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div className="saved-skeleton" key={index} />
-            ))}
-          </div>
-        ) : error ? (
-          <p className="status error">{error}</p>
-        ) : posts.length === 0 ? (
-          <EmptyState
-            title="No saved posts yet"
-            description="When you bookmark educational posts, they will appear here."
-          />
-        ) : filteredPosts.length === 0 ? (
-          <EmptyState
-            title="No matching saved posts"
-            description="Try a different search term or topic."
-          />
-        ) : (
-          <div className="saved-grid">
-            {filteredPosts.map((post) => (
-              <SavedCard
-                key={getSavedPostId(post) || `${post.title || 'saved'}-${post.createdAt || ''}`}
-                post={post}
-                onOpen={handleOpen}
-                onLike={handleLike}
-                onSave={handleSave}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-    </main>
-  );
+  const undo=async()=>{
+    if(!removed||mutation.current)return;const post=removed;mutation.current=true;setBusy(contentId(post));
+    const ticket=generation.current;
+    try{
+      const result=await postApi.toggleSave(contentId(post));if(result?.success===false)throw new Error('Bookmark update was not accepted.');
+      if(!mounted.current||ticket!==generation.current)return;
+      setState(previous=>({...previous,posts:contentList([post,...previous.posts])}));setRemoved(null);setNotice('Bookmark restored.');
+      window.dispatchEvent(new Event('saved-posts-updated'));
+    }catch{if(mounted.current&&ticket===generation.current)setNotice('The bookmark could not be restored. Try again.');}
+    finally{if(ticket===generation.current){mutation.current=false;if(mounted.current)setBusy('');}}
+  };
+  const reset=()=>{setQuery('');setTopic('All');};
+  return <main className="saved-page community-workspace" aria-labelledby="saved-page-title">
+    <header className="community-page-heading"><div><span className="community-eyebrow">YOUR COLLECTION</span><h1 id="saved-page-title">Saved for a quieter moment.</h1><p>Pick up an idea, follow a thread, or find something worth reading again.</p></div>
+      <button type="button" className="community-icon-button" aria-label="Refresh saved posts" disabled={loading||refreshing||Boolean(busy)} onClick={()=>load(true)}><RotateCcw size={18}/></button></header>
+    <div className="community-toolbar"><div className="community-search"><Search size={17} aria-hidden="true"/><input type="search" aria-label="Search saved posts" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Find an idea you saved"/>{query&&<button type="button" aria-label="Clear saved search" onClick={()=>setQuery('')}><X size={17}/></button>}</div>
+      <label className="community-sort">Order<select aria-label="Saved post order" value={sort} onChange={event=>setSort(event.target.value)}><option value="recent">Recent first</option><option value="title">Title A–Z</option></select></label></div>
+    <nav className="community-filters" aria-label="Saved topics">{topics.map(value=><button type="button" key={value} aria-pressed={topic===value} onClick={()=>setTopic(value)}>{value}</button>)}</nav>
+    <div className="community-results-heading"><h2>Your saved posts</h2><span>{loading?'Loading…':`${filtered.length} of ${posts.length} saved`}{refreshing?' · updating':''}</span></div>
+    {notice&&<div className="community-notice" role="status"><span>{notice}</span>{removed&&<button type="button" disabled={Boolean(busy)} onClick={undo}>Undo</button>}</div>}
+    {error&&<div className="community-error" role="alert"><p>{error}</p><button type="button" disabled={refreshing} onClick={()=>load(posts.length>0)}>Try again</button></div>}
+    {loading?<div className="community-skeleton-grid" role="status" aria-label="Loading saved posts">{Array.from({length:6},(_,i)=><i key={i}/>)}</div>:
+      filtered.length?<div className="saved-grid">{filtered.map(post=><SavedCard key={contentId(post)} post={post} busy={Boolean(busy)} onRemove={remove} onOpen={id=>navigate(`/reel/${encodeURIComponent(id)}`)}/>)}</div>:
+      !error&&<div className="community-empty"><Bookmark size={26}/><h3>{posts.length?'No matching saved posts.':'Keep the ideas that matter.'}</h3><p>{posts.length?'Try another topic or a shorter search.':'Bookmark a post from the feed and it will be waiting here.'}</p>{posts.length?<button type="button" onClick={reset}>Clear filters</button>:<Link to="/feed?topic=All">Explore the feed<ArrowUpRight size={15}/></Link>}</div>}
+  </main>;
 }

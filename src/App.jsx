@@ -14,10 +14,12 @@ import {
 import AuthRedirectHandler from './components/AuthRedirectHandler';
 import InstallPrompt from './components/InstallPrompt';
 import UniversalSearch from './components/UniversalSearch';
+import PageTransition from './components/PageTransition';
 import {
   CircleUserRound,
   MessagesSquare,
   House,
+  BookOpen,
   Search,
 } from 'lucide-react';
 import SmartyBrand from './components/SmartyBrand';
@@ -57,6 +59,7 @@ import FollowRequestsPage from './pages/FollowRequestsPage';
 import TopicRoomsPage from './pages/TopicRoomsPage';
 import ReelDetailPage from './pages/ReelDetailPage';
 import NewsPage from './pages/NewsPage';
+import NewsStoryPage from './pages/NewsStoryPage';
 import ReadBookPage from './pages/ReadBookPage';
 import BookReaderPage from './pages/BookReaderPage';
 import PostAiPage from './pages/PostAiPage';
@@ -65,8 +68,9 @@ import AdminModerationPage from './pages/AdminModerationPage';
 import { isAdminUser } from './lib/adminAccess';
 import './styles/production-pages.css';
 import './styles/ipad.css';
+import { useQueryClient } from '@tanstack/react-query';
+import { canStartPull, isVerticalPull, PULL_THRESHOLD, requestPageRefresh } from './lib/pullRefresh';
 
-const GLOBAL_PULL_REFRESH_RATIO = 0.4;
 
 function hasStoredAuthToken() {
   return Boolean(
@@ -346,6 +350,7 @@ function ReminderPopup({ title, body, visible, onClose, onClick }) {
 }
 
 function Layout() {
+  const queryClient = useQueryClient();
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -392,6 +397,9 @@ function Layout() {
   const [popupNotification, setPopupNotification] = useState(null);
   const [globalPullDistance, setGlobalPullDistance] = useState(0);
   const [globalRefreshing, setGlobalRefreshing] = useState(false);
+  const [pageRefreshVersion, setPageRefreshVersion] = useState(0);
+  const refreshingRef = useRef(false);
+  const pullStartXRef = useRef(0);
   const [universalSearchOpen, setUniversalSearchOpen] = useState(false);
 
   const touchStartXRef = useRef(null);
@@ -486,20 +494,31 @@ useEffect(() => {
     setGlobalPullDistance(0);
   }, []);
 
-  const runGlobalPullRefresh = useCallback(() => {
-    if (globalRefreshing) return;
-
+  const runGlobalPullRefresh = useCallback(async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
     setGlobalRefreshing(true);
-    window.dispatchEvent(new CustomEvent('smarty-global-refresh'));
-
-    window.setTimeout(() => {
+    try {
+      await requestPageRefresh(async () => {
+        // Refresh the displayed route, never the auth provider or whole WebView.
+        setPageRefreshVersion(value => value + 1);
+        await Promise.allSettled([queryClient.invalidateQueries({ refetchType:'active' })]);
+      });
+    } finally {
+      refreshingRef.current = false;
       resetGlobalPullRefresh();
       setGlobalRefreshing(false);
-    }, 650);
-  }, [globalRefreshing, resetGlobalPullRefresh]);
+    }
+  }, [queryClient, resetGlobalPullRefresh]);
+
+  useEffect(() => { resetGlobalPullRefresh(); }, [location.pathname, resetGlobalPullRefresh]);
 
   const handleGlobalPullStart = useCallback((event) => {
-    if (globalRefreshing || event.touches.length !== 1) return;
+    if (refreshingRef.current || event.touches.length !== 1) return;
+    // Do not interrupt writing, authentication, calls, or conversation scrolling.
+    if (/(?:login|register|confirm|auth|create|edit|chat|rooms|admin|settings|quiz|game)/i.test(location.pathname) || !canStartPull(event.target,event.currentTarget)) {
+      resetGlobalPullRefresh(); return;
+    }
 
     const atTop = isPageAtTop();
     globalPullAtTopRef.current = atTop;
@@ -511,9 +530,10 @@ useEffect(() => {
     }
 
     globalPullStartYRef.current = event.touches[0]?.clientY || 0;
+    pullStartXRef.current = event.touches[0]?.clientX || 0;
     globalPullDistanceRef.current = 0;
     setGlobalPullDistance(0);
-  }, [globalRefreshing, isPageAtTop, resetGlobalPullRefresh]);
+  }, [location.pathname, isPageAtTop, resetGlobalPullRefresh]);
 
   const handleGlobalPullMove = useCallback((event) => {
     if (
@@ -527,6 +547,10 @@ useEffect(() => {
     }
 
     const currentY = event.touches[0]?.clientY || 0;
+    const currentX = event.touches[0]?.clientX || 0;
+    if (!isVerticalPull({x:pullStartXRef.current,y:globalPullStartYRef.current},{x:currentX,y:currentY})) {
+      globalPullDistanceRef.current = 0;setGlobalPullDistance(0);return;
+    }
     const distance = Math.max(0, currentY - globalPullStartYRef.current);
 
     if (distance <= 0) {
@@ -536,8 +560,7 @@ useEffect(() => {
     }
 
     globalPullDistanceRef.current = distance;
-    const triggerDistance = Math.max(120, window.innerHeight * GLOBAL_PULL_REFRESH_RATIO);
-    const easedDistance = Math.min(triggerDistance, distance * 0.42);
+    const easedDistance = Math.min(56, distance * 0.42);
 
     setGlobalPullDistance((current) => (
       Math.abs(current - easedDistance) > 1 ? easedDistance : current
@@ -545,16 +568,15 @@ useEffect(() => {
   }, [globalRefreshing, isPageAtTop]);
 
   const handleGlobalPullEnd = useCallback(() => {
-    const triggerDistance = Math.max(120, window.innerHeight * GLOBAL_PULL_REFRESH_RATIO);
     const shouldRefresh =
       !globalRefreshing &&
       globalPullAtTopRef.current &&
       isPageAtTop() &&
-      globalPullDistanceRef.current >= triggerDistance;
+      globalPullDistanceRef.current >= PULL_THRESHOLD;
 
     if (shouldRefresh && !globalPullTriggeredRef.current) {
       globalPullTriggeredRef.current = true;
-      setGlobalPullDistance(triggerDistance);
+      setGlobalPullDistance(42);
       runGlobalPullRefresh();
       return;
     }
@@ -1007,6 +1029,7 @@ useEffect(() => {
   return (
     <>
       <AuthRedirectHandler />
+      <PageTransition />
 
       <UniversalSearch
         open={universalSearchOpen}
@@ -1043,7 +1066,7 @@ useEffect(() => {
 
             <nav className="brand-actions" aria-label="Quick navigation">
 
-              <button
+              {!location.pathname.startsWith('/feed') && <button
                 type="button"
                 className="quick-icon-link"
                 aria-label="Search Smarty"
@@ -1052,17 +1075,17 @@ useEffect(() => {
               >
                 <Search size={16} strokeWidth={2.15} />
                 <span className="nav-control-label" aria-hidden="true">Search</span>
-              </button>
+              </button>}
 
               <NavLink
-                to="/feed"
+                to="/feed?topic=All"
                 className="quick-icon-link"
                 aria-label="Feed"
                 title="Feed"
                 onClick={(event) => {
-                  if (window.location.pathname !== '/feed' || window.location.search) return;
+                  if (window.location.pathname !== '/feed' || new URLSearchParams(window.location.search).get('topic') !== 'All') return;
                   event.preventDefault();
-                  const feedScroller = document.querySelector('.snap-feed-page');
+                  const feedScroller = document.querySelector('.snap-feed-page .snap-feed');
                   feedScroller?.scrollTo({
                     top: 0,
                     behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -1074,6 +1097,7 @@ useEffect(() => {
                 <House size={16} strokeWidth={2.2} />
                 <span className="nav-control-label" aria-hidden="true">Feed</span>
               </NavLink>
+
               <button
                 type="button"
                 className="quick-icon-link"
@@ -1165,11 +1189,11 @@ useEffect(() => {
               aria-live="polite"
             >
               <span className="global-pull-refresh-spinner" />
-              <small>{globalRefreshing ? 'Refreshing' : 'Pull to refresh'}</small>
+              <small>{globalRefreshing ? 'Refreshing' : globalPullDistance >= PULL_THRESHOLD * .42 ? 'Release to refresh' : 'Pull to refresh'}</small>
             </div>
           )}
 
-          <RouteErrorBoundary key={location.pathname}>
+          <RouteErrorBoundary key={`${location.pathname}:${pageRefreshVersion}`}>
             <Routes>
                 <Route
                   path="/"
@@ -1187,6 +1211,7 @@ useEffect(() => {
                 <Route path="/bookinfo" element={<Booksinfo />} />
                 <Route path="/topics" element={<TopicsPage />} />
                 <Route path="/news" element={<NewsPage />} />
+                <Route path="/news/story" element={<NewsStoryPage />} />
                 <Route path="/read-books" element={<ReadBookPage />} />
                 <Route path="/preview-books" element={<ReadBookPage />} />
                 <Route path="/read-book/:bookId" element={<BookReaderPage />} />
@@ -1401,30 +1426,28 @@ function ReminderPopupStyles() {
       }
       .global-pull-refresh {
         position: fixed;
-        top: 72px;
+        top: calc(16px + env(safe-area-inset-top));
         left: 50%;
         z-index: 9999;
-        width: 92px;
-        height: 54px;
+        width: 154px;
+        height: 44px;
         border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 999px;
+        border-radius: 10px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 7px;
         color: rgba(255, 255, 255, 0.9);
-        background: linear-gradient(180deg, rgba(10, 15, 28, 0.86), rgba(6, 10, 20, 0.92));
-        box-shadow: 0 16px 42px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
+        background: var(--ui-surface, #111214);
+        box-shadow: 0 8px 24px rgba(0,0,0,.2);
         pointer-events: none;
         will-change: transform, opacity;
         transition: transform 0.18s ease, opacity 0.18s ease;
       }
 
       .global-pull-refresh small {
-        font-size: 10px;
-        font-weight: 800;
+        font-size: 11px;
+        font-weight: 500;
         letter-spacing: -0.02em;
         white-space: nowrap;
       }
@@ -1435,11 +1458,11 @@ function ReminderPopupStyles() {
         border-radius: 999px;
         border: 2px solid rgba(255, 255, 255, 0.22);
         border-top-color: rgba(56, 189, 248, 0.95);
-        animation: globalPullSpin 0.85s linear infinite;
       }
 
       .global-pull-refresh.refreshing .global-pull-refresh-spinner {
-        border-top-color: rgba(34, 197, 94, 0.95);
+        border-top-color: var(--ui-accent);
+        animation: globalPullSpin 0.85s linear infinite;
       }
 
       @keyframes globalPullSpin {
@@ -1450,8 +1473,12 @@ function ReminderPopupStyles() {
 
       @media (max-width: 640px) {
         .global-pull-refresh {
-          top: 64px;
+          top: calc(16px + env(safe-area-inset-top));
         }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .global-pull-refresh { transition:none; }
+        .global-pull-refresh.refreshing .global-pull-refresh-spinner { animation:none; }
       }
       .reminder-popup {
         position: fixed;

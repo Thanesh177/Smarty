@@ -1,49 +1,24 @@
 import { useId } from 'react';
-import { BookOpen, ChevronDown, Compass, Cpu, FlaskConical, Globe2, HeartPulse, Landmark, LayoutGrid, Leaf, Newspaper, Palette, TrendingUp, UsersRound, Wrench } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Search } from 'lucide-react';
 import { MAIN_TOPIC_LABELS } from '../data/topicTaxonomy';
+import FeedTopicPicker from './FeedTopicPicker';
 
-const TOPIC_ICONS = {
-  All: BookOpen, News: Newspaper, Technology: Cpu, Engineering: Wrench,
-  'Science & Mathematics': FlaskConical, 'Life Sciences': Leaf,
-  'Earth & Space': Globe2, 'Mind & Health': HeartPulse,
-  'Money & Business': TrendingUp, 'Food & Agriculture': Leaf,
-  History: Landmark, 'Society & Ideas': UsersRound, 'Arts & Design': Palette,
-};
-
-// Native topic selection keeps the header compact and works with touch,
-// keyboard, and screen readers without a second scrolling navigation row.
-export default function FeedHeader({ topic, onSelect, onBack, status = '' }) {
+// Equal side columns keep the name centered regardless of the selected topic.
+export default function FeedHeader({ topic, onSelect, onBack, onOpenSearch, status = '' }) {
   const statusId = useId();
   const selected = String(topic || 'All').trim();
   const choices = [...new Set(['All', ...MAIN_TOPIC_LABELS, selected])];
-  const title = selected === 'All' ? 'All posts' : selected;
-  const TopicIcon = TOPIC_ICONS[selected] || Compass;
+  const title = selected === 'All' ? 'Your feed' : selected;
 
   return (
     <header className="feed-inner-header">
       <div className="feed-inner-heading">
-        <button type="button" className="feed-inner-back" onClick={onBack} aria-label="Browse all topics" title="Browse all topics">
-          <LayoutGrid size={18} strokeWidth={1.7} aria-hidden="true" />
-        </button>
-        <div className="feed-inner-title feed-topic-switch">
-          <h1 className="feed-header-sr-only">{title}</h1>
-          <span className="feed-topic-current" key={selected} aria-hidden="true">
-            <TopicIcon size={18} strokeWidth={1.7} />
-            <span>{title}</span>
-          </span>
-          <select
-            className="feed-topic-select"
-            aria-label="Change feed topic"
-            aria-describedby={status ? statusId : undefined}
-            title={title}
-            value={selected}
-            onChange={(event) => onSelect(event.target.value)}
-          >
-            {choices.map((choice) => <option key={choice} value={choice}>{choice === 'All' ? 'All posts' : choice}</option>)}
-          </select>
-          <ChevronDown size={15} strokeWidth={1.8} aria-hidden="true" />
-        </div>
+        <h1 className="feed-header-sr-only">{title}</h1>
+        <FeedTopicPicker selected={selected} choices={choices} onSelect={onSelect} onBrowse={onBack} />
       </div>
+      <Link className="feed-header-brand" to="/feed?topic=All" aria-label="Smarty — all posts">Smarty</Link>
+      <button type="button" className="feed-header-search" onClick={() => onOpenSearch?.()} aria-label="Search Smarty"><Search size={18} /><span>Search anything</span><kbd>/</kbd></button>
       {status && <p id={statusId} className="feed-header-sr-only" role="status">{status}</p>}
     </header>
   );

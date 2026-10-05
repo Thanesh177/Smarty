@@ -70,6 +70,7 @@ const DEFAULT_TOPICS = [
 ];
 
 const QUICK_DESTINATIONS = [
+  { key: 'quick-learning', label: 'My learning', meta: 'Resume a lesson or revisit an idea', path: '/learn', type: 'book' },
   { key: 'quick-topics', label: 'Explore topics', meta: 'Complete catalog', path: '/topics', type: 'topic' },
   { key: 'quick-books', label: 'Read books', meta: 'Free library', path: '/read-books', type: 'book' },
   { key: 'quick-news', label: "Today's briefing", meta: 'Local and global news', path: '/news', type: 'news' },
@@ -915,7 +916,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
         panelRef.current.querySelectorAll(
           'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
         )
-      ).filter((element) => !element.hasAttribute('hidden'));
+      ).filter((element) => !element.hasAttribute('hidden') && element.getClientRects().length > 0);
 
       if (!focusable.length) return;
       const first = focusable[0];
@@ -1082,7 +1083,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
             autoComplete="off"
             spellCheck="false"
             maxLength={MAX_QUERY_LENGTH}
-            placeholder="Search topics, posts, people, books, news…"
+            placeholder="Search Smarty"
             value={query}
             onChange={(event) => setQuery(event.target.value.slice(0, MAX_QUERY_LENGTH))}
             onKeyDown={handleInputKeyDown}
@@ -1127,6 +1128,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
                   type="button"
                   key={value}
                   className={activeFilter === value ? 'is-active' : ''}
+                  aria-pressed={activeFilter === value}
                   onClick={() => setActiveFilter(value)}
                 >
                   {label}
@@ -1141,9 +1143,12 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
           {cleanQuery.length < 2 ? (
             <div className="universal-search-start">
               <div className="universal-search-intro">
-                <span>SMARTY SEARCH</span>
-                <h2 id="universal-search-title">Find anything. Keep learning.</h2>
-                <p>Search across the whole app without leaving what you are doing.</p>
+                <span>FOLLOW YOUR CURIOSITY</span>
+                <h2 id="universal-search-title">What are you curious about?</h2>
+                <p>Search ideas, topics, people, and more.</p>
+              </div>
+              <div className="universal-search-suggestions" aria-label="Try a search">
+                {['AI', 'Memory', 'Space', 'Decision making'].map(suggestion => <button type="button" key={suggestion} onClick={() => setQuery(suggestion)}><Search size={13} />{suggestion}</button>)}
               </div>
 
               {recentSearches.length > 0 && (

@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from email.utils import parsedate_to_datetime
 import xml.etree.ElementTree as ET
@@ -1381,6 +1381,147 @@ def build_payload(location):
     }
 
 
+def story_request(params):
+    """Only plain search terms and bounded calendar periods reach providers."""
+    query = re.sub(r"\s+", " ", str(params.get("query") or "")).strip()
+    if not 3 <= len(query) <= 100 or not re.fullmatch(r"[\w\s'-]+", query, re.UNICODE):
+        raise ValueError("Enter a story or subject using 3-100 letters, numbers or spaces.")
+    # Block search operators even without punctuation.
+    query = " ".join(word for word in query.split() if word.upper() not in {"OR", "AND", "NOT"})
+    if len(query) < 3:
+        raise ValueError("Enter a more specific story or subject.")
+    now = datetime.now(timezone.utc)
+    period = str(params.get("year") or "recent")
+    month = str(params.get("month") or "all")
+    if period == "recent":
+        if month != "all":
+            raise ValueError("Select a year before selecting a month.")
+        ranges = [(now - timedelta(days=30), now + timedelta(seconds=1))]
+    else:
+        if not re.fullmatch(r"\d{4}", period) or not 2000 <= int(period) <= now.year:
+            raise ValueError("Choose a year from 2000 through the current year.")
+        if month != "all" and (not month.isdigit() or not 1 <= int(month) <= 12):
+            raise ValueError("Choose a valid month.")
+        year = int(period)
+        months = [int(month)] if month != "all" else [1, 4, 7, 10]
+        ranges = []
+        for first_month in months:
+            start = datetime(year, first_month, 1, tzinfo=timezone.utc)
+            next_month = first_month + (1 if month != "all" else 3)
+            end = datetime(year + (next_month > 12), (next_month - 1) % 12 + 1, 1, tzinfo=timezone.utc)
+            if start <= now:
+                ranges.append((start, min(end, now + timedelta(seconds=1))))
+        if not ranges:
+            raise ValueError("That month has not started yet.")
+    # Keep previous daily snapshots rather than overwriting yesterday's reports.
+    edition = now.strftime("%Y-%m-%d") if period == "recent" else "archive"
+    identity = f"{query.casefold()}|{period}|{month}|{edition}"
+    return query, period, month, ranges, "story-v1#" + hashlib.sha256(identity.encode()).hexdigest()
+
+
+def fetch_story_range(query, start, end):
+    # The provider's date filter is best-effort. Enforce dates again locally.
+    root = fetch_xml(f"{GOOGLE_NEWS_URL}/search", {
+        "q": f'{query} after:{(start - timedelta(days=1)):%Y-%m-%d} before:{(end + timedelta(days=1)):%Y-%m-%d}',
+        "hl": "en-US", "gl": "US", "ceid": "US:en",
+    }, timeout=5)
+    articles = normalize_google_articles(root, make_location("GLOBAL", ""), limit=100)
+    return [article for article in articles if start.timestamp() <= article_timestamp(article) < end.timestamp()]
+
+
+def story_archive_articles(articles, limit=160):
+    """Bound a shared archive item; never store full copyrighted articles."""
+    seen = set()
+    result = []
+    size = 0
+    candidates = sorted(articles, key=article_timestamp)
+    for article in candidates:
+        url = str(article.get("news_link") or "")
+        title = compact_text(article.get("title"), 500)
+        if not valid_http_url(url) or len(url) > 2048 or not title or not article_timestamp(article):
+            continue
+        identity = url.split("#", 1)[0]
+        if identity in seen:
+            continue
+        seen.add(identity)
+        record = {
+            "id": hashlib.sha256(identity.encode()).hexdigest()[:20],
+            "title": title, "news_link": url,
+            "source": compact_text(article.get("source"), 100) or "Original report",
+            "published_at": article["published_at"],
+        }
+        record_size = len(json.dumps(record, ensure_ascii=False).encode("utf-8"))
+        size += record_size
+        result.append(record)
+    # Spread bounded results across the period, retaining both ends of the story.
+    max_records = min(limit, max(1, int(len(result) * 240000 / size))) if size else limit
+    if len(result) > max_records:
+        result = [result[round(index * (len(result) - 1) / (max_records - 1))]
+                  for index in range(max_records)] if max_records > 1 else result[-1:]
+    while len(json.dumps(result, ensure_ascii=False).encode("utf-8")) > 260000:
+        result = result[::2] + (result[-1:] if len(result) % 2 == 0 else [])
+    return result
+
+
+def story_timeline_response(params):
+    try:
+        query, period, month, ranges, cache_key = story_request(params)
+    except ValueError as error:
+        return api_response(400, {"error": str(error)})
+    now = int(time.time())
+    cached = None
+    try:
+        cached = get_cached(cache_key)
+        if cached and int(cached.get("freshUntil", 0)) > now and cached.get("payload"):
+            return api_response(200, {**cached["payload"], "cacheStatus": "fresh-cache"})
+        with generation_lease(NEWS_CACHE, "date", cache_key):
+            latest = get_cached(cache_key)
+            if latest and int(latest.get("freshUntil", 0)) > now and latest.get("payload"):
+                return api_response(200, {**latest["payload"], "cacheStatus": "fresh-cache"})
+            if latest and latest.get("payload"):
+                cached = latest
+            collected, failed = [], 0
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(fetch_story_range, query, start, end) for start, end in ranges]
+                for future in as_completed(futures):
+                    try:
+                        collected.extend(future.result())
+                    except (urllib.error.URLError, TimeoutError, ValueError, ET.ParseError):
+                        failed += 1
+            if failed == len(ranges):
+                raise RuntimeError("Story sources are temporarily unavailable.")
+            archived = (cached or {}).get("payload", {}).get("articles", [])
+            candidates = [article for article in collected + archived
+                          if any(start.timestamp() <= article_timestamp(article) < end.timestamp() for start, end in ranges)]
+            articles = story_archive_articles(candidates)
+            payload = {
+                "kind": "story-timeline", "query": query, "year": period, "month": month,
+                "articles": articles, "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "partial": True, "sourceFailures": failed,
+                "coverageNote": "Available dated reports, not a complete archive. Earlier coverage may be missing. Select a month or refine the subject for more reports.",
+                "notice": "Some sources could not be refreshed. Saved reports are included." if failed else "",
+                "cacheStatus": "fresh", "stored": True,
+            }
+            historical = period != "recent" and int(period) < datetime.now(timezone.utc).year
+            fresh_for = 7 * 86400 if historical else CACHE_TTL_SECONDS
+            if failed or not articles:
+                fresh_for = 300
+            # Intentionally no expiresAt: archive records survive the daily-news TTL.
+            item = {
+                "date": cache_key, "payload": payload, "freshUntil": now + fresh_for,
+                "updatedAt": payload["updatedAt"], "recordType": "story-archive",
+            }
+            if not articles:
+                item["expiresAt"] = now + 86400
+            NEWS_CACHE.put_item(Item=item)
+            return api_response(200, payload)
+    except (GenerationBusy, ClientError, BotoCoreError, RuntimeError):
+        LOGGER.warning(json.dumps({"event": "story_timeline_unavailable", "hasSavedCoverage": bool(cached)}))
+        if cached and cached.get("payload"):
+            return api_response(200, {**cached["payload"], "cacheStatus": "stale-cache", "notice": "Could not refresh. Showing previously saved coverage."})
+        return api_response(503, {"error": "This story timeline is temporarily unavailable. Please try again.", "retryable": True})
+
+
 def lambda_handler(event, context):
     request_context = event.get("requestContext", {})
     method = (
@@ -1394,6 +1535,8 @@ def lambda_handler(event, context):
         return api_response(405, {"error": "Method not allowed."})
 
     params = event.get("queryStringParameters") or {}
+    if params.get("view") == "story":
+        return story_timeline_response(params)
 
     try:
         location = make_location(params.get("country"), params.get("region"))

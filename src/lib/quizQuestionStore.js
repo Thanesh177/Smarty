@@ -8,14 +8,18 @@ const ACTIVE_QUIZ_PREFIX = "smarty-active-quiz-v2";
 const QUESTION_HISTORY_PREFIX = "smarty-quiz-question-history-v2";
 
 function getStorage() {
-  return typeof window !== "undefined" ? window.localStorage : null;
+  try { return typeof window !== "undefined" ? window.localStorage : null; } catch { return null; }
+}
+
+function removeStoredItem(key) {
+  try { getStorage()?.removeItem(key); } catch { /* A quiz still works without browser storage. */ }
 }
 
 function normalizeFingerprintText(value) {
   return String(value || "")
     .normalize("NFKC")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 }
 
@@ -47,7 +51,9 @@ export function getQuizContextKey(topic = {}) {
     topic.postId,
     topic.sourceTitle,
     topic.sourceBody,
-  ].map(normalizeFingerprintText).join("|");
+    topic.studyTrack,
+    topic.examTarget,
+  ].map(value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim()).join("|");
 
   return `ctx-${hashText(context || "general")}`;
 }
@@ -73,7 +79,7 @@ function readJson(key) {
   try {
     return JSON.parse(storage.getItem(key) || "null");
   } catch {
-    storage.removeItem(key);
+    removeStoredItem(key);
     return null;
   }
 }
@@ -91,7 +97,7 @@ export function loadActiveQuiz({ userId, topicId, difficulty, contextKey }) {
     && entry.questions.length > 0;
 
   if (!isValid) {
-    getStorage()?.removeItem(key);
+    removeStoredItem(key);
     return null;
   }
 
@@ -118,10 +124,10 @@ export function saveActiveQuiz({ userId, topicId, difficulty, contextKey, questi
 }
 
 export function clearActiveQuiz(userId, topicId) {
-  getStorage()?.removeItem(getActiveQuizStorageKey(userId, topicId));
+  removeStoredItem(getActiveQuizStorageKey(userId, topicId));
 
   // Remove the pre-v2 cache so an old shared quiz cannot leak across accounts.
-  getStorage()?.removeItem(`smarty-active-quiz-${topicId}`);
+  removeStoredItem(`smarty-active-quiz-${topicId}`);
 }
 
 export function getQuestionHistory(userId, topicId) {
@@ -138,7 +144,7 @@ export function getQuestionHistory(userId, topicId) {
     .slice(-MAX_HISTORY_PER_TOPIC);
 
   if (records.length !== entry.records.length) {
-    getStorage()?.setItem(key, JSON.stringify({ version: STORE_VERSION, records }));
+    try { getStorage()?.setItem(key, JSON.stringify({ version: STORE_VERSION, records })); } catch { /* History is optional. */ }
   }
 
   return records;

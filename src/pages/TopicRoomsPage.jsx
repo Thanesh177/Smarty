@@ -6,7 +6,13 @@ import {
   ArrowDown,
   ArrowLeft,
   Download,
+  Globe2,
+  LockKeyhole,
+  MoreHorizontal,
   Paperclip,
+  Plus,
+  ArrowUpRight,
+  Users,
   Search,
   SendHorizontal,
   Trash2,
@@ -14,10 +20,11 @@ import {
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import './TopicRoomsPage.css';
+import './RoomsWorkspace.css';
 import RoomMediaModal from './RoomMediaModal';
 import RoomMediaPreview from './RoomMediaPreview';
 import RoomInfoPage from './RoomInfoPage';
-import { flushSync } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 
 const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
 const API_ORIGIN = 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com';
@@ -650,6 +657,7 @@ export default function TopicRoomsPage() {
   const [hiddenRooms, setHiddenRooms] = useState([]);
   const [showHidden, setShowHidden] = useState(false);
   const [roomsLoading, setRoomsLoading] = useState(false);
+  const [roomsError, setRoomsError] = useState('');
   const [initialRoomsReady, setInitialRoomsReady] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
@@ -711,7 +719,7 @@ export default function TopicRoomsPage() {
   const [roomSearch, setRoomSearch] = useState(
     () => new URLSearchParams(location.search).get('search') || ''
   );
-  const [roomPrivacyFilter, setRoomPrivacyFilter] = useState('private');
+  const [roomPrivacyFilter, setRoomPrivacyFilter] = useState('all');
   const [modalTitle, setModalTitle] = useState('Group Members');
   const [modalMode, setModalMode] = useState('members');
   const [modalRoom, setModalRoom] = useState(null);
@@ -756,10 +764,27 @@ export default function TopicRoomsPage() {
 
 
   const roomMenuRef = useRef(null);
+  const createRoomTriggerRef = useRef(null);
+  const createRoomNameRef = useRef(null);
 
   const olderScrollTriggerRafRef = useRef(0);
   const roomActionMenuRef = useRef(null);
   const activeRoomMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (!showRoomMenu && !showActiveRoomMenu && !openRoomActionMenuId) return undefined;
+    const dismiss = (event) => {
+      if (event.key !== 'Escape') return;
+      const opener = showActiveRoomMenu ? activeRoomMenuRef.current?.querySelector('button')
+        : openRoomActionMenuId ? roomActionMenuRef.current?.querySelector('button') : roomMenuRef.current?.querySelector('.rooms-menu-btn');
+      setShowRoomMenu(false);
+      setShowActiveRoomMenu(false);
+      setOpenRoomActionMenuId('');
+      opener?.focus();
+    };
+    document.addEventListener('keydown', dismiss);
+    return () => document.removeEventListener('keydown', dismiss);
+  }, [showRoomMenu, showActiveRoomMenu, openRoomActionMenuId]);
 
 
 
@@ -835,7 +860,7 @@ const isMessagesNearBottom = useCallback((threshold = 110) => {
 
     return rooms
       .filter((room) =>
-        roomPrivacyFilter === 'private'
+        roomPrivacyFilter === 'all' ? true : roomPrivacyFilter === 'private'
           ? room.privacy === 'private'
           : room.privacy !== 'private'
       )
@@ -1845,6 +1870,7 @@ async function approveJoinRequest(requestUserId) {
 
     try {
       setStatus('');
+      setRoomsError('');
       setRoomsLoading(true);
 
       if (!navigator.onLine) {
@@ -1945,6 +1971,7 @@ async function approveJoinRequest(requestUserId) {
       setRooms(fallbackRooms);
       setStatus('Connection is slow. Showing cached rooms.');
     } else {
+      setRoomsError('Rooms couldn’t load. Check your connection and try again.');
       setStatus(
         err?.response?.data?.error ||
         err?.response?.data?.message ||
@@ -2108,6 +2135,7 @@ async function approveJoinRequest(requestUserId) {
     roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
     initialRoomsLoadedForUserRef.current = '';
     setRooms([]);
+    setRoomsError('');
     setMessages([]);
     setActiveRoom(null);
     setRoomInvites([]);
@@ -3082,6 +3110,7 @@ function handleEditRoomImageChange(event) {
 
 
 function closeImageCropModal() {
+  if (imageCropTarget === 'create') createRoomNameRef.current?.focus();
   if (imageCropSourceUrl?.startsWith('blob:')) {
     URL.revokeObjectURL(imageCropSourceUrl);
   }
@@ -3096,6 +3125,7 @@ function closeImageCropModal() {
 
 function confirmImageCrop() {
   if (!imageCropSourceFile || !imageCropSourceUrl) return;
+  if (imageCropTarget === 'create') createRoomNameRef.current?.focus();
 
   if (imageCropTarget === 'edit') {
     if (editRoomImagePreview?.startsWith('blob:')) {
@@ -4041,12 +4071,13 @@ async function sendMessage(e) {
 }
 
 return (
-  <main className={`rooms-page ${activeRoom ? 'has-active-room' : ''} ${mobileChatOpen && activeRoom ? 'mobile-chat-open' : ''}`}>
+  <main className={`rooms-page rooms-workspace ${activeRoom ? 'has-active-room' : ''} ${mobileChatOpen && activeRoom ? 'mobile-chat-open' : ''}`}>
     <aside className="sidebar">
       <div className="rooms-title-row">
         <div className="rooms-sidebar-heading">
-          <span>Community</span>
+          <span>Smarty / Discussions</span>
           <h1>Rooms</h1>
+          <p>A place to think out loud. Learn something together.</p>
         </div>
 
         <div
@@ -4058,6 +4089,7 @@ return (
           <button
             type="button"
             className="rooms-create-plus-btn"
+            ref={createRoomTriggerRef}
             aria-label="Create room"
             onClick={(e) => {
               e.preventDefault();
@@ -4069,7 +4101,7 @@ return (
               setShowCreateModal(true);
             }}
           >
-            +
+            <Plus size={18} aria-hidden="true" /><span>New room</span>
           </button>
 
           <button
@@ -4085,7 +4117,7 @@ return (
               setShowRoomMenu((prev) => !prev);
             }}
           >
-            ⋯
+            <MoreHorizontal size={20} aria-hidden="true" />
             {roomInvites.length > 0 && (
               <span className="rooms-menu-badge">
                 {roomInvites.length > 9 ? '9+' : roomInvites.length}
@@ -4129,13 +4161,14 @@ return (
 
       <div className="rooms-sidebar-controls">
         <div className="room-privacy-toggle room-privacy-toggle-title" aria-label="Room visibility">
+          <button type="button" className={roomPrivacyFilter === 'all' ? 'active' : ''} aria-pressed={roomPrivacyFilter === 'all'} onClick={() => setRoomPrivacyFilter('all')}>All rooms</button>
           <button
             type="button"
             className={roomPrivacyFilter === 'private' ? 'active' : ''}
             aria-pressed={roomPrivacyFilter === 'private'}
             onClick={() => setRoomPrivacyFilter('private')}
           >
-            Private
+            <LockKeyhole size={13} aria-hidden="true" /> Private
           </button>
 
           <button
@@ -4144,7 +4177,7 @@ return (
             aria-pressed={roomPrivacyFilter === 'public'}
             onClick={() => setRoomPrivacyFilter('public')}
           >
-            Public
+            <Globe2 size={13} aria-hidden="true" /> Public
           </button>
         </div>
       </div>
@@ -4162,15 +4195,18 @@ return (
         />
       </label>
 
-      {status && <p className="room-status">{status}</p>}
+      {status && !roomsError && <p className="room-status" role="status">{status}</p>}
+      <div className="rooms-list-heading"><h2>{roomSearch.trim() ? 'Search results' : roomPrivacyFilter === 'private' ? 'Private conversations' : roomPrivacyFilter === 'public' ? 'Open conversations' : 'Find your conversation'}</h2><span>{roomsLoading || !initialRoomsReady ? 'Loading' : `${sortedVisibleRooms.length} rooms`}</span></div>
 
       <div className="room-list">
-        {roomsLoading ? (
-          <p className="empty">Loading rooms...</p>
+        {roomsLoading || !initialRoomsReady ? (
+          <div className="rooms-list-loading" role="status" aria-label="Loading rooms">{[0, 1, 2, 3, 4, 5].map((index) => <div className="room-skeleton" key={index} aria-hidden="true"><span /><div /><div /></div>)}</div>
+        ) : roomsError ? (
+          <div className="rooms-discovery-empty" role="alert"><h3>Let’s reconnect.</h3><p>{roomsError}</p><button type="button" onClick={() => loadRooms('', { force: true })}>Try again</button></div>
         ) : rooms.length === 0 ? (
-          <p className="empty">No rooms found</p>
+          <div className="rooms-discovery-empty"><Users size={28} aria-hidden="true" /><h3>Start a conversation.</h3><p>Create a room for a topic you’re curious about, or check your room invitations.</p><button type="button" onClick={() => createRoomTriggerRef.current?.click()}>Create a room <Plus size={16} aria-hidden="true" /></button></div>
         ) : sortedVisibleRooms.length === 0 ? (
-          <p className="empty">No {roomPrivacyFilter} rooms found</p>
+          <div className="rooms-discovery-empty"><h3>{roomSearch.trim() ? 'No matching conversations.' : 'No rooms in this view yet.'}</h3><p>{roomSearch.trim() ? 'Try another name or explore all your available rooms.' : 'Try all rooms, or create a new conversation.'}</p><button type="button" onClick={() => { setRoomSearch(''); setRoomPrivacyFilter('all'); }}>Show all rooms</button></div>
         ) : (
           sortedVisibleRooms.map((room, roomIndex) => {
             const isOwner = isRoomOwner(room, userId);
@@ -4185,50 +4221,14 @@ return (
             const shouldEagerLoadRoomImage = roomIndex < ROOM_IMAGE_EAGER_LIMIT;
 
             return (
-              <div
+              <article
                 key={room.roomId}
-                className={`room-item ${roomImageUrl ? 'room-has-image room-image-full-card' : ''} ${
+                className={`room-item ${roomImageUrl ? 'room-has-image' : ''} ${
                   activeRoom?.roomId === room.roomId ? 'active' : ''
                 }`}
-                onClick={(event) => {
-                  if (event.target.closest('.room-card-menu-wrap')) return;
-                  openRoom(room);
-                }}
               >
-                {roomImageUrl && (
-                  <img
-                    className="room-full-bg-image"
-                    src={roomImageUrl}
-                    alt=""
-                    loading={shouldEagerLoadRoomImage ? 'eager' : 'lazy'}
-                    fetchPriority={shouldEagerLoadRoomImage ? 'high' : 'low'}
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                    aria-hidden="true"
-                    draggable="false"
-                    style={{ pointerEvents: 'none', userSelect: 'none' }}
-                    onError={(event) => {
-                      const failedUrl = event.currentTarget.currentSrc || roomImageUrl;
-                      event.currentTarget.style.display = 'none';
-                      removeStoredRoomImage(room.roomId);
 
-                      setFailedRoomImages((prev) => ({
-                        ...prev,
-                        [room.roomId]: failedUrl,
-                      }));
-
-                      setRoomImageCache((prev) => {
-                        if (!prev[room.roomId]) return prev;
-
-                        const next = { ...prev };
-                        delete next[room.roomId];
-                        return next;
-                      });
-                    }}
-                  />
-                )}
-
-                <div className="room-info">
+                <button type="button" className="room-open-button room-info" onClick={() => openRoom(room)} aria-label={`Open ${room.name || 'room'}`} aria-current={activeRoom?.roomId === room.roomId ? 'true' : undefined}>
                   <div className="room-item-main">
                     <div className="room-image-wrap">
                       {roomImageUrl ? (
@@ -4238,12 +4238,13 @@ return (
                           alt=""
                           width="44"
                           height="44"
-                          loading="lazy"
-                          fetchPriority="low"
+                          loading={shouldEagerLoadRoomImage ? 'eager' : 'lazy'}
+                          fetchPriority={shouldEagerLoadRoomImage ? 'high' : 'low'}
                           decoding="async"
                           referrerPolicy="no-referrer"
                           onError={(event) => {
                             event.currentTarget.style.display = 'none';
+                            setFailedRoomImages((prev) => ({ ...prev, [room.roomId]: roomImageUrl }));
                           }}
                         />
                       ) : (
@@ -4265,10 +4266,12 @@ return (
                         )}
                       </div>
 
-                      <span>{room.privacy === 'private' ? ' Private' : ' Public'}</span>
+                      <span className="room-card-visibility">{room.privacy === 'private' ? <LockKeyhole size={12} aria-hidden="true" /> : <Globe2 size={12} aria-hidden="true" />}{room.privacy === 'private' ? 'Private room' : 'Public room'}</span>
                     </div>
                   </div>
-                </div>
+                  <p className="room-card-description">{room.description || (room.privacy === 'private' ? 'A shared space for your circle. Exchange ideas, notes and useful discoveries.' : 'Bring a question, share an idea, and learn with others.')}</p>
+                  <span className="room-card-open">Enter conversation <ArrowUpRight size={15} aria-hidden="true" /></span>
+                </button>
 
                 <div
                   className="room-card-menu-wrap"
@@ -4282,7 +4285,7 @@ return (
                   <button
                     type="button"
                     className="room-card-menu-btn"
-                    aria-label="Room actions"
+                    aria-label={`Actions for ${room.name || 'room'}`}
                     aria-expanded={openRoomActionMenuId === room.roomId}
                     style={{ position: 'relative', zIndex: 21, pointerEvents: 'auto' }}
                     onMouseDown={(e) => {
@@ -4300,7 +4303,7 @@ return (
                       );
                     }}
                   >
-                    ⋯
+                    <MoreHorizontal size={18} aria-hidden="true" />
                   </button>
 
                   {openRoomActionMenuId === room.roomId && (
@@ -4352,7 +4355,7 @@ return (
                     </div>
                   )}
                 </div>
-              </div>
+              </article>
             );
           })
         )}
@@ -4372,6 +4375,7 @@ return (
             <button
               type="button"
               className="mobile-back-btn"
+              aria-label="Back to rooms"
               onClick={() => {
                 setMobileChatOpen(false);
                 setActiveRoom(null);
@@ -4435,18 +4439,17 @@ return (
                 aria-label="Active room actions"
                 aria-expanded={showActiveRoomMenu}
                 onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   setShowRoomMenu(false);
                   setOpenRoomActionMenuId('');
                   setShowActiveRoomMenu((prev) => !prev);
                 }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
               >
-                ⋯
+                <MoreHorizontal size={20} aria-hidden="true" />
               </button>
 
           {showActiveRoomMenu && (
@@ -5200,29 +5203,46 @@ onClick={() => {
   </div>
 )}
 
-    {showCreateModal && (
-      <div className="members-modal">
-        <div className="members-card create-room-modal">
+    {showCreateModal && createPortal(
+      <div className="rooms-dialog-portal rooms-workspace" aria-hidden={imageCropModalOpen || undefined}>
+      <div className="members-modal room-create-layer">
+        <div className="members-card create-room-modal" role="dialog" aria-modal="true" aria-labelledby="room-create-title" aria-describedby="room-create-description" onKeyDown={(event) => {
+          if (event.key === 'Escape' && !creatingRoom) {
+            event.preventDefault(); removeNewRoomImage(); setShowCreateModal(false); createRoomTriggerRef.current?.focus();
+          }
+          if (event.key === 'Tab') {
+            const controls = [...event.currentTarget.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled)')].filter((element) => !element.hidden && element.getClientRects().length);
+            const first = controls[0], last = controls[controls.length - 1];
+            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+            else if (!controls.length) event.preventDefault();
+          }
+        }}>
           <button
             type="button"
             className="close-members"
+            aria-label="Close create room"
             disabled={creatingRoom}
             onClick={() => {
               if (!creatingRoom) {
                 removeNewRoomImage();
                 setShowCreateModal(false);
+                createRoomTriggerRef.current?.focus();
               }
             }}
           >
             ✕
           </button>
 
-          <h3>Create New Room</h3>
+          <span className="room-modal-eyebrow">A shared space</span>
+          <h3 id="room-create-title">Create a room</h3>
+          <p id="room-create-description">Give your conversation a name. Keep it open to everyone or make it private.</p>
           {status && <p className="room-status">{status}</p>}
 
           <form onSubmit={createRoom} className="create-form">
-            <input
-              placeholder="Room name..."
+            <label className="room-create-field">Room name<input
+              ref={createRoomNameRef}
+              placeholder="e.g. The curious minds club"
               value={newRoomName}
               maxLength={60}
               autoFocus
@@ -5231,19 +5251,21 @@ onClick={() => {
                 setNewRoomName(e.target.value);
               }}
               disabled={creatingRoom}
-            />
+            /></label>
 
-            <select
+            <label className="room-create-field">Who can join?<select
+              aria-label="Who can join?"
               value={newRoomPrivacy}
               onChange={(e) => setNewRoomPrivacy(e.target.value)}
               disabled={creatingRoom}
             >
               <option value="public"> Public Room</option>
               <option value="private"> Private Room</option>
-            </select>
+            </select></label>
+            <p className="room-privacy-help">{newRoomPrivacy === 'private' ? 'Access is managed through invitations and join requests.' : 'Public rooms are visible to other users.'}</p>
 
             <label className="create-room-image-picker">
-              <span>Room image</span>
+              <span>Room image <small>optional</small></span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
@@ -5281,19 +5303,33 @@ onClick={() => {
           </form>
         </div>
       </div>
+      </div>, document.body
     )}
 
-    {imageCropModalOpen && imageCropSourceUrl && (
+    {imageCropModalOpen && imageCropSourceUrl && createPortal(
+  <div className="rooms-dialog-portal rooms-workspace room-crop-portal">
   <div className="members-modal" onClick={closeImageCropModal}>
     <div
       className="members-card create-room-modal image-crop-card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="room-crop-title"
       onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') { event.preventDefault(); closeImageCropModal(); }
+        if (event.key === 'Tab') {
+          const controls = [...event.currentTarget.querySelectorAll('button, input')].filter((element) => !element.disabled && element.getClientRects().length);
+          const first = controls[0], last = controls[controls.length - 1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        }
+      }}
     >
-      <button type="button" className="close-members" onClick={closeImageCropModal}>
+      <button type="button" className="close-members" aria-label="Close image adjustment" autoFocus onClick={closeImageCropModal}>
         ✕
       </button>
 
-      <h3>Adjust Image</h3>
+      <h3 id="room-crop-title">Adjust image</h3>
 
 <div
   className="image-crop-preview"
@@ -5332,6 +5368,7 @@ onClick={() => {
       </div>
     </div>
   </div>
+  </div>, document.body
 )}
   </main>
 );

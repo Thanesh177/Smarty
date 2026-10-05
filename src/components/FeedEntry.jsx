@@ -20,7 +20,7 @@ function InitialVisit({ onOpenSearch }) {
   );
 }
 
-function NewsFeed() {
+function NewsFeed({ onOpenSearch }) {
   const navigate = useNavigate();
   const pageRef = useRef(null);
   useEffect(() => {
@@ -30,7 +30,7 @@ function NewsFeed() {
   }, []);
   return (
     <main ref={pageRef} className="has-inner-feed feed-news-topic">
-      <FeedHeader topic="News" onBack={() => navigate('/topics')}
+      <FeedHeader topic="News" onBack={() => navigate('/topics')} onOpenSearch={onOpenSearch}
         onSelect={(topic) => navigate(`/feed?topic=${encodeURIComponent(topic)}`)} />
       <NewsPage briefingOnly />
     </main>
@@ -44,6 +44,6 @@ export default function FeedEntry({ onOpenSearch }) {
   // Returning native installations can already open the feed directly.
   useEffect(() => { if (topic.trim()) rememberLanding(); }, [topic]);
   if (!topic.trim()) return <InitialVisit onOpenSearch={onOpenSearch} />;
-  if (topic.trim().toLowerCase() === 'news') return <NewsFeed />;
+  if (topic.trim().toLowerCase() === 'news') return <NewsFeed onOpenSearch={onOpenSearch} />;
   return <FeedPage onOpenSearch={onOpenSearch} />;
 }
