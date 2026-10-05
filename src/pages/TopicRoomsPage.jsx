@@ -3110,7 +3110,7 @@ function handleEditRoomImageChange(event) {
 
 
 function closeImageCropModal() {
-  if (imageCropTarget === 'create') createRoomNameRef.current?.focus();
+  if (imageCropTarget === 'create') requestAnimationFrame(() => createRoomNameRef.current?.focus());
   if (imageCropSourceUrl?.startsWith('blob:')) {
     URL.revokeObjectURL(imageCropSourceUrl);
   }
@@ -3125,7 +3125,7 @@ function closeImageCropModal() {
 
 function confirmImageCrop() {
   if (!imageCropSourceFile || !imageCropSourceUrl) return;
-  if (imageCropTarget === 'create') createRoomNameRef.current?.focus();
+  if (imageCropTarget === 'create') requestAnimationFrame(() => createRoomNameRef.current?.focus());
 
   if (imageCropTarget === 'edit') {
     if (editRoomImagePreview?.startsWith('blob:')) {
@@ -4269,7 +4269,7 @@ return (
                       <span className="room-card-visibility">{room.privacy === 'private' ? <LockKeyhole size={12} aria-hidden="true" /> : <Globe2 size={12} aria-hidden="true" />}{room.privacy === 'private' ? 'Private room' : 'Public room'}</span>
                     </div>
                   </div>
-                  <p className="room-card-description">{room.description || (room.privacy === 'private' ? 'A shared space for your circle. Exchange ideas, notes and useful discoveries.' : 'Bring a question, share an idea, and learn with others.')}</p>
+                  <p className={`room-card-description${room.description ? '' : ' is-placeholder'}`}>{room.description || (room.privacy === 'private' ? 'A shared space for your circle. Exchange ideas, notes and useful discoveries.' : 'Bring a question, share an idea, and learn with others.')}</p>
                   <span className="room-card-open">Enter conversation <ArrowUpRight size={15} aria-hidden="true" /></span>
                 </button>
 

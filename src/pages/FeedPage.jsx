@@ -1047,6 +1047,7 @@ const feedLoadLockRef = useRef(false);
 const topicCanvasRef = useRef(null);
 const topicCardMetricsRef = useRef([]);
 const feedRef = useRef(null);
+const postFeedRef = useRef(null);
 const topicSearchLoadRef = useRef({
   topic: '',
   cursors: new Set(),
@@ -2183,9 +2184,8 @@ useEffect(() => {
         requestAnimationFrame(() => {
           if (!mountedRef.current) return;
 
-          if (Number.isFinite(savedScrollY) && savedScrollY > 0 && feedRef.current) {
-            feedRef.current.scrollTop = savedScrollY;
-            feedRef.current.scrollTo({
+          if (Number.isFinite(savedScrollY) && savedScrollY > 0 && postFeedRef.current) {
+            postFeedRef.current.scrollTo({
               top: savedScrollY,
               behavior: 'auto',
             });
@@ -2337,7 +2337,7 @@ useEffect(() => {
 
 useEffect(() => {
   const target = loadMoreRef.current;
-  const root = feedRef.current;
+  const root = postFeedRef.current;
 
   if (!target || !root || !selectedTopic) {
     return undefined;
@@ -2383,9 +2383,9 @@ useEffect(() => {
           loadError
         );
       } finally {
-        window.setTimeout(() => {
-          feedLoadLockRef.current = false;
-        }, 120);
+        // A newly attached observer may fire before a delayed unlock. Release
+        // immediately so a short batch cannot strand the visible sentinel.
+        feedLoadLockRef.current = false;
       }
     },
     {
@@ -2929,7 +2929,7 @@ const selectTopic = useCallback(
     );
 
     requestAnimationFrame(() => {
-      const feed = feedRef.current;
+      const feed = postFeedRef.current;
 
       if (!feed) return;
 
@@ -3045,7 +3045,7 @@ const handleTopicClick = useCallback(
       const postId = getPostId(post);
       if (!postId) return;
 
-      const currentScrollY = feedRef.current?.scrollTop || window.scrollY || 0;
+      const currentScrollY = postFeedRef.current?.scrollTop || 0;
       restoredFeedPositionRef.current = false;
       sessionStorage.setItem(FEED_SCROLL_STORAGE_KEY, String(currentScrollY));
       sessionStorage.setItem(
@@ -3670,7 +3670,7 @@ style={topicCanvasSurfaceStyle}
   )}
 
 {selectedTopic && (
-  <section className="snap-feed">
+  <section ref={postFeedRef} className="snap-feed" aria-label="Posts" tabIndex={0}>
     {selectedTopic === 'All' && <>
       <FeedLearningHome />
       <div className="feed-discovery-heading" id="feed-discovery-heading"><h2>Latest ideas</h2><span>Read · understand · explore</span></div>

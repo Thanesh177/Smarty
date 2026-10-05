@@ -155,3 +155,87 @@
 @media (max-width: 760px) {
   :is(.app-shell .content .rooms-workspace, .rooms-dialog-portal).has-active-room .input { left: 10px !important; bottom: calc(10px + env(safe-area-inset-bottom)) !important; }
 }
+
+/* Phone discovery is a conversation list, not a set of oversized tiles. */
+@media (max-width: 760px) {
+  .app-shell .content .rooms-page.rooms-workspace:not(.has-active-room) .sidebar {
+    padding: max(20px, env(safe-area-inset-top)) 16px 0 !important;
+    gap: 14px;
+  }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .rooms-title-row {
+    align-items: center; gap: 12px; border: 0; padding-bottom: 4px; flex: none;
+  }
+  .rooms-workspace:not(.has-active-room) .rooms-sidebar-heading { min-width: 0; }
+  .rooms-workspace:not(.has-active-room) .rooms-sidebar-heading > span { font-size: 10px; letter-spacing: .02em; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .rooms-sidebar-heading h1 {
+    margin: 7px 0 0; font-size: 32px; letter-spacing: -.055em; line-height: 1.15;
+  }
+  .rooms-workspace:not(.has-active-room) .rooms-sidebar-heading p { display: none; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .rooms-create-plus-btn {
+    width: auto; gap: 6px; padding: 0 11px; border-radius: 9px;
+  }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .rooms-create-plus-btn > span { display: inline; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .rooms-workspace .rooms-menu-wrap { flex: none; gap: 6px; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-search-wrap {
+    order: 1; flex: none; width: 100%; padding: 0 12px;
+    border: 1px solid #29313d !important; border-radius: 9px !important;
+    background: #10141a !important; min-height: 46px;
+  }
+  .app-shell .content .rooms-workspace .room-search { padding-left: 9px; font-size: 16px; }
+  .rooms-workspace:not(.has-active-room) .rooms-sidebar-controls { order: 2; flex: none; }
+  .app-shell .content .rooms-workspace .room-privacy-toggle { gap: 20px; }
+  .app-shell .content .rooms-workspace .room-privacy-toggle button {
+    min-height: 44px; font-size: 12px; color: #97a3b3; background: transparent !important;
+  }
+  .rooms-workspace:not(.has-active-room) .room-status { order: 3; }
+  .rooms-workspace:not(.has-active-room) .rooms-list-heading { order: 4; flex: none; margin: 0 0 2px; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .rooms-list-heading h2 { font-size: 13px; font-weight: 500; color: #a7b4c5; }
+  .rooms-workspace:not(.has-active-room) .rooms-list-heading > span { font-size: 11px; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-list {
+    order: 5; gap: 10px; padding-right: 60px; padding-bottom: calc(36px + env(safe-area-inset-bottom));
+    touch-action: pan-y pinch-zoom; -webkit-overflow-scrolling: touch;
+  }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-item {
+    min-height: 96px !important; border-radius: 10px !important;
+    border-color: #252e3a !important; background: #10141a !important;
+    transition: background-color 160ms ease, border-color 160ms ease;
+  }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-open-button {
+    min-height: 94px; padding: 16px; gap: 0;
+  }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-item-main { gap: 12px; padding-right: 30px; align-items: flex-start; position: static; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-name-badge-row > strong {
+    font-size: 15px; line-height: 1.45; font-weight: 500; color: #e1e8f1;
+  }
+  .app-shell .content .rooms-workspace .room-image-wrap { border-radius: 12px !important; background: #192431 !important; }
+  .app-shell .content .rooms-workspace .room-owner-badge { flex: none; color: #a2b4cc; background: none !important; }
+  .app-shell .content .rooms-workspace .room-card-visibility { display: inline-flex; font-size: 11px; margin-top: 5px; color: #8f9eb2; gap: 5px; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-unread-badge { position: absolute; right: 16px; bottom: 15px; margin: 0; display: grid; place-items: center; height: 20px; min-width: 20px; padding: 0 5px; color: #0b1522 !important; background: #b5cdeb !important; }
+  .rooms-workspace:not(.has-active-room) .room-item:has(.room-unread-badge) .room-card-open { display: none !important; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-card-description {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+    margin: 12px 20px 0 0; max-width: none; color: #99a7ba; font-size: 12px; line-height: 1.65;
+  }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-card-description.is-placeholder { display: none; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-card-open {
+    position: absolute; right: 16px; bottom: 15px; width: 16px;
+    border: 0; margin: 0; padding: 0; font-size: 0; color: #91aacc;
+  }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-card-open > svg { width: 16px; height: 16px; flex: none; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .room-card-menu-wrap { right: 5px; top: 9px; }
+  .app-shell .content .rooms-workspace .room-card-menu-btn { min-width: 44px; width: 44px; }
+  .app-shell .content .rooms-workspace .chat-header { padding: max(10px, env(safe-area-inset-top)) 12px 10px; gap: 10px; height: auto; min-height: 68px; }
+  .app-shell .content .rooms-workspace .active-room-heading strong { font-size: 14px; line-height: 1.4; }
+  .app-shell .content .rooms-workspace .active-room-heading small { font-size: 11px; margin-top: 3px; color: #9aaabe; }
+  .app-shell .content .rooms-workspace .mobile-back-btn { background: transparent !important; }
+  .app-shell .content .rooms-workspace .messages {
+    padding-left: 14px !important; padding-right: 76px !important;
+    scroll-behavior: auto !important; scroll-padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+  .app-shell .content .rooms-workspace .msg { max-width: 100%; padding: 11px 13px; }
+  .app-shell .content .rooms-workspace .msg p { font-size: 15px; line-height: 1.65; overflow-wrap: anywhere; }
+  .app-shell .content .rooms-workspace.has-active-room .input { right: 76px !important; border-radius: 12px; padding: 5px; gap: 4px; }
+  .app-shell .content .rooms-workspace .input input { font-size: 16px; padding: 9px 6px; min-width: 0; }
+  .rooms-dialog-portal .members-modal { padding: max(16px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom)); }
+  .rooms-dialog-portal .members-card { width: 100%; max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+}

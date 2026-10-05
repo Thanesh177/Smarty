@@ -1704,6 +1704,25 @@
 
 .snap-feed-page.has-inner-feed {
   background: #07111c;
+  overflow: hidden;
+}
+
+/* One bounded native scroll surface for posts, independent of the landing
+   page's scroll animations. Keep touch panning available inside WebViews. */
+.app-shell .content .snap-feed-page.has-inner-feed > .snap-feed {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto !important;
+  touch-action: pan-y pinch-zoom;
+  -webkit-overflow-scrolling: touch;
+}
+
+.snap-feed-page.has-inner-feed > .snap-feed:focus-visible {
+  outline: 1px solid var(--ui-line-strong, #344257);
+  outline-offset: -1px;
 }
 
 .snap-feed-page.has-inner-feed::before {

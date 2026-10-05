@@ -482,8 +482,9 @@ useEffect(() => {
     const contentTop = contentElement?.scrollTop || 0;
     const feedElement = document.querySelector('.snap-feed-page');
     const feedTop = feedElement?.scrollTop || 0;
+    const postsTop = feedElement?.querySelector('.snap-feed')?.scrollTop || 0;
 
-    return windowTop <= 2 && contentTop <= 2 && feedTop <= 2;
+    return windowTop <= 2 && contentTop <= 2 && feedTop <= 2 && postsTop <= 2;
   }, []);
 
   const resetGlobalPullRefresh = useCallback(() => {
