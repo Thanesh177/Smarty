@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
@@ -10,11 +11,11 @@ import {
   LogOut,
   LogIn,
   Search,
-  GraduationCap,
   Menu,
   X,
 } from 'lucide-react';
 import './NavbarMenu.css';
+import './NavigationPanel.css';
 import SmartyBrand from './SmartyBrand';
 import { isAdminUser } from '../lib/adminAccess';
 
@@ -33,11 +34,6 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
 
   const toggleMenu = useCallback(() => {
     setOpen((prev) => !prev);
-  }, []);
-
-  const stopMenuPropagation = useCallback((event) => {
-    event.preventDefault?.();
-    event.stopPropagation?.();
   }, []);
 
   const handleLogout = useCallback(async () => {
@@ -111,19 +107,21 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
         <span className="nav-control-label" aria-hidden="true">{open ? 'Close' : 'More'}</span>
       </button>
 
-      {open && (
+      {open && createPortal((
         <div
-          className="menu-overlay"
+          className="menu-overlay navigation-dialog"
           role="presentation"
           onClick={(event) => {
             event.stopPropagation();
             closeMenu();
           }}
         >
-          <nav
+          <section
             className="menu-panel"
             id="smarty-navigation-panel"
             ref={panelRef}
+            role="dialog"
+            aria-modal="true"
             aria-label="Main navigation"
             onClick={(event) => {
               event.stopPropagation();
@@ -145,11 +143,12 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
                 onClick={closeMenu}
                 aria-label="Close menu"
               >
-                ✕
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
-            <div className="menu-section compact-menu-section" aria-label="Learning">
+            <nav className="menu-section compact-menu-section" aria-label="Explore Smarty">
+              <p className="menu-group-label">Explore</p>
               <button
                 type="button"
                 className="menu-link-btn"
@@ -215,7 +214,7 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
                   </span>
                 </NavLink>
               )}
-            </div>
+            </nav>
 
             <div className="menu-footer">
               {logoutError && <p className="status error" role="alert">{logoutError}</p>}
@@ -247,9 +246,9 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
                 </button>
               )}
             </div>
-          </nav>
+          </section>
         </div>
-      )}
+      ), document.body)}
     </div>
   );
 }

@@ -927,7 +927,7 @@ const renderedTopics = useMemo(
   () => TOPICS.filter((item) => {
     const groups = { stem: ['technology', 'engineering', 'science-mathematics', 'life-sciences', 'earth-space'],
       people: ['history', 'society-ideas', 'arts-design', 'community'], everyday: ['news', 'mind-health', 'money-business', 'food-agriculture'] };
-    return (libraryFilter === 'all' || groups[libraryFilter]?.includes(item.id))
+    return (libraryFilter === 'all' || item.group === libraryFilter || groups[libraryFilter]?.includes(item.id))
       && `${item.title} ${item.desc} ${(item.subjects || []).join(' ')}`.toLocaleLowerCase().includes(subjectQuery.trim().toLocaleLowerCase());
   }).map((item) => (
     <TopicCard

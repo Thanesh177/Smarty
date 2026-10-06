@@ -3,6 +3,10 @@ const dots = (points) => points.map(([cx, cy], index) => <circle key={index} cx=
 // Small subject-specific diagrams, drawn locally rather than loading decorative images.
 export default function QuizSubjectArt({ subject }) {
   const illustrations = {
+    'trading-markets': <><path d="M25 104h112M30 104V24M45 75V40M72 88V52M99 67V27M126 54V18" /><path d="M39 48h12v20H39zM66 62h12v18H66zM93 36h12v23H93zM120 28h12v17h-12z" className="quiz-art-accent" /></>,
+    psychology: <><circle cx="60" cy="63" r="29" /><circle cx="98" cy="63" r="29" className="quiz-art-accent" /><path d="M45 63h68M79 35v57M67 54l12 9-12 9M91 54l-12 9 12 9" /></>,
+    neuroscience: <><path d="M72 61 48 34M72 61l30-35M72 61 41 90M72 61l42 31M72 61 25 61M72 61l59-4M48 34l-15-12M48 34l-24 7M102 26l4-14M102 26l28-3M41 90l-9 19M114 92l17 12" />{dots([[72,61],[48,34],[102,26],[41,90],[114,92],[25,61],[131,57]])}</>,
+    'game-theory': <><path d="M32 28h96v78H32zM80 28v78M32 67h96" /><path d="m45 41 19 13M60 41l4 13-13 1M114 41 95 54M99 41l-4 13 13 1M45 93l19-13M60 93l4-13-13-1M114 93 95 80M99 93l-4-13 13-1" className="quiz-art-accent" /></>,
     news: <><path d="M28 29h91M28 40h52M28 75h91M28 86h70" /><path d="M28 53h33v11H28zM75 53h44M75 64h33" className="quiz-art-accent" /></>,
     technology: <><path d="M28 59h30l20-29h40M58 59l20 29h40M78 30v58M118 30v58" />{dots([[28,59],[58,59],[78,30],[118,30],[78,88],[118,88]])}</>,
     engineering: <><path d="m78 22 38 21v43L78 108 40 86V43zM40 43l38 22 38-22M78 65v43" /><path d="m78 22 0 43M40 86l38-21 38 21" className="quiz-art-accent" /></>,

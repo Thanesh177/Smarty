@@ -65,8 +65,8 @@
 :is(.app-shell .content .rooms-workspace, .rooms-dialog-portal):not(.has-active-room) .room-open-button { height: auto; min-height: 198px; padding: 24px; }
 .rooms-workspace:not(.has-active-room) .room-item-main { padding-right: 24px; gap: 14px; }
 :is(.app-shell .content .rooms-workspace, .rooms-dialog-portal):not(.has-active-room) .room-name-badge-row > strong { font-size: 1.05rem; }
-.rooms-workspace:not(.has-active-room) .room-card-description { display: block; font-size: .8rem; font-weight: 400; line-height: 1.7; color: #8393a9; margin: 22px 0; max-width: 45ch; }
-.rooms-workspace:not(.has-active-room) .room-card-open { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid #283344; padding-top: 16px; margin-top: auto; color: #a6bddb; font-size: .72rem; font-weight: 400; }
+.rooms-workspace:not(.has-active-room) .room-card-description { display: block; font-size: .9rem; font-weight: 400; line-height: 1.75; color: #9caabd; margin: 18px 0 22px; max-width: 45ch; }
+.rooms-workspace:not(.has-active-room) .room-card-open { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid #283344; padding-top: 16px; margin-top: auto; color: #a6bddb; font-size: .8rem; font-weight: 400; }
 :is(.app-shell .content .rooms-workspace, .rooms-dialog-portal):not(.has-active-room) .room-card-menu-wrap { right: 10px; top: 22px; }
 .rooms-workspace:not(.has-active-room) .rooms-list-loading { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 :is(.app-shell .content .rooms-workspace, .rooms-dialog-portal) .chat-header { height: 76px; min-height: 76px; border-bottom: 1px solid #252b34; background: #0f1319 !important; box-shadow: none; padding: 12px 24px; gap: 14px; }
@@ -185,12 +185,12 @@
   .rooms-workspace:not(.has-active-room) .rooms-sidebar-controls { order: 2; flex: none; }
   .app-shell .content .rooms-workspace .room-privacy-toggle { gap: 20px; }
   .app-shell .content .rooms-workspace .room-privacy-toggle button {
-    min-height: 44px; font-size: 12px; color: #97a3b3; background: transparent !important;
+    min-height: 44px; font-size: 13px; color: #a6b2c2; background: transparent !important;
   }
   .rooms-workspace:not(.has-active-room) .room-status { order: 3; }
   .rooms-workspace:not(.has-active-room) .rooms-list-heading { order: 4; flex: none; margin: 0 0 2px; }
-  .app-shell .content .rooms-workspace:not(.has-active-room) .rooms-list-heading h2 { font-size: 13px; font-weight: 500; color: #a7b4c5; }
-  .rooms-workspace:not(.has-active-room) .rooms-list-heading > span { font-size: 11px; }
+  .app-shell .content .rooms-workspace:not(.has-active-room) .rooms-list-heading h2 { font-size: 14px; font-weight: 500; color: #a7b4c5; }
+  .rooms-workspace:not(.has-active-room) .rooms-list-heading > span { font-size: 12px; }
   .app-shell .content .rooms-workspace:not(.has-active-room) .room-list {
     order: 5; gap: 10px; padding-right: 60px; padding-bottom: calc(36px + env(safe-area-inset-bottom));
     touch-action: pan-y pinch-zoom; -webkit-overflow-scrolling: touch;
@@ -205,16 +205,16 @@
   }
   .app-shell .content .rooms-workspace:not(.has-active-room) .room-item-main { gap: 12px; padding-right: 30px; align-items: flex-start; position: static; }
   .app-shell .content .rooms-workspace:not(.has-active-room) .room-name-badge-row > strong {
-    font-size: 15px; line-height: 1.45; font-weight: 500; color: #e1e8f1;
+    font-size: 16px; line-height: 1.45; font-weight: 500; color: #e1e8f1;
   }
   .app-shell .content .rooms-workspace .room-image-wrap { border-radius: 12px !important; background: #192431 !important; }
-  .app-shell .content .rooms-workspace .room-owner-badge { flex: none; color: #a2b4cc; background: none !important; }
-  .app-shell .content .rooms-workspace .room-card-visibility { display: inline-flex; font-size: 11px; margin-top: 5px; color: #8f9eb2; gap: 5px; }
+  .app-shell .content .rooms-workspace .room-owner-badge { flex: none; font-size: 11px; color: #a2b4cc; background: none !important; }
+  .app-shell .content .rooms-workspace .room-card-visibility { display: inline-flex; font-size: 12px; margin-top: 5px; color: #9baabd; gap: 5px; }
   .app-shell .content .rooms-workspace:not(.has-active-room) .room-unread-badge { position: absolute; right: 16px; bottom: 15px; margin: 0; display: grid; place-items: center; height: 20px; min-width: 20px; padding: 0 5px; color: #0b1522 !important; background: #b5cdeb !important; }
   .rooms-workspace:not(.has-active-room) .room-item:has(.room-unread-badge) .room-card-open { display: none !important; }
   .app-shell .content .rooms-workspace:not(.has-active-room) .room-card-description {
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
-    margin: 12px 20px 0 0; max-width: none; color: #99a7ba; font-size: 12px; line-height: 1.65;
+    margin: 14px 20px 0 0; max-width: none; color: #a4b1c2; font-size: 13px; line-height: 1.7;
   }
   .app-shell .content .rooms-workspace:not(.has-active-room) .room-card-description.is-placeholder { display: none; }
   .app-shell .content .rooms-workspace:not(.has-active-room) .room-card-open {
@@ -238,4 +238,34 @@
   .app-shell .content .rooms-workspace .input input { font-size: 16px; padding: 9px 6px; min-width: 0; }
   .rooms-dialog-portal .members-modal { padding: max(16px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom)); }
   .rooms-dialog-portal .members-card { width: 100%; max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; overscroll-behavior: contain; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .content .rooms-workspace .room-item { transition: none !important; }
+}
+
+/* Full-width discovery beneath the floating toolbar; only the composer clears it. */
+.app-shell .content .rooms-page.rooms-workspace {
+  --rooms-page-gutter: clamp(16px, 2.5vw, 40px);
+  --rooms-nav-clearance: calc(80px + env(safe-area-inset-right));
+  width: 100%; max-width: none; box-sizing: border-box;
+}
+.app-shell .content .rooms-page.rooms-workspace:not(.has-active-room) .sidebar {
+  max-width: none; box-sizing: border-box;
+  padding: clamp(20px, 2.5vw, 36px) var(--rooms-page-gutter) 0 !important;
+  gap: 18px;
+}
+.app-shell .content .rooms-page.rooms-workspace:not(.has-active-room) .room-list {
+  padding-right: 0;
+  padding-bottom: calc(300px + env(safe-area-inset-bottom));
+  gap: clamp(10px, 1.5vw, 20px);
+}
+.app-shell .content .rooms-page.rooms-workspace.has-active-room .messages {
+  padding-right: clamp(14px, 2vw, 28px) !important;
+  padding-left: clamp(14px, 2vw, 28px) !important;
+}
+.app-shell .content .rooms-page.rooms-workspace.has-active-room .chat-header { padding-right: clamp(14px, 2vw, 28px); }
+.app-shell .content .rooms-page.rooms-workspace.has-active-room .input { right: var(--rooms-nav-clearance) !important; }
+@media (max-height: 380px) {
+  .app-shell .content .rooms-page.rooms-workspace { --rooms-nav-clearance: calc(124px + env(safe-area-inset-right)); }
 }

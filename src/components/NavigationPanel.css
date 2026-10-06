@@ -1,0 +1,49 @@
+/* Portaled above the navigation rail, without inheriting its narrow layout. */
+.navigation-dialog.menu-overlay {
+  position: fixed; inset: 0; z-index: 31000;
+  background: #0008; padding: 0; isolation: isolate;
+}
+.navigation-dialog .menu-panel {
+  position: absolute !important; inset: auto max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) auto !important;
+  width: min(310px, calc(100vw - 32px)) !important;
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  box-sizing: border-box; overflow: auto; overscroll-behavior: contain;
+  padding: 16px; gap: 14px; border-radius: 18px !important;
+  border: 1px solid #30353d !important; background: #111317 !important;
+  box-shadow: 0 20px 70px #0009 !important; backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important; contain: none; will-change: auto;
+  animation: navigationPanelEnter 200ms cubic-bezier(.2,.7,.3,1) both;
+  transform-origin: bottom right;
+}
+.navigation-dialog .menu-header { padding: 0 0 14px; border-bottom: 1px solid #ffffff10; gap: 12px; }
+.navigation-dialog .menu-brand-link { padding: 0; background: none !important; border: 0; }
+.navigation-dialog .menu-header .close-btn {
+  display: grid; place-items: center; min-width: 44px; width: 44px; height: 44px;
+  border: 0; border-radius: 10px; background: #ffffff06; color: #b3bdca; box-shadow: none;
+}
+.navigation-dialog .compact-menu-section { display: grid; gap: 3px; padding: 0; border: 0; }
+.navigation-dialog .menu-group-label { margin: 0 12px 5px; color: #8e9bab; font-size: 12px; font-weight: 400; letter-spacing: .02em; }
+.navigation-dialog :is(.menu-icon-link, .menu-link-btn) {
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: 46px; width: 100%; box-sizing: border-box; padding: 10px 12px;
+  border: 0 !important; border-radius: 9px; background: transparent !important;
+  color: #d9e0e9; font-size: 15px; font-weight: 450; text-decoration: none;
+  box-shadow: none !important; transform: none !important;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.navigation-dialog .menu-link-left { gap: 13px; }
+.navigation-dialog .menu-link-left svg { color: #91a3ba; stroke-width: 1.65; flex-shrink: 0; }
+.navigation-dialog :is(.menu-icon-link, .menu-link-btn):hover,
+.navigation-dialog .menu-icon-link.active { background: #a6c8ef0e !important; color: #e7f0fc; }
+.navigation-dialog .menu-footer { padding: 12px 0 0; border-top: 1px solid #ffffff10; }
+.navigation-dialog :is(.logout-pill, .login-pill) {
+  width: 100%; min-height: 44px; justify-content: flex-start; padding: 10px 12px;
+  gap: 13px; font-size: 14px; font-weight: 400; border: 0 !important;
+  border-radius: 9px; color: #9fabbb; background: transparent !important; box-shadow: none !important;
+}
+.navigation-dialog :is(button, a):focus-visible { outline: 2px solid #9abde7; outline-offset: -2px; }
+@keyframes navigationPanelEnter { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .navigation-dialog .menu-panel { animation: none !important; opacity: 1; transform: none; }
+  .navigation-dialog :is(button, a) { transition: none !important; }
+}

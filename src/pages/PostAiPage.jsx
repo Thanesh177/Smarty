@@ -22,6 +22,7 @@ import { getLearningGuide } from '../data/learningGuides';
 import { DETAILED_EXPLANATION_VERSION, explanationSections, explanationBlocks } from '../lib/explanationFormat';
 import { createRequestCache } from '../lib/requestCache';
 import './PostAiPage.css';
+import './PostAiReading.css';
 
 const getDetailedExplanation = (value) => {
   const text = String(value?.aiDetailedExplanation || '').trim();
@@ -445,7 +446,7 @@ function PostStudyRoom() {
   }, [askQuestion, question]);
 
   return (
-    <main ref={pageRef} className="post-ai-page">
+    <main ref={pageRef} className="post-ai-page is-reading-layout">
       <section className="post-ai-shell">
         <nav className="post-ai-topline" aria-label="Lesson navigation">
           <button type="button" className="post-ai-back" onClick={goBack}>
@@ -547,11 +548,6 @@ function PostStudyRoom() {
             )}
           </article>
 
-          <aside className="post-ai-context" aria-label="Lesson context">
-
-
-
-          </aside>
         </div>
 
         {Array.isArray(post?.sources) && post.sources.length > 0 && <section className="post-study-sources" aria-label="Sources and further reading">

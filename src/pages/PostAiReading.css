@@ -1,0 +1,70 @@
+/* Full-width reading beneath the floating navigation, not beside a reserved rail. */
+.app-shell .content .post-ai-page.post-ai-page.is-reading-layout {
+  --post-ai-accent: #a9c7eb; --post-ai-accent-rgb: 169, 199, 235;
+  --lesson-gutter: clamp(16px, 2.5vw, 40px);
+  width: 100%; max-width: none; box-sizing: border-box;
+  padding: clamp(20px, 2.5vw, 36px) max(var(--lesson-gutter), env(safe-area-inset-right)) calc(88px + env(safe-area-inset-bottom)) max(var(--lesson-gutter), env(safe-area-inset-left)) !important;
+}
+.app-shell .content .post-ai-page.is-reading-layout .post-ai-shell { width: 100%; max-width: none; min-width: 0; margin: 0; gap: clamp(22px, 2.5vw, 32px); }
+.is-reading-layout .post-ai-shell > * { min-width: 0; }
+.app-shell .content .post-ai-page.is-reading-layout .post-ai-topline { display: grid; min-height: 44px; padding: 0; background: transparent; border-radius: 0; backdrop-filter: none; box-shadow: none; }
+.app-shell .content .post-ai-page.is-reading-layout :is(.post-ai-back, .post-ai-comments) { width: auto !important; min-height: 44px; padding: 8px 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; }
+.is-reading-layout .post-ai-back { justify-self: start; }
+.app-shell .content .post-ai-page.is-reading-layout .post-ai-hero { min-height: 0; padding: 16px 0 0; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.is-reading-layout .post-ai-signal { display: none; }
+.app-shell .content .is-reading-layout .post-ai-hero h1 {
+  max-width: 34ch; margin-block: 12px 18px; font-size: clamp(1.9rem, 4vw, 3.5rem);
+  line-height: 1.16; letter-spacing: -.045em; overflow-wrap: anywhere;
+}
+.is-reading-layout .post-ai-meta { gap: 8px 16px; }
+.is-reading-layout .post-ai-meta span { padding: 0; min-height: 0; background: transparent; border: 0; font-size: 13px; color: #98a6b7; }
+.app-shell .content .post-ai-page.is-reading-layout .post-study-objective { margin: 0; padding: 22px 0; background: transparent !important; border-inline: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+.is-reading-layout .post-study-objective p { max-width: 68ch; margin: 12px 0 4px; font-size: 16px; line-height: 1.75; }
+.is-reading-layout .post-ai-workspace { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.app-shell .content .is-reading-layout .post-ai-card.post-ai-explainer { padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; border-radius: 0 !important; }
+.is-reading-layout .post-ai-section-head { gap: 12px; align-items: start; }
+.app-shell .content .is-reading-layout .post-ai-section-head h2 { margin: 5px 0 0; font-size: clamp(1.2rem, 2vw, 1.55rem); line-height: 1.35; }
+.is-reading-layout .post-ai-section-head small { padding: 6px 0; background: none; font-size: 11px; white-space: normal; text-align: right; }
+.is-reading-layout .post-ai-explanation-paragraphs { margin-top: 16px; }
+.app-shell .content .post-ai-page.is-reading-layout .post-ai-explanation-paragraphs .post-ai-text-section { padding-block: clamp(24px, 3vw, 36px); }
+.app-shell .content .post-ai-page.is-reading-layout .post-ai-explanation-paragraphs .post-ai-text-section h3 { margin-bottom: 18px; font-size: 16px; font-weight: 500; line-height: 1.4; }
+.is-reading-layout .post-ai-text-section-body { max-width: 86ch; min-width: 0; gap: 18px; }
+.app-shell .content .post-ai-page.is-reading-layout .post-ai-text-section-body :is(p, li) { font-size: clamp(1rem, 1.15vw, 1.1rem); line-height: 1.85; }
+.is-reading-layout .post-ai-text-section-body :is(ul, ol) { padding-left: 1.5em; }
+.is-reading-layout .post-study-sources { margin: 0; gap: 6px 20px; }
+.is-reading-layout .post-ai-chat { margin-top: 0; }
+.is-reading-layout .post-ai-chat-head { gap: 20px; }
+.is-reading-layout .post-ai-chat-head > p { max-width: 65ch; font-size: 14px; line-height: 1.75; }
+.is-reading-layout .post-ai-prompts { margin-block: 24px; gap: 10px; }
+.is-reading-layout .post-ai-messages:has(.post-ai-empty):not(:has(.post-ai-msg, .post-ai-thinking)) { min-height: 0; padding: 0; margin: 0 0 16px; }
+.is-reading-layout .learning-related > div { flex-wrap: wrap; overflow: visible; }
+.is-reading-layout .learning-related button { max-width: 100%; flex-shrink: 1; white-space: normal; overflow-wrap: anywhere; min-height: 44px; }
+@media (min-width: 1100px) {
+  .app-shell .content .post-ai-page.is-reading-layout .post-ai-shell { grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); }
+  .is-reading-layout .post-ai-shell > * { grid-column: 1 / -1; }
+  .app-shell .content .post-ai-page.is-reading-layout .post-ai-hero { grid-column: 1; grid-row: 2; }
+  .app-shell .content .post-ai-page.is-reading-layout .post-study-objective { grid-column: 2; grid-row: 2; align-self: center; padding-block: 24px; }
+  .app-shell .content .post-ai-page.is-reading-layout .post-ai-explanation-paragraphs .post-ai-text-section {
+    display: grid; grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
+    align-items: start; gap: clamp(24px, 3vw, 48px);
+  }
+  .app-shell .content .post-ai-page.is-reading-layout .post-ai-text-section-body :is(p, li) { max-width: none; }
+  .is-reading-layout .post-ai-text-section h3 { margin: 0; }
+}
+@media (max-width: 600px) {
+  .is-reading-layout .post-ai-topline { grid-template-columns: 1fr auto; gap: 8px; }
+  .is-reading-layout .post-ai-progress-label { grid-row: 2; grid-column: 1 / -1; justify-self: start; font-size: 10px; }
+  .is-reading-layout .post-ai-comments { grid-column: 2; grid-row: 1; justify-self: end; }
+  .is-reading-layout .post-ai-shell { gap: 26px; }
+  .is-reading-layout .post-ai-section-head { grid-template-columns: auto minmax(0, 1fr); }
+  .is-reading-layout .post-ai-section-head small { grid-column: 2; text-align: left; padding: 0; margin: 0; }
+  .is-reading-layout .post-ai-reading-nav { gap: 6px; margin-top: 18px; }
+  .is-reading-layout .post-ai-reading-nav a { padding-inline: 10px; font-size: 12px; }
+  .app-shell .content .is-reading-layout .post-ai-chat { padding: 18px 14px !important; border-radius: 12px !important; }
+  /* Keep the send action usable without narrowing the rest of the lesson. */
+  .is-reading-layout .post-ai-form { padding-right: max(7px, calc(80px + env(safe-area-inset-right) - var(--lesson-gutter) - 14px)); }
+  .is-reading-layout .post-ai-prompts { grid-template-columns: 1fr; }
+}
+@media (max-height: 380px) {
+  .is-reading-layout .post-ai-form { padding-right: max(7px, calc(124px + env(safe-area-inset-right) - var(--lesson-gutter) - 32px)); }
+}

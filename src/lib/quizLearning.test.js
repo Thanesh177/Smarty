@@ -40,7 +40,7 @@ test('results count completed activities; a boss cannot accidentally score 200%'
   assert.deepEqual(getQuizResult([]), { correct: 0, total: 0, percent: 0 });
 });
 test('all main subjects have original questions across three levels with meaningful explanations', () => {
-  assert.deepEqual(QUIZ_SUBJECTS.map((item) => item.id), MAIN_TOPICS.map((item) => item.id));
+  assert.deepEqual(QUIZ_SUBJECTS.slice(0, MAIN_TOPICS.length).map((item) => item.id), MAIN_TOPICS.map((item) => item.id));
   const ids = new Set(), fingerprints = new Set();
   for (const subject of QUIZ_SUBJECTS) {
     const questions = SUBJECT_QUESTIONS[subject.id];
@@ -53,7 +53,7 @@ test('all main subjects have original questions across three levels with meaning
       const fingerprint = getQuestionFingerprint(question); assert.equal(fingerprints.has(fingerprint), false); fingerprints.add(fingerprint);
     }
   }
-  assert.equal(ids.size, 78);
+  assert.equal(ids.size, QUIZ_SUBJECTS.length * 6);
 });
 test('question cache contexts distinguish study track and exam focus; non-English fingerprints work', () => {
   assert.notEqual(getQuizContextKey({ id: 'technology', studyTrack: 'college' }), getQuizContextKey({ id: 'technology', studyTrack: 'government exams' }));
