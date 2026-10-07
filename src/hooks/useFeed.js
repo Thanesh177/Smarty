@@ -82,7 +82,8 @@ export default function useFeed() {
   });
 
   const [nextCursor, setNextCursor] = useState(() => {
-    return localStorage.getItem(feedCursorKey) || null;
+    try { return localStorage.getItem(feedCursorKey) || null; }
+    catch { return null; }
   });
 
   const [preloadedPage, setPreloadedPage] = useState(null);

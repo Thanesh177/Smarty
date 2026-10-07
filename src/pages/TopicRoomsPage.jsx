@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useActionConfirmation } from '../components/ActionConfirmation';
+import { assertActionAccepted } from '../lib/actionConfirmation';
 import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
 import {
   ArrowDown,
@@ -626,6 +628,7 @@ function renderMessageWithLinks(value = '') {
 
 
 export default function TopicRoomsPage() {
+  const confirmAction = useActionConfirmation();
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -3731,13 +3734,13 @@ async function removeRoomMember(member) {
     return;
   }
 
-  const ok = window.confirm(`Remove ${member.name || member.email || 'this member'} from ${modalRoom.name}?`);
+  const ok = await confirmAction({ title: 'Remove member?', description: `Remove ${member.name || member.email || 'this member'} from ${modalRoom.name}?`, confirmLabel: 'Remove member' });
   if (!ok) return;
 
   try {
     setStatus('');
 
-    await roomApi.removeRoomMember(modalRoom.roomId, member.userId);
+    assertActionAccepted(await roomApi.removeRoomMember(modalRoom.roomId, member.userId));
 
     setMembers((prev) => prev.filter((item) => item.userId !== member.userId));
 
@@ -3756,7 +3759,7 @@ async function removeRoomMember(member) {
 async function leaveRoom(room) {
   if (!room?.roomId) return;
 
-  const ok = window.confirm(`Leave "${room.name}"? You will need creator approval to join again.`);
+  const ok = await confirmAction({ title: 'Leave room?', description: `Leave “${room.name}”? You will need creator approval to join again.`, confirmLabel: 'Leave room', danger: false });
   if (!ok) return;
 
   setOpenRoomActionMenuId('');
@@ -3782,7 +3785,7 @@ async function leaveRoom(room) {
   try {
     setStatus('');
 
-    await roomApi.leaveRoom(room.roomId);
+    assertActionAccepted(await roomApi.leaveRoom(room.roomId));
 
     roomsCacheRef.current = { key: '', timestamp: 0, rooms: [] };
     setStatus('Left private group');
@@ -3833,13 +3836,13 @@ async function hideRoom(room) {
 async function deleteRoom(room) {
   if (!room?.roomId) return;
 
-  const ok = window.confirm(`Delete "${room.name}"?`);
+  const ok = await confirmAction({ title: 'Delete room?', description: `“${room.name}” will be permanently removed. This cannot be undone.`, confirmLabel: 'Delete room' });
   if (!ok) return;
 
   try {
     setStatus('');
 
-    await roomApi.deleteRoom(room.roomId);
+    assertActionAccepted(await roomApi.deleteRoom(room.roomId));
 
     setRoomUnreadCounts((prev) => {
       const copy = { ...prev };
@@ -3899,13 +3902,14 @@ async function deleteRoomMessage(message) {
     return;
   }
 
-  const ok = window.confirm(message?.mediaUrl || message?.fileUrl ? 'Delete this media?' : 'Delete this message?');
+  const isMedia = message?.mediaUrl || message?.fileUrl;
+  const ok = await confirmAction({ title: isMedia ? 'Delete media?' : 'Delete message?', description: 'This item will be removed from the room.', confirmLabel: isMedia ? 'Delete media' : 'Delete message' });
   if (!ok) return;
 
   try {
     setDeletingMessageId(messageId);
 
-    await roomApi.deleteRoomMessage(room.roomId, messageId);
+    assertActionAccepted(await roomApi.deleteRoomMessage(room.roomId, messageId));
 
     setMessages((prev) => prev.filter((item) => getRoomMessageId(item) !== messageId));
     setStatus('Deleted');

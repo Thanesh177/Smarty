@@ -7,10 +7,12 @@ import './index.css';
 import './styles/premium-theme.css';
 import './styles/product-theme.css';
 import './styles/chat-workspace.css';
-import './styles/navigation-toolbar.css';
 import './styles/feed-learning-home.css';
 import './styles/interface-polish.css';
+import './styles/form-controls.css';
+import './styles/navigation-toolbar.css';
 import 'aws-amplify/auth/enable-oauth-listener';
+import { claimChunkRecovery, isChunkLoadFailure } from './lib/chunkRecovery';
 import {
   QueryClient,
   QueryClientProvider,
@@ -43,29 +45,18 @@ if ('clearAppBadge' in navigator) {
 }
 
 // In-app browser + chunk-load recovery
-const SMARTY_CHUNK_RELOAD_KEY = 'smarty-chunk-reload-attempted';
-
 const reloadOnceForChunkFailure = () => {
   try {
-    if (sessionStorage.getItem(SMARTY_CHUNK_RELOAD_KEY) === '1') {
-      return;
-    }
-
-    sessionStorage.setItem(SMARTY_CHUNK_RELOAD_KEY, '1');
+    if (claimChunkRecovery({ storage: sessionStorage, online: navigator.onLine !== false })) window.location.reload();
   } catch {
-    // Ignore storage failures in strict WebViews.
+    // An unavailable guard must not create a WebView reload loop.
   }
-
-  window.location.reload();
 };
 
 window.addEventListener('error', (event) => {
   const message = event?.message || '';
 
-  if (
-    message.includes('Failed to fetch dynamically imported module') ||
-    message.includes('Importing a module script failed')
-  ) {
+  if (isChunkLoadFailure(message)) {
     reloadOnceForChunkFailure();
   }
 });
@@ -73,22 +64,10 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   const reason = String(event?.reason || '');
 
-  if (
-    reason.includes('Failed to fetch dynamically imported module') ||
-    reason.includes('Importing a module script failed')
-  ) {
+  if (isChunkLoadFailure(reason)) {
     reloadOnceForChunkFailure();
   }
 });
-
-// Keep reload protection active during startup to avoid infinite WebView loops.
-setTimeout(() => {
-  try {
-    sessionStorage.removeItem(SMARTY_CHUNK_RELOAD_KEY);
-  } catch {
-    // Ignore storage failures in strict WebViews.
-  }
-}, 15000);
 
 const rootElement = document.getElementById('root');
 

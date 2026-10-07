@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test": "node --test src/bootstrap.test.cjs src/contexts/*.test.cjs src/lib/*.test.js src/lib/*.test.cjs src/data/*.test.js src/components/*.test.cjs src/components/audio/*.test.cjs",
+    "check": "npm test && npm run build",
     "test:auth": "node --test src/bootstrap.test.cjs src/contexts/AuthContext.test.cjs src/lib/cognito.test.cjs src/lib/nativeSessionStorage.test.js",
     "test:learning": "node --test src/lib/learningJourney.test.js",
     "dev": "vite",

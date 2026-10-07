@@ -1,5 +1,5 @@
-import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useState, useEffect, useCallback, useRef, Component, useMemo } from 'react';
+import { Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import SupportPage from './pages/SupportPage';
 import TermsPage from './pages/TermsPage';
@@ -15,6 +15,9 @@ import AuthRedirectHandler from './components/AuthRedirectHandler';
 import InstallPrompt from './components/InstallPrompt';
 import UniversalSearch from './components/UniversalSearch';
 import PageTransition from './components/PageTransition';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
+import ConnectionStatus from './components/ConnectionStatus';
+import { ActionConfirmationProvider } from './components/ActionConfirmation';
 import {
   CircleUserRound,
   MessagesSquare,
@@ -210,42 +213,6 @@ function TopicRoomsRouteWrapper() {
   );
 }
 
-class RouteErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error('Route failed to render:', error, errorInfo);
-  }
-
-  componentDidUpdate(prevProps) {
-    if (prevProps.children !== this.props.children && this.state.hasError) {
-      this.setState({ hasError: false });
-    }
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="status" role="alert">
-          <p>Something went wrong loading this page.</p>
-          <button type="button" onClick={() => window.location.reload()}>
-            Reload Smarty
-          </button>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
-
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -417,6 +384,8 @@ function Layout() {
     location.pathname === '/login' ||
     location.pathname === '/register' ||
     location.pathname === '/confirm';
+
+  const isAllPosts = location.pathname === '/feed' && new URLSearchParams(location.search).get('topic') === 'All';
 
   const openUniversalSearch = useCallback(() => {
     setUniversalSearchOpen(true);
@@ -1067,26 +1036,18 @@ useEffect(() => {
 
             <nav className="brand-actions" aria-label="Quick navigation">
 
-              {!location.pathname.startsWith('/feed') && <button
-                type="button"
-                className="quick-icon-link"
-                aria-label="Search Smarty"
-                title="Search"
-                onClick={openUniversalSearch}
-              >
-                <Search size={16} strokeWidth={2.15} />
-                <span className="nav-control-label" aria-hidden="true">Search</span>
-              </button>}
 
-              <NavLink
+
+              <Link
                 to="/feed?topic=All"
-                className="quick-icon-link"
+                className={`quick-icon-link${isAllPosts ? ' is-current' : ''}`}
                 aria-label="Feed"
+                aria-current={isAllPosts ? 'page' : undefined}
                 title="Feed"
                 onClick={(event) => {
                   if (window.location.pathname !== '/feed' || new URLSearchParams(window.location.search).get('topic') !== 'All') return;
                   event.preventDefault();
-                  const feedScroller = document.querySelector('.snap-feed-page .snap-feed');
+                  const feedScroller = document.querySelector('.snap-feed-page .snap-feed') || document.querySelector('.content');
                   feedScroller?.scrollTo({
                     top: 0,
                     behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -1097,7 +1058,7 @@ useEffect(() => {
               >
                 <House size={16} strokeWidth={2.2} />
                 <span className="nav-control-label" aria-hidden="true">Feed</span>
-              </NavLink>
+              </Link>
 
               <button
                 type="button"
@@ -1194,7 +1155,7 @@ useEffect(() => {
             </div>
           )}
 
-          <RouteErrorBoundary key={`${location.pathname}:${pageRefreshVersion}`}>
+          <RouteErrorBoundary key={`${location.pathname}:${pageRefreshVersion}`} resetKey={location.pathname + location.search}>
             <Routes>
                 <Route
                   path="/"
@@ -1899,6 +1860,7 @@ function AppExperience() {
     <>
       <ReminderPopupStyles />
       <Layout />
+      <ConnectionStatus />
       {splashMounted && (
         <AppOpeningScreen
           leaving={splashLeaving}
@@ -1912,7 +1874,9 @@ function AppExperience() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppExperience />
+      <ActionConfirmationProvider>
+        <AppExperience />
+      </ActionConfirmationProvider>
     </AuthProvider>
   );
 }

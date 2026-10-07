@@ -1,0 +1,215 @@
+/* One field surface, consistent touch targets, and room for text at every size.
+   Editorial writing areas and chat's compact composer keep their own layout. */
+.app-shell .content :is(
+  .topic-directory-search, .library-search, .community-search,
+  .friend-search-row, .room-search-wrap, .learn-search > div,
+  .composer-topic-input, .news-summary-search,
+  .quiz-subject-toolbar > label, .read-books-search-box, .topic-search-input
+) {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 48px;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-control-line) !important;
+  border-radius: 8px !important;
+  background: var(--ui-control-bg) !important;
+  color: var(--ui-muted);
+  box-shadow: none !important;
+}
+
+.app-shell .content :is(
+  .topic-directory-search, .library-search, .community-search,
+  .friend-search-row, .room-search-wrap, .learn-search > div,
+  .composer-topic-input, .news-summary-search,
+  .quiz-subject-toolbar > label, .read-books-search-box, .topic-search-input
+) input {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  height: 44px !important;
+  min-height: 44px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--ui-text) !important;
+  font-size: 16px !important;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.app-shell .content :is(
+  .topic-directory-search, .library-search, .community-search,
+  .friend-search-row, .room-search-wrap, .learn-search > div,
+  .composer-topic-input, .news-summary-search,
+  .quiz-subject-toolbar > label, .read-books-search-box, .topic-search-input
+) > svg { flex: 0 0 auto; width: 18px; height: 18px; }
+
+.app-shell .content :is(
+  .topic-directory-search, .library-search, .community-search,
+  .friend-search-row, .room-search-wrap, .learn-search > div,
+  .composer-topic-input, .news-summary-search,
+  .quiz-subject-toolbar > label, .read-books-search-box, .topic-search-input
+) button { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; padding: 0; }
+
+.app-shell .content :is(
+  .topic-directory-search, .library-search, .community-search,
+  .friend-search-row, .room-search-wrap, .learn-search > div,
+  .composer-topic-input, .news-summary-search,
+  .quiz-subject-toolbar > label, .read-books-search-box, .topic-search-input
+):focus-within {
+  border-color: var(--ui-accent-line) !important;
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 3px;
+}
+.app-shell .content :is(
+  .topic-directory-search, .library-search, .community-search,
+  .friend-search-row, .room-search-wrap, .learn-search > div,
+  .composer-topic-input, .news-summary-search,
+  .quiz-subject-toolbar > label, .read-books-search-box, .topic-search-input
+) input:focus-visible { outline: none !important; }
+
+/* News captions sit above fields, never inside a second search-box border. */
+.app-shell .content .news-page .news-location-controls {
+  gap: 16px;
+  align-items: end;
+}
+.app-shell .content .news-page .news-location-controls label {
+  min-width: 0;
+  gap: 8px;
+}
+.app-shell .content .news-page .news-search-control {
+  padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.app-shell .content .news-page .news-location-controls label > span {
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ui-muted);
+}
+.app-shell .content .news-page .news-location-controls .news-search-control input {
+  border: 1px solid var(--ui-control-line) !important;
+  border-radius: 8px;
+  background: var(--ui-control-bg) !important;
+}
+
+.app-shell .content :is(
+  .news-location-controls, .library-filters, .learn-controls,
+  .quiz-setup-fields, .login-card
+) :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), select),
+.rooms-dialog-portal .create-form :is(input:not([type='file']), select),
+.profile-editor-field input:not([type='file']):not([type='range']),
+.library-dialog select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-control-line) !important;
+  border-radius: 8px;
+  background: var(--ui-control-bg) !important;
+  color: var(--ui-text) !important;
+  font-size: 16px !important;
+  font-weight: 400;
+  line-height: 1.5;
+  color-scheme: dark;
+}
+/* More specific than the ordinary-field rule: no nested search borders. */
+.app-shell .content .learn-controls .learn-search > div input {
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+}
+.app-shell .content .quiz-workspace .quiz-subject-toolbar > label input {
+  min-height: 44px !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+.app-shell .content .library-filters label {
+  min-width: 0;
+  gap: 8px;
+}
+.app-shell .content .library-filters select { width: auto; max-width: 100%; }
+.rooms-dialog-portal .create-form label { gap: 8px; }
+
+/* Search dialogs have optional controls; flex avoids empty grid columns. */
+.universal-search-layer .universal-search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  padding: 8px 10px 8px 18px;
+}
+.universal-search-layer .universal-search-input-row > svg,
+.universal-search-layer .universal-search-input-row > kbd { flex: none; }
+.universal-search-layer .universal-search-input-row input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+  font-weight: 400;
+}
+.universal-search-layer :is(.universal-search-clear, .universal-search-close) {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+}
+
+/* The question editor is a single surface, with a legible multiline field. */
+.app-shell .content .post-ai-page .post-ai-form {
+  min-width: 0;
+  gap: 10px;
+  border: 1px solid var(--ui-control-line) !important;
+  border-radius: 12px;
+  background: var(--ui-control-bg) !important;
+}
+.app-shell .content .post-ai-page .post-ai-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 88px;
+  max-height: 180px;
+  padding: 12px;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+  line-height: 1.65;
+}
+.app-shell .content .post-ai-page .post-ai-form:focus-within {
+  border-color: var(--ui-accent-line) !important;
+}
+.app-shell .content .post-ai-page .post-ai-form textarea:focus-visible { outline: none !important; }
+.app-shell .content .chat-page .chat-search { min-width: 0; }
+.app-shell .content .chat-page .chat-search input { min-width: 0; font-size: 16px !important; }
+
+@media (max-width: 480px) {
+  .app-shell .content .post-ai-page .post-ai-form { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .app-shell .content .post-ai-page .post-ai-form button { justify-self: end; min-height: 44px; height: 44px; }
+  .universal-search-layer .universal-search-input-row { gap: 6px; padding-left: 12px; }
+  .app-shell .content .library-filters > div:last-child {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 12px;
+  }
+  .app-shell .content .library-filters label { display: grid; }
+  .app-shell .content .library-filters select { width: 100%; }
+  .app-shell .content .news-page .news-controls.news-location-controls { grid-template-columns: minmax(0, 1fr) !important; }
+  .app-shell .content .news-page .news-location-controls .news-search-control { grid-column: auto; }
+}

@@ -49,6 +49,7 @@ body,
     color 0.16s ease;
 }
 
+
 .chat-avatar-options button:hover,
 .chat-avatar-options button.active {
   transform: translateY(-1px);

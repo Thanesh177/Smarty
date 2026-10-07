@@ -1,17 +1,19 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   BookOpen,
-  Newspaper,
   BrainCircuit,
   Users,
   Bell,
   ShieldCheck,
   LogOut,
   LogIn,
+  Bookmark,
+  ArrowUpRight,
+  LayoutGrid,
   Search,
-  Menu,
+  Compass,
   X,
 } from 'lucide-react';
 import './NavbarMenu.css';
@@ -19,32 +21,54 @@ import './NavigationPanel.css';
 import SmartyBrand from './SmartyBrand';
 import { isAdminUser } from '../lib/adminAccess';
 
-function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
+function NavbarMenu({ user, logout, onOpenSearch }) {
   const [open, setOpen] = useState(false);
+  const [present, setPresent] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [logoutError, setLogoutError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
   const triggerRef = useRef(null);
   const panelRef = useRef(null);
+  const restoreFocusRef = useRef(true);
+  const routeRef = useRef(location.key);
 
-  const closeMenu = useCallback(() => {
+  const closeMenu = useCallback((options = {}) => {
+    restoreFocusRef.current = options.restoreFocus !== false;
     setOpen(false);
-    triggerRef.current?.focus();
   }, []);
 
   const toggleMenu = useCallback(() => {
+    restoreFocusRef.current = true;
+    setLogoutError('');
     setOpen((prev) => !prev);
   }, []);
+
+  const openSearch = useCallback(() => {
+    closeMenu();
+    window.requestAnimationFrame(() => onOpenSearch?.());
+  }, [closeMenu, onOpenSearch]);
+
+  useEffect(() => {
+    if (open) { setPresent(true); return undefined; }
+    const timer = window.setTimeout(() => setPresent(false), 180);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  useEffect(() => {
+    if (routeRef.current === location.key) return;
+    routeRef.current = location.key;
+    closeMenu({ restoreFocus: false });
+  }, [location.key, closeMenu]);
 
   const handleLogout = useCallback(async () => {
     if (signingOut) return;
 
     setSigningOut(true);
     setLogoutError('');
-    closeMenu();
-
     try {
       await logout?.();
+      closeMenu();
     } catch {
       setLogoutError('Could not finish signing out on this device. Please try again before closing Smarty.');
       setOpen(true);
@@ -57,12 +81,26 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
     if (!open) return undefined;
 
     const previousOverflow = document.body.style.overflow;
+    const shell = document.querySelector('.app-shell');
+    const scroller = shell?.querySelector('.content');
+    const previousInert = shell?.inert;
+    const previousScrollOverflow = scroller?.style.overflowY;
     document.body.style.overflow = 'hidden';
+    if (shell) shell.inert = true;
+    if (scroller) scroller.style.overflowY = 'hidden';
     const focusable = () => [...(panelRef.current?.querySelectorAll('a[href], button:not(:disabled)') || [])]
       .filter(element => element.getClientRects().length);
-    const frame = window.requestAnimationFrame(() => focusable()[0]?.focus());
+    const frame = window.requestAnimationFrame(() => {
+      (panelRef.current?.querySelector('.menu-section a') || focusable()[0])?.focus({ preventScroll: true });
+    });
 
     const handleEscape = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        openSearch();
+        return;
+      }
       if (event.key === 'Escape') {
         event.preventDefault();
         closeMenu();
@@ -77,16 +115,27 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
           event.preventDefault(); first.focus();
         }
       }
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && panelRef.current?.contains(document.activeElement)) {
+        const items = focusable();
+        const index = items.indexOf(document.activeElement);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+          : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        event.preventDefault();
+        items[next]?.focus();
+      }
     };
 
-    window.addEventListener('keydown', handleEscape);
+    window.addEventListener('keydown', handleEscape, true);
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      if (shell) shell.inert = previousInert;
+      if (scroller) scroller.style.overflowY = previousScrollOverflow;
       window.cancelAnimationFrame(frame);
-      window.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('keydown', handleEscape, true);
+      if (restoreFocusRef.current && triggerRef.current?.getClientRects().length) triggerRef.current.focus({ preventScroll: true });
     };
-  }, [closeMenu, open]);
+  }, [closeMenu, open, openSearch]);
 
   return (
     <div className="navbar-menu">
@@ -101,15 +150,19 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
         }}
         aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
         aria-expanded={open}
-        aria-controls={open ? 'smarty-navigation-panel' : undefined}
+        aria-haspopup="dialog"
+        aria-controls={open || present ? 'smarty-navigation-panel' : undefined}
       >
-        {open ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
+        {open ? <X size={18} aria-hidden="true" /> : <LayoutGrid size={18} aria-hidden="true" />}
+        <span className="dock-menu-label" aria-hidden="true">More</span>
         <span className="nav-control-label" aria-hidden="true">{open ? 'Close' : 'More'}</span>
       </button>
 
-      {open && createPortal((
+      {(open || present) && createPortal((
         <div
           className="menu-overlay navigation-dialog"
+          data-state={open ? 'open' : 'closing'}
+          aria-hidden={!open || undefined}
           role="presentation"
           onClick={(event) => {
             event.stopPropagation();
@@ -123,6 +176,7 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
             role="dialog"
             aria-modal="true"
             aria-label="Main navigation"
+            inert={!open ? '' : undefined}
             onClick={(event) => {
               event.stopPropagation();
             }}
@@ -134,7 +188,7 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
                 className="menu-brand-link"
                 aria-label="Smarty — view all posts"
               >
-                <SmartyBrand compact tagline="Explore" />
+                <SmartyBrand compact tagline="Your space to learn" />
               </NavLink>
 
               <button
@@ -147,60 +201,50 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
               </button>
             </div>
 
+            <div className="menu-body">
+            <button type="button" className="menu-search-launch" onClick={openSearch} aria-label="Search Smarty">
+              <Search size={18} aria-hidden="true" /><span>Search Smarty</span><ArrowUpRight size={16} aria-hidden="true" />
+            </button>
             <nav className="menu-section compact-menu-section" aria-label="Explore Smarty">
-              <p className="menu-group-label">Explore</p>
-              <button
-                type="button"
-                className="menu-link-btn"
-                onClick={() => {
-                  closeMenu();
-                  onOpenSearch?.();
-                }}
-              >
+              <NavLink to="/learn" onClick={closeMenu} className="menu-icon-link">
                 <span className="menu-link-left">
-                  <Search size={18} strokeWidth={2.2} />
-                  <span>Search</span>
+                  <Compass size={18} />
+                  <span className="menu-link-copy"><strong>My learning</strong></span>
                 </span>
-              </button>
-
-
-
+              </NavLink>
               <NavLink to="/booksinfo" onClick={closeMenu} className="menu-icon-link">
                 <span className="menu-link-left">
                   <BookOpen size={18} strokeWidth={2.2} />
-                  <span>Books</span>
+                  <span className="menu-link-copy"><strong>Books</strong></span>
                 </span>
               </NavLink>
-
-              <NavLink to="/news" onClick={closeMenu} className="menu-icon-link">
-                <span className="menu-link-left">
-                  <Newspaper size={18} strokeWidth={2.2} />
-                  <span>News</span>
-                </span>
-              </NavLink>
-
               <NavLink to="/quiz" onClick={closeMenu} className="menu-icon-link">
                 <span className="menu-link-left">
                   <BrainCircuit size={18} strokeWidth={2.2} />
-                  <span>Quiz</span>
+                  <span className="menu-link-copy"><strong>Quiz</strong></span>
                 </span>
               </NavLink>
 
               <NavLink to="/rooms" onClick={closeMenu} className="menu-icon-link">
                 <span className="menu-link-left">
                   <Users size={18} strokeWidth={2.2} />
-                  <span>Rooms</span>
+                  <span className="menu-link-copy"><strong>Rooms</strong></span>
                 </span>
               </NavLink>
 
-              {user && (
+            </nav>
+
+            {user && <nav className="menu-section menu-personal-section" aria-label="Your space">
+              <NavLink to="/saved" onClick={closeMenu} className="menu-icon-link">
+                <span className="menu-link-left"><Bookmark size={18} /><span>Saved</span></span>
+                <ArrowUpRight className="menu-link-arrow" size={15} aria-hidden="true" />
+              </NavLink>
                 <NavLink to="/notifications" onClick={closeMenu} className="menu-icon-link">
                   <span className="menu-link-left">
                     <Bell size={18} strokeWidth={2.2} />
                     <span>Notifications</span>
                   </span>
                 </NavLink>
-              )}
 
               {isAdminUser(user) && (
                 <NavLink
@@ -214,9 +258,10 @@ function NavbarMenu({ user, logout, totalUnread = 0, onOpenSearch }) {
                   </span>
                 </NavLink>
               )}
-            </nav>
+            </nav>}
+            </div>
 
-            <div className="menu-footer">
+            <div className="menu-footer" aria-busy={signingOut}>
               {logoutError && <p className="status error" role="alert">{logoutError}</p>}
               {user ? (
                 <button

@@ -11,9 +11,9 @@ import {
 import './NewsPage.css';
 import './LibraryNewsTheme.css';
 import { NewsStoryLink, SavedNewsStories } from '../components/NewsStoryLinks';
+import { editorialNewsSections, hasEditorialBriefing, newsCacheIsFresh } from '../lib/newsAvailability';
 
 const CACHE_PREFIX = 'smarty_location_news_v22_';
-const CACHE_TTL = 1000 * 60 * 15;
 const CACHE_STALE_TTL = 1000 * 60 * 60 * 48;
 const PAGE_SIZE = 9;
 const SECTION_ICONS = {
@@ -84,8 +84,7 @@ function getCachedNews(country, region) {
     return {
       news: cached.news,
       timestamp: cached.timestamp,
-      isFresh: age <= CACHE_TTL && (!cached.news.dailySummary?.editionDate
-        || cached.news.dailySummary.editionDate === new Date().toISOString().slice(0, 10)),
+      isFresh: newsCacheIsFresh(cached.news, cached.timestamp),
     };
   } catch {
     return null;
@@ -407,7 +406,8 @@ export default function NewsPage({ briefingOnly = false }) {
   }, []);
   const [country, setCountry] = useState(initialCountry);
   const [region, setRegion] = useState(() => initialCountry === 'GLOBAL' ? '' : getSavedRegion(initialCountry));
-  const [newsData, setNewsData] = useState(null);
+  const [initialCache] = useState(() => getCachedNews(initialCountry, region));
+  const [newsData, setNewsData] = useState(initialCache?.news || null);
   const [search, setSearch] = useState(
     () => new URLSearchParams(location.search).get('search') || ''
   );
@@ -415,9 +415,9 @@ export default function NewsPage({ briefingOnly = false }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [saved, setSaved] = useState([]);
   const [actionStatus, setActionStatus] = useState('');
-  const [lastUpdated, setLastUpdated] = useState('');
-  const [fromCache, setFromCache] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(() => initialCache ? formatUpdatedAt(initialCache.news.generatedAt || initialCache.timestamp) : '');
+  const [fromCache, setFromCache] = useState(Boolean(initialCache && !initialCache.isFresh));
+  const [loading, setLoading] = useState(!initialCache);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [summarySearch, setSummarySearch] = useState('');
@@ -432,6 +432,7 @@ export default function NewsPage({ briefingOnly = false }) {
   const requestIdRef = useRef(0);
   const mountedRef = useRef(true);
   const abortControllerRef = useRef(null);
+  const loadedLocationRef = useRef(initialCache ? getCacheKey(initialCountry, region) : '');
   const savedStorageKey = useMemo(() => {
     const accountId = user?.userId || user?.sub || user?.id || user?.email || 'guest';
     return `smarty-saved-news-v1-${encodeURIComponent(String(accountId))}`;
@@ -476,6 +477,8 @@ export default function NewsPage({ briefingOnly = false }) {
 
   const fetchNews = useCallback(async (targetCountry, targetRegion, forceRefresh = false) => {
     abortControllerRef.current?.abort();
+    const nextLocation = getCacheKey(targetCountry, targetRegion);
+    const retainReports = forceRefresh && loadedLocationRef.current === nextLocation;
     const cached = getCachedNews(targetCountry, targetRegion);
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
@@ -484,6 +487,7 @@ export default function NewsPage({ briefingOnly = false }) {
     setVisibleCount(PAGE_SIZE);
 
     if (cached) {
+      loadedLocationRef.current = nextLocation;
       setNewsData(cached.news);
       setFromCache(!cached.isFresh);
       setLastUpdated(formatUpdatedAt(cached.news.generatedAt || cached.timestamp));
@@ -491,9 +495,14 @@ export default function NewsPage({ briefingOnly = false }) {
       if (cached.isFresh && !forceRefresh) return;
     } else {
       setFromCache(false);
+      if (!retainReports) {
+        loadedLocationRef.current = '';
+        setNewsData(null);
+        setLastUpdated('');
+      }
     }
 
-    setLoading(!cached && !forceRefresh);
+    setLoading(!cached && !retainReports);
     setRefreshing(Boolean(cached) || forceRefresh);
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -504,11 +513,13 @@ export default function NewsPage({ briefingOnly = false }) {
         region: targetRegion,
         lang: 'english',
         signal: controller.signal,
+        forceRefresh,
       });
 
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
       setNewsData(data);
+      loadedLocationRef.current = nextLocation;
       setCachedNews(targetCountry, targetRegion, data);
       setFromCache(data.cacheStatus === 'stale-cache');
       setLastUpdated(formatUpdatedAt(data.generatedAt || Date.now()));
@@ -520,7 +531,7 @@ export default function NewsPage({ briefingOnly = false }) {
       }
 
       setError(
-        cached
+        cached || retainReports
           ? 'Could not refresh right now. Your latest saved briefing is still available.'
           : fetchError.message || 'Could not load current news. Please try again.'
       );
@@ -638,12 +649,11 @@ export default function NewsPage({ briefingOnly = false }) {
   );
 
   const summarySections = useMemo(() => (
-    Array.isArray(newsData?.dailySummary?.sectionDigests)
-      ? newsData.dailySummary.sectionDigests.filter(digest => digest.section && digest.summary
-        && (!briefingOnly || (newsData.dailySummary.summaryMode === 'editorial' && digest.summaryMode !== 'extractive')))
+    briefingOnly ? editorialNewsSections(newsData) : Array.isArray(newsData?.dailySummary?.sectionDigests)
+      ? newsData.dailySummary.sectionDigests.filter(digest => digest?.section && typeof digest.summary === 'string' && digest.summary.trim())
       : []
   ), [newsData, briefingOnly]);
-  const dailyBriefing = newsData?.dailySummary?.summaryMode === 'editorial' ? newsData.dailySummary : null;
+  const dailyBriefing = hasEditorialBriefing(newsData) ? newsData.dailySummary : null;
   const visibleSummaries = summarySections.filter(
     digest => (selectedSection === 'All' || digest.section === selectedSection)
       && `${digest.section} ${digest.summary} ${digest.context || ''} ${digest.next || ''}`
@@ -653,6 +663,10 @@ export default function NewsPage({ briefingOnly = false }) {
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [country, region, search, selectedSection]);
+
+  useEffect(() => {
+    if (newsData && !sectionNames.includes(selectedSection)) setSelectedSection('All');
+  }, [newsData, sectionNames, selectedSection]);
 
   useEffect(() => {
     if (!loaderRef.current) return undefined;
@@ -725,6 +739,7 @@ export default function NewsPage({ briefingOnly = false }) {
 
   if (briefingOnly) return (
     <section className={`news-page news-feed-briefing${comfortableText ? ' news-comfortable-text' : ''}`} aria-label="World news feed">
+      {actionStatus && <p className="news-action-status" role="status" aria-live="polite">{actionStatus}</p>}
       <div className="news-feed-toolbar">
         <div className="news-feed-heading">
           <span className="news-kicker">Your world briefing</span>
@@ -800,11 +815,11 @@ export default function NewsPage({ briefingOnly = false }) {
 
           <div className="news-stream-heading news-summary-heading">
             <div>
-              <span>{summarySearch.trim() ? 'Search results' : selectedSection === 'All' ? 'Latest summaries' : selectedSection}</span>
-              <h2 ref={summaryHeadingRef} tabIndex={-1}>{summarySearch.trim() ? 'Matching summaries' : selectedSection === 'All' ? 'The day, section by section' : `${selectedSection} summaries`}</h2>
+              <span>{!summarySections.length ? 'Original reporting' : summarySearch.trim() ? 'Search results' : selectedSection === 'All' ? 'Latest summaries' : selectedSection}</span>
+              <h2 ref={summaryHeadingRef} tabIndex={-1}>{!summarySections.length ? 'Latest available reports' : summarySearch.trim() ? 'Matching summaries' : selectedSection === 'All' ? 'The day, section by section' : `${selectedSection} summaries`}</h2>
             </div>
             <div className="news-reading-tools">
-              <small aria-live="polite">{visibleSummaries.length} {visibleSummaries.length === 1 ? 'summary' : 'summaries'}</small>
+              <small aria-live="polite">{summarySections.length ? `${visibleSummaries.length} ${visibleSummaries.length === 1 ? 'summary' : 'summaries'}` : `${articles.length} ${articles.length === 1 ? 'report' : 'reports'}`}</small>
               <button type="button" aria-pressed={comfortableText} onClick={toggleComfortableText}>
                 <span aria-hidden="true">Aa</span> Larger text
               </button>
@@ -837,8 +852,21 @@ export default function NewsPage({ briefingOnly = false }) {
                 </article>
               ))}
             </div>
+          ) : summarySections.length ? (
+            <div className="news-status" role="status"><p>No summaries match your filters. Try another subject or show all summaries.</p></div>
           ) : (
-            <div className="news-status" role="status"><p>{summarySections.length ? 'No summaries match your filters. Try another subject or show all summaries.' : 'The AI world briefing is not ready yet. Please try refreshing shortly.'}</p></div>
+            <section className="news-report-fallback" aria-label="Available news reports">
+              <div className="news-status" role="status">
+                <h3>Read the latest reports</h3>
+                <p>The AI section briefing is temporarily unavailable. These are original reports, not an AI-generated daily summary.</p>
+              </div>
+              <nav className="section-tabs" aria-label="Available report sections">
+                {sectionNames.map(section => <SectionTab key={section} section={section} active={selectedSection === section} onSelect={setSelectedSection} />)}
+              </nav>
+              <div className="news-grid">{renderedArticles}</div>
+              {visibleCount < articles.length && <button type="button" className="news-load-more"
+                onClick={() => setVisibleCount(current => Math.min(current + PAGE_SIZE, articles.length))}>Show more reports</button>}
+            </section>
           )}
           {visibleSummaries.length > 0 && <footer className="news-summary-end">
             <Globe2 size={22} strokeWidth={1.5} aria-hidden="true" />

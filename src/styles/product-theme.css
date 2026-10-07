@@ -203,7 +203,7 @@ input, select, textarea { accent-color: var(--ui-accent); }
 .app-shell .content :is(
   .learn-controls, .notification-settings-page, .create-page,
   .profile-page, .admin-moderation-page, .login-page, .post-ai-page
-) :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), select, textarea) {
+) :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), select, textarea) {
   background: var(--ui-control-bg) !important;
   border: 1px solid var(--ui-control-line) !important;
   border-radius: var(--ui-radius-small) !important;

@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { postApi } from '../api/client';
+import { useActionConfirmation } from '../components/ActionConfirmation';
+import { assertActionAccepted } from '../lib/actionConfirmation';
 import './CreatePostPage.css';
 
 // --- Helper functions ---
@@ -21,6 +23,7 @@ function getUploadResultKey(value) {
 }
 
 export default function EditPostPage() {
+  const confirmAction = useActionConfirmation();
   const { reelId } = useParams();
   const navigate = useNavigate();
   const mountedRef = useRef(true);
@@ -132,9 +135,8 @@ export default function EditPostPage() {
   }, [loadPage]);
 
   const deletePost = useCallback(async () => {
-    const confirmDelete = window.confirm(
-      'Delete this post permanently? This cannot be undone.'
-    );
+    if (submitting) return;
+    const confirmDelete = await confirmAction({ title: 'Delete post?', description: 'Your post will be permanently removed. This cannot be undone.', confirmLabel: 'Delete post' });
 
     if (!confirmDelete) return;
     if (submitting) return;
@@ -144,12 +146,12 @@ export default function EditPostPage() {
       setUploadStage('Deleting post');
       setUploadProgress(80);
 
-      await postApi.deletePost({
+      assertActionAccepted(await postApi.deletePost({
         ...(loadedPost || {}),
         id: reelId,
         reelId,
         postId: reelId,
-      });
+      }));
 
       setUploadStage('Deleted');
       setUploadProgress(100);
@@ -184,7 +186,7 @@ export default function EditPostPage() {
         setUploadProgress(0);
       }
     }
-  }, [loadedPost, navigate, reelId, submitting]);
+  }, [confirmAction, loadedPost, navigate, reelId, submitting]);
 
   const uploadFile = useCallback(async (file, onProgress) => {
     if (!file) return '';

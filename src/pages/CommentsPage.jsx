@@ -2,6 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { chatApi, postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useActionConfirmation } from '../components/ActionConfirmation';
+import { assertActionAccepted } from '../lib/actionConfirmation';
 import { getUserScopedStorageKey } from '../lib/userScopedStorage';
 import './CommentsPage.css';
 
@@ -190,6 +192,7 @@ const CommentRow = memo(function CommentRow({
 });
 
 export default function CommentsPage() {
+  const confirmAction = useActionConfirmation();
   const { reelId } = useParams();
   const navigate = useNavigate();
   const inputRef = useRef(null);
@@ -415,16 +418,16 @@ export default function CommentsPage() {
     const commentId = item.commentId || item.id || getCommentId(item, index);
     if (!commentId || processingCommentId) return;
 
-    const ok = window.confirm('Delete this comment?');
+    const ok = await confirmAction({ title: 'Delete comment?', description: 'This comment will be permanently removed.', confirmLabel: 'Delete comment' });
     if (!ok) return;
 
     try {
       setProcessingCommentId(commentId);
 
-      await postApi.deleteComment({
+      assertActionAccepted(await postApi.deleteComment({
         reelId,
         commentId,
-      });
+      }));
 
       if (!mountedRef.current) return;
 
@@ -439,7 +442,7 @@ export default function CommentsPage() {
     } finally {
       if (mountedRef.current) setProcessingCommentId('');
     }
-  }, [getCommentId, processingCommentId, reelId, showToast]);
+  }, [confirmAction, getCommentId, processingCommentId, reelId, showToast]);
 
   const openModerationDialog = useCallback((mode, item, index) => {
     const ownerId = String(

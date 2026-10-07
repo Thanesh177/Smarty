@@ -2,6 +2,8 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallbac
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { chatApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useActionConfirmation } from '../components/ActionConfirmation';
+import { assertActionAccepted } from '../lib/actionConfirmation';
 import {
   connectChatSocket,
   sendChatMessage,
@@ -744,6 +746,7 @@ const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl
 });
 
 export default function ChatPage() {
+  const confirmAction = useActionConfirmation();
   const navigate = useNavigate();
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
@@ -2385,7 +2388,7 @@ const deleteMessage = async (msg) => {
 
   if (!messageId || String(messageId).startsWith('local-') || !activeChat || !isOwnMessage) return;
 
-  if (!window.confirm('Delete this message?')) return;
+  if (!await confirmAction({ title: 'Delete message?', description: 'The message will be replaced with a deleted-message notice.', confirmLabel: 'Delete message' })) return;
 
   const previousMessages = [...messages];
 
@@ -2417,14 +2420,14 @@ const deleteMessage = async (msg) => {
   });
 
   try {
-    await withTimeout(
+    assertActionAccepted(await withTimeout(
       chatApi.deleteMessage({
         chatId: activeChat.chatId,
         messageId,
       }),
       9000,
       'Delete took too long.'
-    );
+    ));
     refreshChatsSoon();
   } catch (err) {
     console.error('Delete message failed:', err);

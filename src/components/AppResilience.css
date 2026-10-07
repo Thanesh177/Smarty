@@ -1,0 +1,33 @@
+.action-confirm-layer {
+  position: fixed; inset: 0; z-index: 45000; display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: #0009; overscroll-behavior: contain;
+}
+.action-confirm-panel {
+  width: min(100%, 360px); max-height: 100%; overflow-y: auto; box-sizing: border-box;
+  padding: 22px; border: 1px solid #ffffff18; border-radius: 16px;
+  background: #111315; color: #edf0f4; box-shadow: 0 20px 60px #0008;
+  animation: actionConfirmIn 180ms cubic-bezier(.2,.7,.2,1) both;
+}
+.action-confirm-panel h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.3; font-weight: 550; letter-spacing: -.025em; }
+.action-confirm-panel p { margin: 0; color: #a9b0ba; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.action-confirm-buttons { display: flex; gap: 8px; margin-top: 22px; }
+.action-confirm-buttons button {
+  flex: 1; min-height: 44px; padding: 10px 12px; border: 1px solid #ffffff12;
+  border-radius: 9px; background: #ffffff04; color: #d8dde5; font: inherit; font-size: 13px; cursor: pointer;
+}
+.action-confirm-buttons .is-destructive { background: #de939314; color: #efb2b2; border-color: #efb2b226; }
+.action-confirm-buttons .is-primary { background: #bdd1e719; color: #bdd1e7; border-color: #bdd1e725; }
+.action-confirm-panel button:focus-visible { outline: 2px solid #bdd1e7; outline-offset: 3px; }
+.app-recovery-state { width: min(100%, 540px); box-sizing: border-box; margin: clamp(32px, 9vh, 96px) auto; padding: 28px 84px 28px 24px; color: #edf0f4; }
+.app-recovery-kicker { font-size: 12px; color: #93a7bd; }
+.app-recovery-state h1 { margin: 12px 0; font-size: clamp(24px, 4vw, 32px); font-weight: 550; letter-spacing: -.035em; line-height: 1.2; }
+.app-recovery-state p { color: #a9b0ba; font-size: 14px; line-height: 1.7; }
+.app-recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.app-recovery-actions :is(button, a) { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 8px 14px; border: 1px solid #ffffff18; border-radius: 9px; background: #ffffff06; color: #d8dde5; text-decoration: none; box-sizing: border-box; font: inherit; font-size: 13px; cursor: pointer; }
+.app-recovery-actions :is(button, a):focus-visible { outline: 2px solid #bdd1e7; outline-offset: 3px; }
+.app-connection-status { position: fixed; inset: max(12px, env(safe-area-inset-top)) 84px auto 12px; z-index: 35000; pointer-events: none; display: flex; justify-content: center; }
+.app-connection-status > span { display: flex; align-items: center; gap: 9px; padding: 9px 12px; border: 1px solid #ffffff14; border-radius: 10px; background: #15191ef5; color: #c3cbd5; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 18px #0005; }
+.app-connection-status svg { flex: none; }
+@keyframes actionConfirmIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .action-confirm-panel { animation: none; } }

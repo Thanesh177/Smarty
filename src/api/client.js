@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createRequestCache } from '../lib/requestCache';
+import { createNewsRequestCache } from '../lib/newsRequestCache';
 import { getLearningGuide } from '../data/learningGuides';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { endpoints } from './endpoints';
@@ -520,6 +521,8 @@ const buildClientDailySummary = (articles, location) => {
   };
 };
 
+const publicNewsCache = createNewsRequestCache();
+
 export const newsApi = {
   async getStoryTimeline({ query, year = 'recent', month = 'all', signal } = {}) {
     const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
@@ -593,7 +596,17 @@ export const newsApi = {
       }));
   },
 
-  async getLatestNews(options = {}) {
+  getLatestNews(options = {}) {
+    const input = typeof options === 'string' ? { lang: options } : options || {};
+    const location = {
+      lang: String(input.lang || 'english').trim().toLowerCase(),
+      country: String(input.country || 'GLOBAL').trim().toUpperCase(),
+      region: String(input.region || '').trim(),
+    };
+    return publicNewsCache.get(JSON.stringify(location), () => newsApi.loadLatestNews(location), input);
+  },
+
+  async loadLatestNews(options = {}) {
     const normalizedOptions = typeof options === 'string'
       ? { lang: options }
       : options || {};

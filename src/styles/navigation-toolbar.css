@@ -1,77 +1,84 @@
-/* Keep the established bottom-right rail and separate feed search position. */
-.app-shell .topbar.glass-topbar { width: 54px !important; max-width: 54px; border-radius: 14px !important; }
-.app-shell .topbar.glass-topbar .brand-actions { gap: 2px !important; padding: 4px !important; }
-.app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) {
-  display: flex !important;
-  flex-direction: row;
-  justify-content: center;
-  align-items: center;
-  gap: 0 !important;
-  width: 44px !important;
-  min-width: 44px !important;
-  height: 44px !important;
-  min-height: 44px !important;
-  padding: 0 !important;
-  position: relative;
-  transition: background 160ms ease, color 160ms ease;
+/* Smarty rail: one compact vertical surface, floating above every page. */
+body .app-shell[inert] > .content { overflow: hidden !important; touch-action: none !important; }
+body .app-shell > .topbar.glass-topbar {
+  position: fixed !important; z-index: 30000;
+  inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) auto !important;
+  width: 56px !important; max-width: 56px !important;
+  margin: 0 !important; padding: 0 !important; border: 1px solid #ffffff17 !important;
+  border-radius: 16px !important; background: #111316f5 !important;
+  box-shadow: 0 8px 28px #0006, inset 0 1px 0 #ffffff06 !important;
+  transform: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
 }
-.app-shell .topbar.glass-topbar .nav-control-label {
-  display: none;
-  position: absolute;
-  right: calc(100% + 12px);
-  top: 50%;
-  transform: translateY(-50%);
-  width: auto;
-  height: auto;
-  font-size: 11px;
-  font-weight: 550;
-  line-height: 1.1;
-  letter-spacing: .01em;
-  color: inherit;
-  white-space: nowrap;
-  padding: 7px 10px;
-  border: 1px solid var(--ui-line);
-  border-radius: 8px;
-  background: var(--ui-surface);
-  pointer-events: none;
+body .app-shell .topbar.glass-topbar .topbar-row { display: flex !important; flex-direction: column !important; gap: 0; }
+body .app-shell .topbar.glass-topbar .brand-actions {
+  display: flex !important; flex-direction: column !important; align-items: center !important;
+  width: auto !important; gap: 3px !important; padding: 5px !important;
+  border: 0 !important; background: none !important;
 }
-.app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):focus-visible > .nav-control-label { display: block; }
+body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) {
+  display: flex !important; position: relative; flex: none;
+  flex-direction: row; align-items: center; justify-content: center; gap: 0 !important;
+  width: 44px !important; height: 44px !important; min-width: 44px !important; min-height: 44px !important;
+  padding: 0 !important; border: 0 !important; border-radius: 11px !important;
+  background: transparent !important; color: #9ba3ad !important;
+  box-shadow: none !important; transform: none !important; filter: none !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) > svg {
+  width: 19px; height: 19px; flex: none; stroke-width: 1.7;
+}
+body .app-shell .topbar.glass-topbar .navbar-menu {
+  flex: none; margin-top: 3px; padding-top: 4px; border-top: 1px solid #ffffff12;
+}
+body .app-shell .topbar.glass-topbar .hamburger-btn { width: 44px !important; color: #d8dce2 !important; }
+body .app-shell .topbar.glass-topbar .dock-menu-label { display: none; }
+body .app-shell .topbar.glass-topbar .quick-icon-link[aria-current='page'] {
+  color: #b8d5f6 !important; background: #203043 !important;
+}
+body .app-shell .topbar.glass-topbar .quick-icon-link[aria-current='page']::after {
+  content: ''; position: absolute; bottom: 4px; left: calc(50% - 2px);
+  width: 4px; height: 2px; border-radius: 2px; background: #b8d5f6;
+}
+body .app-shell .topbar.glass-topbar .topbar-create-btn {
+  background: #d9e7f6 !important; color: #142232 !important;
+}
+body .app-shell .topbar.glass-topbar .hamburger-btn.is-open {
+  background: #ffffff0c !important; color: #f0f3f7 !important;
+}
+body .app-shell .topbar.glass-topbar .nav-create-symbol { font-size: 24px; font-weight: 350; line-height: 1; }
+body .app-shell .topbar.glass-topbar .nav-badge {
+  top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 3px;
+  border: 1px solid #111316; font-size: 10px; font-weight: 600; line-height: 16px;
+  background: #b8d5f6 !important; color: #142232 !important;
+}
+body .app-shell .topbar.glass-topbar .nav-control-label {
+  display: none; position: absolute; inset: 50% calc(100% + 12px) auto auto;
+  transform: translateY(-50%); width: auto; height: auto; white-space: nowrap;
+  padding: 7px 10px; border: 1px solid #ffffff16; border-radius: 8px;
+  background: #191d23; color: #e2e7ee; font-size: 11px; font-weight: 450; line-height: 1.2;
+  pointer-events: none; box-shadow: 0 5px 16px #0005;
+}
+body .app-shell .topbar.glass-topbar :is(button, a):focus-visible { outline: 2px solid #b8d5f6; outline-offset: 2px; }
+body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):focus-visible > .nav-control-label { display: block; }
 @media (hover: hover) {
-  .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):hover > .nav-control-label { display: block; }
+  body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):hover:not([aria-current='page']):not(.topbar-create-btn) { background: #ffffff0b !important; color: #e5eaf1 !important; }
+  body .app-shell .topbar.glass-topbar .topbar-create-btn:hover { background: #eef5fd !important; }
+  body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):hover > .nav-control-label { display: block; }
 }
-.app-shell .topbar.glass-topbar .nav-create-symbol { font-size: 23px; font-weight: 400; line-height: 18px; height: 18px; }
-.app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) > svg { width: 18px; height: 18px; flex: none; }
-.app-shell .topbar.glass-topbar [aria-current='page'] { color: var(--ui-accent) !important; background: var(--ui-accent-soft) !important; }
-.app-shell .topbar.glass-topbar :is(button, a):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
-.app-shell .topbar.glass-topbar .nav-badge { top: 1px; right: 1px; min-width: 15px; height: 15px; font-size: 9px; }
-.app-shell:has(.feed-inner-header) .topbar.glass-topbar .quick-icon-link[aria-label='Search Smarty'] { width: 44px !important; height: 44px !important; min-height: 44px !important; min-width: 44px !important; }
-.app-shell:has(.feed-inner-header) .topbar .quick-icon-link[aria-label='Search Smarty'] .nav-control-label { display: none; }
-@media (max-height: 520px) {
-  .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) { height: 44px !important; min-height: 44px !important; }
-  .app-shell .topbar.glass-topbar .brand-actions { gap: 0 !important; }
+@media (max-height: 380px) {
+  body .app-shell .topbar.glass-topbar .brand-actions { gap: 0 !important; padding: 4px !important; }
+  body .app-shell .topbar.glass-topbar .navbar-menu { margin-top: 2px; padding-top: 2px; }
+}
+@media (max-height: 300px) {
+  body .app-shell > .topbar.glass-topbar { max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; scrollbar-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) { transition: none; }
+  body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) { transition: none; }
 }
-/* The same compact right-hand rail on phones, tablets, and desktop. */
-@media (max-width: 900px) {
-  .app-shell .topbar.glass-topbar {
-    left: auto !important; right: calc(8px + env(safe-area-inset-right)) !important;
-    bottom: calc(10px + env(safe-area-inset-bottom)) !important;
-    margin-inline: 0 !important; transform: none !important;
-  }
-  .app-shell .topbar.glass-topbar .topbar-row,
-  .app-shell .topbar.glass-topbar .brand-actions { flex-direction: column !important; }
-  .app-shell .topbar.glass-topbar .brand-actions { gap: 2px !important; padding: 4px !important; }
-  .app-shell .topbar.glass-topbar .menu-panel {
-    left: auto !important; right: calc(70px + env(safe-area-inset-right)) !important;
-    width: min(350px, calc(100vw - 82px - env(safe-area-inset-right))) !important;
-    max-width: none !important; bottom: calc(10px + env(safe-area-inset-bottom)) !important;
-    max-height: calc(100dvh - 32px - env(safe-area-inset-bottom)) !important;
-  }
-  .app-shell .topbar.glass-topbar .nav-control-label { display: none !important; }
-  .app-shell:has(.feed-inner-header) .topbar.glass-topbar .quick-icon-link[aria-label='Search Smarty'] {
-    /* The bar cannot establish a containing block for the fixed search. */
-    position: fixed !important; top: calc(8px + env(safe-area-inset-top)) !important;
-  }
+/* Conversation controls take over inside active chats. */
+body .app-shell:has(.chat-page.has-active-chat, .rooms-page.has-active-room) > .topbar.glass-topbar { display: none !important; }
+.app-shell .content .rooms-page.rooms-workspace.has-active-room {
+  --rooms-nav-clearance: max(clamp(10px, 2vw, 16px), env(safe-area-inset-right));
 }
