@@ -818,3 +818,127 @@ CONTENT_ANGLES = (
         "instruction": "Compare two easily confused mechanisms and identify the exact step where they diverge.",
     },
 )
+
+
+# Each path has a concrete entry point and an integrative capstone. The existing
+# mechanism catalog fills the middle, rather than treating a random hard concept
+# as a beginner lesson. These are educational stages, not exam qualifications.
+CURRICULUM_VERSION = 1
+TOPIC_PATH_BOOKENDS = {
+    "Artificial Intelligence": ("why training changes model weights but inference uses those learned weights", "how attention, retrieval, and caching trade answer quality for latency and memory"),
+    "Machine Learning": ("how labeled examples teach a model to predict an unseen example", "how regularization, validation, and class imbalance change model selection"),
+    "Data Science": ("how a table separates observations, variables, and missing measurements", "how leakage and confounding can survive a seemingly accurate validation result"),
+    "Robotics": ("how a sensor, controller, and actuator form a robot feedback loop", "how sensor uncertainty and joint limits change a robot motion plan"),
+    "Cybersecurity": ("how authentication differs from permission to access a resource", "how layered defenses limit damage after a stolen account passes authentication"),
+    "Cryptography": ("how plaintext, ciphertext, and a key play different roles in encryption", "why encryption, authentication, and signatures solve different threat models"),
+    "Software Systems": ("how a request moves from a client to a server and back", "how retries, idempotency, and backpressure interact during an outage"),
+    "Databases": ("how rows, columns, and primary keys represent records in a table", "how transaction isolation and index choices trade throughput for correctness"),
+    "Operating Systems": ("how a process differs from a program stored on disk", "how scheduling and memory pressure interact when processes compete for resources"),
+    "Computer Networks": ("how a message is divided into packets addressed to another computer", "how congestion, latency, and retransmission shape end-to-end throughput"),
+    "Cloud Computing": ("how renting compute capacity differs from owning a physical server", "how consistency and redundancy choices affect recovery from a regional failure"),
+    "Semiconductors": ("how electrons and holes carry current in doped silicon", "how leakage, interconnect delay, and packaging constrain chip scaling"),
+    "Electronics": ("how voltage, current, and resistance determine a simple circuit", "how feedback stability and switching losses constrain a power converter"),
+    "Engineering": ("how a free-body diagram separates forces acting on one object", "how fatigue, stress concentration, and safety factors shape a failure analysis"),
+    "Manufacturing": ("how a drawing specifies dimensions and acceptable manufacturing tolerances", "how tolerance stack-up and process variation affect assembly yield"),
+    "Materials Science": ("how atomic arrangement changes the properties of a solid", "how grain size and dislocations trade material strength for ductility"),
+    "Aviation": ("how lift, weight, thrust, and drag change an aircraft's motion", "how lift, induced drag, and control limits interact near an aircraft stall"),
+    "Transportation": ("how torque at a wheel turns an engine's power into forward motion", "how braking limits and traffic waves constrain road capacity"),
+    "Energy": ("how energy conservation distinguishes stored energy from power flow", "how storage losses and variable generation affect grid balancing"),
+    "Infrastructure": ("how a load travels from a bridge deck into its supports", "how thermal movement and cyclic loading influence bridge maintenance decisions"),
+    "Architecture": ("how a building envelope separates indoor conditions from outdoor weather", "how insulation, shading, and ventilation interact in passive building design"),
+    "Physics": ("how a net force changes velocity rather than simply sustaining motion", "how energy and momentum conservation constrain a collision"),
+    "Chemistry": ("how atoms rearrange while mass is conserved in a chemical reaction", "why reaction kinetics and equilibrium predict different effects of a catalyst"),
+    "Mathematics": ("how a function maps an input to an output", "how eigenvectors and repeated transformations explain stable directions"),
+    "Statistics": ("how a sample differs from the population it is meant to represent", "how selection bias and optional stopping undermine statistical inference"),
+    "Probability": ("how a sample space turns possible outcomes into probabilities", "how conditional probability and base rates change a diagnostic inference"),
+    "Biology": ("how a cell membrane separates a living cell from its surroundings", "how membrane gradients couple transport to cellular energy production"),
+    "Genetics": ("how DNA base sequences carry instructions for making proteins", "how inheritance, gene regulation, and environment interact to produce a trait"),
+    "Neuroscience": ("how a neuron sends a signal across a synapse", "how reward prediction errors and synaptic plasticity change learned behavior"),
+    "Human Body": ("how blood circulation connects the lungs to working tissues", "how oxygen delivery and kidney regulation respond to changing tissue demand"),
+    "Immunology": ("how innate defenses differ from an adaptive immune response", "how immune memory and antigen variation affect protection after vaccination"),
+    "Microbiology": ("how bacteria differ from viruses in structure and reproduction", "how biofilms and selection pressure complicate antibiotic susceptibility"),
+    "Astronomy": ("how a telescope collects light rather than moving a star closer", "how parallax and spectral evidence constrain measurements of distant stars"),
+    "Space": ("why an orbit is continuous falling around a planet", "how orbital energy and angular momentum constrain a gravity-assist maneuver"),
+    "Earth Science": ("how Earth's crust, mantle, and core differ in composition and behavior", "how seismic evidence and isotope dating constrain models of Earth's interior"),
+    "Geology": ("how sedimentary layers record deposition in an environment", "how stratigraphy and fault displacement reconstruct a landscape's history"),
+    "Oceanography": ("how temperature and salinity change seawater density", "how density gradients and wind forcing interact in ocean circulation"),
+    "Weather": ("how cooling moist air leads to condensation and cloud formation", "how atmospheric instability and wind shear combine in severe storm development"),
+    "Climate Change": ("how greenhouse gases change the balance between incoming and outgoing energy", "how feedbacks and ocean heat storage shape the pace of climate change"),
+    "Ecology": ("how a food web tracks energy from producers to consumers", "how trophic cascades and habitat changes alter ecosystem stability"),
+    "Environment": ("how a watershed carries runoff from land into a river", "how nutrient loading and oxygen depletion interact in a polluted watershed"),
+    "Psychology": ("how a controlled experiment separates an observation from a causal claim", "how competing explanations and replication limits change a psychological claim"),
+    "Human Behavior": ("how rewards and social cues influence a repeated behavior", "how defaults, loss aversion, and social proof interact in a choice"),
+    "Decision Making": ("how a decision separates available options from uncertain outcomes", "how base rates and expected value change a decision under uncertainty"),
+    "Memory": ("how encoding, storage, and retrieval differ when remembering a fact", "how interference and reconsolidation change recall after retrieval"),
+    "Learning": ("how recalling an answer differs from recognizing it while rereading", "how interleaving and feedback affect transfer to unfamiliar problems"),
+    "Sleep": ("how sleep pressure differs from the body's circadian timing signal", "how circadian misalignment and sleep pressure interact during shift work"),
+    "Nutrition": ("how carbohydrates, fats, and proteins take different routes through digestion", "how meal composition and intestinal absorption change nutrient availability"),
+    "Fitness": ("how a training stimulus and recovery together allow muscle adaptation", "how progressive overload and fatigue management shape a training cycle"),
+    "Health": ("how negative feedback helps keep body conditions within a working range", "how several feedback loops interact when blood glucose regulation is disrupted"),
+    "Mental Health": ("how a short stress response differs from prolonged stress activation", "how avoidance and reinforcement can maintain a learned fear response"),
+    "Finance": ("how interest compensates a lender for time and risk", "how interest-rate changes and credit risk jointly affect a bond's value"),
+    "Investing": ("how ownership, return, and risk differ when buying an investment", "how correlation and sequence risk change a portfolio's withdrawal outcomes"),
+    "Personal Finance": ("how a cash-flow budget separates income, spending, and saving", "how compounding costs and liquidity needs change a debt repayment comparison"),
+    "Stock Market": ("how a share represents ownership rather than a guaranteed return", "how order-book depth and forced buying interact during a liquidity shock"),
+    "Economics": ("how supply and demand respond to a change in price", "how externalities and market power change the outcome predicted by simple supply and demand"),
+    "Global Economy": ("how an exchange rate changes the local price of an imported good", "how foreign-currency debt and capital flows transmit an interest-rate shock"),
+    "Business": ("how revenue, costs, and cash flow describe different parts of a business", "how bottlenecks and working-capital needs can make rapid growth consume cash"),
+    "Startups": ("how a testable customer problem differs from a product idea", "how retention, unit economics, and dilution interact in a funding decision"),
+    "Marketing": ("how a customer journey separates awareness from a purchase", "how incrementality and attribution can disagree about a campaign's impact"),
+    "Consumer Behavior": ("how a reference price shapes a buyer's comparison", "how decoys and default choices interact when a buyer faces many options"),
+    "Supply Chain": ("how lead time connects an order to the arrival of goods", "how demand uncertainty and lead time amplify inventory decisions across a supply chain"),
+    "Agriculture": ("how soil water, nutrients, and light constrain a plant's growth", "how crop rotation and irrigation choices interact under water scarcity"),
+    "Food Science": ("how heat changes proteins and starch during cooking", "how water activity and acidity jointly affect food preservation"),
+    "History": ("how a primary source differs from a later interpretation of an event", "how conflicting primary sources change a causal explanation of the printing press's effects"),
+    "Ancient Civilizations": ("how irrigation and grain storage supported early urban settlements", "how trade, water management, and limited evidence shape interpretations of Indus cities"),
+    "World History": ("how a trade route connects goods, people, and ideas across regions", "how crop transfers and coercive labor systems interacted in the Columbian Exchange"),
+    "Geopolitical History": ("how a boundary differs from effective control of a territory", "how treaty boundaries and population movements interacted during partition"),
+    "Military History": ("how supplies and transport limit what an army can sustain", "how logistics and attrition constrain explanations of Napoleon's Russian campaign"),
+    "Political History": ("how rules for voting change who can influence a government", "how representation and emergency powers can pull democratic institutions in different directions"),
+    "Economic History": ("how a merchant ledger records transactions and obligations", "how financial institutions and transport costs jointly changed long-distance trade"),
+    "Diplomatic History": ("how a treaty differs from an alliance and diplomatic recognition", "how balance-of-power goals and crisis communication constrain diplomatic bargaining"),
+    "Colonial History": ("how a chartered company's commercial rights became a means of territorial control", "how taxation and transport networks reinforced colonial extraction"),
+    "Borders and Empires": ("how an imperial frontier differs from a fixed modern border", "how moving rivers and overlapping claims complicate inherited imperial boundaries"),
+    "Medieval History": ("how land tenure linked agricultural work to obligations in medieval Europe", "how farming changes and merchant institutions supported medieval town growth"),
+    "Modern History": ("how industrial transport separated local time from standardized schedules", "how mass communication and border controls reshaped state power in the twentieth century"),
+    "Trade Routes": ("how seasonal winds changed the timing of a sailing voyage", "how monsoon timing and chokepoint access shaped Indian Ocean trading networks"),
+    "Revolutions": ("how a protest differs from a transfer of political authority", "how food prices, communication networks, and military defections interact in revolutionary crises"),
+    "Archaeology": ("how an artifact's context matters as much as the object itself", "how stratigraphy and isotope evidence can support competing settlement histories"),
+    "Anthropology": ("how observation and interpretation differ in an ethnographic field note", "how gift exchange and kinship obligations challenge a purely economic account of reciprocity"),
+    "Sociology": ("how a social role differs from an individual personality trait", "how residential sorting and institutional incentives can reinforce inequality"),
+    "Culture": ("how a learned social convention signals belonging to a group", "how migration and power influence which revived traditions become accepted as ancient"),
+    "Linguistics": ("how a speech sound differs from a letter in a writing system", "how sound change and frequent-word erosion reshape a language without uniform spelling changes"),
+    "Philosophy": ("how premises support a conclusion in a valid argument", "how identity puzzles and vague boundaries challenge apparently valid arguments"),
+    "Ethics": ("how an intended outcome differs from a foreseeable consequence", "how consent and conflicting fairness goals complicate an algorithmic decision"),
+    "Art History": ("how composition directs a viewer's attention within a painting", "how patronage and image-making technology shaped changes in portraiture"),
+    "Music Theory": ("how pitch, rhythm, and intervals describe different parts of a melody", "how temperament and harmonic resolution trade tuning purity for musical flexibility"),
+    "Photography": ("how shutter speed, aperture, and sensitivity jointly affect an exposure", "how motion, depth of field, and sensor noise constrain a low-light photograph"),
+    "Filmmaking": ("how shot size and camera position guide a viewer's attention", "how editing continuity and frame-rate choices change the perception of a scene"),
+    "Product Design": ("how a user's goal differs from the interface control used to reach it", "how progressive disclosure and error prevention trade simplicity for discoverability"),
+}
+
+LEVEL_INSTRUCTIONS = {
+    "foundation": "Assume no prior study. Define every necessary term in place, use one familiar example, and teach a single causal chain without unexplained notation.",
+    "intermediate": "Briefly reconnect to the earlier foundation, then trace named components and intermediate steps. Explain one practical constraint and vary one input in the example.",
+    "advanced": "Build on the path's earlier mechanisms. Compare competing explanations or designs, test assumptions and edge cases, and justify a tradeoff with a worked example. Explain notation and avoid jargon as a substitute for reasoning.",
+}
+LEVEL_LABELS = {"foundation": "Foundations", "intermediate": "In depth", "advanced": "Advanced"}
+
+
+def topic_learning_path(topic):
+    foundation, capstone = TOPIC_PATH_BOOKENDS[topic]
+    mechanisms = TOPIC_SUBTOPICS[topic]
+    if topic == "Artificial Intelligence":
+        # Tokens and embeddings precede attention; serving and adaptation follow.
+        mechanisms = (mechanisms[2], "how word embeddings represent tokens as learned numeric vectors",
+                      mechanisms[0], mechanisms[1], mechanisms[5], mechanisms[3],
+                      mechanisms[4], mechanisms[6], mechanisms[7], mechanisms[8], mechanisms[9])
+    entries = [("foundation", foundation)] + [("intermediate", subject) for subject in mechanisms] + [("advanced", capstone)]
+    if topic == "Artificial Intelligence":
+        entries = [("foundation" if index < 3 else "advanced" if index >= 6 else level, subject)
+                   for index, (level, subject) in enumerate(entries)]
+    return tuple({"level": level, "subTopic": subject} for level, subject in entries)
+
+
+if set(TOPIC_PATH_BOOKENDS) != set(BASE_TOPICS):
+    raise RuntimeError("Every generated topic must have a foundation and an advanced capstone")

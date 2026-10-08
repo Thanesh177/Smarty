@@ -75,7 +75,19 @@ export function getLearningContext(post = {}, fallbackId = '') {
     takeaway: findSection('Final takeaway', 'Remember this', 'Key takeaway'),
     slug: String(post.slug || '').trim(),
     nextGuides: readTopicValues(post.nextGuides).map(normalizeLearningTopic),
+    learningPathId: String(post.learningPathId || '').slice(0, 100),
+    learningLevel: ['foundation', 'intermediate', 'advanced'].includes(post.learningLevel) ? post.learningLevel : '',
+    learningOrder: Number.isInteger(Number(post.learningOrder)) && Number(post.learningOrder) > 0 ? Math.min(1000, Number(post.learningOrder)) : 0,
+    learningTotalSteps: Number.isInteger(Number(post.learningTotalSteps)) && Number(post.learningTotalSteps) > 0 ? Math.min(1000, Number(post.learningTotalSteps)) : 0,
+    prerequisiteSubject: String(post.prerequisiteSubject || '').slice(0, 300),
+    previousLearningPostId: String(post.previousLearningPostId || '').slice(0, 120),
+    nextLearningPostId: String(post.nextLearningPostId || '').slice(0, 120),
+    nextLearningSubject: String(post.nextLearningSubject || '').slice(0, 300),
   };
+}
+
+export function getLearningLevelLabel(context) {
+  return ({ foundation: 'Foundations', intermediate: 'In depth', advanced: 'Advanced' })[context?.learningLevel] || '';
 }
 
 export function getRelatedLearningTopics(post = {}, limit = 3) {
@@ -168,7 +180,9 @@ function writeProgress(postId, userId, progress, context = {}) {
   // Store a small reading history, never a full feed or another user's data.
   if (context.title || context.focus) {
     next.context = { postId: String(postId), title: String(context.title || context.focus).slice(0, 240),
-      focus: String(context.focus || context.title).slice(0, 240), topic: String(context.topic || 'General Knowledge').slice(0, 120) };
+      focus: String(context.focus || context.title).slice(0, 240), topic: String(context.topic || 'General Knowledge').slice(0, 120),
+      ...Object.fromEntries(['learningPathId', 'learningLevel', 'learningOrder', 'learningTotalSteps',
+        'prerequisiteSubject', 'previousLearningPostId', 'nextLearningPostId', 'nextLearningSubject'].map((key) => [key, getLearningContext(context)[key]])) };
   }
   try {
     localStorage.setItem(getLearningProgressKey(postId, userId), JSON.stringify(next));
@@ -306,6 +320,10 @@ export function selectNextLessons(posts, context, library = [], limit = 3) {
     ) return [];
     const sameTopic = normalizeLearningTopic(candidate.topic) === normalizeLearningTopic(context.topic);
     if (!sameTopic && !related.has(normalizeLearningTopic(candidate.topic))) return [];
+    const samePath = sameTopic && context.learningPathId && context.learningPathId === candidate.learningPathId;
+    // Suggest the adjacent published step, not a later hard lesson that happens
+    // to share many words. Learners can still choose any lesson in the library.
+    if (samePath && context.learningOrder && candidate.learningOrder !== context.learningOrder + 1) return [];
     const candidateTerms = uniqueConnectionTerms(candidate);
     const sharedFocusTerms = [...new Set(getConnectionTerms(
       `${candidate.focus} ${candidate.title} ${candidate.contentAngle} ${candidate.objective}`,
@@ -317,7 +335,8 @@ export function selectNextLessons(posts, context, library = [], limit = 3) {
     const overlap = sharedTerms.length;
     const termLabel = joinConnectionTerms(sharedTerms);
     const candidateKey = lessonKey(candidate.slug || candidate.postId);
-    const explicitNext = authoredNext.has(candidateKey);
+    const explicitNext = authoredNext.has(candidateKey) || candidate.postId === context.nextLearningPostId ||
+      Boolean(samePath && candidate.learningOrder === context.learningOrder + 1);
     const preview = getLessonOutcome(candidate);
     const pathType = explicitNext ? 'sequence' : sameTopic && overlap ? 'deepen' : sameTopic ? 'compare' : 'transfer';
     const reason = pathType === 'sequence'

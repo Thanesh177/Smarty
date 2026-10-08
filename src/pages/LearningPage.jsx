@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { postApi } from '../api/client';
 import useLearningLibrary from '../hooks/useLearningLibrary';
 import { LEARNING_GUIDES } from '../data/learningGuides';
-import { getLearningContext, getLearningNextStep, getLearningQuizLocation, getRelatedLearningTopics, normalizeLearningTopic } from '../lib/learningJourney';
+import { getLearningContext, getLearningLevelLabel, getLearningNextStep, getLearningQuizLocation, getRelatedLearningTopics, normalizeLearningTopic } from '../lib/learningJourney';
 import './LearningPage.css';
 
 function LessonLink({ post, progress, index }) {
@@ -14,9 +14,9 @@ function LessonLink({ post, progress, index }) {
   const minutes = Math.max(2, Math.ceil((context.body + (post.aiDetailedExplanation || '')).split(/\s+/).length / 180));
   return <article className="learn-lesson">
     <span className="learn-lesson-number" aria-hidden="true">{progress?.challenge ? <Check size={17} /> : String(index + 1).padStart(2, '0')}</span>
-    <div className="learn-lesson-content"><small>{context.topic} · About {minutes} min{post.isLearningGuide ? ' · Smarty guide' : ''}</small>
+    <div className="learn-lesson-content"><small>{context.topic}{getLearningLevelLabel(context) && ` · ${getLearningLevelLabel(context)} · Step ${context.learningOrder}`} · About {minutes} min{post.isLearningGuide ? ' · Smarty guide' : ''}</small>
       <Link className="learn-lesson-open" to={'/post-ai/' + encodeURIComponent(context.postId)} state={{ post, creatorName: post.creatorName || post.author || 'Smarty creator' }}>
-        <h3>{context.title}</h3><p>{post.objective || context.body.slice(0, 150)}</p>
+        <h3>{context.title}</h3><p>{context.objective || context.body.slice(0, 150)}</p>
         <span className="learn-lesson-action">{progress?.challenge ? 'Revisit the lesson' : progress ? 'Continue reading' : 'Start learning'} <ArrowRight size={14} /></span>
       </Link>
       {progress && <div className="learn-lesson-footer">
@@ -77,6 +77,13 @@ export default function LearningPage() {
       if (filter === 'started' && (!byId.has(context.postId) || byId.get(context.postId).challenge)) return false;
       if (filter === 'completed' && !byId.get(context.postId)?.challenge) return false;
       return (context.title + ' ' + context.focus + ' ' + context.body).toLowerCase().includes(search.trim().toLowerCase());
+    }).sort((a, b) => {
+      if (!topic) return 0;
+      const first = getLearningContext(a), second = getLearningContext(b);
+      if (first.learningPathId && first.learningPathId === second.learningPathId) return first.learningOrder - second.learningOrder;
+      // Keep complete generated sequences together; untagged older reads retain
+      // their original order and remain available instead of inventing a level.
+      return Boolean(second.learningPathId) - Boolean(first.learningPathId);
     });
   }, [postsQuery.data, topic, filter, byId, search]);
   const due = library.filter((item) => item.nextReviewAt && Date.parse(item.nextReviewAt) <= Date.now());

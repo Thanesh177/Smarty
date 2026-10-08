@@ -17,6 +17,9 @@ import UniversalSearch from './components/UniversalSearch';
 import PageTransition from './components/PageTransition';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
+import ReminderPopup from './components/ReminderPopup';
+import useDailyReminder from './hooks/useDailyReminder';
+import { nativeNotificationRequest, supportsNativeReminders } from './lib/nativeNotifications';
 import { ActionConfirmationProvider } from './components/ActionConfirmation';
 import {
   CircleUserRound,
@@ -37,6 +40,10 @@ import {
   getNotificationDecision,
   getNotificationFingerprint,
   loadNotificationPreferences,
+  activateNotificationPreferences,
+  getNotificationPath,
+  normalizeUnreadCount,
+  createNotificationDeduper,
   syncNotificationPreferencesToWorker,
 } from './lib/notificationPreferences';
 
@@ -237,6 +244,7 @@ function getUserSocketId(user) {
   return (
     user?.userId ||
     user?.sub ||
+    user?.id ||
     user?.username ||
     user?.email ||
     ''
@@ -285,43 +293,17 @@ function getUnreadFromChatsPayload(payload) {
       : [];
 
   return chats.reduce((sum, chat) => {
-    const count = Number(chat?.unreadCount || 0);
-    return sum + (Number.isFinite(count) ? Math.max(0, count) : 0);
+    return sum + normalizeUnreadCount(chat?.unreadCount);
   }, 0);
-}
-
-function ReminderPopup({ title, body, visible, onClose, onClick }) {
-  useEffect(() => {
-    if (!visible) return undefined;
-
-    const timer = window.setTimeout(() => {
-      onClose?.();
-    }, 4200);
-
-    return () => window.clearTimeout(timer);
-  }, [visible, onClose]);
-
-  return (
-    <button
-      type="button"
-      className={`reminder-popup ${visible ? 'show' : ''}`}
-      onClick={onClick}
-      aria-live="polite"
-    >
-      <div className="reminder-popup-card">
-        <strong>{title}</strong>
-        <p>{body}</p>
-      </div>
-    </button>
-  );
 }
 
 function Layout() {
   const queryClient = useQueryClient();
-  const { user, logout } = useAuth();
+  const { user, logout, loading: authLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const currentUserId = getUserSocketId(user);
+  useDailyReminder(currentUserId, authLoading);
   const unreadStorageKey = useMemo(
     () => getUserScopedStorageKey('smartyChatUnreadCount', currentUserId),
     [currentUserId]
@@ -336,7 +318,7 @@ function Layout() {
 
   const cachedUnread = useMemo(() => {
     try {
-      return Number(localStorage.getItem(unreadStorageKey) || 0);
+      return normalizeUnreadCount(localStorage.getItem(unreadStorageKey));
     } catch {
       return 0;
     }
@@ -373,7 +355,7 @@ function Layout() {
   const unreadRefreshInFlightRef = useRef(false);
   const unreadRefreshTimerRef = useRef(null);
   const seenBadgeMessageIdsRef = useRef(new Set());
-  const recentNotificationIdsRef = useRef(new Set());
+  const recentNotificationIdsRef = useRef(createNotificationDeduper());
   const globalPullStartYRef = useRef(0);
   const globalPullDistanceRef = useRef(0);
   const globalPullAtTopRef = useRef(false);
@@ -651,7 +633,7 @@ useEffect(() => {
     const userId = currentUserId;
 
     const applyUnread = (value) => {
-      const nextUnread = Math.max(0, Number(value || 0));
+      const nextUnread = normalizeUnreadCount(value);
       setTotalUnread(nextUnread);
 
       try {
@@ -716,8 +698,7 @@ useEffect(() => {
     };
 
     try {
-      const storedUnread = Number(localStorage.getItem(unreadStorageKey) || 0);
-      setTotalUnread(Math.max(0, storedUnread));
+      setTotalUnread(normalizeUnreadCount(localStorage.getItem(unreadStorageKey)));
     } catch {
       setTotalUnread(0);
     }
@@ -732,7 +713,8 @@ useEffect(() => {
       if (data?.type !== 'newMessage' || !data?.message) return;
 
       const senderId = data.message.senderId || data.message.userId || '';
-      const activeChatId = localStorage.getItem(activeChatStorageKey) || '';
+      let activeChatId = '';
+      try { activeChatId = localStorage.getItem(activeChatStorageKey) || ''; } catch { /* Storage may be blocked. */ }
       const messageChatId = data.message.chatId || '';
       const messageId = String(
         data.message.messageId ||
@@ -754,7 +736,7 @@ useEffect(() => {
 
       if (senderId && senderId === userId) return;
 
-      if (activeChatId && messageChatId && activeChatId === messageChatId) {
+      if (document.visibilityState === 'visible' && activeChatId && messageChatId && activeChatId === messageChatId) {
         scheduleUnreadRefresh();
         return;
       }
@@ -834,7 +816,8 @@ useEffect(() => {
 
   useEffect(() => {
     const handler = (event) => {
-      const nextUnread = Math.max(0, Number(event.detail?.totalUnread || 0));
+      if (!currentUserId) return;
+      const nextUnread = normalizeUnreadCount(event.detail?.totalUnread);
 
       setTotalUnread(nextUnread);
 
@@ -850,9 +833,13 @@ useEffect(() => {
     return () => {
       window.removeEventListener('chat-unread-update', handler);
     };
-  }, [unreadStorageKey]);
+  }, [currentUserId, unreadStorageKey]);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (supportsNativeReminders()) {
+      nativeNotificationRequest('badge', { count: currentUserId ? totalUnread : 0 }).catch(() => {});
+    }
     if (typeof navigator === 'undefined' || !('setAppBadge' in navigator)) return;
 
     if (totalUnread > 0) {
@@ -860,7 +847,7 @@ useEffect(() => {
     } else if ('clearAppBadge' in navigator) {
       navigator.clearAppBadge().catch(() => {});
     }
-  }, [totalUnread]);
+  }, [authLoading, currentUserId, totalUnread]);
 
   // Push notifications after PWA install
   useEffect(() => {
@@ -886,18 +873,24 @@ useEffect(() => {
   }, [user]);
 
   useEffect(() => {
+    if (authLoading) return;
     const syncPreferences = (event) => {
-      const preferences = event?.detail || loadNotificationPreferences(currentUserId);
-      syncNotificationPreferencesToWorker(preferences);
+      const preferences = activateNotificationPreferences(currentUserId);
+      syncNotificationPreferencesToWorker(preferences, currentUserId);
     };
 
     syncPreferences();
+    setPopupNotification(null);
+    recentNotificationIdsRef.current.clear();
     window.addEventListener('smarty-notification-preferences-changed', syncPreferences);
+    const syncStorage = event => { if (event.key?.startsWith('smarty_notification_preferences_v1:')) syncPreferences(); };
+    window.addEventListener('storage', syncStorage);
 
     return () => {
       window.removeEventListener('smarty-notification-preferences-changed', syncPreferences);
+      window.removeEventListener('storage', syncStorage);
     };
-  }, [currentUserId]);
+  }, [currentUserId, authLoading]);
 
   // Foreground push listener
 useEffect(() => {
@@ -954,7 +947,10 @@ useEffect(() => {
 
   useEffect(() => {
     const handleSmartyNotification = (event) => {
+      if (!currentUserId) return;
       const detail = event.detail || {};
+      const recipient = detail.userId || detail.rawPayload?.data?.userId;
+      if (recipient && String(recipient) !== currentUserId) return;
       const notificationType = String(detail.type || '').toLowerCase();
 
       if (
@@ -970,29 +966,26 @@ useEffect(() => {
 
       const rawMessageId = getNotificationFingerprint(detail);
 
-      if (rawMessageId) {
-        if (recentNotificationIdsRef.current.has(rawMessageId)) return;
-
-        recentNotificationIdsRef.current.add(rawMessageId);
-
-        window.setTimeout(() => {
-          recentNotificationIdsRef.current.delete(rawMessageId);
-        }, 60_000);
-      }
+      if (rawMessageId && !recentNotificationIdsRef.current.claim(rawMessageId)) return;
 
       setPopupNotification({
         title: detail.title || 'Smarty',
         body: getNotificationBody(detail, preferences),
-        url: detail.url || '/',
+        url: getNotificationPath(detail.url, window.location.origin),
       });
     };
 
     window.addEventListener('smarty-notification', handleSmartyNotification);
+    const openNotification = event => {
+      if (currentUserId) navigate(getNotificationPath(event.detail?.url, window.location.origin));
+    };
+    window.addEventListener('smarty-notification-open', openNotification);
 
     return () => {
       window.removeEventListener('smarty-notification', handleSmartyNotification);
+      window.removeEventListener('smarty-notification-open', openNotification);
     };
-  }, [currentUserId]);
+  }, [currentUserId, navigate]);
 
 
 

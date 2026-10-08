@@ -4758,3 +4758,12 @@
     transition: none !important;
   }
 }
+/* Curriculum metadata stays quiet; older and user-authored posts are unlabelled. */
+.snap-post .post-content .post-learning-stage {
+  display: block;
+  margin: 0 0 12px;
+  color: var(--ui-muted, #93a1b4);
+  font-size: .8125rem;
+  font-weight: 500;
+  line-height: 1.6;
+}

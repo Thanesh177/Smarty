@@ -368,6 +368,8 @@
 .app-shell .content .learning-journey .learning-next-card-copy > strong { font-size: 1.25rem; line-height: 1.35; }
 .learning-alternatives { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 12px; padding: 8px 0; border: 0; color: var(--ui-accent); background: transparent; font: inherit; font-size: .875rem; cursor: pointer; }
 .learning-alternatives[aria-expanded='true'] svg { transform: rotate(-90deg); }
+.learning-path-meta { color: var(--ui-muted, #93a1b4); font-size: .8125rem; line-height: 1.6; }
+.learning-prerequisite-link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-bottom: 12px; color: var(--ui-accent, #9dc7ee); font-size: .875rem; }
 @media (max-width: 600px) {
   .app-shell .content .learning-journey .learning-next-detail { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .app-shell .content .learning-journey .learning-journey-head { flex-direction: column; gap: 16px; }

@@ -1,7 +1,8 @@
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { getLearningLibrary, getLearningProgressKey, readLearningProgress, rememberLearningLesson,
-  markLearningProgress, saveLearningReflection, recordLearningQuiz, selectNextLessons } from './learningJourney.js';
+  markLearningProgress, saveLearningReflection, recordLearningQuiz, selectNextLessons,
+  getLearningContext, getLearningLevelLabel } from './learningJourney.js';
 import { LEARNING_GUIDES } from '../data/learningGuides.js';
 
 const storage = new Map();
@@ -88,4 +89,41 @@ test('valid JSON with corrupt field types is normalized before rendering', () =>
   assert.equal(progress.lastScore, null);
   assert.equal(progress.context, null);
   assert.equal(progress.nextReviewAt, '');
+});
+
+test('ordered curriculum recommends the adjacent lesson, not a distant advanced match', () => {
+  const current = getLearningContext({ id: 'step-1', topic: 'Artificial Intelligence', subTopic: 'model tokens',
+    learningPathId: 'ai-v1', learningOrder: 1, learningLevel: 'foundation', nextLearningPostId: 'step-2' });
+  const posts = [
+    { id: 'step-5', topic: current.topic, subTopic: 'advanced model token optimization', learningPathId: 'ai-v1', learningOrder: 5 },
+    { id: 'step-2', topic: current.topic, subTopic: 'embedding vectors', learningPathId: 'ai-v1', learningOrder: 2 },
+    { id: 'old', topic: current.topic, subTopic: 'before tokens', learningPathId: 'ai-v1', learningOrder: 0 },
+  ];
+  const selected = selectNextLessons(posts, current);
+  assert.deepEqual(selected.map((item) => item.post.id), ['step-2']);
+  assert.equal(selected[0].pathType, 'sequence');
+  assert.equal(getLearningLevelLabel(current), 'Foundations');
+});
+
+test('curriculum stage and continuation survive saved history, separated by account', () => {
+  const context = getLearningContext({ id: 'step-2', topic: 'Physics', title: 'Energy and motion',
+    learningPathId: 'physics-v1', learningOrder: 2, learningTotalSteps: 7, learningLevel: 'intermediate',
+    previousLearningPostId: 'step-1', nextLearningPostId: 'step-3', prerequisiteSubject: 'net force' });
+  rememberLearningLesson(context, 'learner');
+  assert.equal(getLearningLibrary('learner')[0].context.learningOrder, 2);
+  assert.equal(getLearningLibrary('learner')[0].context.nextLearningPostId, 'step-3');
+  assert.deepEqual(getLearningLibrary('another'), []);
+  assert.equal(getLearningLevelLabel(context), 'In depth');
+});
+
+test('older posts get no invented difficulty and malformed order stays safe', () => {
+  assert.equal(getLearningLevelLabel(getLearningContext({ id: 'old' })), '');
+  assert.equal(getLearningContext({ learningLevel: 'expert-certified', learningOrder: 'invalid' }).learningOrder, 0);
+  assert.equal(getLearningContext({ learningOrder: -2 }).learningOrder, 0);
+  assert.equal(getLearningContext({ learningOrder: 2.5 }).learningOrder, 0);
+});
+
+test('unpublished next step cannot create a broken recommendation', () => {
+  const current = getLearningContext({ id: 'step-1', topic: 'Physics', learningPathId: 'physics-v1', learningOrder: 1, nextLearningPostId: 'not-published' });
+  assert.deepEqual(selectNextLessons([{ id: 'step-4', topic: 'Physics', subTopic: 'more physics', learningPathId: 'physics-v1', learningOrder: 4 }], current), []);
 });

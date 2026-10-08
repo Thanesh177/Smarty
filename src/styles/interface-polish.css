@@ -147,3 +147,17 @@ body .app-shell .topbar.glass-topbar .brand-actions {
   .universal-search-layer .universal-search-footer { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .feed-topic-picker { animation: none; } .feed-topic-trigger > svg { transition: none; } }
+/* Notification settings use ordinary gutters behind the floating navigation. */
+.app-shell .content .notification-settings-page .notification-toggle {
+  background: transparent !important;
+}
+.app-shell .content .notification-settings-page {
+  padding-inline: var(--ui-gutter) !important;
+}
+.app-shell .content .notification-settings-page .notification-save-bar { position: static; }
+@media (max-width: 900px) {
+  /* Scroll the final controls above the rail instead of narrowing every row. */
+  .app-shell .content .notification-settings-page {
+    padding-bottom: calc(300px + env(safe-area-inset-bottom)) !important;
+  }
+}

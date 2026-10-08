@@ -33,3 +33,37 @@ test('account switch prevents pending old reads from refilling the cache', async
   await old;
   assert.equal(await cache.get('a', () => 'unexpected'), 'new account');
 });
+
+test('each reader can cancel without cancelling a shared load', async () => {
+  const cache = createRequestCache();
+  let finish, calls = 0;
+  const load = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+  const controller = new AbortController();
+  const one = cache.get('shared', load, 60000, { signal: controller.signal });
+  const two = cache.get('shared', load);
+  await Promise.resolve(); controller.abort();
+  await assert.rejects(one, { name: 'AbortError' });
+  finish('book'); assert.equal(await two, 'book'); assert.equal(calls, 1);
+  assert.equal(await cache.get('shared', load), 'book');
+});
+test('force refresh coalesces, deletes invalidate late results, and reads promote LRU entries', async () => {
+  const cache = createRequestCache({ maxEntries: 2 });
+  let calls = 0; const load = () => ++calls;
+  await cache.get('a', load); await cache.get('b', load); await cache.get('a', load); await cache.get('c', load);
+  assert.equal(await cache.get('a', load), 1);
+  assert.equal(await cache.get('b', load), 4);
+  const values = await Promise.all([cache.get('b', load, 100, { forceRefresh: true }), cache.get('b', load, 100, { forceRefresh: true })]);
+  assert.deepEqual(values, [5, 5]);
+  let finish; const late = cache.get('late', () => new Promise(resolve => { finish = resolve; }));
+  await Promise.resolve(); cache.delete('late'); finish('old'); await late;
+  assert.equal(await cache.get('late', () => 'new'), 'new');
+});
+test('zero TTL coalesces only concurrent reads and invalid bounds never hang', async () => {
+  const cache = createRequestCache({ maxEntries: 0 });
+  let calls = 0; const load = () => ++calls;
+  assert.deepEqual(await Promise.all([cache.get('a', load, 0), cache.get('a', load, 0)]), [1, 1]);
+  assert.equal(await cache.get('a', load, 0), 2);
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(cache.get('none', load, 0, { signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(calls, 2);
+});

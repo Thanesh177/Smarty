@@ -1,213 +1,101 @@
-import {
-  getUserScope,
-  getUserScopedStorageKey,
-} from './userScopedStorage.js';
+import '../../public/notification-policy.js';
+import { getUserScope, getUserScopedStorageKey } from './userScopedStorage.js';
 
+const policy = globalThis.SmartyNotificationPolicy;
 const STORAGE_KEY = 'smarty_notification_preferences_v1';
 const ACTIVE_STORAGE_KEY = 'smarty_active_notification_preferences_v1';
+const memory = new Map();
+let active = { ...policy.normalize(), enabled: false, userScope: 'anonymous' };
 
-export const DEFAULT_NOTIFICATION_PREFERENCES = Object.freeze({
-  enabled: true,
-  smartDelivery: true,
-  showPreviews: true,
-  quietHours: {
-    enabled: true,
-    start: '22:00',
-    end: '07:30',
-  },
-  categories: {
-    messages: true,
-    social: true,
-    learning: true,
-    news: true,
-    product: false,
-  },
-});
+export const DEFAULT_NOTIFICATION_PREFERENCES = policy.defaults;
+export const normalizeNotificationPreferences = policy.normalize;
+export const classifyNotification = policy.classify;
+export const isNotificationQuietTime = policy.quiet;
+export const getNotificationDecision = policy.decision;
+export const getNotificationBody = policy.body;
+export const getNotificationPath = policy.safePath;
 
-const CATEGORY_MATCHERS = {
-  safety: ['security', 'safety', 'account', 'moderation', 'password', 'login'],
-  messages: ['chat', 'message', 'direct_message', 'dm', 'room_message'],
-  social: ['follow', 'like', 'comment', 'mention', 'reply', 'invite', 'social'],
-  learning: ['quiz', 'lesson', 'learning', 'progress', 'streak', 'topic', 'review'],
-  news: ['news', 'briefing', 'digest', 'headline'],
-};
-
-function cleanTime(value, fallback) {
-  return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ''))
-    ? String(value)
-    : fallback;
-}
-
-export function normalizeNotificationPreferences(value = {}) {
-  const categories = value?.categories || {};
-  const quietHours = value?.quietHours || {};
-
-  return {
-    enabled: value.enabled !== false,
-    smartDelivery: value.smartDelivery !== false,
-    showPreviews: value.showPreviews !== false,
-    quietHours: {
-      enabled: quietHours.enabled !== false,
-      start: cleanTime(quietHours.start, DEFAULT_NOTIFICATION_PREFERENCES.quietHours.start),
-      end: cleanTime(quietHours.end, DEFAULT_NOTIFICATION_PREFERENCES.quietHours.end),
-    },
-    categories: Object.fromEntries(
-      Object.entries(DEFAULT_NOTIFICATION_PREFERENCES.categories).map(([key, defaultValue]) => [
-        key,
-        typeof categories[key] === 'boolean' ? categories[key] : defaultValue,
-      ])
-    ),
-  };
+function remember(key, raw, value) {
+  if (!memory.has(key) && memory.size >= 8) memory.delete(memory.keys().next().value);
+  memory.set(key, { raw, value });
 }
 
 export function loadNotificationPreferences(userOrId) {
+  const key = getUserScopedStorageKey(STORAGE_KEY, userOrId);
   try {
-    const key = getUserScopedStorageKey(STORAGE_KEY, userOrId);
-    const stored = JSON.parse(localStorage.getItem(key) || 'null');
-    return normalizeNotificationPreferences(stored || {});
-  } catch {
-    return normalizeNotificationPreferences();
-  }
+    const raw = localStorage.getItem(key), cached = memory.get(key);
+    if (cached?.raw === raw) return cached.value;
+    const value = policy.normalize(JSON.parse(raw || 'null'));
+    remember(key, raw, value);
+    return value;
+  } catch { return memory.get(key)?.value || policy.normalize(); }
 }
 
-export function loadActiveNotificationPreferences() {
+export function loadActiveNotificationPreferences() { return active; }
+
+export async function syncNotificationPreferencesToWorker(preferences, userOrId) {
+  if (typeof navigator === 'undefined' || !navigator.serviceWorker) return;
+  const message = { type: 'SMARTY_NOTIFICATION_PREFERENCES', preferences: {
+    ...policy.normalize(preferences), userScope: userOrId == null ? active.userScope : getUserScope(userOrId),
+  } };
+  const workers = new Set([navigator.serviceWorker.controller]);
   try {
-    const stored = JSON.parse(localStorage.getItem(ACTIVE_STORAGE_KEY) || 'null');
-    return normalizeNotificationPreferences(stored || {});
-  } catch {
-    return normalizeNotificationPreferences();
-  }
+    // ready can wait forever on a first visit. Sync must not block app startup.
+    const registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+    workers.add(registration?.active); workers.add(registration?.waiting);
+  } catch { /* WebView/private browsing may not expose a registration. */ }
+  if (message.preferences.userScope !== active.userScope ||
+      JSON.stringify(policy.normalize(preferences)) !== JSON.stringify(policy.normalize(active))) return;
+  workers.forEach(worker => { try { worker?.postMessage(message); } catch { /* Best effort. */ } });
 }
 
-export async function syncNotificationPreferencesToWorker(preferences) {
-  if (!('serviceWorker' in navigator)) return;
-
-  const message = {
-    type: 'SMARTY_NOTIFICATION_PREFERENCES',
-    preferences: normalizeNotificationPreferences(preferences),
-  };
-
-  navigator.serviceWorker.controller?.postMessage(message);
-
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    registration.active?.postMessage(message);
-    registration.waiting?.postMessage(message);
-  } catch {
-    // The worker may not be installed until notifications are enabled.
-  }
+export function activateNotificationPreferences(userOrId) {
+  const userScope = getUserScope(userOrId);
+  active = { ...loadNotificationPreferences(userOrId), userScope };
+  if (userScope === 'anonymous') active.enabled = false;
+  try { localStorage.setItem(ACTIVE_STORAGE_KEY, JSON.stringify(active)); } catch { /* Memory still works. */ }
+  return active;
 }
 
 export function saveNotificationPreferences(userOrId, value) {
-  const preferences = normalizeNotificationPreferences(value);
-
-  try {
-    const key = getUserScopedStorageKey(STORAGE_KEY, userOrId);
-    localStorage.setItem(key, JSON.stringify(preferences));
-    localStorage.setItem(
-      ACTIVE_STORAGE_KEY,
-      JSON.stringify({
-        ...preferences,
-        userScope: getUserScope(userOrId),
-        updatedAt: new Date().toISOString(),
-      })
-    );
-  } catch {
-    // Delivery still works with the in-memory defaults when storage is blocked.
+  const preferences = policy.normalize(value), key = getUserScopedStorageKey(STORAGE_KEY, userOrId);
+  const raw = JSON.stringify(preferences);
+  try { localStorage.setItem(key, raw); remember(key, raw, preferences); }
+  catch {
+    let previous = null;
+    try { previous = localStorage.getItem(key); } catch { /* Storage fully unavailable. */ }
+    remember(key, previous, preferences);
   }
-
-  syncNotificationPreferencesToWorker(preferences);
-  window.dispatchEvent(
-    new CustomEvent('smarty-notification-preferences-changed', {
-      detail: preferences,
-    })
-  );
-
+  activateNotificationPreferences(userOrId);
+  syncNotificationPreferencesToWorker(active, userOrId);
+  window.dispatchEvent(new CustomEvent('smarty-notification-preferences-changed', { detail: preferences }));
   return preferences;
 }
 
-export function classifyNotification(detail = {}) {
-  const searchable = [
-    detail.type,
-    detail.category,
-    detail.event,
-    detail.title,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-
-  for (const [category, terms] of Object.entries(CATEGORY_MATCHERS)) {
-    if (terms.some((term) => searchable.includes(term))) return category;
-  }
-
-  return 'product';
-}
-
-function minutesFromMidnight(value) {
-  const [hours, minutes] = String(value).split(':').map(Number);
-  return hours * 60 + minutes;
-}
-
-export function isNotificationQuietTime(preferences, now = new Date()) {
-  const quietHours = normalizeNotificationPreferences(preferences).quietHours;
-  if (!quietHours.enabled) return false;
-
-  const current = now.getHours() * 60 + now.getMinutes();
-  const start = minutesFromMidnight(quietHours.start);
-  const end = minutesFromMidnight(quietHours.end);
-
-  if (start === end) return true;
-  if (start < end) return current >= start && current < end;
-  return current >= start || current < end;
-}
-
-export function getNotificationDecision(detail, preferences, now = new Date()) {
-  const normalized = normalizeNotificationPreferences(preferences);
-  const category = classifyNotification(detail);
-  const isImmediate = category === 'safety' || category === 'messages';
-
-  if (!normalized.enabled) {
-    return { deliver: false, reason: 'disabled', category };
-  }
-
-  if (category !== 'safety' && normalized.categories[category] === false) {
-    return { deliver: false, reason: 'category-disabled', category };
-  }
-
-  if (
-    normalized.smartDelivery &&
-    !isImmediate &&
-    isNotificationQuietTime(normalized, now)
-  ) {
-    return { deliver: false, reason: 'quiet-hours', category };
-  }
-
-  return { deliver: true, reason: isImmediate ? 'immediate' : 'allowed', category };
-}
-
 export function getNotificationFingerprint(detail = {}) {
-  const explicitId =
-    detail.messageId ||
-    detail.notificationId ||
-    detail.rawPayload?.messageId ||
-    detail.rawPayload?.data?.messageId ||
-    detail.rawPayload?.data?.notificationId;
-
-  if (explicitId) return String(explicitId);
-
-  return [detail.type, detail.title, detail.body, detail.url]
-    .map((value) => String(value || '').trim().toLowerCase())
-    .join('|');
+  const explicit = detail.messageId || detail.notificationId || detail.rawPayload?.messageId ||
+    detail.rawPayload?.data?.messageId || detail.rawPayload?.data?.notificationId;
+  return explicit ? String(explicit) : [detail.type, detail.title, detail.body, detail.url]
+    .map(value => String(value || '').trim().toLowerCase()).join('|');
 }
 
-export function getNotificationBody(detail, preferences) {
-  const normalized = normalizeNotificationPreferences(preferences);
-  const category = classifyNotification(detail);
+export function normalizeUnreadCount(value) {
+  const count = Number(value);
+  return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+}
 
-  if (!normalized.showPreviews && category === 'messages') {
-    return 'You have a new message.';
-  }
-
-  return detail?.body || 'You have a new update.';
+// Bounded deduplication without one timeout per alert. Reset on account change.
+export function createNotificationDeduper({ now = Date.now, ttlMs = 60000, limit = 128 } = {}) {
+  const seen = new Map();
+  return {
+    clear: () => seen.clear(),
+    claim(id) {
+      const time = now();
+      for (const [key, expiry] of seen) if (expiry <= time) seen.delete(key);
+      if (!id || seen.has(id)) return false;
+      while (seen.size >= Math.max(1, limit)) seen.delete(seen.keys().next().value);
+      seen.set(id, time + ttlMs);
+      return true;
+    },
+  };
 }

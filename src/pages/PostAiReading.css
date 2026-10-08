@@ -26,6 +26,10 @@
 .app-shell .content .is-reading-layout .post-ai-section-head h2 { margin: 5px 0 0; font-size: clamp(1.2rem, 2vw, 1.55rem); line-height: 1.35; }
 .is-reading-layout .post-ai-section-head small { padding: 6px 0; background: none; font-size: 11px; white-space: normal; text-align: right; }
 .is-reading-layout .post-ai-explanation-paragraphs { margin-top: 16px; }
+.is-reading-layout .post-ai-lesson-opening { display: grid; gap: 18px; max-width: 86ch; margin-block: 24px; }
+.app-shell .content .post-ai-page.is-reading-layout .post-ai-lesson-opening :is(p, li) { font-size: clamp(1rem, 1.15vw, 1.1rem); line-height: 1.85; }
+.app-shell .content .post-ai-page.is-reading-layout .post-ai-lesson-opening > p:first-child { color: var(--ui-text); font-size: clamp(1.1rem, 1.4vw, 1.25rem); line-height: 1.75; }
+.is-reading-layout .post-ai-lesson-opening :is(ul, ol) { padding-left: 1.5em; }
 .app-shell .content .post-ai-page.is-reading-layout .post-ai-explanation-paragraphs .post-ai-text-section { padding-block: clamp(24px, 3vw, 36px); }
 .app-shell .content .post-ai-page.is-reading-layout .post-ai-explanation-paragraphs .post-ai-text-section h3 { margin-bottom: 18px; font-size: 16px; font-weight: 500; line-height: 1.4; }
 .is-reading-layout .post-ai-text-section-body { max-width: 86ch; min-width: 0; gap: 18px; }
@@ -45,11 +49,10 @@
   .app-shell .content .post-ai-page.is-reading-layout .post-ai-hero { grid-column: 1; grid-row: 2; }
   .app-shell .content .post-ai-page.is-reading-layout .post-study-objective { grid-column: 2; grid-row: 2; align-self: center; padding-block: 24px; }
   .app-shell .content .post-ai-page.is-reading-layout .post-ai-explanation-paragraphs .post-ai-text-section {
-    display: grid; grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
-    align-items: start; gap: clamp(24px, 3vw, 48px);
+    display: block; max-width: 86ch;
   }
   .app-shell .content .post-ai-page.is-reading-layout .post-ai-text-section-body :is(p, li) { max-width: none; }
-  .is-reading-layout .post-ai-text-section h3 { margin: 0; }
+  .is-reading-layout .post-ai-text-section h3 { margin: 0 0 18px; }
 }
 @media (max-width: 600px) {
   .is-reading-layout .post-ai-topline { grid-template-columns: 1fr auto; gap: 8px; }

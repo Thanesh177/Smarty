@@ -40,10 +40,6 @@ const queryClient = new QueryClient({
   },
 });
 
-if ('clearAppBadge' in navigator) {
-  navigator.clearAppBadge().catch(() => {});
-}
-
 // In-app browser + chunk-load recovery
 const reloadOnceForChunkFailure = () => {
   try {

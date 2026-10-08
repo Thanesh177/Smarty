@@ -2,6 +2,7 @@ import axios from 'axios';
 import { createRequestCache } from '../lib/requestCache';
 import { createNewsRequestCache } from '../lib/newsRequestCache';
 import { getLearningGuide } from '../data/learningGuides';
+import { DETAILED_EXPLANATION_VERSION } from '../lib/explanationFormat';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { endpoints } from './endpoints';
 import {
@@ -117,6 +118,9 @@ let cachedAuthTokenAt = 0;
 let pendingAuthTokenPromise = null;
 let authTokenGeneration = 0;
 const readCache = createRequestCache();
+// Bibliographic metadata is public; private shelves/notes never enter here.
+const bookMetadataCache = createRequestCache({ maxEntries: 24 });
+const storyTimelineCache = createRequestCache({ maxEntries: 16 });
 
 const resetAuthTokenCache = () => {
   readCache.clear();
@@ -128,6 +132,7 @@ const resetAuthTokenCache = () => {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('smarty:auth-changed', resetAuthTokenCache);
+  window.addEventListener('smarty-global-refresh', () => { readCache.clear(); bookMetadataCache.clear(); storyTimelineCache.clear(); });
 }
 
 const mockFeed = [];
@@ -522,16 +527,19 @@ const buildClientDailySummary = (articles, location) => {
 };
 
 const publicNewsCache = createNewsRequestCache();
+if (typeof window !== 'undefined') window.addEventListener('smarty-global-refresh', () => publicNewsCache.clear());
 
 export const newsApi = {
   async getStoryTimeline({ query, year = 'recent', month = 'all', signal } = {}) {
-    const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
-      params: { view: 'story', query, year, month }, signal, timeout: NEWS_API_TIMEOUT,
-    });
-    if (data?.kind !== 'story-timeline' || !Array.isArray(data.articles)) {
-      throw new Error('Story timelines are not available on this server yet. Please try again later.');
-    }
-    return data;
+    return storyTimelineCache.get(JSON.stringify([query, year, month]), async () => {
+      const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
+        params: { view: 'story', query, year, month }, timeout: NEWS_API_TIMEOUT,
+      });
+      if (data?.kind !== 'story-timeline' || !Array.isArray(data.articles)) {
+        throw new Error('Story timelines are not available on this server yet. Please try again later.');
+      }
+      return data;
+    }, year === 'recent' ? 60000 : 5 * 60000, { signal });
   },
   async getHackerNews(limit = 12, requestOptions = {}) {
     const { data: storyIds } = await axios.get(
@@ -1866,21 +1874,23 @@ export const readBooksApi = {
       throw new Error('Book ID is missing.');
     }
 
-    if (/^\d+$/.test(bookId)) {
+    return bookMetadataCache.get(bookId, async () => {
+      if (/^\d+$/.test(bookId)) {
+        const { data } = await axios.get(
+          `${GUTENDEX_BASE_URL}/books/${encodeURIComponent(bookId)}/`,
+          { timeout: API_TIMEOUT }
+        );
+
+        return this.normalizeGutendexBooks([data])[0] || data;
+      }
+
       const { data } = await axios.get(
-        `${GUTENDEX_BASE_URL}/books/${encodeURIComponent(bookId)}/`,
-        { timeout: API_TIMEOUT, signal }
+        `${OPENLIBRARY_BASE_URL}/works/${encodeURIComponent(bookId)}.json`,
+        { timeout: API_TIMEOUT }
       );
 
-      return this.normalizeGutendexBooks([data])[0] || data;
-    }
-
-    const { data } = await axios.get(
-      `${OPENLIBRARY_BASE_URL}/works/${encodeURIComponent(bookId)}.json`,
-      { timeout: API_TIMEOUT, signal }
-    );
-
-    return data;
+      return data;
+    }, 15 * 60000, { signal });
   },
 
   async getTextFromGutenberg(gutenbergId, { signal } = {}) {
@@ -2055,19 +2065,16 @@ async getFeed({ limit = 10, cursor = null, topic = null } = {}) {
     };
   }
 
-  const { data } = await api.get(endpoints.posts.feed, {
-    params: {
-      limit,
-      ...(cursor ? { cursor } : {}),
-      ...(topic ? { topic } : {}),
-    },
-  });
+  const params = { limit, ...(cursor ? { cursor } : {}), ...(topic ? { topic } : {}) };
+  return readCache.get(`feed:pending:${JSON.stringify(params)}`, async () => {
+    const { data } = await api.get(endpoints.posts.feed, { params });
 
-  return {
-    items: normalizeList(data),
-    nextCursor: data?.nextCursor || null,
-    count: data?.count || 0,
-  };
+    return {
+      items: normalizeList(data),
+      nextCursor: data?.nextCursor || null,
+      count: data?.count || 0,
+    };
+  }, 0);
 },
 
 async getCreatorPrivatePosts(userId) {
@@ -2119,7 +2126,7 @@ async getPostDetails(payload) {
     post: guide,
     explanation: guide.aiDetailedExplanation,
     aiDetailedExplanation: guide.aiDetailedExplanation,
-    aiDetailedExplanationVersion: 4,
+    aiDetailedExplanationVersion: DETAILED_EXPLANATION_VERSION,
     cached: true,
     persisted: true,
   };
@@ -2145,6 +2152,10 @@ async getPostDetails(payload) {
       topic: payload?.topic || '',
       subTopic: payload?.subTopic || payload?.subtopic || '',
       mode: 'detailed',
+    }, {
+      // The configured details integration allows 30 seconds. Let a first-time
+      // lesson finish rather than cutting it off at the ordinary 20-second limit.
+      timeout: Math.max(API_TIMEOUT, 35000),
     });
 
     const parsed = parseApiBody(data);
@@ -2589,6 +2600,9 @@ async reportUser(payload) {
   },
 
   async getChats() {
+    // Coalesce concurrent badge/chat-list reads, but never retain unread counts
+    // across a later refresh, mark-read, delete, or incoming message.
+    return readCache.get('chats:pending', async () => {
     const { data } = await api.get(endpoints.chat.list);
     const chats = normalizeList(data).map(normalizeChatProfile);
 
@@ -2608,6 +2622,7 @@ async reportUser(payload) {
     }
 
     return chats;
+    }, 0);
   },
 
   async getMessages(chatId) {

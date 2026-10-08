@@ -39,6 +39,7 @@ import FeedSkeleton from '../components/FeedSkeleton';
 import FeedHeader from '../components/FeedHeader';
 import FeedLearningHome from '../components/FeedLearningHome';
 import useFeed from '../hooks/useFeed';
+import { getLearningLevelLabel } from '../lib/learningJourney';
 import { useAuth } from '../contexts/AuthContext';
 import {
   MAIN_TOPICS,
@@ -827,6 +828,7 @@ const FeedPostCard = memo(function FeedPostCard({
           )}
         </div>
 
+        {getLearningLevelLabel(post) && <span className="post-learning-stage">{getLearningLevelLabel(post)}{Number.isInteger(Number(post.learningOrder)) && Number(post.learningOrder) > 0 ? ` · Lesson ${post.learningOrder}` : ''}</span>}
         <h1>{post.title}</h1>
         <p>{isTranslated && translatedText ? translatedText : post.body}</p>
 

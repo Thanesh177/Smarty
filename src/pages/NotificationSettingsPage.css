@@ -31,8 +31,8 @@
 .notification-settings-hero h1 {
   margin: 0;
   max-width: 620px;
-  font-size: clamp(2.45rem, 7vw, 5.4rem);
-  line-height: 0.94;
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
+  line-height: 1.05;
   letter-spacing: -0.07em;
 }
 
@@ -93,8 +93,8 @@
 .notification-category-row p,
 .notification-compact-row p {
   margin: 5px 0 0;
-  color: rgba(186, 208, 214, 0.55);
-  font-size: 0.79rem;
+  color: #a1aab5;
+  font-size: 0.82rem;
   line-height: 1.45;
 }
 
@@ -132,7 +132,7 @@
 
 .notification-device-row button,
 .notification-save-bar button {
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 14px;
   border: 0;
   border-radius: 12px;
@@ -262,6 +262,26 @@
   cursor: not-allowed;
 }
 
+.notification-reminder-details {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+.notification-reminder-details label { display: grid; gap: 8px; font-size: 0.82rem; }
+.notification-reminder-details input { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid #303841; border-radius: 10px; background: #10151c; color: #edf3fa; font: inherit; font-size: 16px; color-scheme: dark; }
+.notification-reminder-details p,
+.notification-settings-note { margin: 0; color: #a1aab5; font-size: 0.82rem; line-height: 1.6; }
+.notification-reminder-details small { color: #bdd2ee; line-height: 1.6; }
+.notification-settings-error { margin: 0; color: #efb1a8; font-size: 0.85rem; line-height: 1.6; }
+.notification-reminder-details input:disabled { opacity: .45; }
+.notification-settings-page button:focus-visible,
+.notification-settings-page input:focus-visible { outline: 2px solid #bdd2ee; outline-offset: 4px; }
+.notification-toggle { position: relative; height: 44px; display: flex; align-items: center; background: transparent; }
+.notification-toggle::before { content: ''; position: absolute; inset: 9px 0; border-radius: 99px; background: rgba(137, 174, 184, 0.22); }
+.notification-toggle span { position: relative; }
+.notification-toggle.is-on { background: transparent; }
+.notification-toggle.is-on::before { background: #6c9ecc; }
+
 .notification-save-bar {
   position: sticky;
   bottom: 14px;
@@ -282,7 +302,7 @@
 
 @media (max-width: 620px) {
   .notification-settings-page {
-    padding: 38px 14px 110px;
+    padding: 32px 14px 110px;
   }
 
   .notification-settings-hero {
@@ -290,7 +310,7 @@
   }
 
   .notification-settings-hero h1 {
-    font-size: clamp(2.65rem, 14vw, 4rem);
+    font-size: clamp(2rem, 10vw, 2.8rem);
   }
 
   .notification-master-card,
@@ -314,6 +334,11 @@
     justify-content: center;
     min-height: 44px;
   }
+  .notification-category-row, .notification-master-card { grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+  .notification-category-row > .notification-setting-icon, .notification-master-card > .notification-setting-icon { display: none; }
+  .notification-device-row { align-items: flex-start; flex-direction: column; }
+  .notification-time-fields { grid-template-columns: minmax(0, 1fr); }
+  .notification-time-fields input { font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

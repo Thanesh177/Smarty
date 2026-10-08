@@ -19,8 +19,9 @@ import { postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import LearningJourneyPanel from '../components/learning/LearningJourneyPanel';
 import { getLearningGuide } from '../data/learningGuides';
-import { DETAILED_EXPLANATION_VERSION, explanationSections, explanationBlocks } from '../lib/explanationFormat';
+import { DETAILED_EXPLANATION_VERSION, explanationSections, readingLessonSections, explanationBlocks } from '../lib/explanationFormat';
 import { createRequestCache } from '../lib/requestCache';
+import { getLearningLevelLabel } from '../lib/learningJourney';
 import './PostAiPage.css';
 import './PostAiReading.css';
 
@@ -65,8 +66,8 @@ const renderFormattedParagraphs = (value, className = 'post-ai-paragraphs') => {
 
   if (!text) return null;
 
-  const sections = explanationSections(text);
   const isLesson = className === 'post-ai-explanation-paragraphs';
+  const sections = isLesson ? readingLessonSections(text) : explanationSections(text);
 
   return (
     <div className={className}>
@@ -82,7 +83,9 @@ const renderFormattedParagraphs = (value, className = 'post-ai-paragraphs') => {
             </section>
           );
         }
-        return renderTextBlocks(sectionText, `intro-${index}`);
+        return <div className={isLesson ? 'post-ai-lesson-opening' : undefined} key={`intro-${index}`}>
+          {renderTextBlocks(sectionText, `intro-${index}`)}
+        </div>;
       })}
     </div>
   );
@@ -191,9 +194,8 @@ function PostStudyRoom() {
     const words = `${body} ${displayExplanation}`.trim().split(/\s+/).filter(Boolean).length;
     return Math.max(2, Math.min(12, Math.ceil(words / 180)));
   }, [body, displayExplanation]);
-  const lessonJumps = useMemo(() => explanationSections(displayExplanation).filter(
-    (section) => ['How it works', 'Worked example', 'Real-life example', 'What to learn next'].includes(section.heading)
-  ), [displayExplanation]);
+  const lessonJumps = useMemo(() => readingLessonSections(displayExplanation)
+    .filter((section) => section.heading).slice(0, 5), [displayExplanation]);
   const suggestedQuestions = useMemo(() => [
     { label: 'Start with the basics', question: `Teach the prerequisites for ${topicLabel} using the source lesson. Define essential terms, then connect them to this mechanism.` },
     { label: 'Show each step', question: `Explain ${topicLabel} as a cause-and-effect sequence. Explain why each step leads to the next, and distinguish assumptions from facts.` },
@@ -474,6 +476,7 @@ function PostStudyRoom() {
             <h1>{title || 'Post explanation'}</h1>
             <div className="post-ai-meta">
               <span>{topicLabel}</span>
+              {getLearningLevelLabel(post) && <span>{getLearningLevelLabel(post)} · Lesson {post.learningOrder}</span>}
               <span>{estimatedMinutes} min guided read</span>
               <span>By {creatorName}</span>
             </div>
@@ -499,7 +502,7 @@ function PostStudyRoom() {
               </span>
               <div>
                 <span className="post-ai-section-kicker">Deep explanation</span>
-                <h2>Understand how it works</h2>
+                <h2>See the idea unfold</h2>
               </div>
               <small className={loading ? 'is-working' : ''}>
                 {loading
@@ -527,7 +530,7 @@ function PostStudyRoom() {
                   const target = document.getElementById(section.id);
                   target?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
                   target?.focus({ preventScroll: true });
-                }}>{section.heading === 'How it works' ? 'The steps' : /example/i.test(section.heading) ? 'See an example' : 'What comes next'}</a>)}
+                }}>{section.heading}</a>)}
               </nav>}
               {renderFormattedParagraphs(
                 displayExplanation,

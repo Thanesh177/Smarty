@@ -63,7 +63,7 @@ class SharedCacheTests(unittest.TestCase):
     def test_teaching_version_invalidates_old_followup_answers(self):
         with mock.patch.object(LAMBDA, "call_bedrock_text", return_value="An explanation.") as model:
             self.ask("alice", "How do attention keys work?")
-            with mock.patch.object(LAMBDA, "EXPLANATION_SCHEMA_VERSION", 5):
+            with mock.patch.object(LAMBDA, "EXPLANATION_SCHEMA_VERSION", 6):
                 self.ask("bob", "How do attention keys work?")
         self.assertEqual(model.call_count, 2)
 
@@ -110,6 +110,26 @@ class SharedCacheTests(unittest.TestCase):
             LAMBDA.ensure_post_explanation("p1", self.post)
             LAMBDA.ensure_post_explanation("p1", self.post)
         self.assertEqual(model.call_count, 1)
+
+    def test_old_teaching_format_upgrades_once_then_reuses_the_shared_lesson(self):
+        explanation = quality.ContentCatalogTests.complete_explanation()
+        self.post.update(
+            aiDetailedExplanation=explanation,
+            aiDetailedExplanationVersion=4,
+            aiDetailedExplanationSourceHash=LAMBDA.explanation_source_hash(self.post),
+            aiDetailedExplanationModelId=LAMBDA.DETAILS_MODEL_ID,
+        )
+        with mock.patch.object(LAMBDA, "generate_detailed_explanation", return_value=explanation) as model:
+            first = LAMBDA.ensure_post_explanation("p1", self.post)
+            second = LAMBDA.ensure_post_explanation("p1", self.post)
+        self.assertEqual(first, (explanation, False, True))
+        self.assertEqual(second, (explanation, True, True))
+        self.assertEqual(model.call_count, 1)
+
+    def test_incomplete_generation_does_not_persist_a_partial_lesson(self):
+        with mock.patch.object(LAMBDA, "generate_detailed_explanation", return_value=""), mock.patch.object(LAMBDA, "persist_post_explanation") as persist:
+            self.assertEqual(LAMBDA.ensure_post_explanation("p1", self.post), ("", False, False))
+        persist.assert_not_called()
 
     def test_cache_read_failure_does_not_trigger_ai(self):
         with mock.patch.object(self.explanations, "get_item", side_effect=RuntimeError("db unavailable")), mock.patch.object(LAMBDA, "generate_detailed_explanation") as model:

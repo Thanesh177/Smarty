@@ -126,12 +126,15 @@ class ContentCatalogTests(unittest.TestCase):
             "This section names the important parts, follows the cause and effect, "
             "and explains why each change produces the next observable result. "
         )
-        return "\n\n".join(
-            f"{heading}\n\n" + (
-                "\n\n".join(f"{index}. {sentence * 2}" for index in range(1, 5))
-                if heading == "How it works" else sentence * 6
-            ) for heading in LAMBDA.EXPLANATION_SECTION_HEADINGS
-        ).strip()
+        return (sentence * 4 + "\n\n" + "\n\n".join(
+            f"## {heading}\n\n{sentence * 6}"
+            for heading in (
+                "Why earlier tokens need not start over",
+                "Following one token through the cache",
+                "The memory bill behind a faster answer",
+                "From saved keys to the next prediction",
+            )
+        )).strip()
 
     def test_catalog_is_broad_and_every_target_is_narrow(self):
         self.assertGreaterEqual(len(LAMBDA.TOPIC_SUBTOPICS), 80)
@@ -238,8 +241,9 @@ class ContentCatalogTests(unittest.TestCase):
         generated = self.complete_explanation()
         captured = {}
 
-        def fake_bedrock(prompt, **_kwargs):
+        def fake_bedrock(prompt, **kwargs):
             captured["prompt"] = prompt
+            captured["options"] = kwargs
             return generated
 
         with mock.patch.object(LAMBDA, "call_bedrock_text", fake_bedrock):
@@ -251,22 +255,40 @@ class ContentCatalogTests(unittest.TestCase):
             )
 
         self.assertTrue(LAMBDA.is_complete_detailed_explanation(result))
-        self.assertIn("Use the exact 9 section headings", captured["prompt"])
-        self.assertIn("What to learn next", result)
-        self.assertIn("Limits and edge cases", result)
+        self.assertIn("3 to 5 chapters", captured["prompt"])
+        self.assertIn("unheaded prose", captured["prompt"])
+        self.assertIn("Carry one concrete example", captured["prompt"])
+        self.assertIn("explicit conceptual bridge", captured["prompt"])
+        self.assertIn("## Following one token through the cache", result)
+        self.assertNotIn("Why it matters", result)
         self.assertIn("change ONE input", captured["prompt"])
         self.assertIn("untrusted source material", captured["prompt"])
         self.assertIn("hypothetical", captured["prompt"])
+        self.assertTrue(captured["options"]["require_complete"])
+        self.assertEqual(captured["options"]["max_tokens"], 2800)
 
     def test_missing_or_empty_sections_are_not_saved_as_complete_guides(self):
         complete = self.complete_explanation()
-        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.replace("Worked example", "A generic example")))
-        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.split("Remember this")[0] + "Remember this\n"))
-        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.replace("1. ", "").replace("2. ", "").replace("3. ", "").replace("4. ", "")))
+        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.replace("Following one token through the cache", "Why it matters")))
+        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.replace("Following one token through the cache", "Why it matters:")))
+        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.split("## From saved keys")[0] + "## From saved keys to the next prediction\n"))
+        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete[complete.index("##"):]))
+        self.assertFalse(LAMBDA.is_complete_detailed_explanation(complete.replace("The memory bill behind a faster answer", "Following one token through the cache")))
+
+    def test_only_completed_model_output_can_be_saved_as_a_lesson(self):
+        result = {"output": {"message": {"content": [{"text": self.complete_explanation()}]}}, "stopReason": "max_tokens"}
+        with mock.patch.object(LAMBDA.bedrock, "converse", return_value=result, create=True):
+            self.assertEqual(LAMBDA.call_bedrock_text("Teach", require_complete=True), "")
+            result["stopReason"] = "end_turn"
+            self.assertTrue(LAMBDA.is_complete_detailed_explanation(LAMBDA.call_bedrock_text("Teach", require_complete=True)))
+
+    def test_rejected_lesson_does_not_get_saved_as_an_outline(self):
+        with mock.patch.object(LAMBDA, "call_bedrock_text", return_value="## A short outline\nOne sentence."):
+            self.assertEqual(LAMBDA.generate_detailed_explanation("A mechanism", "Source"), "")
 
     def test_old_version_cache_is_not_reused(self):
-        self.assertEqual(LAMBDA.EXPLANATION_SCHEMA_VERSION, 4)
-        self.assertTrue(LAMBDA.explanation_cache_id("post-1", "hash").startswith("post#v4#"))
+        self.assertEqual(LAMBDA.EXPLANATION_SCHEMA_VERSION, 5)
+        self.assertTrue(LAMBDA.explanation_cache_id("post-1", "hash").startswith("post#v5#"))
 
     def test_saved_explanation_is_reused_without_a_second_model_call(self):
         class MemoryTable:

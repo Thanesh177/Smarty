@@ -7,6 +7,7 @@ import { postApi } from '../../api/client';
 import useLearningLibrary from '../../hooks/useLearningLibrary';
 import { LEARNING_GUIDES } from '../../data/learningGuides';
 import { getLearningContext, getRelatedLearningTopics, getLearningNextStep, getLearningQuizLocation,
+  getLearningLevelLabel,
   markLearningProgress, readLearningProgress, rememberLearningLesson,
   selectNextLessons } from '../../lib/learningJourney';
 import './LearningJourneyPanel.css';
@@ -18,13 +19,13 @@ const STAGES = [
 ];
 
 export default function LearningJourneyPanel(props) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const userId = user?.sub || user?.userId || user?.id || '';
   const context = getLearningContext(props.post, props.postId);
-  return <LessonJourney key={userId + ':' + context.postId} {...props} userId={userId} />;
+  return <LessonJourney key={userId + ':' + context.postId} {...props} userId={userId} authLoading={authLoading} />;
 }
 
-function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId }) {
+function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId, authLoading }) {
   const navigate = useNavigate();
   const titleId = useId();
   const context = useMemo(() => getLearningContext(post, postId), [post, postId]);
@@ -34,15 +35,34 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId 
   const [showAlternatives, setShowAlternatives] = useState(false);
   const library = useLearningLibrary(userId);
   useEffect(() => {
-    if (context.postId) setProgress(rememberLearningLesson(context, userId));
-  }, [context.postId, context.title, context.topic, context.focus, userId]);
+    if (context.postId && !authLoading) setProgress(rememberLearningLesson(context, userId));
+  }, [context.postId, context.title, context.topic, context.focus, userId, authLoading]);
 
   const nextPosts = useQuery({
     queryKey: ['learning-next', userId, context.topic],
     queryFn: () => postApi.getFeed({ limit: 20, topic: context.topic }),
-    enabled: Boolean(context.postId), staleTime: 60000, retry: 1,
+    enabled: Boolean(context.postId) && !authLoading, staleTime: 60000, retry: 1,
   });
-  const nextLessons = useMemo(() => selectNextLessons([...LEARNING_GUIDES, ...(nextPosts.data?.items || [])], context, library), [nextPosts.data, context, library]);
+  const sequencePosts = useQuery({
+    queryKey: ['learning-sequence', userId, context.previousLearningPostId, context.nextLearningPostId],
+    queryFn: async () => {
+      const readPublished = async (id) => {
+        if (!id) return null;
+        try {
+          const post = await postApi.getSingleReel(id);
+          return getLearningContext(post).postId === id ? post : null;
+        } catch (error) {
+          if ([403, 404, 410].includes(error?.response?.status)) return null;
+          throw error;
+        }
+      };
+      const [previous, next] = await Promise.all([readPublished(context.previousLearningPostId), readPublished(context.nextLearningPostId)]);
+      return { previous, next };
+    },
+    enabled: !authLoading && Boolean(context.learningPathId && (context.previousLearningPostId || context.nextLearningPostId)),
+    staleTime: 60000, retry: 1,
+  });
+  const nextLessons = useMemo(() => selectNextLessons([sequencePosts.data?.next, ...LEARNING_GUIDES, ...(nextPosts.data?.items || [])].filter(Boolean), context, library), [nextPosts.data, sequencePosts.data, context, library]);
   const nextStep = getLearningNextStep(progress);
   const openQuiz = () => navigate(getLearningQuizLocation(context), { state: { learningContext: context, post } });
   const completeStep = (step) => {
@@ -59,9 +79,10 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId 
   return (
     <section className="learning-journey" aria-labelledby={titleId}>
       <div className="learning-journey-head">
-
+        {getLearningLevelLabel(context) && <span className="learning-path-meta">{getLearningLevelLabel(context)}{context.learningOrder > 0 && ` · Lesson ${context.learningOrder}${context.learningTotalSteps ? ` of ${context.learningTotalSteps}` : ''}`}</span>}
         <Link className="learning-journey-topic" to="/learn">My learning <ChevronRight size={13} /></Link>
       </div>
+      {sequencePosts.data?.previous && <Link className="learning-prerequisite-link" to={'/post-ai/' + encodeURIComponent(context.previousLearningPostId)} state={{ post: sequencePosts.data.previous }}>Revisit the previous idea <ChevronRight size={13} /></Link>}
 
       {!progress.read && <button type="button" className="learning-secondary-action" onClick={() => completeStep('read')}><Check size={16} /> I’ve read the source</button>}
       {notice && <p className="learning-save-notice" role="status">{notice}</p>}

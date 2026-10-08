@@ -1,13 +1,19 @@
 /* Smarty rail: one compact vertical surface, floating above every page. */
 body .app-shell[inert] > .content { overflow: hidden !important; touch-action: none !important; }
+/* The rail does not reserve a header row or a sidebar in the page layout. */
+body .app-shell > .content { width: 100%; max-width: none; margin-inline: 0; }
 body .app-shell > .topbar.glass-topbar {
-  position: fixed !important; z-index: 30000;
+  position: fixed !important; z-index: 30000 !important;
   inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) auto !important;
   width: 56px !important; max-width: 56px !important;
   margin: 0 !important; padding: 0 !important; border: 1px solid #ffffff17 !important;
   border-radius: 16px !important; background: #111316f5 !important;
   box-shadow: 0 8px 28px #0006, inset 0 1px 0 #ffffff06 !important;
   transform: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  /* Legacy scroll-hiding and containment must not clip or hide this overlay. */
+  contain: none !important; isolation: isolate; will-change: auto;
+  opacity: 1 !important; visibility: visible !important; pointer-events: auto;
+  flex: none; box-sizing: border-box;
 }
 body .app-shell .topbar.glass-topbar .topbar-row { display: flex !important; flex-direction: column !important; gap: 0; }
 body .app-shell .topbar.glass-topbar .brand-actions {
