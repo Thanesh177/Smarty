@@ -21,7 +21,7 @@ const TopicCard = memo(function TopicCard({ topic, onNavigate }) {
           {String(topic.order + 1).padStart(2, "0")}
         </span>
         <span className="feed-topic-count">
-          {topic.acceptsUnknownTopics ? "Open subjects" : `${topic.topics.length} subjects`}
+          {topic.feedOnly ? "Swipe to explore" : topic.acceptsUnknownTopics ? "Open subjects" : `${topic.topics.length} subjects`}
         </span>
       </span>
       <span className="feed-topic-card-copy">

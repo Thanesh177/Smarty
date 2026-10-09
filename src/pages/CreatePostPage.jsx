@@ -13,11 +13,13 @@ import {
   Search,
   Send,
   X,
+  Video,
 } from 'lucide-react';
 import { postApi } from '../api/client';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { EMPTY_POST, hasPostDraft, postReadingStats, readPostDraft, savePostDraft, validatePostMedia } from '../lib/postDraft';
+import { isVideoTopic, validateVideoUpload } from '../lib/videoFeed';
 import './CreatePostComposer.css';
 const createSafeId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -97,6 +99,7 @@ const normalizeUploadResponse = (uploadData = {}) => {
 };
 
 const DEFAULT_TOPICS = [
+  'Video',
   'Science',
   'Psychology',
   'Health',
@@ -148,7 +151,7 @@ const normalizeTopicsResponse = (data) => {
     )
   ).sort((a, b) => a.localeCompare(b));
 
-  return topicList.length ? topicList : DEFAULT_TOPICS;
+  return topicList.length ? [...new Set(['Video', ...topicList])] : DEFAULT_TOPICS;
 };
 
 const cleanTopic = (value) => String(value || '')
@@ -162,12 +165,18 @@ const topicKey = (value) => cleanTopic(value).toLocaleLowerCase();
 
 export default function CreatePostPage() {
   const { user } = useAuth();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const videoMode = params.get('type') === 'video' || isVideoTopic(params.get('topic'));
   const account = user?.userId || user?.sub || user?.id || user?.email || 'guest';
-  return <PostComposer key={account} account={account} user={user} />;
+  return <PostComposer key={`${account}:${videoMode}`} account={account} user={user} videoMode={videoMode} />;
 }
 
-function PostComposer({ account, user }) {
-  const [form, setForm] = useState(() => readPostDraft(account));
+function PostComposer({ account, user, videoMode }) {
+  const [form, setForm] = useState(() => {
+    const draft = readPostDraft(account);
+    return videoMode && !draft.topic.trim() ? { ...draft, topic: 'Video' } : draft;
+  });
   const [draftState, setDraftState] = useState(() => hasPostDraft(form) ? 'restored' : 'empty');
   const [topics, setTopics] = useState(DEFAULT_TOPICS);
   const [topicState, setTopicState] = useState('loading');
@@ -179,6 +188,7 @@ function PostComposer({ account, user }) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const [mediaError, setMediaError] = useState('');
+  const [videoPlayable, setVideoPlayable] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState('');
@@ -205,7 +215,8 @@ function PostComposer({ account, user }) {
     .slice(0, 6), [topics, form.topic]);
   const canCreate = selectedTopic.length >= 2 && !exactTopic;
   const choices = canCreate ? [...matches, selectedTopic] : matches;
-  const ready = selectedTopic.length >= 2 && form.title.trim() && form.body.trim();
+  const isVideo = Boolean(media?.type.startsWith('video/'));
+  const ready = selectedTopic.length >= 2 && form.title.trim() && (isVideo ? videoPlayable : form.body.trim()) && (!videoMode || isVideo);
   const name = user?.name || user?.username || 'You';
 
   const persist = useCallback(() => {
@@ -286,12 +297,12 @@ function PostComposer({ account, user }) {
   const selectMedia = files => {
     if (submittingRef.current || !files?.length) return;
     if (files.length > 1) { setMediaError('Add one image or video at a time.'); return; }
-    const message = validatePostMedia(files[0]);
+    const message = validatePostMedia(files[0]) || ((videoMode || files[0].type.startsWith('video/')) ? validateVideoUpload(files[0]) : '');
     if (message) { setMediaError(message); return; }
-    setMedia(files[0]); uploadCache.current = null; setMediaError(''); setError('');
+    setVideoPlayable(false); setMedia(files[0]); uploadCache.current = null; setMediaError(''); setError('');
   };
   const clearDraft = () => {
-    latestForm.current = { ...EMPTY_POST }; setForm(latestForm.current);
+    latestForm.current = { ...EMPTY_POST, topic: videoMode ? 'Video' : '' }; setForm(latestForm.current);
     pendingSave.current = true;
     setMedia(null); uploadCache.current = null; requestId.current = createSafeId();
     setError(''); setMediaError(''); setConfirmClear(false); setView('write'); setTopicOpen(false); persist();
@@ -331,7 +342,7 @@ function PostComposer({ account, user }) {
       const image = media?.type.startsWith('image/');
       const video = media?.type.startsWith('video/');
       const response = await postApi.createPost({
-        id: requestId.current, topic: selectedTopic, title: form.title.trim(), body: form.body.trim(), likes: 0, visibility: form.visibility,
+        id: requestId.current, topic: selectedTopic, title: form.title.trim(), body: form.body.trim() || form.title.trim(), likes: 0, visibility: form.visibility,
         imageUrl: image ? attachment.fileUrl : '', imageKey: image ? attachment.key : '',
         thumbUrl: image ? attachment.fileUrl : '', thumbKey: image ? attachment.key : '',
         videoUrl: video ? attachment.fileUrl : '', videoKey: video ? attachment.key : '',
@@ -339,7 +350,7 @@ function PostComposer({ account, user }) {
       if (!mounted.current) return;
       const result = typeof response?.body === 'string' ? JSON.parse(response.body) : response;
       if (result?.success === false || result?.error) throw new Error('The post could not be published. Please try again.');
-      setPublished({ topic: selectedTopic, title: form.title.trim(), visibility: form.visibility }); clearDraft();
+      setPublished({ topic: selectedTopic, title: form.title.trim(), visibility: form.visibility, video }); clearDraft();
     } catch (err) {
       if (mounted.current) {
         const message = parseApiErrorMessage(err);
@@ -354,21 +365,21 @@ function PostComposer({ account, user }) {
 
   return <main className="post-composer" aria-labelledby="composer-heading">
     <header className="composer-heading">
-      <div><span className="composer-kicker"><PenLine size={14} /> NEW POST</span><h1 id="composer-heading">Share an idea.</h1><p>Something you learned. Something worth passing on.</p></div>
+      <div><span className="composer-kicker">{videoMode ? <Video size={14} /> : <PenLine size={14} />}{videoMode ? ' NEW VIDEO' : ' NEW POST'}</span><h1 id="composer-heading">{videoMode ? 'Share an idea in motion.' : 'Share an idea.'}</h1><p>{videoMode ? 'One video. One interesting idea. Let people see how it works.' : 'Something you learned. Something worth passing on.'}</p></div>
       <span className={'composer-draft is-' + draftState}><span aria-hidden="true" />{draftLabel}</span>
     </header>
     {published ? <section className="composer-success">
       <span className="composer-success-mark"><Check size={26} /></span><span className="composer-kicker">{published.visibility === 'private' ? 'SAVED PRIVATELY' : 'PUBLISHED'}</span>
       <h2 tabIndex={-1} ref={successHeading}>Your idea is out of the draft.</h2><p>“{published.title}”</p><span>{published.visibility === 'private' ? 'Only you can see this post.' : 'Shared in ' + published.topic + '.'}</span>
       {draftState === 'error' && <p role="status">Published, but the local draft could not be cleared on this device.</p>}
-      <div><Link className="composer-primary" to={published.visibility === 'private' ? '/profile' : '/feed?topic=' + encodeURIComponent(published.topic)}>{published.visibility === 'private' ? 'Go to my profile' : 'Explore this topic'}<ArrowUpRight size={16} /></Link><button type="button" className="composer-quiet" onClick={() => setPublished(null)}>Write another</button></div>
+      <div><Link className="composer-primary" to={published.visibility === 'private' ? '/profile' : '/feed?topic=' + encodeURIComponent(published.video ? 'Video' : published.topic)}>{published.visibility === 'private' ? 'Go to my profile' : published.video ? 'Watch videos' : 'Explore this topic'}<ArrowUpRight size={16} /></Link><button type="button" className="composer-quiet" onClick={() => setPublished(null)}>{videoMode ? 'Add another video' : 'Write another'}</button></div>
     </section> : <form className="composer-layout" onSubmit={submit} aria-busy={submitting}>
       <section className="composer-paper" aria-label="Post editor">
         <div className="composer-paper-bar"><div className="composer-view-switch" role="group" aria-label="Editor view"><button type="button" aria-pressed={view === 'write'} onClick={() => setView('write')}><PenLine size={15} />Write</button><button type="button" aria-pressed={view === 'preview'} onClick={() => { setView('preview'); setTopicOpen(false); }}><Eye size={15} />Preview</button></div><span className="composer-read-time">{stats.words ? stats.minutes + ' min read' : 'Your next good idea'}</span></div>
         {view === 'write' ? <div className="composer-writing" key="write">
           <div className="composer-label-row"><label htmlFor="composer-title">Headline</label><span>{form.title.length}/140</span></div>
           <textarea id="composer-title" className="composer-title" rows={2} placeholder="What did you discover?" maxLength={140} value={form.title} disabled={submitting} onChange={event => change('title', event.target.value.replace(/\n/g, ' '))} />
-          <div className="composer-label-row"><label htmlFor="composer-body">The idea</label><span>{stats.words} {stats.words === 1 ? 'word' : 'words'}</span></div>
+          <div className="composer-label-row"><label htmlFor="composer-body">{videoMode || isVideo ? 'Caption · optional' : 'The idea'}</label><span>{stats.words} {stats.words === 1 ? 'word' : 'words'}</span></div>
           <textarea id="composer-body" ref={bodyInput} className="composer-body" placeholder={'Start with one interesting idea.\n\nExplain how it works, share an example, or tell us what changed your mind.'} maxLength={5000} value={form.body} disabled={submitting} onChange={event => change('body', event.target.value)} aria-describedby="composer-body-count" />
           <div className="composer-writing-foot"><span>Make it specific. Make it yours.</span><span id="composer-body-count">{form.body.length.toLocaleString()}/5,000</span></div>
         </div> : <article className="composer-preview" key="preview" aria-label="Post preview">
@@ -378,10 +389,10 @@ function PostComposer({ account, user }) {
           <span className="composer-preview-note">Reading preview · nothing is published yet</span>
         </article>}
         <div className={'composer-attachment' + (dragging ? ' is-dragging' : '')} onDragOver={event => { event.preventDefault(); if (!submitting) setDragging(true); }} onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }} onDrop={event => { event.preventDefault(); setDragging(false); selectMedia(event.dataTransfer.files); }}>
-          <input ref={fileInput} type="file" accept="image/*,video/*" hidden disabled={submitting} onChange={event => { selectMedia(event.target.files); event.target.value = ''; }} aria-label="Attach an image or video" />
-          {media ? <><div className="composer-attachment-preview">{media.type.startsWith('image/') ? <img src={mediaUrl} alt="Attachment preview" /> : <video src={mediaUrl} controls playsInline preload="metadata" />}</div><div className="composer-file-row"><div><strong>{media.name}</strong><small>{(media.size / 1024 / 1024).toFixed(1)} MB · Attach again if you leave this page</small></div><button type="button" className="composer-icon" aria-label="Remove attachment" disabled={submitting} onClick={() => { setMedia(null); uploadCache.current = null; }}><X size={18} /></button></div></> :
-            <button type="button" className="composer-attach-button" disabled={submitting} onClick={() => fileInput.current?.click()}><span className="composer-attach-icon"><ImagePlus size={21} /></span><span><strong>Add an image or video</strong><small>Optional · drop a file or choose one</small></span><Plus size={18} /></button>}
-          <span className="composer-file-hint">Images up to 12 MB · video up to 250 MB</span>
+          <input ref={fileInput} type="file" accept={videoMode ? 'video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.webm,.m4v' : 'image/*,video/mp4,video/quicktime,video/webm,video/x-m4v'} hidden disabled={submitting} onChange={event => { selectMedia(event.target.files); event.target.value = ''; }} aria-label={videoMode ? 'Attach a video' : 'Attach an image or video'} />
+          {media ? <><div className="composer-attachment-preview">{media.type.startsWith('image/') ? <img src={mediaUrl} alt="Attachment preview" /> : <video src={mediaUrl} controls playsInline preload="metadata" onLoadedMetadata={event => { setVideoPlayable(Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration > 0); setMediaError(''); }} onError={() => { setVideoPlayable(false); setMediaError('This device cannot preview the video. Try an MP4 with H.264 video and AAC audio.'); }} />}</div><div className="composer-file-row"><div><strong>{media.name}</strong><small>{(media.size / 1024 / 1024).toFixed(1)} MB · Attach again if you leave this page</small></div><button type="button" className="composer-icon" aria-label="Remove attachment" disabled={submitting} onClick={() => { setMedia(null); setVideoPlayable(false); uploadCache.current = null; }}><X size={18} /></button></div></> :
+            <button type="button" className="composer-attach-button" disabled={submitting} onClick={() => fileInput.current?.click()}><span className="composer-attach-icon">{videoMode ? <Video size={21} /> : <ImagePlus size={21} />}</span><span><strong>{videoMode ? 'Choose your video' : 'Add an image or video'}</strong><small>{videoMode ? 'Drop a video or choose one from your device' : 'Optional · drop a file or choose one'}</small></span><Plus size={18} /></button>}
+          <span className="composer-file-hint">{videoMode ? 'Up to 250 MB · MP4 recommended · only upload videos you can share' : 'Images up to 12 MB · video up to 250 MB'}</span>
           {mediaError && <p className="composer-error" role="alert">{mediaError}</p>}
         </div>
       </section>
@@ -397,7 +408,7 @@ function PostComposer({ account, user }) {
           {error && <p className="composer-error" role="alert">{error}</p>}
           {submitting && <div className="composer-progress" role="status"><span>{stage}</span>{stage === 'Uploading attachment…' && <><progress max="100" value={progress} aria-label="Attachment upload progress" /><small>{progress}% uploaded</small></>}</div>}
           <button className="composer-primary" type="submit" disabled={!ready || submitting}><Send size={16} />{submitting ? 'Publishing…' : form.visibility === 'private' ? 'Publish privately' : 'Publish post'}</button>
-          <p className="composer-publish-note">{!ready ? 'Add a headline, your idea, and a topic to publish.' : form.visibility === 'private' ? 'Your private post will appear on your profile.' : 'Share thoughtfully. Keep it useful and respectful.'}</p>
+          <p className="composer-publish-note">{!ready ? videoMode || isVideo ? 'Add a headline, a playable video, and a topic to publish.' : 'Add a headline, your idea, and a topic to publish.' : form.visibility === 'private' ? 'Your private post will appear on your profile.' : 'Share thoughtfully. Keep it useful and respectful.'}</p>
           {(hasPostDraft(form) || media) && !confirmClear && <button type="button" className="composer-clear" disabled={submitting} onClick={() => setConfirmClear(true)}>Clear draft</button>}
           {confirmClear && <div className="composer-confirm" role="group" aria-label="Confirm clearing draft"><p>Remove this draft and its attachment?</p><div><button type="button" className="composer-quiet" disabled={submitting} onClick={() => setConfirmClear(false)}>Keep writing</button><button type="button" className="composer-clear" disabled={submitting} onClick={clearDraft}>Clear draft</button></div></div>}
           <p className="composer-device-note">Text drafts stay on this device. Attachments aren’t saved in drafts.</p>

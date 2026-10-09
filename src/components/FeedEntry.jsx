@@ -4,6 +4,8 @@ import FeedPage from '../pages/FeedPage';
 import NewsPage from '../pages/NewsPage';
 import SmartyLanding from './landing/SmartyLanding';
 import FeedHeader from './FeedHeader';
+import VideoTopicPage from '../pages/VideoTopicPage';
+import { isVideoTopic } from '../lib/videoFeed';
 import { hasSeenLanding, rememberLanding } from '../lib/initialVisit';
 
 function InitialVisit({ onOpenSearch }) {
@@ -45,5 +47,6 @@ export default function FeedEntry({ onOpenSearch }) {
   useEffect(() => { if (topic.trim()) rememberLanding(); }, [topic]);
   if (!topic.trim()) return <InitialVisit onOpenSearch={onOpenSearch} />;
   if (topic.trim().toLowerCase() === 'news') return <NewsFeed onOpenSearch={onOpenSearch} />;
+  if (isVideoTopic(topic)) return <VideoTopicPage onOpenSearch={onOpenSearch} />;
   return <FeedPage onOpenSearch={onOpenSearch} />;
 }

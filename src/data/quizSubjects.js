@@ -1,7 +1,7 @@
 import { MAIN_TOPICS } from './topicTaxonomy.js';
 
 const icons = ['◷', '⌘', '⚙', '∑', '⌬', '◉', '◎', '↗', '♧', '◴', '≋', '✦', '◇'];
-export const QUIZ_SUBJECTS = [...MAIN_TOPICS.map((subject, index) => ({
+export const QUIZ_SUBJECTS = [...MAIN_TOPICS.filter(subject => !subject.feedOnly).map((subject, index) => ({
   id: subject.id, title: subject.label, topic: subject.label, desc: subject.description, subjects: subject.topics,
   emoji: icons[index], color: ['blue', 'cyan', 'purple', 'green'][index % 4],
 })),

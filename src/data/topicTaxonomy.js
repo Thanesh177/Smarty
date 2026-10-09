@@ -1,3 +1,5 @@
+import { getPostVideoUrl } from '../lib/videoFeed.js';
+
 const normalizeTopicKey = (value) =>
   String(value || '')
     .normalize('NFKD')
@@ -8,6 +10,15 @@ const normalizeTopicKey = (value) =>
     .replace(/^-+|-+$/g, '');
 
 export const MAIN_TOPICS = [
+  {
+    id: 'video',
+    feedOnly: true,
+    label: 'Video',
+    domain: 'Video',
+    eyebrow: 'Watch and discover',
+    description: 'Ideas in motion. Watch community videos, swipe to the next, or share your own.',
+    topics: ['Video', 'Videos', 'Reels'],
+  },
   {
     id: 'news',
     label: 'News',
@@ -184,6 +195,9 @@ export function getMainTopicLabel(value) {
 export function postMatchesMainTopic(post, selectedTopic, postTopicValues = []) {
   const selected = getMainTopicDefinition(selectedTopic);
   if (!selected) return false;
+
+  // Video is a media view, not a subject: include videos posted in any topic.
+  if (selected.id === 'video') return Boolean(getPostVideoUrl(post));
 
   const explicitDomain = getMainTopicDefinition(post?.topicDomain);
   if (explicitDomain) {

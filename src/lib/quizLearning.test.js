@@ -40,7 +40,9 @@ test('results count completed activities; a boss cannot accidentally score 200%'
   assert.deepEqual(getQuizResult([]), { correct: 0, total: 0, percent: 0 });
 });
 test('all main subjects have original questions across three levels with meaningful explanations', () => {
-  assert.deepEqual(QUIZ_SUBJECTS.slice(0, MAIN_TOPICS.length).map((item) => item.id), MAIN_TOPICS.map((item) => item.id));
+  const learningSubjects = MAIN_TOPICS.filter(subject => !subject.feedOnly);
+  assert.deepEqual(QUIZ_SUBJECTS.slice(0, learningSubjects.length).map((item) => item.id), learningSubjects.map((item) => item.id));
+  assert.equal(QUIZ_SUBJECTS.some(subject => subject.id === 'video'), false);
   const ids = new Set(), fingerprints = new Set();
   for (const subject of QUIZ_SUBJECTS) {
     const questions = SUBJECT_QUESTIONS[subject.id];
