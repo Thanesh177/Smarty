@@ -9,7 +9,7 @@
 .video-topic-tools a { min-height: 40px; padding: 0 14px; border: 1px solid #2b3036; border-radius: 24px; color: #e6eff8; text-decoration: none; background: #10151a; }
 .app-shell .content .video-topic-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; overscroll-behavior-y: contain; scrollbar-width: none; position: relative; container-type: size; }
 .video-topic-scroll::-webkit-scrollbar { display: none; }
-.reel-video { width: 100%; height: 100%; min-height: 100%; display: flex; justify-content: center; padding: 0 80px 16px; scroll-snap-align: start; scroll-snap-stop: always; }
+.reel-video { width: 100%; height: 100%; min-height: 100%; display: flex; justify-content: center; padding: 0 16px 16px; scroll-snap-align: start; scroll-snap-stop: always; }
 .reel-video-stage { position: relative; height: 100%; width: min(100%, 480px); min-width: 0; overflow: hidden; background: #000; border-radius: 18px; isolation: isolate; }
 .reel-video-stage > video, .reel-video-placeholder { width: 100%; height: 100%; object-fit: contain; display: block; background: #090c0f; }
 .reel-video-placeholder { display: grid; place-items: center; color: #6c7c8d; }
@@ -69,9 +69,14 @@
 @media (max-width: 700px) {
   .video-topic-tools { padding: 8px 16px; }
   .video-topic-tools > span { font-size: .75rem; }
-  .reel-video { padding: 0 76px 12px 10px; }
-  .reel-video-stage { border-radius: 14px; width: 100%; }
-  .reel-video-bottom { gap: 10px; padding: 56px 12px 12px; }
+  /* Let the rail overlap the picture, not reserve a blank side column.
+     Only interactive controls need clearance from its 56px floating surface. */
+  .reel-video { padding: 0; }
+  .reel-video-stage { border-radius: 0; width: 100%; }
+  .reel-video-bottom {
+    gap: 10px;
+    padding: 56px max(84px, calc(env(safe-area-inset-right) + 72px)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
   .reel-video-top { padding: 10px 12px 32px; }
   .reel-video-playback { gap: 4px; }
   .video-topic-navigation { display: none; }

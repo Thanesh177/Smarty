@@ -37,7 +37,6 @@ import SmartyBrand from '../components/SmartyBrand';
 import { postApi, creatorApi, chatApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import FeedHeader from '../components/FeedHeader';
-import FeedLearningHome from '../components/FeedLearningHome';
 import useFeed from '../hooks/useFeed';
 import { getLearningLevelLabel } from '../lib/learningJourney';
 import { useAuth } from '../contexts/AuthContext';
@@ -694,7 +693,7 @@ const FeedPostCard = memo(function FeedPostCard({
   return (
     <article
       id={`post-${postId}`}
-      className={`snap-post ${!hasMedia ? 'no-media' : ''}`}
+      className={`snap-post ${!hasMedia ? 'no-media' : ''} ${hasMedia && !post.videoUrl ? 'has-feed-image' : ''}`}
       onClick={() => onOpenPost(post, creatorName)}
       role="button"
       tabIndex={0}
@@ -3674,7 +3673,6 @@ style={topicCanvasSurfaceStyle}
 {selectedTopic && (
   <section ref={postFeedRef} className="snap-feed" aria-label="Posts" tabIndex={0}>
     {selectedTopic === 'All' && <>
-      <FeedLearningHome />
       <div className="feed-discovery-heading" id="feed-discovery-heading"><h2>Latest ideas</h2><span>Read · understand · explore</span></div>
       {loading && !filteredPosts.length && <div className="feed-home-loading" role="status">Finding fresh ideas…<FeedSkeleton /></div>}
       {error && <div className="feed-home-status" role="status"><p>Posts couldn’t load right now. Please try again.</p><button type="button" onClick={handleFeedRetry}>Try again</button></div>}

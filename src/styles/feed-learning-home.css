@@ -28,6 +28,27 @@
 .app-shell .content .is-learning-home .snap-post .post-content > p { max-width: 80ch; font-size: 16px; line-height: 1.8; margin: 0 0 20px !important; }
 .app-shell .content .is-learning-home .snap-post:not(.no-media) { gap: 28px; }
 .app-shell .content .is-learning-home .snap-post:not(.no-media) .mini-media { min-height: 260px; margin-top: 24px; border-radius: 10px; }
+/* Images support the reading flow rather than taking up most of the screen.
+   Video posts and the full-screen video viewer retain their own sizing. */
+.app-shell .content .has-inner-feed .snap-post.has-feed-image {
+  grid-template-columns: minmax(0, clamp(220px, 30vw, 380px)) minmax(0, 1fr);
+  gap: clamp(18px, 3vw, 32px); align-items: center;
+}
+.app-shell .content .has-inner-feed .snap-post.has-feed-image .mini-media {
+  width: min(100%, 380px); height: clamp(220px, 32vh, 320px);
+  min-height: 0; max-height: 320px; margin: 16px 0;
+  justify-self: center; border-radius: 10px;
+}
+.app-shell .content .has-inner-feed .snap-post.has-feed-image .mini-media img {
+  object-fit: contain; max-width: 100%; max-height: 100%;
+}
+@media (max-width: 900px) {
+  .app-shell .content .has-inner-feed .snap-post.has-feed-image { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .app-shell .content .has-inner-feed .snap-post.has-feed-image .mini-media {
+    width: min(100%, 360px); height: clamp(180px, 28vh, 240px); max-height: 240px;
+    margin: 12px 0 4px;
+  }
+}
 .feed-home-loading, .feed-home-status { max-width: 1240px; margin: 20px auto; padding: 24px 0; color: var(--ui-muted); font-size: 14px; line-height: 1.7; }
 .feed-home-status :is(button, a) { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; margin: 4px 8px 4px 0; border: 1px solid var(--ui-line); border-radius: 7px; color: var(--ui-text); background: var(--ui-surface); font: inherit; text-decoration: none; cursor: pointer; }
 .feed-learning-home :is(button, a), .feed-header-search { transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease; }

@@ -15,6 +15,8 @@ import AuthRedirectHandler from './components/AuthRedirectHandler';
 import InstallPrompt from './components/InstallPrompt';
 import UniversalSearch from './components/UniversalSearch';
 import PageTransition from './components/PageTransition';
+import FeedViewSwitch from './components/FeedViewSwitch';
+import { getFeedView } from './lib/feedViews';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
 import ReminderPopup from './components/ReminderPopup';
@@ -1016,7 +1018,7 @@ useEffect(() => {
 
       {!isAuthPage && <InstallPrompt />}
 
-      <div className={`app-shell ${location.pathname === '/feed' && !new URLSearchParams(location.search).get('topic') ? 'is-smarty-landing' : ''}`}>
+      <div className={`app-shell ${getFeedView(location) ? 'has-feed-view-switch' : ''} ${location.pathname === '/feed' && !new URLSearchParams(location.search).get('topic') ? 'is-smarty-landing' : ''}`}>
           <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
@@ -1118,6 +1120,7 @@ useEffect(() => {
           </div>
           </header>
 
+        <FeedViewSwitch />
         <main
           className="content"
           onTouchStart={handleGlobalPullStart}
