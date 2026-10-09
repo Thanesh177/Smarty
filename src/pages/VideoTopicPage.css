@@ -39,16 +39,16 @@
 .reel-video-error { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 64px 24px 160px; text-align: center; }
 .reel-video-error p { margin: 0; color: #9daab8; font-size: .8125rem; line-height: 1.5; max-width: 260px; }
 .reel-video-stage .reel-video-error button { padding: 0 18px; border-radius: 24px; gap: 8px; }
-.video-topic-state { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; width: min(100%, 500px); height: 100%; min-height: 260px; margin: auto; padding: 32px 84px 64px 28px; text-align: center; }
+.video-topic-state { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; width: min(100%, 500px); height: 100%; min-height: 260px; margin: auto; padding: 32px 24px 64px; text-align: center; }
 .video-topic-state h2 { margin: 0; color: #eef3f9; font-size: clamp(1.375rem, 3vw, 2rem); letter-spacing: -.035em; line-height: 1.25; }
 .video-topic-state p { margin: 0; max-width: 320px; line-height: 1.7; color: #a1abb5; font-size: .875rem; }
 .video-topic-state :is(a, button), .video-topic-end :is(a, button) { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; gap: 8px; border-radius: 24px; border: 1px solid #2b3540; background: #121a23; color: #d5e6f6; font-size: .8125rem; text-decoration: none; cursor: pointer; }
-.video-topic-end { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; min-height: 160px; padding: 28px 80px 36px 24px; color: #a4afb9; font-size: .8125rem; scroll-snap-align: end; }
-.video-topic-navigation { position: absolute; right: clamp(85px, 8vw, 140px); top: 46%; display: grid; place-items: center; gap: 14px; }
+.video-topic-end { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; min-height: 160px; padding: 28px 24px 36px; color: #a4afb9; font-size: .8125rem; scroll-snap-align: end; }
+.video-topic-navigation { position: absolute; right: clamp(20px, 5vw, 80px); top: 46%; display: grid; place-items: center; gap: 14px; }
 .video-topic-navigation button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 50%; background: #131920; color: #dbe8f5; border: 1px solid #252d35; cursor: pointer; }
 .video-topic-navigation button:disabled { opacity: .25; cursor: default; }
 .video-topic-navigation span { font-size: .6875rem; color: #a1acb7; }
-.video-topic-notice { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 160px); z-index: 30001; padding: 12px 18px; border-radius: 12px; border: 1px solid #313c49; background: #111820; color: #deebf7; font-size: .8125rem; text-align: center; }
+.video-topic-notice { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 32px); z-index: 30001; padding: 12px 18px; border-radius: 12px; border: 1px solid #313c49; background: #111820; color: #deebf7; font-size: .8125rem; text-align: center; }
 .video-safety-dialog { width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 24px; margin: auto; background: #0d1116; border: 1px solid #2a333e; border-radius: 20px; color: #eff3f8; overflow: auto; }
 .video-safety-dialog::backdrop { background: #000b; }
 .video-safety-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -69,13 +69,12 @@
 @media (max-width: 700px) {
   .video-topic-tools { padding: 8px 16px; }
   .video-topic-tools > span { font-size: .75rem; }
-  /* Let the rail overlap the picture, not reserve a blank side column.
-     Only interactive controls need clearance from its 56px floating surface. */
+  /* The video viewer uses only its top navigation and playback controls. */
   .reel-video { padding: 0; }
   .reel-video-stage { border-radius: 0; width: 100%; }
   .reel-video-bottom {
     gap: 10px;
-    padding: 56px max(84px, calc(env(safe-area-inset-right) + 72px)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    padding: 56px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   }
   .reel-video-top { padding: 10px 12px 32px; }
   .reel-video-playback { gap: 4px; }

@@ -20,6 +20,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { EMPTY_POST, hasPostDraft, postReadingStats, readPostDraft, savePostDraft, validatePostMedia } from '../lib/postDraft';
 import { isVideoTopic, validateVideoUpload } from '../lib/videoFeed';
+import { normalizePostResponse } from '../lib/postResponse';
 import './CreatePostComposer.css';
 const createSafeId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -348,8 +349,7 @@ function PostComposer({ account, user, videoMode }) {
         videoUrl: video ? attachment.fileUrl : '', videoKey: video ? attachment.key : '',
       });
       if (!mounted.current) return;
-      const result = typeof response?.body === 'string' ? JSON.parse(response.body) : response;
-      if (result?.success === false || result?.error) throw new Error('The post could not be published. Please try again.');
+      normalizePostResponse(response);
       setPublished({ topic: selectedTopic, title: form.title.trim(), visibility: form.visibility, video }); clearDraft();
     } catch (err) {
       if (mounted.current) {

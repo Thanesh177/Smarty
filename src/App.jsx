@@ -370,6 +370,7 @@ function Layout() {
     location.pathname === '/confirm';
 
   const isAllPosts = location.pathname === '/feed' && new URLSearchParams(location.search).get('topic') === 'All';
+  const feedView = getFeedView(location);
 
   const openUniversalSearch = useCallback(() => {
     setUniversalSearchOpen(true);
@@ -1018,8 +1019,8 @@ useEffect(() => {
 
       {!isAuthPage && <InstallPrompt />}
 
-      <div className={`app-shell ${getFeedView(location) ? 'has-feed-view-switch' : ''} ${location.pathname === '/feed' && !new URLSearchParams(location.search).get('topic') ? 'is-smarty-landing' : ''}`}>
-          <header className="topbar glass-topbar">
+      <div className={`app-shell ${feedView ? 'has-feed-view-switch' : ''} ${location.pathname === '/feed' && !new URLSearchParams(location.search).get('topic') ? 'is-smarty-landing' : ''}`}>
+          {feedView !== 'video' && <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
               to="/feed?topic=All"
@@ -1118,7 +1119,7 @@ useEffect(() => {
               />
             </nav>
           </div>
-          </header>
+          </header>}
 
         <FeedViewSwitch />
         <main

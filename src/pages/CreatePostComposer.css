@@ -1,4 +1,4 @@
-/* Scoped to the new composer; the existing edit-post screen keeps its styles. */
+/* Shared writing surfaces for creating and editing posts. */
 .app-shell .content .post-composer { width: 100%; max-width: none; min-height: 100dvh; margin: 0; padding: clamp(24px, 3vw, 48px) max(clamp(18px, 3vw, 48px), env(safe-area-inset-right)) 100px max(clamp(18px, 3vw, 48px), env(safe-area-inset-left)); box-sizing: border-box; color: var(--ui-text); }
 .post-composer *, .post-composer *::before, .post-composer *::after { box-sizing: border-box; }
 .post-composer svg { flex: none; }

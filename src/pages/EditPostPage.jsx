@@ -1,602 +1,210 @@
-
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Check, Eye, Globe2, ImagePlus, Lock, PenLine, RefreshCw, Save, Search, Trash2, X } from 'lucide-react';
 import { postApi } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import { useActionConfirmation } from '../components/ActionConfirmation';
-import { assertActionAccepted } from '../lib/actionConfirmation';
-import './CreatePostPage.css';
+import { MAIN_TOPIC_LABELS } from '../data/topicTaxonomy';
+import { cleanPostTopic, POST_LIMITS, postReadingStats, validatePostMedia } from '../lib/postDraft';
+import { normalizePostResponse } from '../lib/postResponse';
+import { editPostError, editPostForm, editPostPayload, invalidateEditedFeed, normalizeEditUpload, postForEditing } from '../lib/postEditing';
+import { validateVideoUpload } from '../lib/videoFeed';
+import './CreatePostComposer.css';
+import './EditPostPage.css';
 
-// --- Helper functions ---
-function normalizeItemsResponse(value, key) {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.[key])) return value[key];
-  if (Array.isArray(value?.items)) return value.items;
-  return [];
-}
-
-function normalizeSinglePostResponse(value) {
-  return value?.post || value?.item || value?.reel || value || null;
-}
-
-function getUploadResultKey(value) {
-  return value?.fileKey || value?.mediaKey || value?.key || value?.imageKey || value?.videoKey || value?.fileUrl || value?.mediaUrl || value?.url || '';
-}
+const errorMessage = (err, fallback) => err?.response?.status === 403
+  ? 'You do not have permission to change this post.'
+  : err?.response?.status === 404 ? 'This post is no longer available.' : fallback;
 
 export default function EditPostPage() {
-  const confirmAction = useActionConfirmation();
   const { reelId } = useParams();
+  const { user } = useAuth();
+  const account = user?.userId || user?.sub || user?.id || '';
+  // An old request must not update a different post or a different account.
+  return <PostEditor key={`${account}:${reelId}`} id={reelId} account={account} />;
+}
+
+function PostEditor({ id, account }) {
   const navigate = useNavigate();
-  const mountedRef = useRef(true);
-  const navigateTimerRef = useRef(null);
-  const activeUploadRef = useRef(null);
-
-  const [topics, setTopics] = useState([]);
-  const [topicMode, setTopicMode] = useState('existing');
-
-  const [form, setForm] = useState({
-    topic: '',
-    customTopic: '',
-    title: '',
-    body: '',
-    visibility: 'public',
-    imageUrl: '',
-    videoUrl: '',
-  });
-  const [loadedPost, setLoadedPost] = useState(null);
-
-  const [imageFile, setImageFile] = useState(null);
-  const [videoFile, setVideoFile] = useState(null);
-
+  const confirm = useActionConfirmation();
+  const [post, setPost] = useState(null);
+  const [form, setForm] = useState(null);
+  const [topics, setTopics] = useState(MAIN_TOPIC_LABELS);
+  const [topicOpen, setTopicOpen] = useState(false);
+  const [topicIndex, setTopicIndex] = useState(-1);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [deleted, setDeleted] = useState(false);
+  const [view, setView] = useState('write');
+  const [file, setFile] = useState(null);
+  const [fileUrl, setFileUrl] = useState('');
+  const [removeMedia, setRemoveMedia] = useState(false);
+  const [videoPlayable, setVideoPlayable] = useState(false);
+  const [mediaError, setMediaError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState('');
+  const [progress, setProgress] = useState(0);
+  const mounted = useRef(false);
+  const operation = useRef(false);
+  const loadVersion = useRef(0);
+  const xhrRef = useRef(null);
+  const uploadCache = useRef(null);
+  const fileInput = useRef(null);
+  const topicInput = useRef(null);
+  const originalForm = useMemo(() => post ? editPostForm(post) : null, [post]);
+  const dirty = Boolean(form && originalForm && (file || removeMedia || Object.keys(form).some(key => form[key] !== originalForm[key])));
+  const video = file ? file.type.startsWith('video/') : !removeMedia && Boolean(form?.videoUrl);
+  const imageUrl = file ? file.type.startsWith('image/') ? fileUrl : '' : removeMedia ? '' : form?.imageUrl;
+  const videoUrl = file ? video ? fileUrl : '' : removeMedia ? '' : form?.videoUrl;
+  const stats = postReadingStats(form?.body || '');
+  const validation = form ? editPostError(form, video) : '';
+  const choices = useMemo(() => [...new Set([originalForm?.topic, ...topics].filter(Boolean))]
+    .filter(topic => topic.toLowerCase().includes((form?.topic || '').trim().toLowerCase())).slice(0, 6), [form?.topic, originalForm?.topic, topics]);
+  // A failed preview of existing media must not prevent text-only corrections.
+  const canSave = dirty && !validation && !busy && (!file || ((!video || videoPlayable) && !mediaError));
 
-  const [status, setStatus] = useState('');
-  const [uploadStage, setUploadStage] = useState('');
-  const [uploadProgress, setUploadProgress] = useState(0);
-
-  const selectedTopic = useMemo(() => {
-    return topicMode === 'custom' ? form.customTopic.trim() : form.topic;
-  }, [topicMode, form.customTopic, form.topic]);
-
-  const canSubmit = useMemo(
-    () => Boolean(!submitting && selectedTopic && form.title.trim() && form.body.trim()),
-    [form.body, form.title, selectedTopic, submitting]
-  );
-
-  const renderedTopicOptions = useMemo(() => {
-    if (topics.length === 0) {
-      return <option value={form.topic}>{form.topic || 'No topics found'}</option>;
-    }
-
-    return topics.map((topic) => (
-      <option key={topic} value={topic}>
-        {topic}
-      </option>
-    ));
-  }, [form.topic, topics]);
-
-  const loadPage = useCallback(async () => {
+  const load = useCallback(async () => {
+    const version = ++loadVersion.current;
+    setLoading(true); setLoadError('');
     try {
-      setLoading(true);
-
-      const [topicData, postResponse] = await Promise.all([
-        postApi.getTopics(),
-        postApi.getSingleReel(reelId),
-      ]);
-      if (!mountedRef.current) return;
-
-      const topicItems = normalizeItemsResponse(topicData, 'topics');
-      const post = normalizeSinglePostResponse(postResponse);
-
-      const topicList = Array.from(
-        new Set(
-          topicItems
-            .map((item) =>
-              typeof item === 'string' ? item : item.topic || item.name || item.title
-            )
-            .filter(Boolean)
-            .map((item) => String(item).trim())
-        )
-      );
-
-      setTopics(topicList);
-      setLoadedPost(post || null);
-
-      setForm({
-        topic: post?.topic || topicList[0] || '',
-        customTopic: '',
-        title: post?.title || '',
-        body: post?.body || '',
-        visibility: post?.visibility || 'public',
-        imageUrl: post?.imageUrl || post?.photoUrl || post?.thumbnail || post?.coverImage || '',
-        videoUrl: post?.videoUrl || post?.mediaUrl || '',
-      });
+      const current = postForEditing(await postApi.getSingleReel(id));
+      if (!mounted.current || version !== loadVersion.current) return;
+      setPost(current); setForm(editPostForm(current));
     } catch (err) {
-      console.error(err);
-      if (mountedRef.current) setStatus('Could not load post.');
+      if (mounted.current && version === loadVersion.current) setLoadError(errorMessage(err, 'We could not load this post. Check your connection and try again.'));
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mounted.current && version === loadVersion.current) setLoading(false);
     }
-  }, [reelId]);
-
+  }, [id]);
   useEffect(() => {
-    mountedRef.current = true;
-    loadPage();
+    mounted.current = true; load();
+    return () => { mounted.current = false; loadVersion.current += 1; xhrRef.current?.abort(); };
+  }, [load]);
+  useEffect(() => {
+    let active = true;
+    // Suggestions are optional: a topic-service failure cannot block editing.
+    postApi.getTopics().then(response => {
+      const value = Array.isArray(response) ? response : normalizePostResponse(response);
+      const items = Array.isArray(value) ? value : value.topics || value.items || [];
+      const names = items.map(item => cleanPostTopic(typeof item === 'string' ? item : item?.topic || item?.name || item?.title)).filter(Boolean);
+      if (active && names.length) setTopics([...new Set(names)]);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!file) { setFileUrl(''); return; }
+    const url = URL.createObjectURL(file); setFileUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = event => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
-    return () => {
-      mountedRef.current = false;
-      if (navigateTimerRef.current) {
-        window.clearTimeout(navigateTimerRef.current);
-      }
-      if (activeUploadRef.current) {
-        activeUploadRef.current.abort();
-      }
-    };
-  }, [loadPage]);
+  const change = (key, value) => { setForm(current => ({ ...current, [key]: value })); setError(''); setSaved(false); };
+  const chooseTopic = topic => { change('topic', cleanPostTopic(topic)); setTopicOpen(false); setTopicIndex(-1); topicInput.current?.focus(); };
+  const selectFile = selected => {
+    if (!selected || busy) return;
+    const problem = validatePostMedia(selected) || (selected.type.startsWith('video/') ? validateVideoUpload(selected) : '');
+    if (problem) { setError(problem); return; }
+    setFile(selected); setRemoveMedia(false); setVideoPlayable(false); setMediaError(''); setSaved(false); setError(''); uploadCache.current = null;
+  };
+  const restoreMedia = () => { setFile(null); setRemoveMedia(false); setMediaError(''); setSaved(false); uploadCache.current = null; };
+  const leave = async () => {
+    if (busy || operation.current) return;
+    if (dirty && !await confirm({ title: 'Discard changes?', description: 'Your unsaved edits will be lost. The published post will stay unchanged.', confirmLabel: 'Discard changes', cancelLabel: 'Keep editing' })) return;
+    if (mounted.current) navigate('/profile');
+  };
 
-  const deletePost = useCallback(async () => {
-    if (submitting) return;
-    const confirmDelete = await confirmAction({ title: 'Delete post?', description: 'Your post will be permanently removed. This cannot be undone.', confirmLabel: 'Delete post' });
-
-    if (!confirmDelete) return;
-    if (submitting) return;
-
-    try {
-      setSubmitting(true);
-      setUploadStage('Deleting post');
-      setUploadProgress(80);
-
-      assertActionAccepted(await postApi.deletePost({
-        ...(loadedPost || {}),
-        id: reelId,
-        reelId,
-        postId: reelId,
-      }));
-
-      setUploadStage('Deleted');
-      setUploadProgress(100);
-
-      navigateTimerRef.current = window.setTimeout(() => {
-        if (mountedRef.current) {
-          if (window.history.length > 1) {
-            navigate(-1);
-          } else {
-            navigate('/profile');
-          }
-        }
-      }, 500);
-    } catch (err) {
-      console.error('Delete failed:', err);
-      if (mountedRef.current) {
-        const backendError = err?.response?.data?.error || err?.response?.data?.message;
-        const ownerId = err?.response?.data?.ownerId;
-        const currentUser = err?.response?.data?.currentUser;
-
-        if (err?.response?.status === 403) {
-          setStatus(
-            ownerId && currentUser
-              ? `Delete blocked: this post belongs to ${ownerId}, but you are signed in as ${currentUser}.`
-              : backendError || 'Delete blocked: you are not the owner of this post.'
-          );
-        } else {
-          setStatus(backendError || 'Failed to delete post.');
-        }
-        setSubmitting(false);
-        setUploadStage('');
-        setUploadProgress(0);
-      }
-    }
-  }, [confirmAction, loadedPost, navigate, reelId, submitting]);
-
-  const uploadFile = useCallback(async (file, onProgress) => {
-    if (!file) return '';
-
-    const uploadData = await postApi.getUploadUrl({
-      fileName: file.name,
-      fileType: file.type,
-    });
-
+  const uploadFile = async () => {
+    if (!file) return null;
+    if (uploadCache.current?.file === file) return uploadCache.current.result;
+    setStage('Preparing attachment…');
+    const result = normalizeEditUpload(await postApi.getUploadUrl({ fileName: file.name, fileType: file.type }));
+    if (!mounted.current) throw new Error('Upload cancelled.');
+    if (!result.uploadUrl || (!result.fileUrl && !result.key)) throw new Error('Could not prepare the attachment. Please try again.');
+    setStage('Uploading attachment…');
     await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      activeUploadRef.current = xhr;
-
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) {
-          const percent = Math.round((event.loaded / event.total) * 100);
-          onProgress(percent);
-        }
-      };
-
-      xhr.onload = () => {
-        activeUploadRef.current = null;
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`Upload failed: ${xhr.status}`));
-      };
-
-      xhr.onerror = () => {
-        activeUploadRef.current = null;
-        reject(new Error('Upload failed'));
-      };
-
-      xhr.onabort = () => {
-        activeUploadRef.current = null;
-        reject(new Error('Upload cancelled'));
-      };
-
-      xhr.open('PUT', uploadData.uploadUrl);
-      xhr.setRequestHeader('Content-Type', file.type);
-      xhr.send(file);
+      const xhr = new XMLHttpRequest(); xhrRef.current = xhr;
+      const fail = message => { xhrRef.current = null; reject(new Error(message)); };
+      xhr.upload.onprogress = event => { if (mounted.current && event.lengthComputable) setProgress(Math.round(event.loaded / event.total * 100)); };
+      xhr.onload = () => { xhrRef.current = null; xhr.status >= 200 && xhr.status < 300 ? resolve() : fail('Upload failed. Please try again.'); };
+      xhr.onerror = () => fail('Upload interrupted. Check your connection and try again.');
+      xhr.onabort = () => fail('Upload cancelled.');
+      xhr.ontimeout = () => fail('Upload timed out. Try a smaller file or a stronger connection.');
+      xhr.open('PUT', result.uploadUrl); xhr.timeout = 180000; xhr.setRequestHeader('Content-Type', file.type); xhr.send(file);
     });
-
-    return getUploadResultKey(uploadData);
-  }, []);
-
-  const submit = useCallback(async (event) => {
+    uploadCache.current = { file, result };
+    return result;
+  };
+  const submit = async event => {
     event.preventDefault();
-    if (submitting) return;
-
-    const topic = selectedTopic;
-    const title = form.title.trim();
-    const body = form.body.trim();
-
-    if (!topic || !title || !body) {
-      setStatus('Please fill topic, title, and content.');
-      return;
-    }
-
+    if (operation.current || !canSave) return;
+    operation.current = true; setBusy(true); setError(''); setSaved(false); setProgress(0); setTopicOpen(false); setStage('Saving changes…');
     try {
-      setSubmitting(true);
-      setStatus('');
-      setUploadStage('Preparing update');
-      setUploadProgress(5);
-
-      let imageUrl = form.imageUrl;
-      let videoUrl = form.videoUrl;
-
-      if (imageFile) {
-        setUploadStage('Uploading new image');
-        setUploadProgress(0);
-        imageUrl = await uploadFile(imageFile, setUploadProgress);
-        if (!mountedRef.current) return;
-      }
-
-      if (videoFile) {
-        setUploadStage('Uploading new video');
-        setUploadProgress(0);
-        videoUrl = await uploadFile(videoFile, setUploadProgress);
-        if (!mountedRef.current) return;
-      }
-
-      setUploadStage('Updating post');
-      setUploadProgress(90);
-
-      await postApi.updatePost({
-        id: reelId,
-        reelId,
-        topic,
-        title,
-        body,
-        visibility: form.visibility,
-        imageUrl,
-        videoUrl,
-      });
-      if (!mountedRef.current) return;
-
-      setUploadStage('Success');
-      setUploadProgress(100);
-      setStatus('Post updated successfully.');
-
-      navigateTimerRef.current = window.setTimeout(() => {
-        if (mountedRef.current) {
-          if (window.history.length > 1) {
-            navigate(-1);
-          } else {
-            navigate(`/reel/${reelId}`);
-          }
-        }
-      }, 500);
+      const upload = await uploadFile();
+      if (!mounted.current) return;
+      const payload = editPostPayload(id, post, form, { file, upload, removeMedia });
+      setStage('Saving changes…');
+      normalizePostResponse(await postApi.updatePost(payload));
+      if (!mounted.current) return;
+      const updated = { ...post, ...payload };
+      setPost(updated); setForm(editPostForm(updated)); setFile(null); setRemoveMedia(false); setMediaError(''); uploadCache.current = null; setSaved(true);
+      invalidateEditedFeed(account);
+      window.dispatchEvent(new Event('smarty-global-refresh'));
     } catch (err) {
-      console.error(err);
-      if (mountedRef.current) {
-        setStatus(err?.message === 'Upload cancelled' ? 'Upload cancelled.' : 'Failed to update post.');
-        setSubmitting(false);
-        setUploadStage('');
-        setUploadProgress(0);
-      }
+      if (mounted.current) setError(errorMessage(err, err?.message?.replace('published', 'updated').replace('publishing', 'update') || 'Could not save. Your changes are still here; please try again.'));
+    } finally {
+      operation.current = false;
+      if (mounted.current) { setBusy(false); setStage(''); }
     }
-  }, [form, imageFile, navigate, reelId, selectedTopic, submitting, uploadFile, videoFile]);
-
-  const handleTopicModeChange = useCallback((event) => {
-    setTopicMode(event.target.value);
-  }, []);
-
-  const handleTopicChange = useCallback((event) => {
-    setForm((current) => ({ ...current, topic: event.target.value }));
-  }, []);
-
-  const handleCustomTopicChange = useCallback((event) => {
-    setForm((current) => ({ ...current, customTopic: event.target.value }));
-  }, []);
-
-  const handleImageFileChange = useCallback((event) => {
-    const file = event.target.files?.[0] || null;
-
-    if (!file) {
-      setImageFile(null);
-      return;
+  };
+  const deletePost = async () => {
+    if (operation.current || busy) return;
+    // Lock before the dialog opens, so a delayed confirmation cannot race a save.
+    operation.current = true;
+    const approved = await confirm({ title: 'Delete post?', description: 'This permanently removes the published post and its content. This cannot be undone.', confirmLabel: 'Delete post' });
+    if (!approved || !mounted.current) { operation.current = false; return; }
+    setBusy(true); setError(''); setStage('Deleting post…');
+    try {
+      normalizePostResponse(await postApi.deletePost({ ...post, id, reelId: id, postId: id }));
+      if (mounted.current) { setDeleted(true); setFile(null); setRemoveMedia(false); setForm(editPostForm(post)); invalidateEditedFeed(account); window.dispatchEvent(new Event('smarty-global-refresh')); }
+    } catch (err) {
+      if (mounted.current) setError(errorMessage(err, 'Could not delete this post. Please try again.'));
+    } finally {
+      operation.current = false;
+      if (mounted.current) { setBusy(false); setStage(''); }
     }
+  };
 
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    const maxSize = 8 * 1024 * 1024;
-
-    if (!allowedTypes.includes(file.type)) {
-      setStatus('Please choose a JPG, PNG, or WEBP image.');
-      event.target.value = '';
-      return;
-    }
-
-    if (file.size > maxSize) {
-      setStatus('Image must be under 8 MB.');
-      event.target.value = '';
-      return;
-    }
-
-    setStatus('');
-    setImageFile(file);
-    setVideoFile(null);
-  }, []);
-
-  const handleVideoFileChange = useCallback((event) => {
-    const file = event.target.files?.[0] || null;
-
-    if (!file) {
-      setVideoFile(null);
-      return;
-    }
-
-    const allowedTypes = ['video/mp4', 'video/webm', 'video/quicktime'];
-    const maxSize = 80 * 1024 * 1024;
-
-    if (!allowedTypes.includes(file.type)) {
-      setStatus('Please choose an MP4, WEBM, or MOV video.');
-      event.target.value = '';
-      return;
-    }
-
-    if (file.size > maxSize) {
-      setStatus('Video must be under 80 MB.');
-      event.target.value = '';
-      return;
-    }
-
-    setStatus('');
-    setVideoFile(file);
-    setImageFile(null);
-  }, []);
-
-  const handleTitleChange = useCallback((event) => {
-    setForm((current) => ({ ...current, title: event.target.value }));
-  }, []);
-
-  const handleBodyChange = useCallback((event) => {
-    setForm((current) => ({ ...current, body: event.target.value }));
-  }, []);
-
-  const setPublicVisibility = useCallback(() => {
-    setForm((current) => ({ ...current, visibility: 'public' }));
-  }, []);
-
-  const setPrivateVisibility = useCallback(() => {
-    setForm((current) => ({ ...current, visibility: 'private' }));
-  }, []);
-
-  if (loading) {
-    return (
-      <main className="create-page">
-        <p className="status">Loading post...</p>
-      </main>
-    );
-  }
-
-  return (
-    <main className="create-page">
-      {submitting && (
-        <div className="upload-loader">
-          <div className="upload-orb-wrap">
-            <div className="upload-orb">
-              <span>{uploadStage === 'Success' ? '✓' : '↑'}</span>
-            </div>
-            <div className="orbit orbit-one"></div>
-            <div className="orbit orbit-two"></div>
-          </div>
-
-          <h3>{uploadStage}</h3>
-
-          <div className="progress-track">
-            <div style={{ width: `${uploadProgress}%` }} />
-          </div>
-
-          <p className="progress-text">{uploadProgress}%</p>
-
-          <div className="current-stage-card">
-            <span>{uploadStage === 'Success' ? '✓' : '•'}</span>
-            <strong>{uploadStage || 'Working...'}</strong>
-          </div>
-        </div>
-      )}
-
-      <section className="create-hero">
-        <div>
-          <span className="create-pill">Edit reel</span>
-          <h1>Refine your post.</h1>
-          <p>Update the topic, content, visibility, image, or video for your existing post.</p>
+  if (loading) return <main className="post-composer post-editor" aria-busy="true"><div className="edit-loading" role="status"><span>Opening your post…</span><div /><div /><div /></div></main>;
+  if (loadError || !form) return <main className="post-composer post-editor"><section className="edit-empty"><PenLine size={24} /><h1>We couldn’t open this post.</h1><p role="alert">{loadError || 'This post is no longer available.'}</p><button type="button" className="composer-primary" onClick={load}><RefreshCw size={16} />Try again</button><Link to="/profile">Back to my posts</Link></section></main>;
+  if (deleted) return <main className="post-composer post-editor"><section className="composer-success"><span className="composer-success-mark"><Check size={24} /></span><h1>Post deleted.</h1><p>Your post has been removed.</p><Link to="/profile" className="composer-primary">Back to my posts</Link></section></main>;
+  return <main className="post-composer post-editor" aria-labelledby="edit-heading">
+    <header className="composer-heading"><div><span className="composer-kicker"><PenLine size={14} />EDIT POST</span><h1 id="edit-heading">Edit your post.</h1><p>Make a change. Preview it before saving.</p></div><span className={'composer-draft' + (saved ? ' is-saved' : '')}><span aria-hidden="true" />{busy ? stage : saved ? 'Changes saved' : dirty ? 'Unsaved changes' : 'Up to date'}</span></header>
+    <form className="composer-layout" onSubmit={submit} aria-busy={busy}>
+      <section className="composer-paper" aria-label="Post editor">
+        <div className="composer-paper-bar"><div className="composer-view-switch" role="group" aria-label="Editor view"><button type="button" aria-pressed={view === 'write'} onClick={() => setView('write')}><PenLine size={15} />Write</button><button type="button" aria-pressed={view === 'preview'} onClick={() => setView('preview')}><Eye size={15} />Preview</button></div><span className="composer-read-time">{stats.words} words · {stats.minutes} min read</span></div>
+        {view === 'write' ? <div className="composer-writing"><div className="composer-label-row"><label htmlFor="edit-title">Headline</label><span>{form.title.length}/{POST_LIMITS.title}</span></div><textarea id="edit-title" className="composer-title" rows={2} maxLength={POST_LIMITS.title} value={form.title} disabled={busy} onChange={event => change('title', event.target.value.replace(/\n/g, ' '))} /><div className="composer-label-row"><label htmlFor="edit-body">{video ? 'Caption · optional' : 'The idea'}</label><span>{form.body.length.toLocaleString()}/{POST_LIMITS.body.toLocaleString()}</span></div><textarea id="edit-body" className="composer-body" rows={12} maxLength={POST_LIMITS.body} value={form.body} disabled={busy} placeholder="Make one interesting idea easy to understand." onChange={event => change('body', event.target.value)} /></div>
+          : <article className="composer-preview" aria-label="Post preview"><span className="composer-kicker">{form.topic} · {form.visibility === 'private' ? 'ONLY YOU' : 'PUBLIC'}</span><h2>{form.title || 'Your headline'}</h2><p>{form.body || (video ? 'No caption added.' : 'Your content will appear here.')}</p></article>}
+        <div className="composer-attachment"><input ref={fileInput} type="file" hidden aria-label="Replace attachment" accept="image/*,video/mp4,video/quicktime,video/webm,video/x-m4v" disabled={busy} onChange={event => { selectFile(event.target.files?.[0]); event.target.value = ''; }} />
+          {(imageUrl || videoUrl) && <div className="composer-attachment-preview">{videoUrl && <video key={videoUrl} src={videoUrl} controls playsInline preload="metadata" onLoadedMetadata={event => { if (file) setVideoPlayable(Number.isFinite(event.currentTarget.duration) && event.currentTarget.duration > 0); setMediaError(''); }} onError={() => setMediaError(file ? 'This device cannot preview the video. Try an MP4 with H.264 video and AAC audio.' : 'The saved video could not be previewed. You can still edit its text or replace the file.')} />}{imageUrl && <img key={imageUrl} src={imageUrl} alt={file ? 'New attachment preview' : 'Current post attachment'} onError={() => setMediaError(file ? 'This image could not be previewed. Choose another image.' : 'The saved image could not be previewed. You can still edit its text or replace the file.')} />}</div>}
+          <div className="edit-media-row"><div><strong>{file ? file.name : removeMedia ? 'Attachment will be removed' : imageUrl || videoUrl ? 'Current attachment' : 'No attachment'}</strong><small>{file ? 'Replaces the current media when you save.' : 'Images up to 12 MB · videos up to 250 MB'}</small></div><button type="button" className="composer-quiet" disabled={busy} onClick={() => fileInput.current?.click()}><ImagePlus size={16} />{imageUrl || videoUrl ? 'Replace' : 'Add media'}</button>{(file || removeMedia) ? <button type="button" className="composer-icon" aria-label="Restore original attachment" disabled={busy} onClick={restoreMedia}><RefreshCw size={16} /></button> : (imageUrl || videoUrl) && <button type="button" className="composer-icon" aria-label="Remove attachment" disabled={busy} onClick={() => { setRemoveMedia(true); setMediaError(''); setSaved(false); }}><X size={16} /></button>}</div>
+          {mediaError && <p className="edit-media-error" role="status">{mediaError}</p>}
         </div>
       </section>
-
-      <section className="create-layout">
-        <form className="create-form" onSubmit={submit}>
-          <div className="top-row-grid">
-            <div className="form-section">
-              <label>Topic</label>
-
-              <div className="topic-row">
-                <select value={topicMode} disabled={submitting} onChange={handleTopicModeChange}>
-                  <option value="existing">Choose topic</option>
-                  <option value="custom">Custom topic</option>
-                </select>
-
-                {topicMode === 'existing' ? (
-                  <select
-                    value={form.topic}
-                    disabled={submitting}
-                    onChange={handleTopicChange}
-                  >
-                    {renderedTopicOptions}
-                  </select>
-                ) : (
-                  <input
-                    placeholder="Custom topic"
-                    value={form.customTopic}
-                    disabled={submitting}
-                    onChange={handleCustomTopicChange}
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="form-section">
-              <label>Replace Media</label>
-
-              <div className="media-scroll-row">
-                <label className="mini-upload-card">
-                  <small>{imageFile ? imageFile.name : 'New image'}</small>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    disabled={submitting}
-                    onChange={handleImageFileChange}
-                  />
-                </label>
-
-                <label className="mini-upload-card">
-                  <small>{videoFile ? videoFile.name : 'New video'}</small>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    disabled={submitting}
-                    onChange={handleVideoFileChange}
-                  />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="edit-preview-row">
-            {form.imageUrl && (
-              <div className="edit-preview-card">
-                <span>Current image</span>
-                <img
-                  src={form.imageUrl}
-                  alt="Current post"
-                  loading="lazy"
-                  decoding="async"
-                  fetchPriority="auto"
-                />
-              </div>
-            )}
-
-            {form.videoUrl && (
-              <div className="edit-preview-card">
-                <span>Current video</span>
-                <video src={form.videoUrl} controls preload="metadata" />
-              </div>
-            )}
-          </div>
-
-          <div className="form-section">
-            <label>Headline</label>
-            <input
-              value={form.title}
-              disabled={submitting}
-              onChange={handleTitleChange}
-            />
-          </div>
-
-          <div className="form-section">
-            <label>Content</label>
-            <textarea
-              rows="10"
-              value={form.body}
-              disabled={submitting}
-              onChange={handleBodyChange}
-            />
-          </div>
-
-          <div className="bottom-row">
-            <div className="form-section visibility-box">
-              <label>Visibility</label>
-
-              <div className="visibility-toggle">
-                <button
-                  type="button"
-                  disabled={submitting}
-                  className={form.visibility === 'public' ? 'active' : ''}
-                  onClick={setPublicVisibility}
-                >
-                  🌍 Public
-                </button>
-
-                <button
-                  type="button"
-                  disabled={submitting}
-                  className={form.visibility === 'private' ? 'active' : ''}
-                  onClick={setPrivateVisibility}
-                >
-                  🔒 Private
-                </button>
-              </div>
-            </div>
-
-            <div className="edit-action-row">
-              <button className="primary-btn publish-btn" disabled={!canSubmit} type="submit">
-                {submitting ? 'Updating...' : 'Update reel'}
-              </button>
-
-              <button
-                className="delete-post-btn"
-                disabled={submitting}
-                type="button"
-                onClick={deletePost}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-
-          
-
-          {status && <p className="status">{status}</p>}
-        </form>
-
-        <aside className="create-side">
-          <h3>Edit tips</h3>
-
-          <div className="tip-card">
-            <span>Improve clarity</span>
-            <p>Make the first sentence stronger and easier to understand.</p>
-          </div>
-
-          <div className="tip-card">
-            <span>Refresh media</span>
-            <p>Add a stronger image or video to make the post more engaging.</p>
-          </div>
-
-          <div className="tip-card">
-            <span>Control access</span>
-            <p>Switch between public and private depending on who should see it.</p>
-          </div>
-        </aside>
-      </section>
-    </main>
-  );
+      <aside className="composer-details"><div className="composer-details-heading"><h2>Post settings</h2><span>YOUR IDEA</span></div>
+        <div className="composer-setting composer-topic-shell" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setTopicOpen(false); }}><label htmlFor="edit-topic">Topic</label><div className="composer-topic-input"><Search size={16} /><input ref={topicInput} id="edit-topic" role="combobox" aria-autocomplete="list" aria-expanded={topicOpen} aria-controls={topicOpen ? 'edit-topic-options' : undefined} aria-activedescendant={topicOpen && choices[topicIndex] ? 'edit-topic-' + topicIndex : undefined} autoComplete="off" maxLength={POST_LIMITS.topic} value={form.topic} disabled={busy} placeholder="Find or add a topic" onFocus={() => setTopicOpen(true)} onChange={event => { change('topic', event.target.value.replace(/[\u0000-\u001f\u007f]/g, '')); setTopicOpen(true); setTopicIndex(-1); }} onKeyDown={event => { if (event.key === 'Escape') { setTopicOpen(false); event.stopPropagation(); } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setTopicOpen(true); setTopicIndex(index => choices.length ? (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length : -1); } else if (event.key === 'Enter') { event.preventDefault(); if (topicOpen && choices[topicIndex]) chooseTopic(choices[topicIndex]); else setTopicOpen(false); } }} /></div>
+          {topicOpen && choices.length > 0 && <div className="composer-topic-menu" id="edit-topic-options" role="listbox" aria-label="Matching topics">{choices.map((topic, index) => <button key={topic} id={'edit-topic-' + index} type="button" role="option" aria-selected={index === topicIndex} onClick={() => chooseTopic(topic)}>{topic}{topic === form.topic && <Check size={14} />}</button>)}</div>}<p>Search existing topics, or type a new one.</p></div>
+        <fieldset className="composer-setting composer-audience"><legend>Who can see it</legend><div><button type="button" aria-pressed={form.visibility === 'public'} disabled={busy} onClick={() => change('visibility', 'public')}><Globe2 size={15} />Public</button><button type="button" aria-pressed={form.visibility === 'private'} disabled={busy} onClick={() => change('visibility', 'private')}><Lock size={15} />Only me</button></div><p>{form.visibility === 'private' ? 'Only you can see this post.' : 'Visible to the Smarty community.'}</p></fieldset>
+        <div className="composer-publish-area">{error && <p className="composer-error" role="alert">{error}</p>}{dirty && validation && <p className="composer-publish-note">{validation}</p>}{busy && <div className="composer-progress" role="status"><span>{stage}</span>{stage === 'Uploading attachment…' && <progress max="100" value={progress} aria-label="Attachment upload progress" />}</div>}{saved && <p className="edit-saved" role="status"><Check size={16} />Your changes are saved.</p>}
+          <button className="composer-primary" type="submit" disabled={!canSave}><Save size={16} />{busy ? 'Please wait…' : 'Save changes'}</button><button type="button" className="edit-cancel composer-quiet" disabled={busy} onClick={leave}>Back to my posts</button>{saved && <Link className="edit-view-post" to={'/reel/' + encodeURIComponent(id)}>View updated post</Link>}
+        </div><div className="edit-danger"><button type="button" className="composer-quiet" disabled={busy} onClick={deletePost}><Trash2 size={15} />Delete post</button><p>Permanently removes this post.</p></div>
+      </aside>
+    </form>
+  </main>;
 }
