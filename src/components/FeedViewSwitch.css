@@ -1,18 +1,19 @@
 /* One stable toggle outside the scrolling/animated route content. */
 .app-shell > .feed-view-switchbar {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) 90px; align-items: center; gap: clamp(8px, 2vw, 24px);
   flex: none; position: relative; z-index: 110;
   padding: calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
   background: var(--ui-bg, #090a0c); border-bottom: 1px solid var(--ui-line, #ffffff12);
 }
 .feed-view-switch {
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
-  position: relative; isolation: isolate; width: min(100%, 650px); margin: 0 auto;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  position: relative; isolation: isolate; width: min(100%, 560px); margin: 0 auto;
   padding: 4px; border: 1px solid var(--ui-line, #ffffff12); border-radius: 12px;
   background: #ffffff04; box-sizing: border-box;
 }
 .feed-view-switch-indicator {
   position: absolute; z-index: -1; top: 4px; bottom: 4px; left: 4px;
-  width: calc((100% - 8px) / 5); border-radius: 8px;
+  width: calc((100% - 8px) / 4); border-radius: 8px;
   background: #ffffff0e; box-shadow: inset 0 1px #ffffff0a, 0 1px 3px #0003;
   transform: translateX(calc(var(--feed-view-index, 0) * 100%));
   transition: transform 340ms cubic-bezier(.22,.8,.25,1);
@@ -30,15 +31,27 @@
 .feed-view-switch > a svg { flex: none; }
 .feed-view-switch > a:focus-visible { outline: 2px solid var(--ui-accent, #b8d5f6); outline-offset: -2px; }
 .feed-view-compact-label { display: none; }
+.feed-view-brand { display: flex; align-items: center; min-height: 44px; color: var(--ui-text, #f3f4f5); font-size: 20px; font-weight: 650; letter-spacing: -.045em; text-decoration: none; }
+.feed-view-topics { display: flex; justify-content: end; min-width: 0; }
+.feed-view-topics .feed-topic-trigger {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-width: 44px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 8px;
+  color: var(--ui-secondary, #aab2bd); background: transparent; font: inherit; font-size: 12px; cursor: pointer;
+}
+.feed-view-topics .feed-topic-trigger:hover { background: #ffffff08; }
+.feed-view-brand:focus-visible { outline: 2px solid var(--ui-accent, #b8d5f6); outline-offset: 3px; border-radius: 4px; }
+.feed-view-route-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* Give bounded feeds the remaining height instead of the legacy full viewport. */
 body .app-shell.has-feed-view-switch > .content { flex: 1 1 0; height: 0; min-height: 0; }
 body .app-shell.has-feed-view-switch > .content .snap-feed-page.has-inner-feed { height: 100%; min-height: 0; }
 /* The shared bar has already consumed the native top safe area. */
-body .app-shell.has-feed-view-switch { --feed-header-height: 60px; }
-.app-shell.has-feed-view-switch .content .feed-inner-header { padding-top: 8px; }
+body .app-shell.has-feed-view-switch { --feed-header-height: 0px; }
 @media (hover: hover) { .feed-view-switch > a:hover { color: var(--ui-text, #f3f4f5); } }
 @media (max-width: 480px) {
-  .app-shell > .feed-view-switchbar { padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)); }
+  .app-shell > .feed-view-switchbar { grid-template-columns: auto minmax(0, 1fr) 44px; gap: 6px; padding-inline: max(8px, env(safe-area-inset-left)) max(8px, env(safe-area-inset-right)); }
+  .feed-view-brand { font-size: 17px; }
+  .feed-view-topics .feed-topic-trigger { width: 44px; padding: 0; }
+  .feed-view-topics .feed-topic-trigger > span { display: none; }
   .feed-view-switch > a { font-size: 11px; gap: 0; padding-inline: 2px; }
   .feed-view-switch > a svg, .feed-view-label { display: none; }
   .feed-view-compact-label { display: inline; }

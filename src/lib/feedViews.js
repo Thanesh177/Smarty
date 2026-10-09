@@ -1,13 +1,11 @@
 export const FEED_VIEWS = [
   { id: 'all', label: 'All posts', compactLabel: 'All posts', to: '/feed?topic=All' },
-  { id: 'learn', label: 'My learning', compactLabel: 'Learn', to: '/learn' },
   { id: 'news', label: 'News', compactLabel: 'News', to: '/feed?topic=News' },
   { id: 'video', label: 'Videos', compactLabel: 'Videos', to: '/feed?topic=Video' },
   { id: 'saved', label: 'Saved', compactLabel: 'Saved', to: '/saved' },
 ];
 
 export function getFeedView({ pathname = '', search = '' } = {}) {
-  if (pathname === '/learn') return 'learn';
   if (pathname === '/saved') return 'saved';
   if (pathname !== '/feed' && !pathname.startsWith('/feed/')) return null;
   const pathTopic = pathname.startsWith('/feed/') ? pathname.slice(6) : '';

@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { Check, ChevronDown, LayoutGrid, Search } from 'lucide-react';
 import { topicPickerPosition } from '../lib/topicPickerPosition';
 
-export default function FeedTopicPicker({ selected, choices, onSelect, onBrowse }) {
+export default function FeedTopicPicker({ selected, choices, onSelect, onBrowse, compact = false }) {
   const { pathname, search } = useLocation();
   const isFeedRoute = pathname === '/feed' || pathname.startsWith('/feed/');
   const [open, setOpen] = useState(false);
@@ -104,11 +104,12 @@ export default function FeedTopicPicker({ selected, choices, onSelect, onBrowse 
   if (!isFeedRoute) return null;
 
   return <>
-    <button ref={triggerRef} type="button" className="feed-topic-select feed-topic-trigger"
+    <button ref={triggerRef} type="button" className={`feed-topic-select feed-topic-trigger${compact ? ' is-compact' : ''}`}
+      title={compact ? `Topics: ${label}` : undefined}
       aria-label={`Change feed topic: ${label}`} aria-haspopup="dialog" aria-expanded={open}
       aria-controls={open ? `${listId}-panel` : undefined}
       onClick={() => { scrollActiveRef.current = true; setQuery(''); setOpen(value => !value); }}>
-      <span>{label}</span><ChevronDown size={14} aria-hidden="true" />
+      {compact ? <><LayoutGrid size={17} aria-hidden="true" /><span>Topics</span></> : <><span>{label}</span><ChevronDown size={14} aria-hidden="true" /></>}
     </button>
     {open && createPortal(<section ref={panelRef} id={`${listId}-panel`} className="feed-topic-picker"
       role="dialog" aria-label="Choose a feed topic" style={position} onKeyDown={handleKeys}

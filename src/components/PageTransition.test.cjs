@@ -43,7 +43,7 @@ test('view switches move in segment order without a blinking opacity drop', () =
   assert.equal(app.animations[0].options.duration, 280);
   cancel();
   assert(app.animations[0].canceled);
-  app.render('/learn');
+  app.render('/feed?topic=News');
   assert.equal(app.animations[1].frames[0].transform, 'translateX(-8px)');
   assert.equal(app.scrolls.length, 2);
 });
