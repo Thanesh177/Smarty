@@ -24,10 +24,10 @@ export default function PageTransition() {
     const target = direction ? content?.querySelector(':scope > main, :scope > section') : content;
     if (!target?.animate) return undefined;
     const animation = target.animate(direction ? [
-      { opacity: .96, transform: `translateX(${direction * 8}px)` },
+      { opacity: 1, transform: `translateX(${direction * 72}px)` },
       { opacity: 1, transform: 'translateX(0)' },
     ] : [{ opacity: .72 }, { opacity: 1 }], {
-      duration: direction ? 280 : 220, easing: 'cubic-bezier(.22,.8,.25,1)',
+      duration: direction ? 360 : 220, easing: 'cubic-bezier(.22,.8,.25,1)',
     });
     return () => animation.cancel();
   }, [pageKey, view]);

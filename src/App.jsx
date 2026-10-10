@@ -16,6 +16,7 @@ import InstallPrompt from './components/InstallPrompt';
 import UniversalSearch from './components/UniversalSearch';
 import PageTransition from './components/PageTransition';
 import FeedViewSwitch from './components/FeedViewSwitch';
+import FeedViewSwipe from './components/FeedViewSwipe';
 import { getFeedView } from './lib/feedViews';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
@@ -1122,6 +1123,7 @@ useEffect(() => {
           </header>}
 
         <FeedViewSwitch />
+        <FeedViewSwipe />
         <main
           className="content"
           onTouchStart={handleGlobalPullStart}

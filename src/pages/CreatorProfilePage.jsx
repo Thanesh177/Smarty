@@ -1,400 +1,92 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowUpRight, BookOpen, Check, Layers, MessageCircle, Play, RefreshCw, Search, Share2, UserPlus } from 'lucide-react';
 import { creatorApi, postApi } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import { getPostAuthorUsername } from '../lib/postAuthor';
+import { normalizePostResponse } from '../lib/postResponse';
+import { getPostVideoUrl } from '../lib/videoFeed';
+import { contentId, contentList, contentTopics, filterContent } from '../lib/communityContent';
+import { postReadingStats } from '../lib/postDraft';
 import './CreatorProfile.css';
 
-const CreatorPostCard = memo(function CreatorPostCard({ post, index, onOpen }) {
-  const postId = post.id || post.reelId;
-
-  return (
-    <button
-      className="mini-post-card"
-      type="button"
-      disabled={!postId}
-      onClick={() => onOpen(postId)}
-    >
-      {post.imageUrl ? (
-        <img
-          src={post.imageUrl}
-          alt={post.title || 'Creator post'}
-          loading={index < 2 ? 'eager' : 'lazy'}
-          decoding="async"
-          fetchPriority={index < 2 ? 'high' : 'auto'}
-        />
-      ) : (
-        <div className="mini-placeholder">
-          {post.topic?.[0] || 'S'}
-        </div>
-      )}
-
-      <div className="mini-card-overlay">
-        <span>{post.topic}</span>
-        <h4>{post.title}</h4>
-      </div>
-    </button>
-  );
-});
-
-const PersonRow = memo(function PersonRow({ item, fallbackLabel, onOpen }) {
-  const id = item.userId || item.followerId || item.followingId;
-
-  return (
-    <button disabled={!id} onClick={() => onOpen(id)}>
-      <strong>{item.name || item.email || id}</strong>
-      <span>{item.email || fallbackLabel}</span>
-    </button>
-  );
-});
-
 export default function CreatorProfilePage() {
-  const { userId } = useParams();
-  const navigate = useNavigate();
-  const mountedRef = useRef(true);
-
-  const [profile, setProfile] = useState(null);
-  const [creatorPosts, setCreatorPosts] = useState([]);
-  const [followers, setFollowers] = useState([]);
-  const [following, setFollowing] = useState([]);
-  const [activeTab, setActiveTab] = useState('posts');
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [postsLoading, setPostsLoading] = useState(false);
-
-  const displayName = useMemo(
-    () => getPostAuthorUsername(null, profile),
-    [profile, userId]
-  );
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    async function loadCreatorData() {
-      setLoading(true);
-      setPostsLoading(false);
-
-      try {
-        const profileData = await creatorApi.getProfile(userId);
-        if (!mountedRef.current) return;
-
-        setProfile(profileData || null);
-        setLoading(false);
-        setPostsLoading(true);
-
-        const [followersResult, followingResult, postsResult] = await Promise.allSettled([
-          creatorApi.getFollowers(userId),
-          creatorApi.getFollowing(userId),
-          postApi.getPostsByCreator(userId),
-        ]);
-
-        if (!mountedRef.current) return;
-
-        if (followersResult.status === 'fulfilled') {
-          const followersData = followersResult.value;
-          setFollowers(
-            Array.isArray(followersData?.followers)
-              ? followersData.followers
-              : Array.isArray(followersData)
-                ? followersData
-                : []
-          );
-        }
-
-        if (followingResult.status === 'fulfilled') {
-          const followingData = followingResult.value;
-          setFollowing(
-            Array.isArray(followingData?.following)
-              ? followingData.following
-              : Array.isArray(followingData)
-                ? followingData
-                : []
-          );
-        }
-
-        if (postsResult.status === 'fulfilled') {
-          const posts = postsResult.value;
-          setCreatorPosts(
-            Array.isArray(posts?.posts)
-              ? posts.posts
-              : Array.isArray(posts?.reels)
-                ? posts.reels
-                : Array.isArray(posts)
-                  ? posts
-                  : []
-          );
-        }
-      } catch (err) {
-        console.error('Error fetching creator data:', err);
-        if (mountedRef.current) setLoading(false);
-      } finally {
-        if (mountedRef.current) setPostsLoading(false);
-      }
-    }
-
-    if (userId) loadCreatorData();
-
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [userId]);
-
-  const handleStartChat = useCallback(() => {
-    if (!userId) return;
-
-    navigate('/chat', {
-      state: {
-        startWithUser: {
-          userId,
-          id: userId,
-          sub: userId,
-          email: profile?.email || '',
-          username: profile?.username || profile?.email || userId,
-          name: displayName,
-        },
-      },
-    });
-  }, [displayName, navigate, profile, userId]);
-
-  const handleFollow = useCallback(async () => {
-    if (!profile || !userId || actionLoading || profile.requestPending) return;
-
-    setActionLoading(true);
-
+  const { userId } = useParams(), { user } = useAuth();
+  const account = String(user?.sub || user?.userId || user?.id || 'guest');
+  return <PublicProfile key={account + ':' + userId} userId={userId} account={account} user={user}/>;
+}
+function PublicProfile({ userId, account, user }) {
+  const navigate = useNavigate(), client = useQueryClient(), lock = useRef(false), mounted = useRef(true);
+  const [tab, setTab] = useState('posts'), [search, setSearch] = useState(''), [kind, setKind] = useState('all');
+  const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
+  const profileKey = ['public-profile', account, userId, 'identity'];
+  const profileQuery = useQuery({ queryKey: profileKey, queryFn: async () => {
+    const result = normalizePostResponse(await creatorApi.getProfile(userId));
+    if (!(result.userId || result.id || result.sub || result.username || result.name)) throw new Error('Profile unavailable');
+    return result;
+  }, enabled: Boolean(userId), staleTime: 60000, retry: 1 });
+  const profile = profileQuery.data;
+  const postsQuery = useQuery({ queryKey: ['public-profile', account, userId, 'posts'], queryFn: () => postApi.getPostsByCreator(userId), enabled: Boolean(profile), staleTime: 60000, retry: 1 });
+  const peopleQuery = useQuery({ queryKey: ['public-profile', account, userId, 'people', tab], queryFn: () => tab === 'followers' ? creatorApi.getFollowers(userId) : creatorApi.getFollowing(userId), enabled: Boolean(profile && tab !== 'posts'), staleTime: 60000, retry: 1 });
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const name = getPostAuthorUsername(null, profile), own = account === userId || profile?.isMe === true;
+  const avatar = getPostVideoUrl({ videoUrl: profile?.avatarUrl || profile?.photoUrl || profile?.profilePic });
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const posts = contentList(postsQuery.data);
+  const shown = filterContent(posts.filter(post => kind === 'all' || Boolean(getPostVideoUrl(post)) === (kind === 'video')), { query: search });
+  const people = Array.isArray(peopleQuery.data) ? peopleQuery.data : peopleQuery.data?.[tab] || peopleQuery.data?.items || [];
+  const count = value => Math.max(0, Number(value) || 0);
+  const stats = { posts: profile?.postsCount ?? profile?.reelsCount ?? posts.length, followers: profile?.followersCount ?? (tab === 'followers' ? people.length : 0), following: profile?.followingCount ?? (tab === 'following' ? people.length : 0) };
+  const requireUser = () => {
+    if (user) return true;
+    navigate('/login', { state: { from: { pathname: '/creator/' + encodeURIComponent(userId) } } }); return false;
+  };
+  const follow = async () => {
+    if (!requireUser() || own || !profile || lock.current || profile.requestPending) return;
+    lock.current = true; setBusy(true); setNotice('');
     try {
-      if (profile.isFollowing) {
-        await creatorApi.unfollow(userId);
-        if (!mountedRef.current) return;
-
-        setProfile((prev) => ({
-          ...prev,
-          isFollowing: false,
-          requestPending: false,
-          followersCount: Math.max(0, Number(prev?.followersCount || 0) - 1),
-        }));
-
-        return;
-      }
-
-      await creatorApi.follow(userId);
-      if (!mountedRef.current) return;
-
-      setProfile((prev) => ({
-        ...prev,
-        requestPending: true,
-        isFollowing: false,
-      }));
-    } catch (err) {
-      console.error(err);
-    } finally {
-      if (mountedRef.current) setActionLoading(false);
-    }
-  }, [actionLoading, profile, userId]);
-
-  const followButtonText = useMemo(() => {
-    if (actionLoading) return 'Please wait...';
-    if (profile?.requestPending) return 'Requested';
-    if (profile?.isFollowing) return 'Following';
-    return 'Follow';
-  }, [actionLoading, profile]);
-
-  const goBack = useCallback(() => {
-    navigate(-1);
-  }, [navigate]);
-
-  const openCreator = useCallback(
-    (id) => {
-      if (id) navigate(`/creator/${id}`);
-    },
-    [navigate]
-  );
-
-  const openPost = useCallback(
-    (postId) => {
-      if (postId) navigate(`/reel/${postId}`);
-    },
-    [navigate]
-  );
-
-  const showPosts = useCallback(() => {
-    setActiveTab('posts');
-  }, []);
-
-  const showFollowers = useCallback(() => {
-    setActiveTab('followers');
-  }, []);
-
-  const showFollowing = useCallback(() => {
-    setActiveTab('following');
-  }, []);
-
-  const renderedPosts = useMemo(
-    () => creatorPosts.map((post, index) => (
-      <CreatorPostCard
-        key={post.id || post.reelId || `creator-post-${index}`}
-        post={post}
-        index={index}
-        onOpen={openPost}
-      />
-    )),
-    [creatorPosts, openPost]
-  );
-
-  const renderedFollowers = useMemo(
-    () => followers.map((item, index) => (
-      <PersonRow
-        key={item.userId || item.followerId || `follower-${index}`}
-        item={item}
-        fallbackLabel="Follower"
-        onOpen={openCreator}
-      />
-    )),
-    [followers, openCreator]
-  );
-
-  const renderedFollowing = useMemo(
-    () => following.map((item, index) => (
-      <PersonRow
-        key={item.userId || item.followingId || `following-${index}`}
-        item={item}
-        fallbackLabel="Following"
-        onOpen={openCreator}
-      />
-    )),
-    [following, openCreator]
-  );
-
-  if (loading) {
-    return (
-      <main className="creator-profile-container">
-        <div className="profile-card">
-          <p className="skeleton-loader">Loading creator profile...</p>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="creator-profile-container">
-      <div className="profile-card">
-        <button className="back-link" onClick={goBack}>
-          ← Back to Feed
-        </button>
-
-        <header className="profile-header">
-          <div className="avatar-wrapper">
-            {profile?.avatarUrl ? (
-              <img
-                className="avatar-large image-avatar"
-                src={profile.avatarUrl}
-                alt={displayName}
-                loading="eager"
-                decoding="async"
-                fetchPriority="high"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="avatar-large">
-                {displayName?.[0]?.toUpperCase() || 'C'}
-              </div>
-            )}
-
-            <div className="online-status" />
-          </div>
-
-          <div className="profile-info">
-            <h2>{displayName}</h2>
-            <p className="profile-id">ID: {userId.substring(0, 8)}...</p>
-            <p className="bio">
-              {profile?.bio || 'Curated Educational Content & Expert Insights'}
-            </p>
-          </div>
-
-          <div className="profile-actions">
-            <button className="btn-primary" onClick={handleStartChat}>
-              💬 Message
-            </button>
-
-            {!profile?.isMe && (
-              <button
-                className={profile?.isFollowing ? 'btn-secondary following' : 'btn-secondary'}
-                onClick={handleFollow}
-                disabled={actionLoading || profile?.requestPending}
-              >
-                {followButtonText}
-              </button>
-            )}
-          </div>
-        </header>
-
-        <div className="stats-bar">
-          <button className="stat" onClick={showPosts}>
-            <strong>{creatorPosts.length || profile?.postsCount || profile?.reelsCount || 0}</strong>
-            posts
-          </button>
-
-          <button className="stat" onClick={showFollowers}>
-            <strong>{followers.length || profile?.followersCount || 0}</strong>
-            followers
-          </button>
-
-          <button className="stat" onClick={showFollowing}>
-            <strong>{following.length || profile?.followingCount || 0}</strong>
-            following
-          </button>
-        </div>
-
-        {activeTab === 'posts' && (
-          <section className="posts-section">
-            <h3>Recent Contributions</h3>
-
-            {postsLoading ? (
-              <div className="empty-state">
-                <p>Loading posts...</p>
-              </div>
-            ) : creatorPosts.length > 0 ? (
-              <div className="creator-grid">
-                {renderedPosts}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <p>This creator has not posted anything yet.</p>
-              </div>
-            )}
-          </section>
-        )}
-
-        {activeTab === 'followers' && (
-          <section className="posts-section">
-            <h3>Followers</h3>
-
-            {followers.length > 0 ? (
-              <div className="people-list">
-                {renderedFollowers}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <p>No followers yet.</p>
-              </div>
-            )}
-          </section>
-        )}
-
-        {activeTab === 'following' && (
-          <section className="posts-section">
-            <h3>Following</h3>
-
-            {following.length > 0 ? (
-              <div className="people-list">
-                {renderedFollowing}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <p>This creator is not following anyone yet.</p>
-              </div>
-            )}
-          </section>
-        )}
-      </div>
-    </main>
-  );
+      const unfollow = profile.isFollowing;
+      const result = normalizePostResponse(await (unfollow ? creatorApi.unfollow(userId) : creatorApi.follow(userId)));
+      if (!mounted.current) return;
+      const following = !unfollow && (result.isFollowing === true || result.following === true || result.requestPending === false || ['accepted','following'].includes(result.status));
+      const pending = !unfollow && !following;
+      client.setQueryData(profileKey, previous => ({ ...previous, isFollowing: following, requestPending: pending,
+        followersCount: Math.max(0, count(previous?.followersCount) + (unfollow ? -1 : following ? 1 : 0)) }));
+      setNotice(unfollow ? 'You’re no longer following this member.' : pending ? 'Follow request sent.' : 'You’re now following this member.');
+      client.invalidateQueries({ queryKey: ['public-profile', account, userId, 'people', 'followers'] });
+    } catch { if (mounted.current) setNotice('This follow update could not be completed. Please try again.'); }
+    finally { lock.current = false; if (mounted.current) setBusy(false); }
+  };
+  const message = () => {
+    if (!requireUser()) return;
+    navigate('/chat', { state: { startWithUser: { userId, id: userId, sub: userId, username: name, name } } });
+  };
+  const share = async () => {
+    try {
+      if (navigator.share) await navigator.share({ title: name + ' on Smarty', url: window.location.href });
+      else { await navigator.clipboard.writeText(window.location.href); if (mounted.current) setNotice('Profile link copied.'); }
+    } catch (error) { if (error?.name !== 'AbortError' && mounted.current) setNotice('The profile link could not be shared.'); }
+  };
+  const failure = (query, label) => <div className="public-profile-empty" role="alert"><h2>{label}</h2><p>Check your connection and try again.</p><button type="button" onClick={() => query.refetch()} disabled={query.isFetching}><RefreshCw size={16}/>Try again</button></div>;
+  return <main className="creator-profile-container public-profile-page" aria-labelledby="public-profile-name">
+    <nav className="public-profile-nav" aria-label="Profile navigation"><Link to="/feed?topic=All"><Layers size={16}/>Feed</Link><Link to="/feed?topic=All" className="public-profile-brand">Smarty</Link><button type="button" onClick={share} aria-label="Share profile"><Share2 size={17}/></button></nav>
+    {profileQuery.isPending ? <div className="public-profile-skeleton" role="status" aria-label="Loading profile"><i/><i/><i/></div> : profileQuery.isError || !profile ? failure(profileQuery,'This profile could not load.') : <>
+      <header className="public-profile-header"><div className="public-profile-avatar">{avatar && !avatarFailed ? <img src={avatar} alt="" decoding="async" onError={() => setAvatarFailed(true)}/> : name.slice(0,1).toUpperCase()}</div><div className="public-profile-identity"><small>MEMBER PROFILE</small><h1 id="public-profile-name">{name}</h1><p>{profile.bio || 'Sharing ideas and learning along the way.'}</p></div><div className="public-profile-actions">{own ? <Link to="/profile">Edit profile<ArrowUpRight size={15}/></Link> : <><button type="button" className="public-profile-follow" aria-pressed={Boolean(profile.isFollowing)} disabled={busy || profile.requestPending} onClick={follow}>{profile.isFollowing || profile.requestPending ? <Check size={16}/> : <UserPlus size={16}/>} {busy ? 'Updating…' : profile.requestPending ? 'Requested' : profile.isFollowing ? 'Following' : 'Follow'}</button><button type="button" onClick={message}><MessageCircle size={16}/>Message</button></>}</div></header>
+      {notice && <p className="public-profile-notice" role="status">{notice}</p>}
+      <nav className="public-profile-tabs" aria-label="Profile sections">{[['posts','Posts'],['followers','Followers'],['following','Following']].map(([value,label]) => <button type="button" key={value} aria-pressed={tab === value} onClick={() => { setTab(value); setSearch(''); }}><strong>{count(stats[value])}</strong>{label}</button>)}</nav>
+      <section className="public-profile-collection" aria-label={tab === 'posts' ? 'Recent contributions' : tab}>
+        <header className="public-profile-collection-heading"><div><small>{tab === 'posts' ? 'IDEAS SHARED' : 'THE COMMUNITY'}</small><h2>{tab === 'posts' ? 'Recent contributions' : tab === 'followers' ? 'Followers' : 'Following'}</h2></div>{tab === 'posts' && <label className="public-profile-kind"><span className="public-profile-sr">Content type</span><select aria-label="Profile content type" value={kind} onChange={event => setKind(event.target.value)}><option value="all">All posts</option><option value="read">Reads</option><option value="video">Videos</option></select></label>}</header>
+        {tab === 'posts' && posts.length > 0 && <label className="public-profile-search"><Search size={16}/><input type="search" aria-label="Search this member’s posts" placeholder="Find an idea" value={search} onChange={event => setSearch(event.target.value)}/></label>}
+        {tab === 'posts' ? postsQuery.isPending ? <p role="status">Loading contributions…</p> : postsQuery.isError ? failure(postsQuery,'Contributions could not load.') : shown.length ? <div className="public-profile-posts">{shown.map(post => {
+          const id = contentId(post), video = getPostVideoUrl(post), thumbnail = getPostVideoUrl({ videoUrl: post.thumbUrl || post.imageUrl }), topic = contentTopics(post)[0] || 'Smarty';
+          return <Link className="public-profile-post" key={id} to={'/reel/' + encodeURIComponent(id)}><div className="public-profile-thumbnail">{thumbnail ? <img src={thumbnail} alt="" loading="lazy" decoding="async" onError={event => { event.currentTarget.hidden = true; }}/> : video ? <Play size={22}/> : <BookOpen size={22}/>}</div><div><small>{topic} · {video ? 'Video' : postReadingStats(post.body || '').minutes + ' min read'}</small><h3>{post.title || 'An idea to explore'}</h3><p>{post.body || post.description}</p></div><ArrowUpRight size={16}/></Link>;
+        })}</div> : <div className="public-profile-empty"><h2>{posts.length ? 'No matching ideas.' : 'A collection waiting to grow.'}</h2><p>{posts.length ? 'Try another search or content type.' : 'New contributions will appear here.'}</p>{posts.length > 0 && <button type="button" onClick={() => { setSearch(''); setKind('all'); }}>Clear filters</button>}</div>
+        : peopleQuery.isPending ? <p role="status">Loading members…</p> : peopleQuery.isError ? failure(peopleQuery,'These members could not load.') : people.length ? <div className="public-profile-people">{people.map((person,index) => {
+          const id = String(person.userId || person.followerId || person.followingId || person.id || ''), label = getPostAuthorUsername(null,person);
+          return <Link key={id || index} to={id ? '/creator/' + encodeURIComponent(id) : '#'} onClick={event => { if (!id) event.preventDefault(); }} aria-disabled={!id}><span>{label.slice(0,1).toUpperCase()}</span><div><strong>{label}</strong><small>Smarty member</small></div><ArrowUpRight size={16}/></Link>;
+        })}</div> : <div className="public-profile-empty"><h2>{tab === 'followers' ? 'No followers yet.' : 'No members followed yet.'}</h2><p>Connections grow one good conversation at a time.</p></div>}
+      </section>
+    </>}
+  </main>;
 }
