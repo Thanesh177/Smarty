@@ -18,6 +18,8 @@ import {
 import { postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import LearningJourneyPanel from '../components/learning/LearningJourneyPanel';
+import PostAuthor from '../components/PostAuthor';
+import { getPostAuthorUsername } from '../lib/postAuthor';
 import { getLearningGuide } from '../data/learningGuides';
 import { DETAILED_EXPLANATION_VERSION, explanationSections, readingLessonSections, explanationBlocks } from '../lib/explanationFormat';
 import { createRequestCache } from '../lib/requestCache';
@@ -127,9 +129,8 @@ function PostStudyRoom() {
   const { user, loading: authLoading } = useAuth();
 
   const postFromState = useMemo(() => getLearningGuide(postId) || location.state?.post || null, [location.state, postId]);
-  const creatorName = postFromState?.isLearningGuide ? 'Smarty learning guide' : location.state?.creatorName || 'Smarty creator';
-
   const [post, setPost] = useState(postFromState);
+  const creatorName = getPostAuthorUsername(post);
   const [explanation, setExplanation] = useState(() => getUsableDetailedExplanation(postFromState));
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
@@ -478,7 +479,7 @@ function PostStudyRoom() {
               <span>{topicLabel}</span>
               {getLearningLevelLabel(post) && <span>{getLearningLevelLabel(post)} · Lesson {post.learningOrder}</span>}
               <span>{estimatedMinutes} min guided read</span>
-              <span>By {creatorName}</span>
+              <span>By <PostAuthor post={post} /></span>
             </div>
           </div>
 

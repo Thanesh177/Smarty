@@ -1,7 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { postApi } from '../api/client';
 import LearningJourneyPanel from '../components/learning/LearningJourneyPanel';
+import PostAuthor from '../components/PostAuthor';
+import { getPostAuthorUsername } from '../lib/postAuthor';
 import './ReelDetailPage.css';
 function getPostImage(post) {
   return (
@@ -253,9 +255,7 @@ const handleSave = useCallback(async () => {
           <h1>{post.title}</h1>
 
           <div className="reel-author-row">
-            <Link to={`/creator/${post.authorId || post.userId || post.creatorId}`}>
-              {post.author || post.creatorName || 'Creator'}
-            </Link>
+            <PostAuthor post={post} />
           </div>
 
           <p className="reel-body">{post.body}</p>
@@ -264,7 +264,7 @@ const handleSave = useCallback(async () => {
             post={post}
             postId={reelId}
             stage="read"
-            creatorName={post.author || post.creatorName || 'Smarty creator'}
+            creatorName={getPostAuthorUsername(post)}
           />
 
           <div className="reel-actions">

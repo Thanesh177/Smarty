@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import PostAuthor from './PostAuthor';
 
 export default function PostCard({ post, onLike, onSave }) {
   return (
@@ -12,7 +13,7 @@ export default function PostCard({ post, onLike, onSave }) {
       <h2>{post.title}</h2>
       <p>{post.body}</p>
       <div className="post-footer">
-        <span>By {post.author}</span>
+        <span>By <PostAuthor post={post} /></span>
         <div className="actions">
           <button onClick={() => onLike(post.id)}>❤️ {post.likes}</button>
           <button onClick={() => onSave(post.id)}>{post.saved ? '★ Saved' : '☆ Save'}</button>

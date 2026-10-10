@@ -47,7 +47,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
   const visitedCursors = useRef(new Set());
   const mounted = useRef(true);
   const [activeId, setActiveId] = useState('');
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [notice, setNotice] = useState('');
@@ -78,8 +78,13 @@ function VideoFeed({ onOpenSearch, account, user }) {
     if (!root || !videos.length) { setActiveId(''); return undefined; }
     const ratios = new Map();
     const observer = new IntersectionObserver(entries => {
-      entries.forEach(entry => ratios.set(entry.target.dataset.videoId, entry.isIntersecting ? entry.intersectionRatio : 0));
-      setActiveId(previous => getMostVisibleVideo(ratios, previous));
+      entries.forEach(entry => {
+        const ratio = entry.isIntersecting ? entry.intersectionRatio : 0;
+        ratios.set(entry.target.dataset.videoId, ratio);
+        // Pause at the visibility boundary, before React commits.
+        if (ratio < .5) entry.target.querySelector('video')?.pause();
+      });
+      setActiveId(getMostVisibleVideo(ratios));
     }, { root, threshold: [0, 0.25, 0.5, 0.75, 1] });
     root.querySelectorAll('[data-video-id]').forEach(element => observer.observe(element));
     return () => observer.disconnect();

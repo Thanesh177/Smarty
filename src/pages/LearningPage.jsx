@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { postApi } from '../api/client';
 import useLearningLibrary from '../hooks/useLearningLibrary';
 import { LEARNING_GUIDES } from '../data/learningGuides';
+import { getPostAuthorUsername } from '../lib/postAuthor';
 import { getLearningContext, getLearningLevelLabel, getLearningNextStep, getLearningQuizLocation, getRelatedLearningTopics, normalizeLearningTopic } from '../lib/learningJourney';
 import './LearningPage.css';
 
@@ -15,7 +16,7 @@ function LessonLink({ post, progress, index }) {
   return <article className="learn-lesson">
     <span className="learn-lesson-number" aria-hidden="true">{progress?.challenge ? <Check size={17} /> : String(index + 1).padStart(2, '0')}</span>
     <div className="learn-lesson-content"><small>{context.topic}{getLearningLevelLabel(context) && ` · ${getLearningLevelLabel(context)} · Step ${context.learningOrder}`} · About {minutes} min{post.isLearningGuide ? ' · Smarty guide' : ''}</small>
-      <Link className="learn-lesson-open" to={'/post-ai/' + encodeURIComponent(context.postId)} state={{ post, creatorName: post.creatorName || post.author || 'Smarty creator' }}>
+      <Link className="learn-lesson-open" to={'/post-ai/' + encodeURIComponent(context.postId)} state={{ post, creatorName: getPostAuthorUsername(post) }}>
         <h3>{context.title}</h3><p>{context.objective || context.body.slice(0, 150)}</p>
         <span className="learn-lesson-action">{progress?.challenge ? 'Revisit the lesson' : progress ? 'Continue reading' : 'Start learning'} <ArrowRight size={14} /></span>
       </Link>

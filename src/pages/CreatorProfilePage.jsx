@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { creatorApi, postApi } from '../api/client';
+import { getPostAuthorUsername } from '../lib/postAuthor';
 import './CreatorProfile.css';
 
 const CreatorPostCard = memo(function CreatorPostCard({ post, index, onOpen }) {
@@ -61,11 +62,7 @@ export default function CreatorProfilePage() {
   const [postsLoading, setPostsLoading] = useState(false);
 
   const displayName = useMemo(
-    () =>
-      profile?.name ||
-      profile?.username ||
-      profile?.email ||
-      (userId?.length > 20 ? `Creator_${userId.substring(0, 5)}` : userId),
+    () => getPostAuthorUsername(null, profile),
     [profile, userId]
   );
 

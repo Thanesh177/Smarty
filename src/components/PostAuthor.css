@@ -1,0 +1,3 @@
+.post-author-link { color: inherit; font: inherit; text-decoration: none; text-underline-offset: 4px; }
+.post-author-link:hover { text-decoration: underline; }
+.post-author-link:focus-visible { outline: 2px solid var(--ui-accent, #a6c5df); outline-offset: 4px; border-radius: 2px; }

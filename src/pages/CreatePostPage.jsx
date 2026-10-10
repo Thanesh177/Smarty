@@ -21,6 +21,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { EMPTY_POST, hasPostDraft, postReadingStats, readPostDraft, savePostDraft, validatePostMedia } from '../lib/postDraft';
 import { isVideoTopic, validateVideoUpload } from '../lib/videoFeed';
 import { normalizePostResponse } from '../lib/postResponse';
+import { getPostAuthorUsername } from '../lib/postAuthor';
 import './CreatePostComposer.css';
 const createSafeId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -218,7 +219,7 @@ function PostComposer({ account, user, videoMode }) {
   const choices = canCreate ? [...matches, selectedTopic] : matches;
   const isVideo = Boolean(media?.type.startsWith('video/'));
   const ready = selectedTopic.length >= 2 && form.title.trim() && (isVideo ? videoPlayable : form.body.trim()) && (!videoMode || isVideo);
-  const name = user?.name || user?.username || 'You';
+  const name = getPostAuthorUsername(null, user);
 
   const persist = useCallback(() => {
     window.clearTimeout(saveTimer.current);

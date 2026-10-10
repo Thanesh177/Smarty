@@ -1,3 +1,5 @@
+import { getPostAuthorId, getPostAuthorUsername } from './postAuthor.js';
+
 export const getVideoPostId = post => String(post?.reelId || post?.postId || post?.id || '').trim();
 
 export function getPostVideoUrl(post) {
@@ -11,14 +13,8 @@ export function getPostVideoUrl(post) {
   } catch { return ''; }
 }
 
-export const getVideoCreatorId = post => String(
-  post?.creatorId || post?.authorId || post?.userId || post?.author?.id || post?.creator?.id || post?.user?.id || ''
-).trim();
-
-export function getVideoCreatorName(post) {
-  const name = post?.creatorName || post?.authorName || post?.username || post?.author?.name || post?.creator?.name;
-  return String(name || (typeof post?.author === 'string' ? post.author : '') || 'Smarty member');
-}
+export const getVideoCreatorId = getPostAuthorId;
+export const getVideoCreatorName = getPostAuthorUsername;
 
 export function getVideoPosts(posts = []) {
   const seen = new Set();
@@ -33,13 +29,17 @@ export function getVideoPosts(posts = []) {
   });
 }
 
-export function getMostVisibleVideo(entries, previousId = '') {
+export function getMostVisibleVideo(entries) {
   const visible = [...entries].filter(([, ratio]) => ratio >= 0.5);
   visible.sort((a, b) => b[1] - a[1]);
-  return visible[0]?.[0] || (entries.get(previousId) > 0 ? previousId : '');
+  return visible[0]?.[0] || '';
 }
 
 export const isVideoTopic = topic => ['video', 'videos', 'reels'].includes(String(topic || '').trim().toLowerCase());
+export function isVideoTopicPost(post) {
+  return [post?.topic, post?.topics, post?.mainTopic, post?.topicDomain, post?.category, post?.categories]
+    .flat().some(topic => typeof topic === 'string' && topic.split(',').some(isVideoTopic));
+}
 
 export function validateVideoUpload(file) {
   if (!file?.type?.startsWith('video/')) return 'Choose a video for the Video feed.';

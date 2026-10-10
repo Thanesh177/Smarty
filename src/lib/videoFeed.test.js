@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatVideoTime, getMostVisibleVideo, getPostVideoUrl, getVideoCreatorId, getVideoCreatorName, getVideoPosts, isVideoTopic, validateVideoUpload } from './videoFeed.js';
+import { formatVideoTime, getMostVisibleVideo, getPostVideoUrl, getVideoCreatorId, getVideoCreatorName, getVideoPosts, isVideoTopic, isVideoTopicPost, validateVideoUpload } from './videoFeed.js';
 import { MAIN_TOPICS, getMainTopicDefinition, postMatchesMainTopic } from '../data/topicTaxonomy.js';
 
 test('Video is available in navigation and resolves legacy video labels', () => {
@@ -35,7 +35,12 @@ test('media URLs reject executable, credential-like, and invalid payloads', () =
 test('the most visible card wins and completely offscreen cards never play', () => {
   assert.equal(getMostVisibleVideo(new Map([['one', .25], ['two', .75]]), 'one'), 'two');
   assert.equal(getMostVisibleVideo(new Map([['one', 0], ['two', 0]]), 'one'), '');
-  assert.equal(getMostVisibleVideo(new Map([['one', .25]]), 'one'), 'one');
+  assert.equal(getMostVisibleVideo(new Map([['one', .25]]), 'one'), '');
+});
+test('All posts excludes Video-topic aliases but retains videos in other learning subjects', () => {
+  for (const post of [{ topic: 'Video' }, { topic: ['Physics', 'Reels'] }, { topic: 'Physics,Video' }, { topicDomain: 'Videos' }, { category: 'video' }, { categories: ['Reels'] }]) assert(isVideoTopicPost(post));
+  assert(!isVideoTopicPost({ topic: 'Physics', videoUrl: '/science.mp4' }));
+  assert(!isVideoTopicPost({ topic: 'Video editing techniques' }));
 });
 test('video upload has a specific supported-container check', () => {
   assert.match(validateVideoUpload({ type: 'image/png' }), /Choose a video/);

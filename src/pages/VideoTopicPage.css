@@ -29,7 +29,8 @@
 .reel-video-stage button:disabled { opacity: .4; cursor: default; }
 .reel-video-stage [aria-pressed="true"] { color: #b2d8f5; }
 .reel-video-tap { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; display: grid; place-items: center; background: transparent; border: 0; color: #fff; cursor: pointer; }
-.reel-video-tap > span { display: grid; place-items: center; width: 72px; height: 72px; border-radius: 50%; background: #0007; border: 1px solid #ffffff38; }
+.reel-video-tap > span { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 22px 26px; border-radius: 20px; background: #0008; border: 1px solid #ffffff24; }
+.reel-video-tap small { font-size: 12px; font-weight: 500; letter-spacing: .01em; }
 .reel-video-playback { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .reel-video-stage .reel-video-playback button { min-width: 32px; min-height: 32px; border: 0; background: transparent; }
 .reel-video-playback input { min-width: 0; width: 100%; height: 32px; padding: 0; cursor: pointer; accent-color: #b3dafa; }

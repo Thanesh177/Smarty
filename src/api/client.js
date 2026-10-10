@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createRequestCache } from '../lib/requestCache';
+import { normalizeSavedCollection } from '../lib/savedCollection';
 import { createNewsRequestCache } from '../lib/newsRequestCache';
 import { getLearningGuide } from '../data/learningGuides';
 import { DETAILED_EXPLANATION_VERSION } from '../lib/explanationFormat';
@@ -2312,7 +2313,7 @@ async toggleSave(reelId) {
     }
 
     const { data } = await api.get(endpoints.posts.saved);
-    return normalizeList(data);
+    return normalizeSavedCollection(data);
   },
 
   async getTopics() {
