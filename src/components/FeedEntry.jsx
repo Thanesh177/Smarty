@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import FeedPage from '../pages/FeedPage';
-import NewsPage from '../pages/NewsPage';
+import NewsPage from './NewsRoute';
 import SmartyLanding from './landing/SmartyLanding';
 import FeedHeader from './FeedHeader';
 import VideoTopicPage from '../pages/VideoTopicPage';

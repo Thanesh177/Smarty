@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, BellRing, BrainCircuit, MessageCircle, Newspaper, Sparkles, Users, Clock3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { notificationApi } from '../api/client';
+import { notificationApi, newsApi } from '../api/client';
+import { newsPushPreferences } from '../lib/newsPushPreferences';
 import {
   loadNotificationPreferences,
   saveNotificationPreferences,
@@ -150,6 +151,13 @@ export default function NotificationSettingsPage() {
     try {
     const stored = saveNotificationPreferences(userId, preferences);
     setPreferences(stored);
+    try {
+      await newsApi.saveNewsPushPreferences(newsPushPreferences(stored));
+      if (!mounted.current || activeUser.current !== userId) return;
+    } catch (cause) {
+      if (mounted.current && activeUser.current === userId) setError(cause.message || 'Saved on this device. Story-alert sync failed; please try again.');
+      return;
+    }
     if (native) {
       try {
         const result = await nativeNotificationRequest('configure', { userScope: getUserScope(userId), time: reminderTime(stored) });

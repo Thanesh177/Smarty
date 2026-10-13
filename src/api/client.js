@@ -531,6 +531,26 @@ const publicNewsCache = createNewsRequestCache();
 if (typeof window !== 'undefined') window.addEventListener('smarty-global-refresh', () => publicNewsCache.clear());
 
 export const newsApi = {
+  async saveNewsPushPreferences(preferences) {
+    const { data } = await api.put('/news/push-preferences', preferences, { timeout: 8000 });
+    if (data?.success !== true) throw new Error('Saved on this device, but story-alert preferences could not sync. Please try again.');
+    return data;
+  },
+  async getPersonalNews({ signal } = {}) {
+    const { data } = await api.get('/news/personal', { signal, timeout: 8000 });
+    if (!Array.isArray(data?.stories) || !Array.isArray(data?.updates)) throw new Error('News preferences are not available on this server yet.');
+    return data;
+  },
+  async saveNewsPreferences(preferences) {
+    const { data } = await api.put('/news/preferences', preferences, { timeout: 8000 });
+    if (!data?.preferences || data.success === false) throw new Error('News preferences could not be saved.');
+    return data;
+  },
+  async updateNewsStory(payload) {
+    const { data } = await api.post('/news/follows', payload, { timeout: 8000 });
+    if (data?.success !== true) throw new Error('Story update could not be saved.');
+    return data;
+  },
   async getStoryTimeline({ query, year = 'recent', month = 'all', signal } = {}) {
     return storyTimelineCache.get(JSON.stringify([query, year, month]), async () => {
       const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
@@ -611,6 +631,7 @@ export const newsApi = {
       lang: String(input.lang || 'english').trim().toLowerCase(),
       country: String(input.country || 'GLOBAL').trim().toUpperCase(),
       region: String(input.region || '').trim(),
+      ...(input.view === 'reports' ? { view: 'reports' } : {}),
     };
     return publicNewsCache.get(JSON.stringify(location), () => newsApi.loadLatestNews(location), input);
   },
@@ -625,7 +646,7 @@ export const newsApi = {
 
     const primaryResult = await Promise.allSettled([
       axios.get(`${NEWS_API_BASE_URL}/latest`, {
-        params: { lang, country, ...(region ? { region } : {}) },
+        params: { lang, country, ...(region ? { region } : {}), ...(normalizedOptions.view === 'reports' ? { view: 'reports' } : {}) },
         timeout: NEWS_API_TIMEOUT,
         signal: normalizedOptions.signal,
       }),
@@ -1571,6 +1592,14 @@ async getFollowRequests() {
 },
 
 deleteAccount: async () => {
+  // Remove private news choices before revoking the identity. Old deployments
+  // without this service keep their existing deletion path; an active service
+  // must successfully erase its records before the account is removed.
+  try {
+    const { data } = await api.delete('/news/personal', { timeout: 8000 });
+    if (data?.success !== true) throw new Error('Your news data could not be removed. Please try again.');
+  }
+  catch (error) { if (![404, 405].includes(error?.response?.status)) throw error; }
   const response = await api.delete('/account');
   return response.data;
 },

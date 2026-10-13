@@ -4,6 +4,7 @@ import { ArrowDown, ArrowLeft, ArrowUpRight, Bookmark, Check, History, Search, S
 import { newsApi } from '../api/client';
 import { cleanStoryQuery, filterStoryReports, groupStoryReports, reportKey, storyPeriod, timelineArticles } from '../lib/newsStories';
 import useNewsStoryLibrary from '../hooks/useNewsStoryLibrary';
+import { NewsFollowButton } from '../components/NewsPersonalization';
 import './NewsStoryPage.css';
 
 const CACHE_KEY = 'smarty-story-timelines-v1';
@@ -139,6 +140,7 @@ export default function NewsStoryPage() {
       <h1 id="story-title" tabIndex={-1} ref={heading}>{query ? query[0].toLocaleUpperCase() + query.slice(1) : 'Follow a story'}</h1>
       <p>Follow the reporting. Connect the background to what happens next.</p>
       <div className="news-story-actions">
+        <NewsFollowButton query={query}/>
         {filtered.length > 0 && <button type="button" className="news-story-start" onClick={() => jumpTo(nextUnopened >= 0 ? nextUnopened : 0)}><ArrowDown size={16} aria-hidden="true" />{openedCount > 0 && nextUnopened >= 0 ? 'Continue story' : 'Read reports'}</button>}
         <button type="button" aria-pressed={Boolean(savedStory?.saved)} disabled={query.length < 3} onClick={() => {
           const result = updateLibrary(query, {saved: !savedStory?.saved, year, month, order});

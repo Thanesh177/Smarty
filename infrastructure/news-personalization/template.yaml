@@ -1,0 +1,329 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Private Smarty news preferences and followed-story updates
+Parameters:
+  ExistingHttpApiId:
+    Type: String
+    AllowedPattern: '[a-z0-9]+'
+  ExistingJwtAuthorizerId:
+    Type: String
+    AllowedPattern: '[a-z0-9]+'
+  NewsEndpoint:
+    Type: String
+    AllowedPattern: 'https://[a-zA-Z0-9.-]+/latest'
+  AllowedOrigin:
+    Type: String
+    Default: https://smarty.wiki
+    AllowedPattern: 'https://[a-zA-Z0-9.-]+'
+  WorkerState:
+    Type: String
+    Default: DISABLED
+    AllowedValues: [ENABLED, DISABLED]
+  PushState:
+    Type: String
+    Default: DISABLED
+    AllowedValues: [ENABLED, DISABLED]
+  ExistingPushSenderArn:
+    Type: String
+    AllowedPattern: 'arn:[a-z-]+:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]+'
+  ExistingPushSenderRoleName:
+    Type: String
+    AllowedPattern: '[A-Za-z0-9+=,.@_-]+'
+  ExistingPersonalNewsTableName:
+    Type: String
+    Default: ''
+    AllowedPattern: '[A-Za-z0-9_.-]*'
+Conditions:
+  CreatePersonalNews: !Equals [!Ref ExistingPersonalNewsTableName, '']
+Resources:
+  PersonalNews:
+    Type: AWS::DynamoDB::Table
+    Condition: CreatePersonalNews
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification: { SSEEnabled: true }
+      PointInTimeRecoverySpecification: { PointInTimeRecoveryEnabled: true }
+      TimeToLiveSpecification: { AttributeName: expiresAt, Enabled: true }
+      AttributeDefinitions:
+        - { AttributeName: userId, AttributeType: S }
+        - { AttributeName: entryId, AttributeType: S }
+        - { AttributeName: watchPartition, AttributeType: S }
+        - { AttributeName: watchSort, AttributeType: S }
+        - { AttributeName: pushPartition, AttributeType: S }
+        - { AttributeName: pushDue, AttributeType: N }
+      KeySchema:
+        - { AttributeName: userId, KeyType: HASH }
+        - { AttributeName: entryId, KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: ActiveWatches
+          KeySchema:
+            - { AttributeName: watchPartition, KeyType: HASH }
+            - { AttributeName: watchSort, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+        - IndexName: PendingPush
+          KeySchema:
+            - { AttributeName: pushPartition, KeyType: HASH }
+            - { AttributeName: pushDue, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+  PushSenderReceipts:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-push-receipts'
+      Roles: [!Ref ExistingPushSenderRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem]
+            Resource: !If [CreatePersonalNews, !GetAtt PersonalNews.Arn, !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingPersonalNewsTableName}']
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Metadata: { BuildMethod: makefile }
+    Properties:
+      CodeUri: ./
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 10
+      Tracing: Active
+      Environment:
+        Variables:
+          PERSONAL_NEWS_TABLE: !If [CreatePersonalNews, !Ref PersonalNews, !Ref ExistingPersonalNewsTableName]
+          ALLOWED_ORIGIN: !Ref AllowedOrigin
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:Query, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:BatchWriteItem]
+              Resource: !If [CreatePersonalNews, !GetAtt PersonalNews.Arn, !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingPersonalNewsTableName}']
+  WorkerFailures:
+    Type: AWS::SQS::Queue
+    Properties:
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600
+  PushFailures:
+    Type: AWS::SQS::Queue
+    Properties:
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600
+  PushFunction:
+    Type: AWS::Serverless::Function
+    Metadata: { BuildMethod: makefile }
+    Properties:
+      CodeUri: ./
+      Runtime: python3.12
+      Handler: push_delivery.lambda_handler
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 150
+      Tracing: Active
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt PushFailures.Arn
+      Environment:
+        Variables:
+          PERSONAL_NEWS_TABLE: !If [CreatePersonalNews, !Ref PersonalNews, !Ref ExistingPersonalNewsTableName]
+          PUSH_SENDER_ARN: !Ref ExistingPushSenderArn
+          PUSH_FAILURES_QUEUE: !Ref PushFailures
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem]
+              Resource: !If [CreatePersonalNews, !GetAtt PersonalNews.Arn, !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingPersonalNewsTableName}']
+            - Effect: Allow
+              Action: dynamodb:Query
+              Resource: !If [CreatePersonalNews, !Sub '${PersonalNews.Arn}/index/PendingPush', !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingPersonalNewsTableName}/index/PendingPush']
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Ref ExistingPushSenderArn
+            - Effect: Allow
+              Action: sqs:SendMessage
+              Resource: !GetAtt PushFailures.Arn
+      Events:
+        PushChecks:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: rate(5 minutes)
+            State: !Ref PushState
+            FlexibleTimeWindow: { Mode: 'OFF' }
+            RetryPolicy: { MaximumEventAgeInSeconds: 300, MaximumRetryAttempts: 1 }
+            DeadLetterConfig: { Arn: !GetAtt PushFailures.Arn }
+  PushLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${PushFunction}'
+      RetentionInDays: 30
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Metadata: { BuildMethod: makefile }
+    Properties:
+      CodeUri: ./
+      Runtime: python3.12
+      Handler: lambda_function.worker_handler
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 150
+      Tracing: Active
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt WorkerFailures.Arn
+      Environment:
+        Variables:
+          PERSONAL_NEWS_TABLE: !If [CreatePersonalNews, !Ref PersonalNews, !Ref ExistingPersonalNewsTableName]
+          NEWS_ENDPOINT: !Ref NewsEndpoint
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem]
+              Resource: !If [CreatePersonalNews, !GetAtt PersonalNews.Arn, !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingPersonalNewsTableName}']
+            - Effect: Allow
+              Action: dynamodb:Query
+              Resource: !If [CreatePersonalNews, !Sub '${PersonalNews.Arn}/index/ActiveWatches', !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingPersonalNewsTableName}/index/ActiveWatches']
+      Events:
+        StoryChecks:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: rate(15 minutes)
+            State: !Ref WorkerState
+            FlexibleTimeWindow: { Mode: 'OFF' }
+            RetryPolicy: { MaximumEventAgeInSeconds: 900, MaximumRetryAttempts: 1 }
+            DeadLetterConfig: { Arn: !GetAtt WorkerFailures.Arn }
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ApiFunction}'
+      RetentionInDays: 30
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${WorkerFunction}'
+      RetentionInDays: 30
+  NewsIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      IntegrationType: AWS_PROXY
+      IntegrationMethod: POST
+      IntegrationUri: !GetAtt ApiFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 10000
+  ReadRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: GET /news/personal
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub 'integrations/${NewsIntegration}'
+  PreferencesRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: PUT /news/preferences
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub 'integrations/${NewsIntegration}'
+  PushPreferencesRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: PUT /news/push-preferences
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub 'integrations/${NewsIntegration}'
+  FollowsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: POST /news/follows
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub 'integrations/${NewsIntegration}'
+  DeleteRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ExistingHttpApiId
+      RouteKey: DELETE /news/personal
+      AuthorizationType: JWT
+      AuthorizerId: !Ref ExistingJwtAuthorizerId
+      Target: !Sub 'integrations/${NewsIntegration}'
+  ApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingHttpApiId}/*/*/news/*'
+  WorkerErrors:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Followed story update worker errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref WorkerFunction }]
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  FailedChecksAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Followed story checks waiting for operator review
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{ Name: QueueName, Value: !GetAtt WorkerFailures.QueueName }]
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  PushErrors:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Story push delivery function errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref PushFunction }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+  PushFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Story push deliveries waiting for operator review
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{ Name: QueueName, Value: !GetAtt PushFailures.QueueName }]
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+Outputs:
+  PushDispatcher:
+    Description: Consent-aware story push dispatcher
+    Value: !Ref PushFunction
+  PersonalNewsTable:
+    Description: Private account news data table
+    Value: !If [CreatePersonalNews, !Ref PersonalNews, !Ref ExistingPersonalNewsTableName]
+  Worker:
+    Description: Bounded followed-story checker
+    Value: !Ref WorkerFunction
+  FailureQueue:
+    Description: Failed scheduled checks for operator review
+    Value: !Ref WorkerFailures

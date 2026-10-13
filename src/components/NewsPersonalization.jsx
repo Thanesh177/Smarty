@@ -1,0 +1,97 @@
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Bell, BellOff, Globe2, MapPin, X } from 'lucide-react';
+import useNewsPersonalization from '../hooks/useNewsPersonalization';
+import { NEWS_COUNTRIES, NEWS_REGIONS, getDefaultNewsCountry } from '../data/newsLocations';
+import { cleanStoryQuery, storyQuery } from '../lib/newsStories';
+import './NewsPersonalization.css';
+
+export function NewsBriefingChoice({ personal }) {
+  const { preferences, savePreference, syncWarning } = personal;
+  const [editing, setEditing] = useState(false), [country, setCountry] = useState(preferences?.country || getDefaultNewsCountry());
+  const [region, setRegion] = useState(preferences?.region || ''), [saving, setSaving] = useState(false);
+  useEffect(() => { setCountry(preferences?.country || getDefaultNewsCountry()); setRegion(preferences?.region || ''); }, [preferences?.country, preferences?.region]);
+  const apply = async mode => {
+    if (saving) return;
+    setSaving(true);
+    await savePreference({ chosen: true, country, region, mode });
+    setSaving(false); setEditing(false);
+  };
+  const label = preferences?.region || NEWS_COUNTRIES.find(item => item.code === preferences?.country)?.name || 'Your place';
+  const hasLocal = preferences?.country && preferences.country !== 'GLOBAL';
+  return <section className="news-place-choice" aria-label="Daily briefing location">
+    {preferences && !editing ? <div className="news-place-switch">
+      <div role="group" aria-label="Briefing edition"><button type="button" aria-pressed={preferences.mode === 'world'} disabled={saving} onClick={() => apply('world')}><Globe2 size={15}/>World</button>
+        {hasLocal && <button type="button" aria-pressed={preferences.mode === 'local'} disabled={saving} onClick={() => apply('local')}><MapPin size={15}/>{label}</button>}</div>
+      <button type="button" onClick={() => setEditing(true)}>Change place</button>
+    </div> : <form onSubmit={event => { event.preventDefault(); void apply('local'); }}>
+      <header><div><span>MAKE IT YOURS</span><h2>Where would you like your daily briefing from?</h2><p>Stay with the world, or choose your country and region. You can switch anytime.</p></div>
+        {preferences && <button type="button" aria-label="Close location settings" onClick={() => setEditing(false)}><X size={18}/></button>}</header>
+      <div className="news-place-fields"><label>Country<select aria-label="Briefing country" value={country} onChange={event => { setCountry(event.target.value); setRegion(''); }}>
+        {NEWS_COUNTRIES.map(item => <option value={item.code} key={item.code}>{item.name}</option>)}</select></label>
+        <label>State or region<select aria-label="Briefing state or region" value={region} disabled={!NEWS_REGIONS[country]?.length} onChange={event => setRegion(event.target.value)}>
+          <option value="">Countrywide</option>{(NEWS_REGIONS[country] || []).map(item => <option key={item}>{item}</option>)}</select></label></div>
+      <footer><button type="submit" disabled={saving}>{saving ? 'Saving…' : country === 'GLOBAL' ? 'Use world briefing' : 'Use my place'}</button><button type="button" disabled={saving} onClick={() => apply('world')}>Keep world briefing</button></footer>
+    </form>}
+    {syncWarning && <p role="status" className="news-personal-note">{syncWarning}</p>}
+  </section>;
+}
+
+export function NewsFollowButton({ story, query: supplied }) {
+  const navigate = useNavigate(), personal = useNewsPersonalization();
+  const [status, setStatus] = useState(''), [busy, setBusy] = useState(false);
+  const query = cleanStoryQuery(supplied || storyQuery(story));
+  const followed = personal.stories.find(item => item.query.toLowerCase() === query.toLowerCase());
+  if (query.length < 3) return null;
+  const toggle = async () => {
+    if (!personal.account) { navigate('/login', { state: { from: { pathname: '/news/story', search: '?q=' + encodeURIComponent(query) } } }); return; }
+    setBusy(true); setStatus('');
+    try { await personal.updateStory({ query, follow: !followed }); setStatus(followed ? 'Updates turned off.' : 'Following. New related reports will appear in your news updates.'); }
+    catch { setStatus('Story alerts could not be saved. Please try again after the news service reconnects.'); }
+    finally { setBusy(false); }
+  };
+  return <div className="news-follow-control"><button type="button" disabled={busy || personal.pending} aria-pressed={Boolean(followed)} onClick={toggle}>
+    {followed ? <BellOff size={15}/> : <Bell size={15}/>} {busy ? 'Saving…' : followed ? 'Following updates' : 'Follow updates'}</button>
+    {status && <p role="status">{status}</p>}</div>;
+}
+
+export function NewsUpdatesShelf({ personal }) {
+  const [status, setStatus] = useState('');
+  const unread = personal.updates.filter(item => !item.readAt);
+  if (!personal.stories.length && !personal.updates.length) return null;
+  return <details className="news-updates-shelf">
+    <summary><Bell size={16}/>Your story updates <span>{unread.length ? `${unread.length} new` : `${personal.stories.length} followed`}</span></summary>
+    <p>Related reporting matched to the subjects you follow. Checked periodically, not live alerts.</p>
+    <ul>{personal.updates.slice(0,20).map(item => <li key={item.id}>
+      <Link to={'/news/story?q=' + encodeURIComponent(item.query) + '&year=recent&order=newest'} onClick={() => {
+        if (!item.readAt) personal.updateStory({ read: item.id }).catch(() => setStatus('Could not mark this update as read.'));
+      }}><strong>{item.query}</strong><span>{item.body}</span><small>{item.readAt ? 'Opened' : 'New report'}</small></Link>
+    </li>)}</ul>
+    <div className="news-followed-list">{personal.stories.map(item => <div key={item.id}><Link to={'/news/story?q=' + encodeURIComponent(item.query)}>{item.query}</Link>
+      <button type="button" disabled={personal.pending} aria-label={'Unfollow ' + item.query} onClick={() => personal.updateStory({ query: item.query, follow: false }).catch(() => setStatus('Could not turn off updates. Try again.'))}><X size={16}/></button></div>)}</div>
+    {status && <p role="status">{status}</p>}
+  </details>;
+}
+
+// One poller for the signed-in app, never one timer per card. Delivery obeys the
+// app's notification policy; unread updates remain available in the newsroom.
+export function NewsUpdateNotifier() {
+  const personal = useNewsPersonalization({ poll: true }), account = personal.account;
+  const seen = useRef({ account: '', ids: new Set() });
+  useEffect(() => {
+    if (!account) { seen.current = { account: '', ids: new Set() }; return; }
+    if (seen.current.account !== account) {
+      let ids = []; try { ids = JSON.parse(localStorage.getItem('smarty-news-alerts-seen-' + account) || '[]'); } catch { /* Memory only. */ }
+      seen.current = { account, ids: new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string').slice(-100) : []) };
+    }
+    const fresh = personal.updates.filter(item => !item.readAt && !seen.current.ids.has(item.id));
+    if (!fresh.length) return;
+    fresh.forEach(item => seen.current.ids.add(item.id));
+    const ids = [...seen.current.ids].slice(-100); seen.current.ids = new Set(ids);
+    try { localStorage.setItem('smarty-news-alerts-seen-' + account, JSON.stringify(ids)); } catch { /* Memory deduplication still works. */ }
+    const latest = fresh[0];
+    window.dispatchEvent(new CustomEvent('smarty-notification', { detail: { userId: account, notificationId: latest.id, type: 'news',
+      title: 'New reporting: ' + latest.query, body: latest.body, url: '/news/story?q=' + encodeURIComponent(latest.query) + '&year=recent&order=newest' } }));
+  }, [account, personal.updates]);
+  return null;
+}

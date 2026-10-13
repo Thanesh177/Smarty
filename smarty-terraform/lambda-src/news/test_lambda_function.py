@@ -89,6 +89,43 @@ def make_article(identifier, title, section, published_at, source="Test Wire"):
 
 
 class NewsLambdaTests(unittest.TestCase):
+    def test_local_daily_edition_reuses_saved_summary_and_isolates_regions(self):
+        store = {}
+        def save(key, payload, fresh_until=None):
+            store[key] = {"payload": payload, "freshUntil": fresh_until}
+        with (patch.object(news, "get_cached", side_effect=lambda key: store.get(key)),
+              patch.object(news, "set_cached", side_effect=save),
+              patch.object(news, "generation_lease", side_effect=lambda *args: nullcontext()),
+              patch.object(news, "build_daily_summary", return_value={"summaryMode": "editorial", "overview": "Daily local news"}) as build):
+            first = news.get_world_daily_summary([], news.make_location("IN", "Tamil Nadu"))
+            second = news.get_world_daily_summary([{"new": "headlines"}], news.make_location("IN", "Tamil Nadu"))
+            self.assertEqual(first, second)
+            self.assertEqual(build.call_count, 1)
+            news.get_world_daily_summary([], news.make_location("IN", "Kerala"))
+            self.assertEqual(build.call_count, 2)
+
+    def test_reports_route_stores_shared_reports_without_running_summary_model(self):
+        with (patch.object(news, "get_cached", return_value=None),
+              patch.object(news, "generation_lease", return_value=nullcontext()),
+              patch.object(news, "build_reports_payload", return_value={"articles": [{"id": "one"}]}) as reports,
+              patch.object(news, "set_cached") as save,
+              patch.object(news, "build_daily_summary") as model):
+            result = news.lambda_handler({"queryStringParameters": {"view": "reports"}}, None)
+            self.assertEqual(result["statusCode"], 200)
+            self.assertTrue(save.call_args.args[0].endswith("#reports"))
+            reports.assert_called_once()
+            model.assert_not_called()
+
+    def test_full_briefing_reuses_previously_loaded_reports(self):
+        cached = {"freshUntil": int(news.time.time()) + 600, "payload": {"articles": [{"id": "one"}], "sections": {}}}
+        with (patch.object(news, "get_cached", return_value=cached),
+              patch.object(news, "build_reports_payload") as providers,
+              patch.object(news, "get_world_daily_summary", return_value={"overview": "Daily summary"})):
+            result = news.build_payload(news.make_location("IN", "Tamil Nadu"))
+            self.assertEqual(result["dailySummary"]["overview"], "Daily summary")
+            providers.assert_not_called()
+            self.assertNotIn("dailySummary", cached["payload"])
+
     def test_world_edition_is_shared_for_whole_day_and_changes_next_day(self):
         location = news.make_location("GLOBAL", "")
         start = int(news.datetime(2026, 9, 22, 8, tzinfo=news.timezone.utc).timestamp())

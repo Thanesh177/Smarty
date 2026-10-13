@@ -1,0 +1,12 @@
+{
+  "name": "smarty-private-push-sender",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test message.test.mjs" },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1150.0",
+    "@aws-sdk/lib-dynamodb": "3.1150.0",
+    "google-auth-library": "11.3.0"
+  }
+}

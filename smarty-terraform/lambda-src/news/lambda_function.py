@@ -1247,11 +1247,14 @@ def build_daily_summary(articles, location):
 
 
 def get_world_daily_summary(articles, location):
-    """Publish one shared UTC edition; refreshing headlines never reruns its AI."""
+    """Publish a shared UTC edition per place; refreshes never rerun its AI."""
     now = int(time.time())
     edition_date = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%d")
     next_day = (now // 86400 + 1) * 86400
-    key = f"world-briefing-v{CACHE_VERSION}#{edition_date}#english"
+    identity = f"{location['countryCode']}|{location['region'].lower()}"
+    suffix = hashlib.sha256(identity.encode()).hexdigest()[:16]
+    key = (f"world-briefing-v{CACHE_VERSION}#{edition_date}#english" if location["countryCode"] == "GLOBAL"
+           else f"local-briefing-v{CACHE_VERSION}#{edition_date}#{suffix}#english")
     cached = get_cached(key)
     if cached and int(cached.get("freshUntil", 0)) > now and cached.get("payload"):
         return cached["payload"]
@@ -1274,7 +1277,7 @@ def get_world_daily_summary(articles, location):
         return summary
 
 
-def build_payload(location):
+def build_reports_payload(location):
     provider_results = {}
     providers = {
         "google": {
@@ -1366,8 +1369,6 @@ def build_payload(location):
     return {
         "status": 200,
         "location": {key: value for key, value in location.items() if key != "gdeltCountry"},
-        "dailySummary": get_world_daily_summary(articles, location)
-        if location["countryCode"] == "GLOBAL" else build_daily_summary(articles, location),
         "articles": articles,
         "sections": sections,
         "sources": sources,
@@ -1379,6 +1380,23 @@ def build_payload(location):
             if partial else ""
         ),
     }
+
+
+def build_payload(location):
+    reports_key = make_cache_key(location) + "#reports"
+    cached = get_cached(reports_key)
+    if cached and int(cached.get("freshUntil", 0)) > int(time.time()) and cached.get("payload"):
+        payload = dict(cached["payload"])
+    else:
+        with generation_lease(NEWS_CACHE, "date", reports_key):
+            cached = get_cached(reports_key)
+            if cached and int(cached.get("freshUntil", 0)) > int(time.time()) and cached.get("payload"):
+                payload = dict(cached["payload"])
+            else:
+                payload = build_reports_payload(location)
+                set_cached(reports_key, payload)
+    payload["dailySummary"] = get_world_daily_summary(payload["articles"], location)
+    return payload
 
 
 def story_request(params):
@@ -1543,7 +1561,8 @@ def lambda_handler(event, context):
     except ValueError as error:
         return api_response(400, {"error": str(error)})
 
-    cache_key = make_cache_key(location)
+    reports_only = params.get("view") == "reports"
+    cache_key = make_cache_key(location) + ("#reports" if reports_only else "")
     try:
         cached = get_cached(cache_key)
     except ClientError:
@@ -1560,7 +1579,7 @@ def lambda_handler(event, context):
             latest = get_cached(cache_key)
             if latest and int(latest.get("freshUntil", 0)) > int(time.time()) and latest.get("payload"):
                 return api_response(200, {**latest["payload"], "cacheStatus": "fresh-cache"})
-            payload = build_payload(location)
+            payload = build_reports_payload(location) if reports_only else build_payload(location)
             set_cached(cache_key, payload)
         LOGGER.info(json.dumps({
             "event": "news_refresh_succeeded",

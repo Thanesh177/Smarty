@@ -17,11 +17,14 @@ import UniversalSearch from './components/UniversalSearch';
 import PageTransition from './components/PageTransition';
 import FeedViewSwitch from './components/FeedViewSwitch';
 import FeedViewSwipe from './components/FeedViewSwipe';
+import { NewsUpdateNotifier } from './components/NewsPersonalization';
 import { getFeedView } from './lib/feedViews';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
 import ReminderPopup from './components/ReminderPopup';
 import useDailyReminder from './hooks/useDailyReminder';
+import useNativePush from './hooks/useNativePush';
+import useNewsPushPreferences from './hooks/useNewsPushPreferences';
 import { nativeNotificationRequest, supportsNativeReminders } from './lib/nativeNotifications';
 import { ActionConfirmationProvider } from './components/ActionConfirmation';
 import {
@@ -71,8 +74,7 @@ import CreatorDashboardPage from './pages/CreatorDashboardPage';
 import FollowRequestsPage from './pages/FollowRequestsPage';
 import TopicRoomsPage from './pages/TopicRoomsPage';
 import ReelDetailPage from './pages/ReelDetailPage';
-import NewsPage from './pages/NewsPage';
-import NewsStoryPage from './pages/NewsStoryPage';
+import NewsPage, { NewsStoryRoute as NewsStoryPage } from './components/NewsRoute';
 import ReadBookPage from './pages/ReadBookPage';
 import BookReaderPage from './pages/BookReaderPage';
 import PostAiPage from './pages/PostAiPage';
@@ -307,6 +309,8 @@ function Layout() {
   const navigate = useNavigate();
   const currentUserId = getUserSocketId(user);
   useDailyReminder(currentUserId, authLoading);
+  useNativePush(currentUserId, authLoading);
+  useNewsPushPreferences(currentUserId, authLoading);
   const unreadStorageKey = useMemo(
     () => getUserScopedStorageKey('smartyChatUnreadCount', currentUserId),
     [currentUserId]
@@ -1124,6 +1128,7 @@ useEffect(() => {
 
         <FeedViewSwitch />
         <FeedViewSwipe />
+        <NewsUpdateNotifier />
         <main
           className="content"
           onTouchStart={handleGlobalPullStart}
