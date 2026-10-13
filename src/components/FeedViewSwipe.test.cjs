@@ -20,7 +20,7 @@ function harness({ reduced = false } = {}) {
   vm.runInNewContext(transformSync(fs.readFileSync(__dirname + '/../lib/feedSwipe.js', 'utf8'), { format: 'cjs' }).code,
     { module: swipeScope, exports: swipeScope.exports, require: () => ({ FEED_VIEWS: [
       { id: 'all', to: '/feed?topic=All' }, { id: 'news', to: '/feed?topic=News' },
-      { id: 'video', to: '/feed?topic=Video' }, { id: 'saved', to: '/saved' },
+      { id: 'video', to: '/feed?topic=Video' },
     ] }) });
   vm.runInNewContext(transformSync(fs.readFileSync(__dirname + '/FeedViewSwipe.jsx', 'utf8'), { format: 'cjs', loader: 'jsx' }).code, {
     module: scope, exports: scope.exports, document,
@@ -31,7 +31,7 @@ function harness({ reduced = false } = {}) {
     require(name) {
       if (name === 'react') return { useEffect(fn) { effect = fn; }, useRef(value) { return refs[slot++] ||= { current: value }; } };
       if (name === 'react-router-dom') return { useLocation: () => location, useNavigate: () => path => navigations.push(path) };
-      if (name.includes('feedViews')) return { getFeedView: value => value.pathname === '/saved' ? 'saved' : ({ All: 'all', News: 'news', Video: 'video' }[new URLSearchParams(value.search).get('topic')] || null) };
+      if (name.includes('feedViews')) return { getFeedView: value => value.pathname === '/feed' ? ({ All: 'all', News: 'news', Video: 'video' }[new URLSearchParams(value.search).get('topic')] || null) : null };
       if (name.includes('feedSwipe')) return { swipeDestination: swipeScope.exports.swipeDestination, swipeTargetAllowed: target => target.allowed !== false };
       throw new Error(name);
     }, URLSearchParams,
@@ -79,4 +79,11 @@ test('short and canceled swipes settle back; reduced motion never drags the scre
   const quiet = harness({ reduced: true }); quiet.render(); quiet.emit('touchstart'); quiet.emit('touchmove', { x: 90 }); quiet.flush();
   assert.equal(quiet.route.style.transform, undefined); quiet.emit('touchend', { x: 90, touches: 0 });
   assert.deepEqual(quiet.navigations, ['/feed?topic=News']);
+});
+
+test('Saved has no feed swipe listeners after removal from the toggle', () => {
+  const app = harness();
+  app.render('/saved');
+  assert.equal(app.content.events.size, 0);
+  assert.equal(app.toggle.events.size, 0);
 });

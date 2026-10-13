@@ -56,10 +56,19 @@ test('filters inside a view do not restart its transition', () => {
   assert.equal(app.scrolls.length, 0);
 });
 
+test('Saved uses ordinary page navigation, not a hidden feed segment', () => {
+  const app = harness();
+  app.render('/feed?topic=Video');
+  app.render('/saved');
+  assert.equal(app.scrolls.length, 0);
+  assert.equal(app.animations[0].options.duration, 220);
+  assert.equal(app.animations[0].frames[0].transform, undefined);
+});
+
 test('reduced motion still resets the new view scroll but never animates', () => {
   const app = harness({ reduced: true });
   app.render('/feed?topic=News');
-  app.render('/saved');
+  app.render('/feed?topic=Video');
   assert.equal(app.animations.length, 0);
   assert.equal(app.scrolls.length, 1);
   assert.equal(app.scrolls[0].top, 0);

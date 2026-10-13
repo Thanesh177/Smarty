@@ -5,9 +5,11 @@ import { swipeDestination, swipeTargetAllowed } from './feedSwipe.js';
 test('horizontal swipes follow toggle order without wrapping at the edges', () => {
   assert.equal(swipeDestination('all', { dx: -90, dy: 8 })?.id, 'news');
   assert.equal(swipeDestination('news', { dx: -90, dy: 8 })?.id, 'video');
-  assert.equal(swipeDestination('saved', { dx: 90, dy: 8 })?.id, 'video');
+  assert.equal(swipeDestination('video', { dx: 90, dy: 8 })?.id, 'news');
   assert.equal(swipeDestination('all', { dx: 90, dy: 8 }), null);
   assert.equal(swipeDestination('saved', { dx: -90, dy: 8 }), null);
+  assert.equal(swipeDestination('saved', { dx: 90, dy: 8 }), null);
+  assert.equal(swipeDestination('video', { dx: -90, dy: 8 }), null);
 });
 test('vertical scroll, taps, multitouch, and held gestures never switch views', () => {
   for (const gesture of [{ dx: 20, dy: 0 }, { dx: -70, dy: 90 }, { dx: -90, dy: 2, touches: 2 }, { dx: -90, dy: 2, elapsed: 1600 }]) assert.equal(swipeDestination('all', gesture), null);

@@ -10,6 +10,7 @@ zip -j "$release_dir/news.zip" \
 zip -j "$release_dir/AIcontent.zip" \
   "$project_dir/infrastructure/ai-content/lambda_function.py" \
   "$project_dir/infrastructure/ai-content/content_catalog.py" \
+  "$project_dir/infrastructure/ai-content/editorial_sources.py" \
   "$project_dir/infrastructure/shared/generation_cache.py"
 zip -j "$release_dir/generateQuizQuestions.zip" \
   "$project_dir/smarty-terraform/lambda-src/generateQuizQuestions/index.mjs"

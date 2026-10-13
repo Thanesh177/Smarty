@@ -788,6 +788,21 @@ TOPIC_TO_DOMAIN = {
 
 CONTENT_ANGLES = (
     {
+        "id": "documented_history",
+        "label": "A moment that changed the world",
+        "instruction": "Use a documented event or historical object to trace causes, consequences, and what the surviving evidence does and does not establish. Avoid single-cause myths and invented scenes.",
+    },
+    {
+        "id": "current_connection",
+        "label": "In the world now",
+        "instruction": "Connect the assigned concept to a dated, retrieved recent report. Attribute reported claims and distinguish proposals, preliminary findings, and confirmed outcomes. If no relevant recent report is available, teach the stable concept without claiming it is current news.",
+    },
+    {
+        "id": "deep_question",
+        "label": "Beneath the obvious answer",
+        "instruction": "Start with a specific, worthwhile puzzle. Explain the less obvious causal link, evidence, and competing explanations where applicable. Resolve the puzzle without sensationalism, conspiracy framing, or speculation presented as fact.",
+    },
+    {
         "id": "mechanism",
         "label": "Inside the mechanism",
         "instruction": "Follow the input through named parts or stages until it becomes an observable output.",

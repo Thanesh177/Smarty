@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FEED_VIEWS, getFeedView, getFeedViewDirection } from './feedViews.js';
 
-test('the compact toggle has four destinations without a learning tab', () => {
-  assert.equal(FEED_VIEWS.length, 4);
-  assert(!FEED_VIEWS.some(view => view.id === 'learn'));
+test('the compact toggle has three destinations without learning or saved tabs', () => {
+  assert.equal(FEED_VIEWS.length, 3);
+  assert(!FEED_VIEWS.some(view => ['learn', 'saved'].includes(view.id)));
   for (const view of FEED_VIEWS) {
     const url = new URL(view.to, 'https://smarty.example');
     assert.equal(getFeedView(url), view.id);
@@ -17,13 +17,14 @@ test('topic feeds and legacy video routes select the correct segment', () => {
   assert.equal(getFeedView({ pathname: '/feed', search: '?topic=VIDEOS' }), 'video');
 });
 test('landing, authentication, and unrelated pages do not get a feed toggle', () => {
-  for (const pathname of ['/feed', '/', '/login', '/quiz', '/news/story', '/learn', '/learn/lesson', '/feedish']) {
+  for (const pathname of ['/feed', '/', '/login', '/quiz', '/news/story', '/learn', '/learn/lesson', '/feedish', '/saved']) {
     assert.equal(getFeedView({ pathname }), null);
   }
 });
 test('content direction follows the segment order, including browser back', () => {
   assert.equal(getFeedViewDirection('all', 'video'), 1);
-  assert.equal(getFeedViewDirection('saved', 'news'), -1);
+  assert.equal(getFeedViewDirection('video', 'news'), -1);
+  assert.equal(getFeedViewDirection('saved', 'news'), 0);
   assert.equal(getFeedViewDirection('learn', 'learn'), 0);
   assert.equal(getFeedViewDirection(null, 'all'), 0);
   assert.equal(getFeedViewDirection('all', null), 0);

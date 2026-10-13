@@ -1,11 +1,11 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bookmark, Layers, Newspaper, Play } from 'lucide-react';
+import { Layers, Newspaper, Play } from 'lucide-react';
 import { FEED_VIEWS, getFeedView } from '../lib/feedViews';
 import { MAIN_TOPIC_LABELS } from '../data/topicTaxonomy';
 import FeedTopicPicker from './FeedTopicPicker';
 import './FeedViewSwitch.css';
 
-const icons = { all: Layers, news: Newspaper, video: Play, saved: Bookmark };
+const icons = { all: Layers, news: Newspaper, video: Play };
 
 // Mounted once above the route outlet so switching views never resets the pill.
 export default function FeedViewSwitch() {
@@ -18,8 +18,10 @@ export default function FeedViewSwitch() {
   const choices = [...new Set(['All', ...MAIN_TOPIC_LABELS, selected])];
   if (!active) return null;
   return <header className="feed-view-switchbar">
-    <Link className="feed-view-brand" to="/feed?topic=All" aria-label="Smarty — all posts">Smarty</Link>
-    <nav className="feed-view-switch" aria-label="Feed views" style={{ '--feed-view-index': FEED_VIEWS.findIndex(view => view.id === active) }}>
+    <Link className="feed-view-brand" to="/feed?topic=All" aria-label="Smarty — all posts">
+      <span className="feed-view-brand-mark" aria-hidden="true">S</span><span>Smarty</span>
+    </Link>
+    <nav className="feed-view-switch" aria-label="Feed views" style={{ '--feed-view-index': FEED_VIEWS.findIndex(view => view.id === active), '--feed-view-count': FEED_VIEWS.length }}>
       <span className="feed-view-switch-indicator" aria-hidden="true" />
       {FEED_VIEWS.map(view => {
         const Icon = icons[view.id];
