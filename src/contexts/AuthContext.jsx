@@ -390,6 +390,7 @@ export function AuthProvider({ children }) {
   const nativeCompletionRef = useRef(null);
   const sessionRevisionRef = useRef(0);
   const loggingOutRef = useRef(false);
+  const credentialActionRef = useRef(false);
 
   const invalidatePendingSession = useCallback(() => {
     sessionRevisionRef.current += 1;
@@ -686,6 +687,8 @@ export function AuthProvider({ children }) {
         payload.event === 'signInWithRedirect' ||
         payload.event === 'cognitoHostedUI'
       ) {
+        // The explicit email/challenge operation owns its session completion.
+        if (credentialActionRef.current) return;
         try {
           await establishSession({ attempts: 8 });
         } catch (err) {
@@ -713,6 +716,7 @@ export function AuthProvider({ children }) {
       if (payload.event === 'signedOut') {
         // Explicit logout owns its completion, including durable device storage.
         if (loggingOutRef.current) return;
+        if (credentialActionRef.current) return;
         // Native Google/Apple sessions are owned by the native OAuth flow,
         // not Amplify's separate email/web session. Its events cannot revoke
         // the native account (including while its token is refreshing).
@@ -730,57 +734,89 @@ export function AuthProvider({ children }) {
   }, [establishSession, invalidatePendingSession]);
 
   const login = async (email, password) => {
+    if (credentialActionRef.current) throw new Error('Another sign-in attempt is still running. Please wait.');
+    if (loggingOutRef.current) throw staleAuthOperation();
+    credentialActionRef.current = true;
     invalidatePendingSession();
-    clearNativeOAuthStorage();
-    setAuthError('');
-    try {
-      await withAuthDeadline(getCurrentUser());
-      await withAuthDeadline(signOut({ global: false }));
-    } catch {
-      // No existing Cognito session.
-    }
-
-    clearAuthStorage();
-
-    const result = await withAuthDeadline(signIn({
-      username: email,
-      password,
-    }), 'Sign-in took too long. Check your connection and try again.');
-
-    if (result.isSignedIn) {
-      const authUser = await establishSession({ attempts: 3 });
-
-      return { success: true, user: authUser };
-    }
-
-    return {
-      success: false,
-      nextStep: result.nextStep,
+    const revision = sessionRevisionRef.current;
+    const assertCurrent = () => {
+      if (revision !== sessionRevisionRef.current || loggingOutRef.current) throw staleAuthOperation();
     };
+    try {
+      clearNativeOAuthStorage();
+      setAuthError('');
+      try {
+        await withAuthDeadline(getCurrentUser());
+        await withAuthDeadline(signOut({ global: false }));
+      } catch {
+        // No existing Cognito session.
+      }
+
+      assertCurrent();
+      clearAuthStorage();
+      setUser(null);
+
+      const result = await withAuthDeadline(signIn({
+        username: email,
+        password,
+      }), 'Sign-in took too long. Check your connection and try again.');
+      if (revision !== sessionRevisionRef.current || loggingOutRef.current) {
+        if (loggingOutRef.current) {
+          clearAmplifyAuthStorage();
+          await flushNativeSessionStorage();
+        }
+        throw staleAuthOperation();
+      }
+
+      if (result.isSignedIn) {
+        const authUser = await establishSession({ attempts: 3 });
+        return { success: true, user: authUser };
+      }
+
+      return { success: false, nextStep: result.nextStep };
+    } finally {
+      credentialActionRef.current = false;
+    }
   };
 
-  const confirmLogin = async (challengeResponse) => {
-    const response = String(challengeResponse || '').trim();
+  const confirmLogin = async (challengeResponse, options) => {
+    // Password challenges must preserve meaningful leading/trailing spaces.
+    const response = String(challengeResponse || '');
 
-    if (!response) {
+    if (!response.trim()) {
       throw new Error('Enter the requested verification value.');
     }
 
-    const result = await withAuthDeadline(confirmSignIn({ challengeResponse: response }), 'Verification took too long. Please try again.');
+    if (credentialActionRef.current) throw new Error('Another sign-in attempt is still running. Please wait.');
+    if (loggingOutRef.current) throw staleAuthOperation();
+    credentialActionRef.current = true;
+    const revision = sessionRevisionRef.current;
+    try {
+      const result = await withAuthDeadline(confirmSignIn({
+        challengeResponse: response,
+        ...(options ? { options } : {}),
+      }), 'Verification took too long. Please try again.');
+      if (revision !== sessionRevisionRef.current || loggingOutRef.current) {
+        if (loggingOutRef.current) {
+          clearAmplifyAuthStorage();
+          await flushNativeSessionStorage();
+        }
+        throw staleAuthOperation();
+      }
 
-    if (result.isSignedIn) {
-      const authUser = await establishSession({ attempts: 3 });
-      return { success: true, user: authUser };
+      if (result.isSignedIn) {
+        const authUser = await establishSession({ attempts: 3 });
+        return { success: true, user: authUser };
+      }
+
+      return { success: false, nextStep: result.nextStep };
+    } finally {
+      credentialActionRef.current = false;
     }
-
-    return {
-      success: false,
-      nextStep: result.nextStep,
-    };
   };
 
   const register = async (name, email, password) => {
-    const result = await signUp({
+    const result = await withAuthDeadline(signUp({
       username: email,
       password,
       options: {
@@ -789,7 +825,7 @@ export function AuthProvider({ children }) {
           name,
         },
       },
-    });
+    }), 'Registration took too long. Check your email for a code before trying again.');
 
     return {
       success: true,
@@ -799,28 +835,28 @@ export function AuthProvider({ children }) {
   };
 
   const confirmRegistration = async (email, code) => {
-    const result = await confirmSignUp({
+    const result = await withAuthDeadline(confirmSignUp({
       username: email,
       confirmationCode: code,
-    });
+    }), 'Verification took too long. Please try again.');
 
     return result;
   };
 
   const resendRegistrationCode = async (email) => {
-    return resendSignUpCode({ username: String(email || '').trim().toLowerCase() });
+    return withAuthDeadline(resendSignUpCode({ username: String(email || '').trim().toLowerCase() }), 'Sending the code took too long. Check your connection and try again.');
   };
 
   const beginPasswordReset = async (email) => {
-    return resetPassword({ username: String(email || '').trim().toLowerCase() });
+    return withAuthDeadline(resetPassword({ username: String(email || '').trim().toLowerCase() }), 'Password recovery took too long. Check your connection and try again.');
   };
 
   const finishPasswordReset = async (email, code, newPassword) => {
-    await confirmResetPassword({
+    await withAuthDeadline(confirmResetPassword({
       username: String(email || '').trim().toLowerCase(),
       confirmationCode: String(code || '').trim(),
       newPassword,
-    });
+    }), 'Password reset took too long. Try signing in with your new password before resetting again.');
 
     return { success: true };
   };

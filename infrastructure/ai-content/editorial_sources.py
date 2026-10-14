@@ -59,12 +59,24 @@ def download(url):
 def historical_sources(subject, now):
     # Use only retrieved pages. Never let the model invent a bibliography.
     terms = [word for word in re.findall(r"[A-Za-z]{3,}", subject) if word.lower() not in STOP]
-    params = {"action": "query", "format": "json", "formatversion": "2", "generator": "search", "gsrsearch": " ".join(terms[:12]), "gsrnamespace": "0", "gsrlimit": "2", "prop": "extracts|info", "explaintext": "1", "exchars": "3400", "exlimit": "2", "inprop": "url"}
+    names = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", subject)
+    anchor = max(names, key=len) if names else ""
+    # Introductory history lessons have a central concept rather than an event
+    # name. Search that concept instead of AND-ing a whole causal question.
+    if not anchor:
+        concepts = ("primary source", "trade route", "irrigation", "land tenure", "chartered company", "standardized time", "cuneiform", "logistics", "ledger", "treaty", "frontier", "monsoon")
+        anchor = next((term for term in concepts if term in subject.lower()), "")
+    query = 'intitle:"' + anchor + '"' if anchor else " ".join(terms[:10])
+    params = {"action": "query", "format": "json", "formatversion": "2", "generator": "search", "gsrsearch": query, "gsrnamespace": "0", "gsrlimit": "2", "prop": "extracts|info", "explaintext": "1", "exintro": "1", "exchars": "1200", "exlimit": "2", "inprop": "url"}
     data = json.loads(download("https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode(params)))
     sources = []
     for page in data.get("query", {}).get("pages", []):
+        if not isinstance(page, dict):
+            continue
         title, excerpt = plain(page.get("title"), 180), plain(page.get("extract"))
         url = page.get("fullurl", "")
+        if anchor and anchor.casefold() not in title.casefold():
+            continue
         if len(excerpt.split()) < 80 or len(words(subject) & words(title + " " + excerpt)) < 2 or not safe_url(url, {"en.wikipedia.org"}):
             continue
         sources.append({"id": "history-" + str(page["pageid"]), "label": title + " · Wikipedia", "url": url, "publisher": "Wikipedia", "kind": "reference", "excerpt": excerpt, "retrievedAt": int(now)})
@@ -84,7 +96,10 @@ def recent_sources(subject, now):
                 title = plain(item.findtext("title"), 180)
                 excerpt = plain(item.findtext("description"), 1500 if publisher == "NASA" else 750)
                 url = item.findtext("link", "").strip()
-                date = parsedate_to_datetime(item.findtext("pubDate", ""))
+                try:
+                    date = parsedate_to_datetime(item.findtext("pubDate", ""))
+                except (TypeError, ValueError, OverflowError):
+                    continue
                 if date.tzinfo is None:
                     continue
                 published = int(date.timestamp())
@@ -127,5 +142,18 @@ def selected_sources(pack, ids):
     return [available[value] for value in ids]
 
 
+def evidence_fingerprint(pack):
+    # DynamoDB returns Decimal for integers. Normalize scalars so a saved read
+    # hashes exactly like the original publication's in-memory evidence.
+    fields = ("id", "label", "url", "publisher", "kind", "excerpt", "retrievedAt", "publishedAt")
+    canonical = {"version": str(pack.get("version", "")), "mode": str(pack.get("mode", "")), "asOf": str(pack.get("asOf", "")),
+                 "sources": [{key: str(source.get(key, "")) for key in fields} for source in pack.get("sources", [])]}
+    return hashlib.sha256(json.dumps(canonical, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
 def claims_current(text):
-    return bool(re.search(r"\b(today|yesterday|currently|latest|this (week|month|year)|ongoing|breaking news)\b", str(text), re.I))
+    if re.search(r"\b(today|yesterday|currently|latest|this (week|month|year)|ongoing|breaking news)\b", str(text), re.I):
+        return True
+    # A dated current claim cannot evade the check by avoiding the word 'today'.
+    year = datetime.now(timezone.utc).year
+    return any(int(value) >= year for value in re.findall(r"\b(20\d{2})\b", str(text)))

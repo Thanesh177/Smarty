@@ -1,0 +1,113 @@
+/* One restrained composition for sign-in, recovery and registration. */
+.app-shell .content .login-page.login-page {
+  background: var(--ui-bg, #080a0d) !important;
+  padding: clamp(28px, 5vh, 64px) 88px 52px 28px;
+}
+.login-page.login-page .login-shell {
+  width: min(100%, 1040px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 430px);
+  gap: clamp(32px, 6vw, 88px);
+  align-items: center;
+  margin-inline: auto;
+}
+.login-page.login-page .login-hero { padding: 0; }
+.login-page.login-page .login-hero h1 {
+  font-size: clamp(32px, 4.2vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -.045em;
+  max-width: 12ch;
+}
+.login-page.login-page .login-hero p { max-width: 34ch; line-height: 1.65; }
+.login-page.login-page .login-highlights { gap: 18px; margin-top: 36px; }
+.login-page.login-page .login-highlights div { padding: 0; background: transparent; }
+.app-shell .content .login-page.login-page .login-card {
+  width: 100%;
+  min-width: 0;
+  padding: clamp(20px, 2.7vw, 30px);
+  gap: 17px;
+  border: 1px solid var(--ui-line, #24282e) !important;
+  border-radius: 16px !important;
+  background: var(--ui-surface, #101216) !important;
+  box-shadow: none !important;
+}
+.app-shell .content .login-page.login-page .auth-mode-switch {
+  display: flex;
+  gap: 24px;
+  padding: 0;
+  margin-bottom: 8px;
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--ui-line, #24282e) !important;
+  border-radius: 0;
+}
+.app-shell .content .login-page.login-page .auth-mode-switch .auth-mode-option {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 12px 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
+  font-size: .84rem;
+  font-weight: 500;
+  color: var(--ui-secondary, #a4acb9) !important;
+  transform: none;
+}
+.app-shell .content .login-page.login-page .auth-mode-switch .auth-mode-option.active {
+  color: var(--ui-text, #eef2f7) !important;
+}
+.auth-mode-option.active::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  background: var(--ui-accent, #a8c9f4);
+}
+.app-shell .content .login-page.login-page .login-card :is(input:not([type='checkbox']), select) {
+  min-height: 48px;
+  height: 48px;
+  padding-inline: 13px;
+  background: var(--ui-control-bg, #171b21) !important;
+  color: var(--ui-text, #eef2f7) !important;
+  border: 1px solid var(--ui-control-line, #303741) !important;
+  border-radius: 9px;
+  font-size: 16px;
+  line-height: 1.4;
+  box-shadow: none;
+}
+.app-shell .content .login-page.login-page .login-card input:focus {
+  outline: 2px solid var(--ui-accent, #a8c9f4);
+  outline-offset: 2px;
+}
+.app-shell .content .login-page.login-page .login-card input::placeholder {
+  color: var(--ui-muted, #8892a1) !important;
+}
+.login-page.login-page .auth-password-control input { padding-right: 65px !important; }
+.login-page.login-page .login-card label { font-size: .8rem; font-weight: 500; gap: 8px; }
+.login-page.login-page .login-card-header h2 { font-size: 1.45rem; letter-spacing: -.035em; }
+.login-page.login-page .login-card-header p { font-size: .86rem; line-height: 1.5; }
+.login-page.login-page :is(.login-submit, .register-submit) { min-height: 48px; border-radius: 9px; }
+.login-page.login-page .login-card :is(.auth-inline-action, .auth-recovery-link, .register-signin-link) { min-height: 44px; }
+.login-page.login-page .login-card :is(.auth-inline-action, .auth-recovery-link) { background: transparent !important; border: 0 !important; }
+.login-page.login-page .auth-password-checks { grid-template-columns: repeat(2, minmax(0, 1fr)); font-size: .7rem; line-height: 1.5; }
+.login-page.login-page .status { font-weight: 450; line-height: 1.6; overflow-wrap: anywhere; }
+.login-page.login-page .login-legal-note { font-size: .73rem; line-height: 1.65; }
+.login-page.login-page .terms-agreement { font-size: .76rem; line-height: 1.6; }
+.login-page.login-page [aria-disabled='true'] { pointer-events: none; opacity: .5; }
+.auth-setup-key { display: grid; gap: 10px; padding: 14px; background: var(--ui-control-bg, #171b21); border-radius: 9px; }
+.auth-setup-key :is(span, small) { font-size: .76rem; line-height: 1.5; color: var(--ui-secondary, #a4acb9); }
+.auth-setup-key code { overflow-wrap: anywhere; user-select: all; letter-spacing: .06em; }
+@media (max-width: 760px) {
+  .app-shell .content .login-page.login-page { padding: 24px 76px 40px 16px; }
+  .login-page.login-page .login-shell { max-width: 430px; grid-template-columns: minmax(0, 1fr); gap: 26px; }
+  .login-page.login-page .login-hero h1 { max-width: none; font-size: clamp(26px, 6vw, 34px); margin-bottom: 10px; }
+  .login-page.login-page .login-hero p { margin: 0; font-size: .87rem; }
+  .login-page.login-page .login-brand { margin-bottom: 20px; }
+  .login-page.login-page .login-highlights { display: none; }
+  .app-shell .content .login-page.login-page .login-card { padding: 18px; gap: 15px; }
+  .login-page.login-page .auth-password-checks { gap: 7px; font-size: .66rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-page.login-page .login-card { animation: none; }
+}

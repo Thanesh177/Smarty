@@ -7,35 +7,20 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import SmartyBrand from '../components/SmartyBrand';
 import { startSocialLogin } from '../lib/cognito';
+import { clearAuthDestination, safeAuthDestination, saveAuthDestination } from '../lib/authNavigation';
 import {
   getAuthErrorMessage,
   getChallengePresentation,
   isStrongPassword,
   isValidAuthEmail,
+  isValidVerificationCode,
   normalizeAuthEmail,
 } from '../lib/authErrors';
 import './LoginPage.css';
+import './AuthProduction.css';
 
 function getSafeDestination(location) {
-  const fromState = location.state?.from;
-  const candidate =
-    (typeof fromState === 'string'
-      ? fromState
-      : fromState?.pathname
-        ? `${fromState.pathname}${fromState.search || ''}${fromState.hash || ''}`
-        : '') || '/feed';
-
-  if (
-    !candidate.startsWith('/') ||
-    candidate.startsWith('//') ||
-    candidate.includes('\\') ||
-    candidate === '/login' ||
-    candidate === '/register'
-  ) {
-    return '/feed';
-  }
-
-  return candidate;
+  return safeAuthDestination(location.state?.from);
 }
 
 function getInitialAuthError(location) {
@@ -71,6 +56,7 @@ export default function LoginPage() {
   const from = getSafeDestination(location);
   const autoSocialStartedRef = useRef(false);
   const authActionInFlightRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const [mode, setMode] = useState('sign-in');
   const [form, setForm] = useState({
@@ -91,6 +77,12 @@ export default function LoginPage() {
   const [socialProvider, setSocialProvider] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [capsLockOn, setCapsLockOn] = useState(false);
+  const [challengeAttributes, setChallengeAttributes] = useState({});
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!authError) return;
@@ -109,6 +101,7 @@ export default function LoginPage() {
   };
 
   const returnToSignIn = () => {
+    if (authActionInFlightRef.current) return;
     setMode('sign-in');
     setChallenge(null);
     setError('');
@@ -119,8 +112,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (loading || !user) return;
 
-    sessionStorage.removeItem('smarty-post-login-redirect');
-    localStorage.removeItem('smarty-post-login-redirect');
+    clearAuthDestination();
     navigate(from, { replace: true });
   }, [from, loading, navigate, user]);
 
@@ -139,6 +131,19 @@ export default function LoginPage() {
     };
     window.addEventListener('smarty:native-auth-status', handleNativeStatus);
     return () => window.removeEventListener('smarty:native-auth-status', handleNativeStatus);
+  }, []);
+
+  useEffect(() => {
+    const resumePage = event => {
+      // Browser back-cache can restore the pre-OAuth busy state without
+      // mounting again. A fresh attempt must remain available in that case.
+      if (!event.persisted) return;
+      authActionInFlightRef.current = false;
+      setSubmitting(false);
+      setSocialProvider('');
+    };
+    window.addEventListener('pageshow', resumePage);
+    return () => window.removeEventListener('pageshow', resumePage);
   }, []);
 
   const continueFromNextStep = useCallback(
@@ -161,6 +166,7 @@ export default function LoginPage() {
       const presentation = getChallengePresentation(nextStep);
 
       if (presentation) {
+        setChallengeAttributes({});
         setChallenge({ nextStep, presentation });
         setMode('challenge');
         updateField(
@@ -192,11 +198,10 @@ export default function LoginPage() {
       setSocialProvider(provider.toLowerCase());
 
       try {
-        sessionStorage.setItem('smarty-post-login-redirect', from);
-        localStorage.setItem('smarty-post-login-redirect', from);
+        saveAuthDestination(from);
         await startSocialLogin(provider, from);
       } catch (socialError) {
-        console.error(`${provider} sign-in failed:`, socialError);
+        if (!mountedRef.current) return;
         setError(
           getAuthErrorMessage(
             socialError,
@@ -214,13 +219,13 @@ export default function LoginPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    if (params.get('google') !== '1' || autoSocialStartedRef.current) {
+    if (loading || user || params.get('google') !== '1' || autoSocialStartedRef.current) {
       return;
     }
 
     autoSocialStartedRef.current = true;
     handleSocialLogin('Google');
-  }, [handleSocialLogin]);
+  }, [handleSocialLogin, loading, user]);
 
   if (loading) {
     return (
@@ -274,10 +279,10 @@ export default function LoginPage() {
           return;
         }
 
-        sessionStorage.setItem('smarty-post-login-redirect', from);
-        localStorage.setItem('smarty-post-login-redirect', from);
+        saveAuthDestination(from);
 
         const result = await login(email, form.password);
+        if (!mountedRef.current) return;
 
         if (result?.success) {
           return;
@@ -287,7 +292,14 @@ export default function LoginPage() {
       }
 
       if (mode === 'forgot-password') {
-        const result = await beginPasswordReset(email);
+        let result;
+        try { result = await beginPasswordReset(email); }
+        catch (resetError) {
+          if (resetError?.name !== 'UserNotFoundException') throw resetError;
+          // Match the successful reset screen; don't disclose account existence.
+          result = {};
+        }
+        if (!mountedRef.current) return;
 
         if (result?.isPasswordReset) {
           setMode('sign-in');
@@ -299,13 +311,13 @@ export default function LoginPage() {
         setMessage(
           result?.nextStep?.codeDeliveryDetails?.destination
             ? `A reset code was sent to ${result.nextStep.codeDeliveryDetails.destination}.`
-            : 'A password reset code was sent to your email.'
+            : 'If an account exists for this email, a reset code will arrive shortly.'
         );
       }
 
       if (mode === 'reset-password') {
-        if (!form.code.trim()) {
-          setError('Enter the reset code from your email.');
+        if (!isValidVerificationCode(form.code)) {
+          setError('Enter the six-digit reset code from your email.');
           return;
         }
 
@@ -315,6 +327,7 @@ export default function LoginPage() {
         }
 
         await finishPasswordReset(email, form.code, form.newPassword);
+        if (!mountedRef.current) return;
         setMode('sign-in');
         setForm((current) => ({
           ...current,
@@ -326,14 +339,35 @@ export default function LoginPage() {
       }
 
       if (mode === 'challenge') {
-        const response = form.challengeResponse.trim();
+        const passwordChallenge = ['password', 'new-password'].includes(challenge?.presentation?.type);
+        const response = passwordChallenge ? form.challengeResponse : form.challengeResponse.trim();
 
         if (!response) {
           setError('Complete the verification step to continue.');
           return;
         }
 
-        const result = await confirmLogin(response);
+        if (challenge?.presentation?.type === 'new-password' && !isStrongPassword(response)) {
+          setError('Use at least 10 characters with uppercase, lowercase, and a number.');
+          return;
+        }
+        if (challenge?.presentation?.type === 'email' && !isValidAuthEmail(response)) {
+          setError('Enter a valid recovery email.');
+          return;
+        }
+        if ((challenge?.presentation?.type === 'totp-setup' ||
+          /WITH_(EMAIL|SMS|TOTP)_CODE$/.test(challenge?.nextStep?.signInStep || '')) && !isValidVerificationCode(response)) {
+          setError('Enter the six-digit security code.');
+          return;
+        }
+        const missing = challenge?.nextStep?.missingAttributes || [];
+        if (missing.some(key => !String(challengeAttributes[key] || '').trim())) {
+          setError('Complete the required account details.');
+          return;
+        }
+
+        const result = await confirmLogin(response, missing.length ? { userAttributes: challengeAttributes } : undefined);
+        if (!mountedRef.current) return;
 
         if (result?.success) {
           return;
@@ -342,10 +376,10 @@ export default function LoginPage() {
         continueFromNextStep(result?.nextStep);
       }
     } catch (authError) {
-      setError(getAuthErrorMessage(authError));
+      if (mountedRef.current) setError(getAuthErrorMessage(authError));
     } finally {
       authActionInFlightRef.current = false;
-      setSubmitting(false);
+      if (mountedRef.current) setSubmitting(false);
     }
   };
 
@@ -380,6 +414,7 @@ export default function LoginPage() {
             onSubmit={handleSubmit}
             aria-busy={submitting}
             noValidate
+            aria-describedby={error ? 'login-error' : undefined}
           >
             {!isRecoveryMode && mode !== 'challenge' && (
               <nav className="auth-mode-switch" aria-label="Authentication options">
@@ -392,6 +427,9 @@ export default function LoginPage() {
                   state={{ from }}
                   viewTransition
                   onClick={prepareSignUpTransition}
+                  aria-disabled={submitting}
+                  tabIndex={submitting ? -1 : undefined}
+                  onClickCapture={(event) => { if (submitting) event.preventDefault(); }}
                 >
                   Sign up
                 </Link>
@@ -419,6 +457,10 @@ export default function LoginPage() {
                 <input
                   placeholder="you@example.com"
                   type="email"
+                  name="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  maxLength={254}
                   value={form.email}
                   autoComplete="email"
                   inputMode="email"
@@ -435,6 +477,7 @@ export default function LoginPage() {
                   <button
                     className="auth-inline-action"
                     type="button"
+                    disabled={submitting}
                     onClick={() => setShowPassword((current) => !current)}
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
@@ -446,6 +489,7 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   autoComplete="current-password"
+                  name="password"
                   disabled={submitting}
                   onKeyUp={(event) => setCapsLockOn(event.getModifierState('CapsLock'))}
                   onBlur={() => setCapsLockOn(false)}
@@ -462,6 +506,7 @@ export default function LoginPage() {
                   <input
                     placeholder="6-digit code"
                     inputMode="numeric"
+                    maxLength={6}
                     autoComplete="one-time-code"
                     value={form.code}
                     disabled={submitting}
@@ -526,7 +571,22 @@ export default function LoginPage() {
               </label>
             ) : null}
 
-            {error && <p className="status error" role="alert">{error}</p>}
+            {mode === 'challenge' && challengePresentation?.type === 'totp-setup' && (
+              <div className="auth-setup-key">
+                <span>Manual setup key · keep private</span>
+                <code>{challenge?.nextStep?.totpSetupDetails?.sharedSecret}</code>
+                <small>In your authenticator, choose a time-based account. This key is not saved by this form.</small>
+              </div>
+            )}
+            {mode === 'challenge' && (challenge?.nextStep?.missingAttributes || []).map(key => (
+              <label key={key}>
+                {key.replace(/_/g, ' ')}
+                <input value={challengeAttributes[key] || ''} disabled={submitting}
+                  onChange={event => setChallengeAttributes(current => ({ ...current, [key]: event.target.value }))} />
+              </label>
+            ))}
+
+            {error && <p id="login-error" className="status error" role="alert">{error}</p>}
             {message && <p className="status success" role="status">{message}</p>}
 
             <button
@@ -549,6 +609,7 @@ export default function LoginPage() {
               <button
                 className="auth-recovery-link"
                 type="button"
+                disabled={submitting}
                 onClick={() => {
                   setMode('forgot-password');
                   setError('');
@@ -560,7 +621,7 @@ export default function LoginPage() {
             )}
 
             {(isRecoveryMode || mode === 'challenge') && (
-              <button className="auth-recovery-link" type="button" onClick={returnToSignIn}>
+              <button className="auth-recovery-link" type="button" disabled={submitting} onClick={returnToSignIn}>
                 Back to sign in
               </button>
             )}
@@ -573,6 +634,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     className="apple-login-btn"
+                    aria-label="Sign in with Apple"
                     disabled={submitting}
                     onClick={() => handleSocialLogin('Apple')}
                   >
@@ -583,6 +645,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     className="google-login-btn"
+                    aria-label="Sign in with Google"
                     data-google-login-button
                     disabled={submitting}
                     onClick={() => handleSocialLogin('Google')}

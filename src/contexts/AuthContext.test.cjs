@@ -14,7 +14,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((yes, 
 const jwt = (sub, nonce, expiresIn = 3600) => `fixture.${Buffer.from(JSON.stringify({ sub, nonce, exp: Math.floor(Date.now() / 1000) + expiresIn })).toString('base64url')}.not-a-real-signature`;
 const storage = () => { const data = new Map(); return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, String(value)), removeItem: key => data.delete(key) }; };
 
-async function mount({ restore, exchange, refresh, persist, initialNativeSession, initialSearch = '', pendingState = '', signInResult = { isSignedIn: true }, signInError } = {}) {
+async function mount({ restore, exchange, refresh, persist, initialNativeSession, initialSearch = '', pendingState = '', signInResult = { isSignedIn: true }, signInError, signInWait, confirmWait, onSignIn, onConfirm } = {}) {
   const localStorage = storage(), sessionStorage = storage();
   if (initialNativeSession) {
     const subject = initialNativeSession.sub;
@@ -59,8 +59,8 @@ async function mount({ restore, exchange, refresh, persist, initialNativeSession
         getCurrentUser: async () => { sdkReads++; if (sdkSignedIn) return { userId: 'older-user' }; if (typeof restore === 'function') return restore(sdkReads); if (restore) return restore; const error = Error('No current user'); error.name = 'UserUnAuthenticatedException'; throw error; },
         fetchAuthSession: async () => ({ tokens: { idToken: { toString: () => jwt('older-user'), payload: { sub: 'older-user' } } } }),
         signOut: async () => { sdkSignedIn = false; },
-        signIn: async () => { if (signInError) throw signInError; sdkSignedIn = Boolean(signInResult.isSignedIn); return signInResult; },
-        confirmSignIn: async () => { sdkSignedIn = true; return { isSignedIn: true }; },
+        signIn: async () => { onSignIn?.(); if (signInWait) await signInWait; if (signInError) throw signInError; sdkSignedIn = Boolean(signInResult.isSignedIn); return signInResult; },
+        confirmSignIn: async input => { onConfirm?.(input); if (confirmWait) await confirmWait; sdkSignedIn = true; return { isSignedIn: true }; },
       };
       if (name.includes('cognito')) return {
         exchangeNativeCodeForTokens: async () => {
@@ -547,4 +547,46 @@ test('incorrect credentials do not save a session', async () => {
   const app = await mount({ signInError: Error('Incorrect username or password') });
   await assert.rejects(app.value.login('fixture@example.invalid', 'synthetic-test-value'));
   assert.equal(app.states[0], null); assert.equal(app.localStorage.getItem('eduscroll_user'), null);
+});
+
+test('duplicate email submissions are rejected before a second SDK sign-in', async () => {
+  const pending = deferred(); let calls = 0;
+  const app = await mount({ signInWait: pending.promise, onSignIn: () => calls++ });
+  const first = app.value.login('fixture@example.invalid', 'synthetic-test-value');
+  await flush();
+  await assert.rejects(app.value.login('fixture@example.invalid', 'synthetic-test-value'), /still running/);
+  pending.resolve();
+  assert.equal((await first).success, true);
+  assert.equal(calls, 1);
+});
+
+test('email sign-in finishing after explicit logout cannot restore the account', async () => {
+  const pending = deferred();
+  const app = await mount({ signInWait: pending.promise });
+  const first = app.value.login('fixture@example.invalid', 'synthetic-test-value');
+  await flush();
+  await app.value.logout();
+  pending.resolve();
+  await assert.rejects(first, error => error.name === 'StaleAuthOperation');
+  assert.equal(app.states[0], null);
+  assert.equal(app.localStorage.getItem('eduscroll_user'), null);
+});
+
+test('challenge completion preserves password whitespace and required attributes', async () => {
+  let input;
+  const app = await mount({ onConfirm: value => { input = value; } });
+  await app.value.confirmLogin('  Synthetic-value-9  ', { userAttributes: { name: 'Fixture' } });
+  assert.equal(input.challengeResponse, '  Synthetic-value-9  ');
+  assert.equal(input.options.userAttributes.name, 'Fixture');
+});
+
+test('challenge completion after logout cannot authenticate a user', async () => {
+  const pending = deferred();
+  const app = await mount({ confirmWait: pending.promise });
+  const first = app.value.confirmLogin('123456');
+  await flush();
+  await app.value.logout();
+  pending.resolve();
+  await assert.rejects(first, error => error.name === 'StaleAuthOperation');
+  assert.equal(app.states[0], null);
 });

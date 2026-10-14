@@ -2,26 +2,27 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import SmartyBrand from '../components/SmartyBrand';
 import { useAuth } from '../contexts/AuthContext';
+import { safeAuthDestination } from '../lib/authNavigation';
 import {
   getAuthErrorMessage,
   isValidAuthEmail,
+  isValidVerificationCode,
   normalizeAuthEmail,
 } from '../lib/authErrors';
 import './LoginPage.css';
 import './RegisterPage.css';
+import './AuthProduction.css';
 
 export default function ConfirmPage() {
-  const { user, confirmRegistration, resendRegistrationCode } = useAuth();
+  const { user, loading, confirmRegistration, resendRegistrationCode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const mountedRef = useRef(true);
   const redirectTimerRef = useRef(null);
+  const cooldownTimerRef = useRef(null);
+  const actionRef = useRef(false);
   const initialEmail = normalizeAuthEmail(location.state?.email);
-  const fromState = location.state?.from;
-  const from =
-    typeof fromState === 'string'
-      ? fromState
-      : fromState?.pathname || '/feed';
+  const from = safeAuthDestination(location.state?.from);
 
   const [form, setForm] = useState({
     email: initialEmail,
@@ -42,30 +43,34 @@ export default function ConfirmPage() {
       if (redirectTimerRef.current) {
         window.clearTimeout(redirectTimerRef.current);
       }
+      window.clearTimeout(cooldownTimerRef.current);
     };
   }, []);
 
   if (user) return <Navigate to={from} replace />;
+  if (loading) return <main className="login-page auth-loading-page" role="status">Restoring your session…</main>;
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (submitting) return;
+    if (actionRef.current || redirectTimerRef.current) return;
 
     const email = normalizeAuthEmail(form.email);
     const code = form.code.trim();
 
-    if (!isValidAuthEmail(email) || !code) {
-      setError('Enter your email and verification code.');
+    if (!isValidAuthEmail(email) || !isValidVerificationCode(code)) {
+      setError('Enter a valid email and six-digit verification code.');
       return;
     }
 
     setError('');
     setMessage('');
     setSubmitting(true);
+    actionRef.current = true;
 
     try {
-      await confirmRegistration(email, code);
+      const confirmed = await confirmRegistration(email, code);
+      if (confirmed?.isSignUpComplete === false) throw new Error('Verification incomplete.');
       if (!mountedRef.current) return;
 
       setMessage('Account verified. Taking you back to sign in…');
@@ -86,12 +91,13 @@ export default function ConfirmPage() {
         )
       );
     } finally {
-      if (mountedRef.current) setSubmitting(false);
+      actionRef.current = false;
+      if (mountedRef.current && !redirectTimerRef.current) setSubmitting(false);
     }
   };
 
   const handleResend = async () => {
-    if (submitting || resendCooldown) return;
+    if (actionRef.current || resendCooldown || redirectTimerRef.current) return;
 
     const email = normalizeAuthEmail(form.email);
 
@@ -101,6 +107,7 @@ export default function ConfirmPage() {
     }
 
     setSubmitting(true);
+    actionRef.current = true;
     setError('');
     setMessage('');
 
@@ -109,13 +116,15 @@ export default function ConfirmPage() {
       if (!mountedRef.current) return;
       setMessage('A new verification code was sent.');
       setResendCooldown(true);
-      window.setTimeout(() => {
+      window.clearTimeout(cooldownTimerRef.current);
+      cooldownTimerRef.current = window.setTimeout(() => {
         if (mountedRef.current) setResendCooldown(false);
       }, 30_000);
     } catch (resendError) {
       if (!mountedRef.current) return;
       setError(getAuthErrorMessage(resendError, 'A new code could not be sent.'));
     } finally {
+      actionRef.current = false;
       if (mountedRef.current) setSubmitting(false);
     }
   };
@@ -143,6 +152,10 @@ export default function ConfirmPage() {
               <input
                 placeholder="you@example.com"
                 type="email"
+                name="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={254}
                 value={form.email}
                 autoComplete="email"
                 inputMode="email"
@@ -160,6 +173,7 @@ export default function ConfirmPage() {
                 placeholder="6-digit code"
                 value={form.code}
                 inputMode="numeric"
+                maxLength={6}
                 autoComplete="one-time-code"
                 disabled={submitting}
                 onChange={(event) => setForm((current) => ({

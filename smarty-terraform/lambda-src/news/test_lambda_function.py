@@ -116,6 +116,23 @@ class NewsLambdaTests(unittest.TestCase):
             reports.assert_called_once()
             model.assert_not_called()
 
+    def test_prompt_revision_only_versions_briefings_not_reports_or_history(self):
+        location = news.make_location("GLOBAL", "")
+        reports_key = news.make_cache_key(location) + "#reports"
+        with (patch.object(news, "get_cached", return_value=None),
+              patch.object(news, "generation_lease", side_effect=lambda *args: nullcontext()),
+              patch.object(news, "build_payload", return_value={"articles": []}),
+              patch.object(news, "set_cached") as save):
+            news.lambda_handler({"queryStringParameters": {"country": "GLOBAL"}}, None)
+            self.assertEqual(save.call_args.args[0], news.make_cache_key(location) + f"#briefing-v{news.BRIEFING_VERSION}")
+            self.assertNotIn("briefing-v", reports_key)
+        with (patch.object(news, "get_cached", return_value=None),
+              patch.object(news, "generation_lease", side_effect=lambda *args: nullcontext()),
+              patch.object(news, "build_daily_summary", return_value={"summaryMode": "editorial"}),
+              patch.object(news, "set_cached") as save):
+            news.get_world_daily_summary([], location)
+            self.assertTrue(save.call_args.args[0].endswith(f"#briefing-v{news.BRIEFING_VERSION}"))
+
     def test_full_briefing_reuses_previously_loaded_reports(self):
         cached = {"freshUntil": int(news.time.time()) + 600, "payload": {"articles": [{"id": "one"}], "sections": {}}}
         with (patch.object(news, "get_cached", return_value=cached),
@@ -186,6 +203,29 @@ class NewsLambdaTests(unittest.TestCase):
         articles = [make_article("one", "Researchers map a deep ocean habitat", "Science", "")]
         with self.assertRaisesRegex(ValueError, "grounded"):
             news.validate_editorial_summary({"overview": "Parliament approved an enormous tax increase affecting every household in the entire country this morning."}, articles, ["Science"])
+
+    def test_briefing_prompt_keeps_concrete_reporting_without_generic_transitions(self):
+        headline = "Researchers map a deep ocean habitat before a planned marine survey"
+        article = make_article("one", headline, "Science", "")
+        response = {"output": {"message": {"content": [{"text":
+            f"OVERVIEW: {headline}. {headline}.\nSECTION_1_SUMMARY: {headline}."
+        }]}}, "stopReason": "end_turn"}
+        with patch.object(news.BEDROCK_RUNTIME, "converse", return_value=response) as model:
+            result = news.generate_editorial_summary([article], news.make_location("GLOBAL", ""), ["Science"])
+            prompt = model.call_args.kwargs["messages"][0]["content"][0]["text"]
+            self.assertIn("Every sentence, including each opening and closing sentence", prompt)
+            self.assertIn("Do not add generic scene-setting", prompt)
+            self.assertIn("Prefer one reported development per sentence", prompt)
+            self.assertIn(headline, prompt)
+            self.assertEqual(result["summaryMode"], "editorial")
+
+    def test_generic_sentence_still_rejects_an_otherwise_supported_overview(self):
+        headline = "Researchers map a deep ocean habitat before a planned marine survey"
+        articles = [make_article("one", headline, "Science", "")]
+        with self.assertRaisesRegex(ValueError, "grounded"):
+            news.validate_editorial_summary({"overview":
+                f"{headline}. These developments highlight rapid change across the world."
+            }, articles, ["Science"])
 
     def test_context_fields_are_parsed_and_unsupported_context_is_omitted(self):
         headline = "Researchers map a deep ocean habitat before a planned marine survey"

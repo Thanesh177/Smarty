@@ -6,27 +6,34 @@ import { NEWS_COUNTRIES, NEWS_REGIONS, getDefaultNewsCountry } from '../data/new
 import { cleanStoryQuery, storyQuery } from '../lib/newsStories';
 import './NewsPersonalization.css';
 
-export function NewsBriefingChoice({ personal }) {
+export function NewsBriefingChoice({ personal, activePlace, onChange }) {
   const { preferences, savePreference, syncWarning } = personal;
   const [editing, setEditing] = useState(false), [country, setCountry] = useState(preferences?.country || getDefaultNewsCountry());
   const [region, setRegion] = useState(preferences?.region || ''), [saving, setSaving] = useState(false);
-  useEffect(() => { setCountry(preferences?.country || getDefaultNewsCountry()); setRegion(preferences?.region || ''); }, [preferences?.country, preferences?.region]);
+  const [error, setError] = useState('');
+  useEffect(() => { setCountry(preferences?.country || (activePlace?.country !== 'GLOBAL' && activePlace?.country) || getDefaultNewsCountry()); setRegion(preferences?.region || activePlace?.region || ''); }, [preferences?.country, preferences?.region, activePlace?.country, activePlace?.region]);
   const apply = async mode => {
     if (saving) return;
-    setSaving(true);
-    await savePreference({ chosen: true, country, region, mode });
-    setSaving(false); setEditing(false);
+    setSaving(true); setError('');
+    try {
+      await savePreference({ chosen: true, country, region, mode });
+      onChange?.({ country: mode === 'world' ? 'GLOBAL' : country, region: mode === 'world' ? '' : region });
+      setEditing(false);
+    } catch { setError('Could not save this place. Please try again.'); }
+    finally { setSaving(false); }
   };
-  const label = preferences?.region || NEWS_COUNTRIES.find(item => item.code === preferences?.country)?.name || 'Your place';
-  const hasLocal = preferences?.country && preferences.country !== 'GLOBAL';
+  const localCountry = activePlace?.country !== 'GLOBAL' && activePlace?.country || preferences?.country;
+  const label = (activePlace?.country !== 'GLOBAL' ? activePlace?.region : '') || preferences?.region || NEWS_COUNTRIES.find(item => item.code === localCountry)?.name || 'Your place';
+  const hasLocal = localCountry && localCountry !== 'GLOBAL';
+  const mode = activePlace ? activePlace.country === 'GLOBAL' ? 'world' : 'local' : preferences?.mode || 'world';
   return <section className="news-place-choice" aria-label="Daily briefing location">
-    {preferences && !editing ? <div className="news-place-switch">
-      <div role="group" aria-label="Briefing edition"><button type="button" aria-pressed={preferences.mode === 'world'} disabled={saving} onClick={() => apply('world')}><Globe2 size={15}/>World</button>
-        {hasLocal && <button type="button" aria-pressed={preferences.mode === 'local'} disabled={saving} onClick={() => apply('local')}><MapPin size={15}/>{label}</button>}</div>
-      <button type="button" onClick={() => setEditing(true)}>Change place</button>
+    {!editing ? <div className="news-place-switch">
+      <div role="group" aria-label="Briefing edition"><button type="button" aria-pressed={mode === 'world'} disabled={saving} onClick={() => apply('world')}><Globe2 size={15}/>World</button>
+        {hasLocal && <button type="button" aria-pressed={mode === 'local'} disabled={saving} onClick={() => apply('local')}><MapPin size={15}/>{label}</button>}</div>
+      <button type="button" disabled={saving} onClick={() => setEditing(true)}><MapPin size={14}/>{preferences || hasLocal ? 'Change place' : 'Choose place'}</button>
     </div> : <form onSubmit={event => { event.preventDefault(); void apply('local'); }}>
-      <header><div><span>MAKE IT YOURS</span><h2>Where would you like your daily briefing from?</h2><p>Stay with the world, or choose your country and region. You can switch anytime.</p></div>
-        {preferences && <button type="button" aria-label="Close location settings" onClick={() => setEditing(false)}><X size={18}/></button>}</header>
+      <header><div><h2>Your briefing, your place.</h2><p>Choose a country and region. Switch back to World anytime.</p></div>
+        <button type="button" aria-label="Close location settings" disabled={saving} onClick={() => setEditing(false)}><X size={18}/></button></header>
       <div className="news-place-fields"><label>Country<select aria-label="Briefing country" value={country} onChange={event => { setCountry(event.target.value); setRegion(''); }}>
         {NEWS_COUNTRIES.map(item => <option value={item.code} key={item.code}>{item.name}</option>)}</select></label>
         <label>State or region<select aria-label="Briefing state or region" value={region} disabled={!NEWS_REGIONS[country]?.length} onChange={event => setRegion(event.target.value)}>
@@ -34,6 +41,7 @@ export function NewsBriefingChoice({ personal }) {
       <footer><button type="submit" disabled={saving}>{saving ? 'Saving…' : country === 'GLOBAL' ? 'Use world briefing' : 'Use my place'}</button><button type="button" disabled={saving} onClick={() => apply('world')}>Keep world briefing</button></footer>
     </form>}
     {syncWarning && <p role="status" className="news-personal-note">{syncWarning}</p>}
+    {error && <p role="alert" className="news-personal-note">{error}</p>}
   </section>;
 }
 

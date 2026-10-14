@@ -2,6 +2,7 @@ import 'aws-amplify/auth/enable-oauth-listener';
 import { Amplify } from 'aws-amplify';
 import { signInWithRedirect } from 'aws-amplify/auth';
 import { flushNativeSessionStorage } from './nativeSessionStorage';
+import { readAuthDestination, safeAuthDestination, saveAuthDestination } from './authNavigation';
 
 
 const COGNITO_DOMAIN = (
@@ -157,15 +158,7 @@ const saveCurrentRedirectPath = () => {
     !/^\/(login|register)(\/|$)/.test(window.location.pathname) &&
     !new URLSearchParams(window.location.search).has('code')
   ) {
-    sessionStorage.setItem(
-      'smarty-post-login-redirect',
-      currentPath
-    );
-
-    localStorage.setItem(
-      'smarty-post-login-redirect',
-      currentPath
-    );
+    saveAuthDestination(currentPath);
   }
 };
 
@@ -205,10 +198,7 @@ export const startNativeSocialLogin = async (
 
   saveCurrentRedirectPath();
 
-  const redirectPath =
-    sessionStorage.getItem(
-      'smarty-post-login-redirect'
-    ) || fallbackPath;
+  const redirectPath = readAuthDestination(safeAuthDestination(fallbackPath));
   const oauthState = createSecureRandomValue(32);
   const oauthNonce = createSecureRandomValue(32);
   const codeVerifier = createSecureRandomValue(64);
@@ -234,14 +224,7 @@ export const startNativeSocialLogin = async (
   localStorage.setItem('smarty-native-oauth-nonce', oauthNonce);
   sessionStorage.setItem('smarty-native-oauth-code-verifier', codeVerifier);
   localStorage.setItem('smarty-native-oauth-code-verifier', codeVerifier);
-  sessionStorage.setItem(
-    'smarty-post-login-redirect',
-    redirectPath
-  );
-  localStorage.setItem(
-    'smarty-post-login-redirect',
-    redirectPath
-  );
+  saveAuthDestination(redirectPath);
 
   const query = new URLSearchParams({
     identity_provider:
@@ -273,23 +256,11 @@ export const startSocialLogin = async (
   provider,
   redirectPath = '/feed'
 ) => {
-  const normalizedProvider =
-    provider === 'Apple' ? 'Apple' : 'Google';
+  if (!['Google', 'Apple'].includes(provider)) throw new Error('Unsupported sign-in provider.');
+  const normalizedProvider = provider;
 
   if (isBrowser) {
-    const safeRedirectPath =
-      String(redirectPath || '').startsWith('/')
-        ? redirectPath
-        : '/feed';
-
-    sessionStorage.setItem(
-      'smarty-post-login-redirect',
-      safeRedirectPath
-    );
-    localStorage.setItem(
-      'smarty-post-login-redirect',
-      safeRedirectPath
-    );
+    saveAuthDestination(redirectPath);
   }
 
   if (isNativeApp()) {

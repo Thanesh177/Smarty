@@ -16,14 +16,14 @@ export function NewsStoryLink({ story }) {
   </Link>;
 }
 
-export function SavedNewsStories() {
+export function SavedNewsStories({ collapsed = false }) {
   const { entries, update } = useNewsStoryLibrary();
   const location = useLocation();
   const [status, setStatus] = useState('');
   const saved = entries.filter(entry => entry.saved);
   if (!saved.length && !status) return null;
   return <section className="news-story-shelf" aria-label="Saved story timelines">
-    {saved.length > 0 && <details open>
+    {saved.length > 0 && <details open={collapsed ? undefined : true}>
       <summary>Saved stories <span>{saved.length}</span></summary>
       <p>Pick up where you left off. Saved on this device for your account.</p>
       <ul>{saved.map(entry => <li key={entry.query.toLocaleLowerCase()}>

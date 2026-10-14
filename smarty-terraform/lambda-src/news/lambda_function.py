@@ -27,10 +27,16 @@ GOOGLE_NEWS_URL = "https://news.google.com/rss"
 HACKER_NEWS_URL = "https://hn.algolia.com/api/v1/search"
 SPACEFLIGHT_NEWS_URL = "https://api.spaceflightnewsapi.net/v4/articles/"
 CACHE_VERSION = 22
+# Version briefing prompts separately so report caches and story history survive
+# an editorial fix. Old briefing records are retained, not deleted.
+BRIEFING_VERSION = 2
 CACHE_TTL_SECONDS = 20 * 60
 STALE_TTL_SECONDS = 48 * 60 * 60
 MAX_ARTICLES = 60
 MIN_ARTICLES = 4
+# The deployed and declared News Lambda timeout is 28 seconds. Keep this above
+# the full invocation lifetime; the default shared 960s recovery is unnecessary.
+NEWS_LEASE_SECONDS = 90
 MAX_PROVIDER_RESPONSE_BYTES = 3 * 1024 * 1024
 BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-micro-v1:0")
 
@@ -1097,6 +1103,9 @@ Requirements:
 - Every section summary must use only headlines carrying that exact section label.
 - Lead each section with the main development, then explain other distinct developments, the people or places affected, and any stated next steps. Include context and significance only when explicitly supported by the supplied headlines.
 - Use only facts explicitly present in the supplied headlines. Do not infer causes, outcomes, motives, or background.
+- Every sentence, including each opening and closing sentence, must identify a concrete reported event. Keep the distinctive names, places, organizations, and technical terms from its supporting headline so readers can trace it to the original report.
+- Do not add generic scene-setting, connective conclusions, or sector trends. For example, never add "The world faces several challenges" or "These developments highlight rapid change" between factual sentences.
+- Prefer one reported development per sentence. Do not replace concrete headline details with vague pronouns or broad synonyms; combine reports only when their headlines explicitly describe the same event.
 - Length targets are maximum guidance, never permission to repeat or invent details. Summarize distinct developments and retain meaningful names, figures, and locations when supplied.
 - Do not turn two separate headlines into a causal claim unless a supplied headline explicitly states that relationship.
 - Attribute allegations, criticism, estimates, and disputed claims to the person or source named in the headline.
@@ -1255,12 +1264,13 @@ def get_world_daily_summary(articles, location):
     suffix = hashlib.sha256(identity.encode()).hexdigest()[:16]
     key = (f"world-briefing-v{CACHE_VERSION}#{edition_date}#english" if location["countryCode"] == "GLOBAL"
            else f"local-briefing-v{CACHE_VERSION}#{edition_date}#{suffix}#english")
+    key += f"#briefing-v{BRIEFING_VERSION}"
     cached = get_cached(key)
     if cached and int(cached.get("freshUntil", 0)) > now and cached.get("payload"):
         return cached["payload"]
 
     # Fail closed on database/lease failures rather than generating per visitor.
-    with generation_lease(NEWS_CACHE, "date", key):
+    with generation_lease(NEWS_CACHE, "date", key, NEWS_LEASE_SECONDS):
         cached = get_cached(key)
         if cached and int(cached.get("freshUntil", 0)) > int(time.time()) and cached.get("payload"):
             return cached["payload"]
@@ -1388,7 +1398,7 @@ def build_payload(location):
     if cached and int(cached.get("freshUntil", 0)) > int(time.time()) and cached.get("payload"):
         payload = dict(cached["payload"])
     else:
-        with generation_lease(NEWS_CACHE, "date", reports_key):
+        with generation_lease(NEWS_CACHE, "date", reports_key, NEWS_LEASE_SECONDS):
             cached = get_cached(reports_key)
             if cached and int(cached.get("freshUntil", 0)) > int(time.time()) and cached.get("payload"):
                 payload = dict(cached["payload"])
@@ -1492,7 +1502,7 @@ def story_timeline_response(params):
         cached = get_cached(cache_key)
         if cached and int(cached.get("freshUntil", 0)) > now and cached.get("payload"):
             return api_response(200, {**cached["payload"], "cacheStatus": "fresh-cache"})
-        with generation_lease(NEWS_CACHE, "date", cache_key):
+        with generation_lease(NEWS_CACHE, "date", cache_key, NEWS_LEASE_SECONDS):
             latest = get_cached(cache_key)
             if latest and int(latest.get("freshUntil", 0)) > now and latest.get("payload"):
                 return api_response(200, {**latest["payload"], "cacheStatus": "fresh-cache"})
@@ -1562,7 +1572,7 @@ def lambda_handler(event, context):
         return api_response(400, {"error": str(error)})
 
     reports_only = params.get("view") == "reports"
-    cache_key = make_cache_key(location) + ("#reports" if reports_only else "")
+    cache_key = make_cache_key(location) + ("#reports" if reports_only else f"#briefing-v{BRIEFING_VERSION}")
     try:
         cached = get_cached(cache_key)
     except ClientError:
@@ -1575,7 +1585,7 @@ def lambda_handler(event, context):
         return api_response(200, payload)
 
     try:
-        with generation_lease(NEWS_CACHE, "date", cache_key):
+        with generation_lease(NEWS_CACHE, "date", cache_key, NEWS_LEASE_SECONDS):
             latest = get_cached(cache_key)
             if latest and int(latest.get("freshUntil", 0)) > int(time.time()) and latest.get("payload"):
                 return api_response(200, {**latest["payload"], "cacheStatus": "fresh-cache"})

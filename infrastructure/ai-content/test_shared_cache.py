@@ -103,6 +103,20 @@ class SharedCacheTests(unittest.TestCase):
             self.ask("bob", "How do attention keys work?")
         self.assertEqual(model.call_count, 2)
 
+    def test_bounded_service_lease_keeps_default_and_enforces_recovery_window(self):
+        with mock.patch('generation_cache.time.time', return_value=1000):
+            with LAMBDA.generation_lease(self.explanations, 'explanationId', 'news', 90):
+                record = next(value for value in self.explanations.items.values() if value.get('owner'))
+                self.assertEqual(record['expiresAt'],1090)
+                with self.assertRaises(LAMBDA.GenerationBusy):
+                    with LAMBDA.generation_lease(self.explanations,'explanationId','news',90): pass
+            with LAMBDA.generation_lease(self.explanations,'explanationId','ordinary'):
+                record = next(value for value in self.explanations.items.values() if value.get('expiresAt') == 1960)
+                self.assertEqual(record['expiresAt'],1960)
+        for seconds in (0, 29, 961, True, '90'):
+            with self.assertRaises(ValueError):
+                with LAMBDA.generation_lease(self.explanations,'explanationId','invalid',seconds): pass
+
     def test_inline_explanation_from_old_source_is_not_reused(self):
         explanation = quality.ContentCatalogTests.complete_explanation()
         self.post.update(aiDetailedExplanation=explanation, aiDetailedExplanationVersion=LAMBDA.EXPLANATION_SCHEMA_VERSION, aiDetailedExplanationSourceHash="old")

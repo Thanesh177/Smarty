@@ -1,24 +1,27 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SmartyBrand from '../components/SmartyBrand';
 import TermsAgreement, {
   recordTermsAcceptance,
 } from '../components/TermsAgreement';
-import { userApi } from '../api/client';
+import { safeAuthDestination, saveAuthDestination } from '../lib/authNavigation';
 import {
   getAuthErrorMessage,
   getPasswordChecks,
   isStrongPassword,
   isValidAuthEmail,
+  isValidVerificationCode,
   normalizeAuthEmail,
 } from '../lib/authErrors';
 import './LoginPage.css';
 import './RegisterPage.css';
+import './AuthProduction.css';
 
 export default function RegisterPage() {
   const {
     user,
+    loading,
     register,
     login,
     confirmRegistration,
@@ -26,11 +29,10 @@ export default function RegisterPage() {
   } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const fromState = location.state?.from;
-  const from =
-    (typeof fromState === 'string'
-      ? fromState
-      : fromState?.pathname) || '/feed';
+  const from = safeAuthDestination(location.state?.from);
+  const actionRef = useRef(false);
+  const mountedRef = useRef(true);
+  const cooldownTimerRef = useRef(null);
 
   const [step, setStep] = useState('register');
   const [form, setForm] = useState({
@@ -55,7 +57,16 @@ export default function RegisterPage() {
     document.documentElement.dataset.authDirection = 'backward';
   };
 
-  if (user) return <Navigate to="/feed" replace />;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      window.clearTimeout(cooldownTimerRef.current);
+    };
+  }, []);
+
+  if (user) return <Navigate to={from} replace />;
+  if (loading) return <main className="login-page auth-loading-page" role="status">Restoring your session…</main>;
 
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -63,6 +74,8 @@ export default function RegisterPage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (actionRef.current) return;
+    actionRef.current = true;
     setError('');
     setMessage('');
     setSubmitting(true);
@@ -76,8 +89,8 @@ export default function RegisterPage() {
           return;
         }
 
-        if (form.name.trim().length < 2) {
-          setError('Enter your name.');
+        if (form.name.trim().length < 2 || form.name.trim().length > 100) {
+          setError('Use a name between 2 and 100 characters.');
           return;
         }
 
@@ -96,56 +109,63 @@ export default function RegisterPage() {
           return;
         }
 
-        try {
-          const existing = await userApi.checkEmailExists(cleanEmail);
-
-          if (existing.exists) {
-            console.info('Account record found; Cognito will verify whether sign-up can continue.');
-          }
-        } catch (lookupError) {
-          console.info('Account lookup unavailable; continuing with secure registration.', lookupError);
-        }
-
+        // Cognito owns account creation. A separate email lookup adds latency,
+        // exposes account existence and cannot prove that registration is safe.
         const result = await register(form.name.trim(), cleanEmail, form.password);
         recordTermsAcceptance(cleanEmail);
+        if (!mountedRef.current) return;
+        setForm(current => ({ ...current, email: cleanEmail }));
 
         if (result?.isSignUpComplete) {
+          setForm(current => ({ ...current, password: '', confirmPassword: '' }));
           setMessage('Account created. You can log in now.');
           setStep('done');
         } else {
           setMessage('Verification code sent to your email.');
           setStep('confirm');
+          // Sending another code immediately after sign-up is unnecessary.
+          setResendCooldown(true);
+          cooldownTimerRef.current = window.setTimeout(() => setResendCooldown(false), 30_000);
         }
       }
 
       if (step === 'confirm') {
         const cleanEmail = normalizeAuthEmail(form.email);
 
-        if (!form.code.trim()) {
-          setError('Enter the verification code from your email.');
+        if (!isValidVerificationCode(form.code)) {
+          setError('Enter the six-digit verification code from your email.');
           return;
         }
 
-        await confirmRegistration(cleanEmail, form.code.trim());
-        const signInResult = await login(cleanEmail, form.password);
-
-        if (signInResult?.success) {
-          navigate(from, { replace: true });
-          return;
-        }
-
-        setMessage('Account verified. Sign in to continue.');
+        const confirmed = await confirmRegistration(cleanEmail, form.code.trim());
+        if (confirmed?.isSignUpComplete === false) throw new Error('Verification incomplete.');
+        if (!mountedRef.current) return;
+        // Confirmation and sign-in are separate transactions. Never ask a
+        // verified user to confirm again when the subsequent sign-in fails.
         setStep('done');
+        setMessage('Account verified. Sign in to continue.');
+        try {
+          saveAuthDestination(from);
+          const signInResult = await login(cleanEmail, form.password);
+          if (!mountedRef.current) return;
+          if (signInResult?.success) navigate(from, { replace: true });
+        } catch {
+          // The account is still verified. Continue to the regular sign-in
+          // flow for connection recovery or any additional security check.
+        } finally {
+          if (mountedRef.current) setForm(current => ({ ...current, password: '', confirmPassword: '', code: '' }));
+        }
       }
     } catch (err) {
-      setError(getAuthErrorMessage(err, 'Registration could not be completed.'));
+      if (mountedRef.current) setError(getAuthErrorMessage(err, 'Registration could not be completed.'));
     } finally {
-      setSubmitting(false);
+      actionRef.current = false;
+      if (mountedRef.current) setSubmitting(false);
     }
   };
 
   const handleResendCode = async () => {
-    if (submitting || resendCooldown) return;
+    if (actionRef.current || resendCooldown) return;
 
     const cleanEmail = normalizeAuthEmail(form.email);
 
@@ -154,19 +174,23 @@ export default function RegisterPage() {
       return;
     }
 
+    actionRef.current = true;
     setSubmitting(true);
     setError('');
     setMessage('');
 
     try {
       await resendRegistrationCode(cleanEmail);
+      if (!mountedRef.current) return;
       setMessage('A new verification code was sent.');
       setResendCooldown(true);
-      window.setTimeout(() => setResendCooldown(false), 30_000);
+      window.clearTimeout(cooldownTimerRef.current);
+      cooldownTimerRef.current = window.setTimeout(() => setResendCooldown(false), 30_000);
     } catch (err) {
-      setError(getAuthErrorMessage(err, 'A new code could not be sent.'));
+      if (mountedRef.current) setError(getAuthErrorMessage(err, 'A new code could not be sent.'));
     } finally {
-      setSubmitting(false);
+      actionRef.current = false;
+      if (mountedRef.current) setSubmitting(false);
     }
   };
 
@@ -203,7 +227,7 @@ export default function RegisterPage() {
         </section>
 
         <section className="login-layout">
-          <form className="login-card register-card" onSubmit={handleSubmit}>
+          <form className="login-card register-card" onSubmit={handleSubmit} noValidate aria-busy={submitting} aria-describedby={error ? 'register-error' : undefined}>
             <nav className="auth-mode-switch" aria-label="Authentication options">
               <Link
                 className="auth-mode-option"
@@ -211,6 +235,9 @@ export default function RegisterPage() {
                 state={{ from }}
                 viewTransition
                 onClick={prepareSignInTransition}
+                aria-disabled={submitting}
+                tabIndex={submitting ? -1 : undefined}
+                onClickCapture={event => { if (submitting) event.preventDefault(); }}
               >
                 Sign in
               </Link>
@@ -239,6 +266,8 @@ export default function RegisterPage() {
                   <input
                     placeholder="Your name"
                     autoComplete="name"
+                    name="name"
+                    maxLength={100}
                     value={form.name}
                     disabled={submitting}
                     onChange={(e) => updateField('name', e.target.value)}
@@ -251,6 +280,11 @@ export default function RegisterPage() {
                     placeholder="you@example.com"
                     type="email"
                     autoComplete="email"
+                    name="email"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    maxLength={254}
                     value={form.email}
                     disabled={submitting}
                     onChange={(e) => updateField('email', e.target.value)}
@@ -264,6 +298,8 @@ export default function RegisterPage() {
                       placeholder="Create a strong password"
                       type={showPassword ? 'text' : 'password'}
                       autoComplete="new-password"
+                      name="new-password"
+                      maxLength={256}
                       value={form.password}
                       disabled={submitting}
                       onChange={(e) => updateField('password', e.target.value)}
@@ -271,6 +307,7 @@ export default function RegisterPage() {
                     <button
                       className="auth-password-toggle"
                       type="button"
+                      disabled={submitting}
                       onClick={() => setShowPassword((current) => !current)}
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
                     >
@@ -294,6 +331,8 @@ export default function RegisterPage() {
                     placeholder="Repeat your password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="new-password"
+                    name="confirm-password"
+                    maxLength={256}
                     value={form.confirmPassword}
                     disabled={submitting}
                     onChange={(e) => updateField('confirmPassword', e.target.value)}
@@ -317,7 +356,7 @@ export default function RegisterPage() {
                     type="email"
                     autoComplete="email"
                     value={form.email}
-                    disabled={submitting}
+                    disabled
                     onChange={(e) => updateField('email', e.target.value)}
                   />
                 </label>
@@ -327,10 +366,11 @@ export default function RegisterPage() {
                   <input
                     placeholder="Enter your code"
                     inputMode="numeric"
+                    maxLength={6}
                     autoComplete="one-time-code"
                     value={form.code}
                     disabled={submitting}
-                    onChange={(e) => updateField('code', e.target.value)}
+                    onChange={(e) => updateField('code', e.target.value.replace(/\s/g, ''))}
                   />
                 </label>
 
@@ -345,8 +385,8 @@ export default function RegisterPage() {
               </>
             )}
 
-            {error && <p className="status error">{error}</p>}
-            {message && <p className="status success">{message}</p>}
+            {error && <p id="register-error" className="status error" role="alert">{error}</p>}
+            {message && <p className="status success" role="status">{message}</p>}
 
             {step !== 'done' ? (
               <button
@@ -373,9 +413,12 @@ export default function RegisterPage() {
               <Link
                 className="primary-btn register-submit"
                 to="/login"
-                state={{ from }}
+                state={{ from, verifiedEmail: form.email }}
                 viewTransition
                 onClick={prepareSignInTransition}
+                aria-disabled={submitting}
+                tabIndex={submitting ? -1 : undefined}
+                onClickCapture={event => { if (submitting) event.preventDefault(); }}
               >
                 Continue to sign in
               </Link>
@@ -387,6 +430,9 @@ export default function RegisterPage() {
               state={{ from }}
               viewTransition
               onClick={prepareSignInTransition}
+              aria-disabled={submitting}
+              tabIndex={submitting ? -1 : undefined}
+              onClickCapture={event => { if (submitting) event.preventDefault(); }}
             >
               Already have an account? Sign in
             </Link>

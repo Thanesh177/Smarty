@@ -12,6 +12,7 @@ import {
   setupAndroidPushTokenListener,
 } from './firebase';
 import AuthRedirectHandler from './components/AuthRedirectHandler';
+import { clearAuthDestination, readAuthDestination } from './lib/authNavigation';
 import InstallPrompt from './components/InstallPrompt';
 import UniversalSearch from './components/UniversalSearch';
 import PageTransition from './components/PageTransition';
@@ -142,20 +143,7 @@ function OAuthCompletionPage() {
   const destinationRef = useRef(null);
 
   if (!destinationRef.current) {
-    const storedTarget =
-      sessionStorage.getItem('smarty-post-login-redirect') ||
-      localStorage.getItem('smarty-post-login-redirect') ||
-      '/feed?topic=All';
-    const candidate = String(storedTarget || '').trim();
-
-    destinationRef.current =
-      candidate.startsWith('/') &&
-      !candidate.startsWith('//') &&
-      !candidate.includes('\\') &&
-      candidate !== '/login' &&
-      candidate !== '/register'
-        ? candidate
-        : '/feed?topic=All';
+    destinationRef.current = readAuthDestination('/feed?topic=All');
   }
 
   useEffect(() => {
@@ -168,16 +156,15 @@ function OAuthCompletionPage() {
 
     retriedRef.current = true;
     restoreSession({ attempts: 8 }).catch((error) => {
-      console.error('OAuth session recovery failed:', error);
+      console.warn('OAuth session recovery is temporarily unavailable.');
     });
   }, [loading, restoreSession, user]);
 
   useEffect(() => {
     if (!user) return;
 
-    sessionStorage.removeItem('smarty-post-login-redirect');
-    localStorage.removeItem('smarty-post-login-redirect');
-    sessionStorage.removeItem('smarty-auth-redirecting');
+    clearAuthDestination();
+    try { sessionStorage.removeItem('smarty-auth-redirecting'); } catch { /* restricted storage */ }
     navigate(destinationRef.current, { replace: true });
   }, [navigate, user]);
 

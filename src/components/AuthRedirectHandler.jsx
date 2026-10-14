@@ -16,7 +16,6 @@ export default function AuthRedirectHandler() {
 
     if (hasOAuthError && isOAuthResponse) {
       const errorMessage = params.get('error_description') || params.get('error') || 'Sign-in could not be completed.';
-      console.error('OAuth returned an error:', errorMessage);
       navigate('/login', {
         replace: true,
         state: {

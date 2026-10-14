@@ -5,14 +5,19 @@ export function normalizeAuthEmail(value) {
 }
 
 export function isValidAuthEmail(value) {
-  return EMAIL_PATTERN.test(normalizeAuthEmail(value));
+  const email = normalizeAuthEmail(value);
+  return email.length <= 254 && EMAIL_PATTERN.test(email);
+}
+
+export function isValidVerificationCode(value) {
+  return /^\d{6}$/.test(String(value || '').trim());
 }
 
 export function getPasswordChecks(value) {
   const password = String(value || '');
 
   return [
-    { id: 'length', label: '10+ characters', valid: password.length >= 10 },
+    { id: 'length', label: '10–256 characters', valid: password.length >= 10 && password.length <= 256 },
     { id: 'lower', label: 'lowercase', valid: /[a-z]/.test(password) },
     { id: 'upper', label: 'uppercase', valid: /[A-Z]/.test(password) },
     { id: 'number', label: 'number', valid: /\d/.test(password) },
@@ -27,13 +32,18 @@ export function getAuthErrorMessage(error, fallback = 'Something went wrong. Ple
   const name = String(error?.name || '');
   const message = String(error?.message || '');
   const combined = `${name} ${message}`.toLowerCase();
+  const safeTimeouts = [
+    'Registration took too long. Check your email for a code before trying again.',
+    'Password reset took too long. Try signing in with your new password before resetting again.',
+  ];
+  if (safeTimeouts.includes(message)) return message;
 
   if (combined.includes('notauthorizedexception') || combined.includes('incorrect username or password')) {
     return 'The email or password is incorrect.';
   }
 
   if (combined.includes('usernotfoundexception')) {
-    return 'No account was found for this email.';
+    return 'The email or password is incorrect.';
   }
 
   if (combined.includes('usernotconfirmedexception')) {
@@ -52,7 +62,7 @@ export function getAuthErrorMessage(error, fallback = 'Something went wrong. Ple
     return 'That verification code has expired. Request a new one.';
   }
 
-  if (combined.includes('limitexceededexception') || combined.includes('too many')) {
+  if (combined.includes('limitexceededexception') || combined.includes('toomanyrequestsexception') || combined.includes('too many')) {
     return 'Too many attempts. Wait a moment and try again.';
   }
 
@@ -64,6 +74,10 @@ export function getAuthErrorMessage(error, fallback = 'Something went wrong. Ple
     return 'We could not reach the sign-in service. Check your connection and try again.';
   }
 
+  if (combined.includes('timeout') || combined.includes('timed out') || combined.includes('took too long') || name === 'AbortError') {
+    return 'The sign-in service took too long. Check your connection and try again.';
+  }
+
   if (combined.includes('access_denied') || combined.includes('cancelled') || combined.includes('canceled')) {
     return 'Connected sign-in was cancelled. Your account was not changed.';
   }
@@ -72,7 +86,14 @@ export function getAuthErrorMessage(error, fallback = 'Something went wrong. Ple
     return 'Connected sign-in could not be completed. Please try again.';
   }
 
-  return message && !message.toLowerCase().includes('exception') ? message : fallback;
+  // Provider messages can contain URLs, configuration and other internal data.
+  // Only surface known safe application validation errors; never raw OAuth text.
+  const safeMessages = [
+    'Enter the requested verification value.',
+    'Another sign-in attempt is still running. Please wait.',
+    'Sign-out could not be saved on this device. Please try again before closing Smarty.',
+  ];
+  return safeMessages.includes(message) ? message : fallback;
 }
 
 export function getChallengePresentation(nextStep = {}) {
@@ -99,6 +120,14 @@ export function getChallengePresentation(nextStep = {}) {
       description: 'Enter the current code from your authenticator app.',
       label: 'Authenticator code',
       type: 'code',
+      inputMode: 'numeric',
+      autoComplete: 'one-time-code',
+    },
+    CONTINUE_SIGN_IN_WITH_TOTP_SETUP: {
+      title: 'Set up your authenticator',
+      description: 'Add Smarty to your authenticator app with the setup key, then enter its current six-digit code.',
+      label: 'Authenticator code',
+      type: 'totp-setup',
       inputMode: 'numeric',
       autoComplete: 'one-time-code',
     },

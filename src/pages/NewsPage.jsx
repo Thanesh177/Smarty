@@ -1,12 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowDown, BriefcaseBusiness, Cpu, FlaskConical, Globe2, HeartPulse, Landmark, Leaf, Newspaper, Search, Trophy } from 'lucide-react';
+import { ArrowDown, ArrowUpRight, Bookmark, BriefcaseBusiness, Cpu, FlaskConical, Globe2, HeartPulse, Landmark, Leaf, Newspaper, RefreshCw, Search, Share2, Trophy } from 'lucide-react';
 import { newsApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import {
   NEWS_COUNTRIES,
   NEWS_REGIONS,
-  getDefaultNewsCountry,
 } from '../data/newsLocations';
 import './NewsPage.css';
 import './LibraryNewsTheme.css';
@@ -15,6 +14,8 @@ import { editorialNewsSections, hasEditorialBriefing, newsCacheIsFresh } from '.
 import useNewsPersonalization from '../hooks/useNewsPersonalization';
 import { NewsBriefingChoice, NewsFollowButton, NewsUpdatesShelf } from '../components/NewsPersonalization';
 import { briefingPlace, readNewsPreference } from '../lib/newsPreferences';
+import { normalizeNewsEdition, mergeNewsBriefing, safeNewsUrl } from '../lib/newsEdition';
+import './NewsCompact.css';
 
 const CACHE_PREFIX = 'smarty_location_news_v22_';
 const CACHE_STALE_TTL = 1000 * 60 * 60 * 48;
@@ -85,7 +86,7 @@ function getCachedNews(country, region) {
     }
 
     return {
-      news: cached.news,
+      news: normalizeNewsEdition(cached.news),
       timestamp: cached.timestamp,
       isFresh: newsCacheIsFresh(cached.news, cached.timestamp),
     };
@@ -184,30 +185,31 @@ const NewsCard = memo(function NewsCard({ article, index, saved, onToggleSave, o
           {publishedAt && <time dateTime={article.published_at}>{publishedAt}</time>}
         </div>
 
-        <h3>{article.title || 'Untitled news'}</h3>
+        <h3><a href={safeNewsUrl(article.news_link)} target="_blank" rel="noopener noreferrer">{article.title || 'Untitled news'}</a></h3>
         <p>{article.summary || `Current reporting from ${article.source || 'this source'}.`}</p>
         <span className="news-card-source">{article.source || 'News source'}</span>
-        <NewsStoryLink story={article} />
-        <NewsFollowButton story={article}/>
+        <div className="news-card-story-tools"><NewsStoryLink story={article} /><NewsFollowButton story={article}/></div>
 
         <div className="news-actions">
           <a href={article.news_link} target="_blank" rel="noopener noreferrer">
-            Read story
+            Read story <ArrowUpRight size={14} aria-hidden="true" />
           </a>
           <button
             type="button"
             aria-pressed={saved}
             aria-label={`${saved ? 'Remove' : 'Save'} ${article.title}`}
+            title={saved ? 'Remove from saved reports' : 'Save report'}
             onClick={() => onToggleSave(article)}
           >
-            {saved ? 'Saved' : 'Save'}
+            <Bookmark size={17} aria-hidden="true" fill={saved ? 'currentColor' : 'none'} />
           </button>
           <button
             type="button"
             aria-label={`Share ${article.title}`}
+            title="Share report"
             onClick={() => onShare(article)}
           >
-            Share
+            <Share2 size={17} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -244,7 +246,10 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
             {summary.title || `${locationLabel} at a glance`}
           </h2>
           <div className="news-brief-prose">
-            {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+            <p>{paragraphs[0]}</p>
+            {paragraphs.length > 1 && <details className="news-brief-more"><summary>Read the full briefing</summary>
+              {paragraphs.slice(1).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+            </details>}
           </div>
 
           <dl className="news-brief-stats">
@@ -264,7 +269,7 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
 
           <p className="news-analysis-scope">
             <span aria-hidden="true" />
-            {summary.analysisStatement || 'The full story collection is included in this digest.'}
+            {summary.analysisStatement || 'Based on available reporting. Developments may change after publication.'}
           </p>
         </div>
 
@@ -289,7 +294,8 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
         )}
       </div>
 
-      <div className="news-brief-insight-grid">
+      {(summary.keyTakeaways?.length > 0 || summary.keyThemes?.length > 0) && <details className="news-brief-insight-grid">
+        <summary>Key developments <span>{summary.keyTakeaways?.length || summary.keyThemes?.length}</span></summary>
         {summary.keyTakeaways?.length > 0 ? (
           <div className="news-brief-takeaways">
             <header>
@@ -332,7 +338,7 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
         ) : null}
 
 
-      </div>
+      </details>}
 
       {showSections && summary.sectionDigests?.length > 0 && (
         <details className="news-section-digest" open={world || undefined}>
@@ -407,7 +413,7 @@ export default function NewsPage({ briefingOnly = false }) {
   const initialCountry = useMemo(() => {
     if (briefingOnly) return briefingPlace(readNewsPreference(user?.sub || user?.userId || user?.id || '')).country;
     const requested = new URLSearchParams(location.search).get('country');
-    return NEWS_COUNTRIES.some(item => item.code === requested) ? requested : getDefaultNewsCountry();
+    return NEWS_COUNTRIES.some(item => item.code === requested) ? requested : briefingPlace(readNewsPreference(user?.sub || user?.userId || user?.id || '')).country;
   }, []);
   const [country, setCountry] = useState(initialCountry);
   const [region, setRegion] = useState(() => briefingOnly ? briefingPlace(readNewsPreference(user?.sub || user?.userId || user?.id || '')).region : initialCountry === 'GLOBAL' ? '' : getSavedRegion(initialCountry));
@@ -446,6 +452,7 @@ export default function NewsPage({ briefingOnly = false }) {
 
   const preferred = briefingPlace(personal.preferences);
   useEffect(() => {
+    if (!briefingOnly && NEWS_COUNTRIES.some(item => item.code === new URLSearchParams(location.search).get('country'))) return;
     if (briefingOnly || personal.preferences) { setCountry(preferred.country); setRegion(preferred.region); setSelectedSection('All'); }
   }, [briefingOnly, personal.account, personal.preferences?.chosen, preferred.country, preferred.region]);
 
@@ -520,7 +527,7 @@ export default function NewsPage({ briefingOnly = false }) {
     abortControllerRef.current = controller;
 
     try {
-      const data = await newsApi.getLatestNews({
+      const data = normalizeNewsEdition(await newsApi.getLatestNews({
         country: targetCountry,
         region: targetRegion,
         lang: 'english',
@@ -528,7 +535,7 @@ export default function NewsPage({ briefingOnly = false }) {
         forceRefresh,
         // Reports have their own shared cache and do not wait for the model.
         view: 'reports',
-      });
+      }));
 
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
@@ -545,9 +552,11 @@ export default function NewsPage({ briefingOnly = false }) {
         try {
           const briefing = await newsApi.getLatestNews({ country: targetCountry, region: targetRegion, lang: 'english', signal: controller.signal, forceRefresh });
           if (mountedRef.current && requestId === requestIdRef.current) {
-            setNewsData(briefing); setCachedNews(targetCountry, targetRegion, briefing);
-            setFromCache(briefing.cacheStatus === 'stale-cache');
-            setLastUpdated(formatUpdatedAt(briefing.generatedAt || Date.now()));
+            const merged = mergeNewsBriefing(data, briefing);
+            setNewsData(merged); setCachedNews(targetCountry, targetRegion, merged);
+            setFromCache(merged.cacheStatus === 'stale-cache');
+            setLastUpdated(formatUpdatedAt(merged.generatedAt || Date.now()));
+            if (!hasEditorialBriefing(merged)) setError('The daily summary is unavailable right now. Original reports are ready below.');
           }
         } catch {
           if (!controller.signal.aborted && mountedRef.current && requestId === requestIdRef.current) setError('Reports are ready. The daily summary is taking longer; you can keep reading.');
@@ -578,7 +587,6 @@ export default function NewsPage({ briefingOnly = false }) {
     fetchNews(country, region);
   }, [country, fetchNews, region]);
 
-  const regionOptions = useMemo(() => NEWS_REGIONS[country] || [], [country]);
   const sections = useMemo(() => {
     let sectionMap = newsData?.sections || {};
     if (!Object.keys(sectionMap).length && Array.isArray(newsData?.articles)) {
@@ -586,7 +594,7 @@ export default function NewsPage({ briefingOnly = false }) {
         const section = article.section || 'World';
         (result[section] ||= []).push(article);
         return result;
-      }, {});
+      }, Object.create(null));
     }
     return Object.entries(sectionMap).filter(([, items]) => Array.isArray(items) && items.length);
   }, [newsData]);
@@ -695,8 +703,9 @@ export default function NewsPage({ briefingOnly = false }) {
   }, [country, region, search, selectedSection]);
 
   useEffect(() => {
-    if (newsData && !sectionNames.includes(selectedSection)) setSelectedSection('All');
-  }, [newsData, sectionNames, selectedSection]);
+    const available = briefingOnly && summarySections.length ? ['All', ...summarySections.map(digest => digest.section)] : sectionNames;
+    if (newsData && !available.includes(selectedSection)) setSelectedSection('All');
+  }, [newsData, sectionNames, selectedSection, briefingOnly, summarySections]);
 
   useEffect(() => {
     if (!loaderRef.current) return undefined;
@@ -714,31 +723,10 @@ export default function NewsPage({ briefingOnly = false }) {
     return () => observer.disconnect();
   }, [articles.length, loading, selectedSection, search, visibleCount]);
 
-  const handleCountryChange = useCallback((event) => {
-    const nextCountry = event.target.value;
-    setCountry(nextCountry);
-    setRegion('');
-    setNewsData(null);
-    setSelectedSection('All');
-    setSearch('');
-    try {
-      localStorage.setItem('smarty-news-country', nextCountry);
-    } catch {
-      // Continue with an in-memory selection.
-    }
+  const handlePlaceChange = useCallback(place => {
+    setCountry(place.country); setRegion(place.region);
+    setSelectedSection('All'); setSearch(''); setSummarySearch('');
   }, []);
-
-  const handleRegionChange = useCallback((event) => {
-    const nextRegion = event.target.value;
-    setRegion(nextRegion);
-    setNewsData(null);
-    setSelectedSection('All');
-    try {
-      localStorage.setItem(`smarty-news-region-${country}`, nextRegion);
-    } catch {
-      // Continue with an in-memory selection.
-    }
-  }, [country]);
 
   const handleBriefSectionSelect = useCallback((section) => {
     setSelectedSection(section);
@@ -768,8 +756,8 @@ export default function NewsPage({ briefingOnly = false }) {
   };
 
   if (briefingOnly) return (
-    <section className={`news-page news-feed-briefing${comfortableText ? ' news-comfortable-text' : ''}`} aria-label="Daily news feed">
-      <NewsBriefingChoice personal={personal}/>
+    <section className={`news-page news-compact news-feed-briefing${comfortableText ? ' news-comfortable-text' : ''}`} aria-label="Daily news feed">
+      <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
       <NewsUpdatesShelf personal={personal}/>
       {briefingPending && <div className="news-briefing-pending" role="status"><span/>Reports are ready. Your daily summary is being prepared in the background.</div>}
       {actionStatus && <p className="news-action-status" role="status" aria-live="polite">{actionStatus}</p>}
@@ -784,9 +772,9 @@ export default function NewsPage({ briefingOnly = false }) {
             onChange={event => setSummarySearch(event.target.value)} />
         </label>}
         <div className="news-feed-actions">
-          <Link to="/news">Open full newsroom <span aria-hidden="true">↗</span></Link>
+          <Link to="/news">All reports <ArrowUpRight size={14} aria-hidden="true" /></Link>
           <button type="button" className="refresh-news-btn" disabled={loading || refreshing}
-            onClick={() => fetchNews(country, region, true)}>{refreshing ? 'Refreshing' : 'Refresh'}</button>
+            aria-label="Refresh daily briefing" title="Refresh daily briefing" onClick={() => fetchNews(country, region, true)}><RefreshCw size={16} aria-hidden="true" className={refreshing ? 'news-refreshing' : ''}/></button>
         </div>
       </div>
       {loading && <div role="status"><p>Opening your daily briefing…</p><div className="news-summary-feed"><NewsSkeleton /><NewsSkeleton /></div></div>}
@@ -808,9 +796,13 @@ export default function NewsPage({ briefingOnly = false }) {
                 </h2>
                 {(newsData.dailySummary.overviewParagraphs?.length
                   ? newsData.dailySummary.overviewParagraphs
-                  : [newsData.dailySummary.overview]).filter(Boolean).map((paragraph, index) => (
+                  : [newsData.dailySummary.overview]).filter(Boolean).slice(0, 1).map((paragraph, index) => (
                   <p key={index}>{paragraph}</p>
                 ))}
+                {newsData.dailySummary.overviewParagraphs?.length > 1 && <details className="news-brief-more">
+                  <summary>Read the full briefing</summary>
+                  {newsData.dailySummary.overviewParagraphs.slice(1).filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+                </details>}
               </div>
               <div className="news-edition-footer">
               <dl>
@@ -825,13 +817,13 @@ export default function NewsPage({ briefingOnly = false }) {
               <BriefingSources stories={dailyBriefing.highlights} label="Daily overview sources" />
             </section>
           )}
-          {dailyBriefing?.keyTakeaways?.length > 0 && !summarySearch.trim() && <section className="news-briefing-takeaways" aria-label="The day in brief">
-            <h2>Start here</h2>
+          {dailyBriefing?.keyTakeaways?.length > 0 && !summarySearch.trim() && <details className="news-briefing-takeaways" aria-label="The day in brief">
+            <summary>Key developments <span>{dailyBriefing.keyTakeaways.length}</span></summary>
             <div>{dailyBriefing.keyTakeaways.slice(0, 3).map((item, index) => <article key={index}>
               <span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
               <h3>{item.title}</h3><p>{item.summary}</p>
             </article>)}</div>
-          </section>}
+          </details>}
 
           {summarySections.length > 0 && (
             <nav className="section-tabs news-topic-tabs" aria-label="Daily news sections">
@@ -911,8 +903,8 @@ export default function NewsPage({ briefingOnly = false }) {
   );
 
   return (
-    <section className="news-page">
-      <NewsBriefingChoice personal={personal}/>
+    <section className="news-page news-compact news-newsroom">
+      <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
       <NewsUpdatesShelf personal={personal}/>
       {actionStatus && (
         <p className="news-action-status" role="status" aria-live="polite">
@@ -921,30 +913,28 @@ export default function NewsPage({ briefingOnly = false }) {
       )}
       <div className="news-hero">
         <div>
-          <span className="news-kicker">Stay in the picture</span>
-          <h1>The day, in perspective.</h1>
-          <p>Start with the day’s briefing, then move through original reporting by place and subject.</p>
-          <Link className="news-feed-link" to="/feed?topic=News">Read the world briefing in your feed →</Link>
+          <h1>News<span className="news-heading-place">{locationLabel}</span></h1>
           {lastUpdated && (
-            <span className="last-updated">Updated at {lastUpdated}</span>
+            <span className="last-updated">Updated {lastUpdated}</span>
           )}
         </div>
 
-        <button
+        <div className="news-header-actions"><Link className="news-feed-link" to="/feed?topic=News">Daily briefing <ArrowUpRight size={14} aria-hidden="true" /></Link><button
           type="button"
           className="refresh-news-btn"
           onClick={() => fetchNews(country, region, true)}
           disabled={loading || refreshing}
           aria-label="Refresh current news"
+          title="Refresh current news"
         >
-          {refreshing ? 'Refreshing' : 'Refresh'}
-        </button>
+          <RefreshCw size={16} aria-hidden="true" className={refreshing ? 'news-refreshing' : ''}/>
+        </button></div>
       </div>
 
-      <SavedNewsStories />
-      <div className="news-controls news-location-controls">
+      <SavedNewsStories collapsed />
+      <div className="news-controls news-compact-search">
         <label className="news-search-control">
-          <span>Search</span>
+          <Search size={17} aria-hidden="true" />
           <input
             type="search"
             aria-label="Search current news"
@@ -954,29 +944,6 @@ export default function NewsPage({ briefingOnly = false }) {
           />
         </label>
 
-        <label>
-          <span>Country</span>
-          <select aria-label="News country" value={country} onChange={handleCountryChange}>
-            {NEWS_COUNTRIES.map((item) => (
-              <option key={item.code} value={item.code}>{item.name}</option>
-            ))}
-          </select>
-        </label>
-
-        <label>
-          <span>State or region</span>
-          <select
-            aria-label="News state or region"
-            value={region}
-            onChange={handleRegionChange}
-            disabled={!regionOptions.length}
-          >
-            <option value="">{regionOptions.length ? 'All states and regions' : 'Countrywide'}</option>
-            {regionOptions.map((item) => (
-              <option key={item} value={item}>{item}</option>
-            ))}
-          </select>
-        </label>
       </div>
 
       {(fromCache || newsData?.notice) && !loading && (
@@ -1008,8 +975,8 @@ export default function NewsPage({ briefingOnly = false }) {
       {!loading && newsData && (
         <>
           {briefingPending && <div className="news-briefing-pending" role="status"><span/>Reports are ready. Your daily summary is being prepared in the background.</div>}
-          {newsData.dailySummary && !briefingPending && <DailyBrief
-            summary={newsData.dailySummary}
+          {dailyBriefing && !briefingPending && <DailyBrief
+            summary={dailyBriefing}
             locationLabel={locationLabel}
             onSelectSection={handleBriefSectionSelect}
             showSections={false}

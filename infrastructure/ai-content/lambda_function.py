@@ -19,7 +19,7 @@ from botocore.exceptions import ClientError, BotoCoreError
 from generation_cache import GenerationBusy, generation_lease
 from editorial_sources import (
     SOURCE_VERSION, CURRENT_MAX_AGE, retrieve_sources, evidence_context,
-    selected_sources, claims_current,
+    selected_sources, claims_current, evidence_fingerprint,
 )
 
 from content_catalog import (
@@ -620,7 +620,11 @@ def reserve_generation_topic():
     raise RuntimeError("Could not reserve a unique content topic")
 
 
-def choose_content_angle(recent_posts):
+def choose_content_angle(recent_posts, topic=""):
+    historical = TOPIC_TO_DOMAIN.get(topic) == "History and civilization" or "history" in topic.lower()
+    eligible = [angle for angle in CONTENT_ANGLES
+                if (angle["id"] != "documented_history" or historical or not topic)
+                and (angle["id"] != "current_connection" or not historical)]
     angle_counts = Counter(
         normalize_text(item.get("contentAngle"))
         for item in recent_posts[:24]
@@ -628,11 +632,11 @@ def choose_content_angle(recent_posts):
     )
     least_used = min(
         angle_counts.get(angle["id"], 0)
-        for angle in CONTENT_ANGLES
+        for angle in eligible
     )
     choices = [
         angle
-        for angle in CONTENT_ANGLES
+        for angle in eligible
         if angle_counts.get(angle["id"], 0) == least_used
     ]
     return random.choice(choices)
@@ -644,7 +648,7 @@ def resolve_content_angle(value=None):
     angle_id = normalize_text(value)
     return next(
         (angle for angle in CONTENT_ANGLES if angle["id"] == angle_id),
-        CONTENT_ANGLES[0],
+        next(angle for angle in CONTENT_ANGLES if angle["id"] == "mechanism"),
     )
 
 
@@ -944,12 +948,11 @@ def load_editorial_evidence(topic, subject, angle):
     saved = explanations_table.get_item(Key={"explanationId": cache_id}, ConsistentRead=True).get("Item")
     if saved and int(saved.get("freshUntil") or 0) > now:
         pack = saved.get("evidence", {})
-        if historical or all(-300 <= now - int(source.get("publishedAt") or 0) <= CURRENT_MAX_AGE for source in pack.get("sources", [])):
+        if pack.get("version") == SOURCE_VERSION and (historical or all(-300 <= now - int(source.get("publishedAt") or 0) <= CURRENT_MAX_AGE for source in pack.get("sources", []))):
             return pack
     pack = retrieve_sources(topic, subject, domain, angle, now)
-    if pack.get("sources"):
-        fresh_until = now + (7 * 86400 if historical else 15 * 60)
-        explanations_table.put_item(Item={"explanationId": cache_id, "entryType": "editorialSources", "evidence": pack, "freshUntil": fresh_until, "expiresAt": fresh_until})
+    fresh_until = now + ((7 * 86400 if historical else 15 * 60) if pack.get("sources") else 60)
+    explanations_table.put_item(Item={"explanationId": cache_id, "entryType": "editorialSources", "evidence": pack, "freshUntil": fresh_until, "expiresAt": fresh_until})
     return pack
 
 
@@ -1104,7 +1107,10 @@ Return exactly this JSON shape:
             )
             return None
 
-        used_sources = selected_sources(evidence, (parsed or {}).get("sourceIds"))
+        ids = (parsed or {}).get("sourceIds", [])
+        used_sources = selected_sources(evidence, ids)
+        if not isinstance(ids, list) or (ids and not used_sources):
+            return None
         if evidence.get("mode") in ("history", "current") and not used_sources:
             return None
         if evidence.get("mode") != "current" and claims_current(candidate["title"] + " " + candidate["body"]):
@@ -1393,7 +1399,7 @@ def create_post(publication_id=None):
 
 def publish_learning_step(base_topic, learning_target, path_state, reel_id):
     recent_posts = paginated_scan_recent_posts()
-    content_angle = choose_content_angle(recent_posts)
+    content_angle = choose_content_angle(recent_posts, base_topic)
     ai_post = None
     sub_topic = learning_target["subTopic"]
 
@@ -1440,7 +1446,7 @@ def publish_learning_step(base_topic, learning_target, path_state, reel_id):
         body,
         base_topic,
         sub_topic,
-        content_angle,
+        resolve_content_angle(ai_post.get("contentAngle") or content_angle),
         learning_target,
         ai_post.get("sourceEvidence"),
     )
@@ -1522,8 +1528,8 @@ def publish_learning_step(base_topic, learning_target, path_state, reel_id):
         "topic": base_topic,
         "topicDomain": TOPIC_TO_DOMAIN[base_topic],
         "subTopic": sub_topic,
-        "contentAngle": content_angle["id"],
-        "contentAngleLabel": content_angle["label"],
+        "contentAngle": item["contentAngle"],
+        "contentAngleLabel": item["contentAngleLabel"],
         "title": title,
         "imageKey": image_key,
         "imageQuery": get_smart_image_query(base_topic, title, ai_image_query),
@@ -1546,6 +1552,8 @@ def explanation_source_hash(post):
     for field in LEARNING_SOURCE_FIELDS:
         if field in post:
             source += "\n" + field + ":" + normalize_text(post[field], 12000)
+    if post.get("sourceEvidence"):
+        source += "\nsourceEvidence:" + evidence_fingerprint(post["sourceEvidence"])
     return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
@@ -1588,7 +1596,7 @@ def persist_post_explanation(post_id, post, explanation, source_hash):
 
     explanations_table.put_item(Item=cache_item)
     unchanged = Attr("id").exists()
-    for field in (*EXPLANATION_SOURCE_FIELDS, *LEARNING_SOURCE_FIELDS):
+    for field in (*EXPLANATION_SOURCE_FIELDS, *LEARNING_SOURCE_FIELDS, "sourceEvidence"):
         unchanged = unchanged & (Attr(field).eq(post[field]) if field in post else Attr(field).not_exists())
     table.update_item(
         Key={"id": post.get("id", post_id)},

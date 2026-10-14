@@ -2,6 +2,7 @@ import axios from 'axios';
 import { createRequestCache } from '../lib/requestCache';
 import { normalizeSavedCollection } from '../lib/savedCollection';
 import { createNewsRequestCache } from '../lib/newsRequestCache';
+import { hasEditorialBriefing } from '../lib/newsAvailability';
 import { getLearningGuide } from '../data/learningGuides';
 import { DETAILED_EXPLANATION_VERSION } from '../lib/explanationFormat';
 import { fetchAuthSession } from 'aws-amplify/auth';
@@ -674,14 +675,16 @@ export const newsApi = {
         Object.entries(primaryPayload.sections).forEach(([sectionName, items]) => {
           addSection(sectionName, items);
         });
-      } else if (Array.isArray(primaryPayload.articles)) {
+      }
+      if (!Object.keys(sections).length && Array.isArray(primaryPayload.articles)) {
         primaryPayload.articles.forEach((item) => {
           addSection(item?.section || 'World', [item]);
         });
       }
     }
 
-    if (!Object.keys(sections).length && country === 'GLOBAL' && !normalizedOptions.signal?.aborted) {
+    const summaryOnly = primaryPayload && hasEditorialBriefing(primaryPayload);
+    if (!Object.keys(sections).length && !summaryOnly && country === 'GLOBAL' && !normalizedOptions.signal?.aborted) {
       const [hackerResult, spaceResult] = await Promise.allSettled([
         newsApi.getHackerNews(10, { signal: normalizedOptions.signal }),
         newsApi.getSpaceflightNews(10, { signal: normalizedOptions.signal }),
@@ -722,7 +725,7 @@ export const newsApi = {
       items.map((item) => ({ ...item, section: item.section || sectionName }))
     );
 
-    if (!articles.length) {
+    if (!articles.length && !summaryOnly) {
       if (normalizedOptions.signal?.aborted) {
         throw new DOMException('News request cancelled.', 'AbortError');
       }
