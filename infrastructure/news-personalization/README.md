@@ -1,6 +1,6 @@
 # Personalized news release
 
-Status on 2026-10-13: the private service is deployed as `smarty-news-personalization` in us-east-1. The existing `sendmsg` sender was updated without reading or replacing its credentials. Both automatic schedules remain DISABLED pending physical-device acceptance. The public news cache changes in `smarty-terraform/lambda-src/news` remain a separate, not-yet-deployed release.
+Status on 2026-10-13: the private service is deployed as `smarty-news-personalization` in us-east-1. The existing `sendmsg` sender was updated without reading or replacing its credentials. Both automatic schedules remain DISABLED pending physical-device acceptance. The public news timeout, shared-cache and briefing fix was separately deployed on October 13; see `../COMPACT-NEWS-RELEASE.md`. Website/interface changes still require the normal frontend release.
 
 The first stack creation rolled back because the account cannot allocate the requested Lambda concurrency reservations. Its empty retained database was preserved and reused: `smarty-news-personalization-PersonalNews-1D99P96M3SWDZ`. The approved retry uses conditional 180-second database leases for one active checker/dispatcher at a time, plus per-alert and per-device delivery receipts. No existing function's concurrency was reduced. Retained logs from the rollback remain available for diagnosis.
 

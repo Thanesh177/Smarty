@@ -11,16 +11,25 @@ export function NewsBriefingChoice({ personal, activePlace, onChange }) {
   const [editing, setEditing] = useState(false), [country, setCountry] = useState(preferences?.country || getDefaultNewsCountry());
   const [region, setRegion] = useState(preferences?.region || ''), [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const actionRef = useRef(null), mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    actionRef.current = null; setSaving(false); setError('');
+    return () => { mountedRef.current = false; actionRef.current = null; };
+  }, [personal.account]);
   useEffect(() => { setCountry(preferences?.country || (activePlace?.country !== 'GLOBAL' && activePlace?.country) || getDefaultNewsCountry()); setRegion(preferences?.region || activePlace?.region || ''); }, [preferences?.country, preferences?.region, activePlace?.country, activePlace?.region]);
   const apply = async mode => {
-    if (saving) return;
+    if (actionRef.current) return;
+    const action = {};
+    actionRef.current = action;
     setSaving(true); setError('');
     try {
       await savePreference({ chosen: true, country, region, mode });
+      if (!mountedRef.current || actionRef.current !== action) return;
       onChange?.({ country: mode === 'world' ? 'GLOBAL' : country, region: mode === 'world' ? '' : region });
       setEditing(false);
-    } catch { setError('Could not save this place. Please try again.'); }
-    finally { setSaving(false); }
+    } catch { if (mountedRef.current) setError('Could not save this place. Please try again.'); }
+    finally { if (actionRef.current === action) { actionRef.current = null; if (mountedRef.current) setSaving(false); } }
   };
   const localCountry = activePlace?.country !== 'GLOBAL' && activePlace?.country || preferences?.country;
   const label = (activePlace?.country !== 'GLOBAL' ? activePlace?.region : '') || preferences?.region || NEWS_COUNTRIES.find(item => item.code === localCountry)?.name || 'Your place';
@@ -34,9 +43,9 @@ export function NewsBriefingChoice({ personal, activePlace, onChange }) {
     </div> : <form onSubmit={event => { event.preventDefault(); void apply('local'); }}>
       <header><div><h2>Your briefing, your place.</h2><p>Choose a country and region. Switch back to World anytime.</p></div>
         <button type="button" aria-label="Close location settings" disabled={saving} onClick={() => setEditing(false)}><X size={18}/></button></header>
-      <div className="news-place-fields"><label>Country<select aria-label="Briefing country" value={country} onChange={event => { setCountry(event.target.value); setRegion(''); }}>
+      <div className="news-place-fields"><label>Country<select aria-label="Briefing country" value={country} disabled={saving} onChange={event => { setCountry(event.target.value); setRegion(''); }}>
         {NEWS_COUNTRIES.map(item => <option value={item.code} key={item.code}>{item.name}</option>)}</select></label>
-        <label>State or region<select aria-label="Briefing state or region" value={region} disabled={!NEWS_REGIONS[country]?.length} onChange={event => setRegion(event.target.value)}>
+        <label>State or region<select aria-label="Briefing state or region" value={region} disabled={saving || !NEWS_REGIONS[country]?.length} onChange={event => setRegion(event.target.value)}>
           <option value="">Countrywide</option>{(NEWS_REGIONS[country] || []).map(item => <option key={item}>{item}</option>)}</select></label></div>
       <footer><button type="submit" disabled={saving}>{saving ? 'Saving…' : country === 'GLOBAL' ? 'Use world briefing' : 'Use my place'}</button><button type="button" disabled={saving} onClick={() => apply('world')}>Keep world briefing</button></footer>
     </form>}
@@ -48,18 +57,38 @@ export function NewsBriefingChoice({ personal, activePlace, onChange }) {
 export function NewsFollowButton({ story, query: supplied }) {
   const navigate = useNavigate(), personal = useNewsPersonalization();
   const [status, setStatus] = useState(''), [busy, setBusy] = useState(false);
+  const actionRef = useRef(null), mountedRef = useRef(true);
   const query = cleanStoryQuery(supplied || storyQuery(story));
   const followed = personal.stories.find(item => item.query.toLowerCase() === query.toLowerCase());
+  useEffect(() => {
+    mountedRef.current = true;
+    actionRef.current = null; setBusy(false); setStatus('');
+    return () => { mountedRef.current = false; actionRef.current = null; };
+  }, [query, personal.account]);
   if (query.length < 3) return null;
   const toggle = async () => {
+    if (actionRef.current) return;
     if (!personal.account) { navigate('/login', { state: { from: { pathname: '/news/story', search: '?q=' + encodeURIComponent(query) } } }); return; }
     setBusy(true); setStatus('');
-    try { await personal.updateStory({ query, follow: !followed }); setStatus(followed ? 'Updates turned off.' : 'Following. New related reports will appear in your news updates.'); }
-    catch { setStatus('Story alerts could not be saved. Please try again after the news service reconnects.'); }
-    finally { setBusy(false); }
+    const action = {};
+    actionRef.current = action;
+    try {
+      if (!personal.ready) {
+        const result = await personal.refresh();
+        if (result.error) throw result.error;
+        // A retry loads the real followed state first; it never toggles blindly.
+        if (mountedRef.current && actionRef.current === action) setStatus('Updates reconnected. Choose follow or unfollow below.');
+      } else {
+        await personal.updateStory({ query, follow: !followed });
+        if (mountedRef.current && actionRef.current === action) setStatus(followed ? 'Updates turned off.' : 'Subject followed. Open its timeline anytime to check the latest coverage.');
+      }
+    }
+    catch { if (mountedRef.current && actionRef.current === action) setStatus('Story alerts could not be saved. Please try again after the news service reconnects.'); }
+    finally { if (actionRef.current === action) { actionRef.current = null; if (mountedRef.current) setBusy(false); } }
   };
-  return <div className="news-follow-control"><button type="button" disabled={busy || personal.pending} aria-pressed={Boolean(followed)} onClick={toggle}>
-    {followed ? <BellOff size={15}/> : <Bell size={15}/>} {busy ? 'Saving…' : followed ? 'Following updates' : 'Follow updates'}</button>
+  const waiting = Boolean(personal.account && !personal.ready && !personal.error);
+  return <div className="news-follow-control"><button type="button" disabled={busy || personal.pending || waiting} aria-pressed={Boolean(followed)} onClick={toggle}>
+    {followed ? <BellOff size={15}/> : <Bell size={15}/>} {busy ? 'Saving…' : waiting ? 'Checking updates…' : personal.error && !personal.ready ? 'Retry updates' : followed ? 'Following updates' : 'Follow updates'}</button>
     {status && <p role="status">{status}</p>}</div>;
 }
 
@@ -69,7 +98,7 @@ export function NewsUpdatesShelf({ personal }) {
   if (!personal.stories.length && !personal.updates.length) return null;
   return <details className="news-updates-shelf">
     <summary><Bell size={16}/>Your story updates <span>{unread.length ? `${unread.length} new` : `${personal.stories.length} followed`}</span></summary>
-    <p>Related reporting matched to the subjects you follow. Checked periodically, not live alerts.</p>
+    <p>Related reporting matched to the subjects you follow. Updates are not live and may be delayed.</p>
     <ul>{personal.updates.slice(0,20).map(item => <li key={item.id}>
       <Link to={'/news/story?q=' + encodeURIComponent(item.query) + '&year=recent&order=newest'} onClick={() => {
         if (!item.readAt) personal.updateStory({ read: item.id }).catch(() => setStatus('Could not mark this update as read.'));

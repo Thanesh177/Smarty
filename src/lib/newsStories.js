@@ -34,12 +34,26 @@ export function timelineArticles(articles, order = 'oldest') {
     if (typeof article?.title !== 'string' || !article.title.trim() || !Number.isFinite(Date.parse(article.published_at))) return false;
     try {
       const url = new URL(article.news_link);
-      if (!['https:', 'http:'].includes(url.protocol) || seen.has(url.href)) return false;
+      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || seen.has(url.href)) return false;
       seen.add(url.href);
       return true;
     } catch { return false; }
   }).map(article => ({ ...article, title: article.title.trim(), source: typeof article.source === 'string' && article.source.trim() ? article.source.trim() : 'Original report' }))
     .sort((a, b) => (Date.parse(a.published_at) - Date.parse(b.published_at)) * (order === 'newest' ? -1 : 1));
+}
+
+export function normalizeStoryTimeline(value, expectedQuery = '') {
+  if (value?.kind !== 'story-timeline' || !Array.isArray(value.articles)) {
+    throw new Error('Story coverage is temporarily unavailable. Please try again.');
+  }
+  const query = cleanStoryQuery(value.query);
+  if (query && expectedQuery && query.toLowerCase() !== cleanStoryQuery(expectedQuery).toLowerCase()) {
+    throw new Error('This coverage belongs to a different story. Please try again.');
+  }
+  const text = value => typeof value === 'string' ? value : '';
+  return { ...value, query, articles: timelineArticles(value.articles).slice(0, 1000),
+    coverageNote: text(value.coverageNote), notice: text(value.notice), updatedAt: text(value.updatedAt),
+    cacheStatus: ['fresh', 'fresh-cache', 'stale-cache'].includes(value.cacheStatus) ? value.cacheStatus : '' };
 }
 
 export function storyPeriod(params, now = new Date()) {

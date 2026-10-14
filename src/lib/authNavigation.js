@@ -1,5 +1,9 @@
 const REDIRECT_KEY = 'smarty-post-login-redirect';
 
+export function isAuthenticationPath(pathname) {
+  return /^\/(?:login|register|confirm)\/?$/i.test(String(pathname || ''));
+}
+
 export function safeAuthDestination(value, fallback = '/feed') {
   const candidate = typeof value === 'string' ? value
     : value?.pathname ? `${value.pathname}${value.search || ''}${value.hash || ''}` : '';

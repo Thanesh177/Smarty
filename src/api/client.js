@@ -3,6 +3,8 @@ import { createRequestCache } from '../lib/requestCache';
 import { normalizeSavedCollection } from '../lib/savedCollection';
 import { createNewsRequestCache } from '../lib/newsRequestCache';
 import { hasEditorialBriefing } from '../lib/newsAvailability';
+import { normalizePersonalNews } from '../lib/newsPersonalization';
+import { normalizeStoryTimeline } from '../lib/newsStories';
 import { getLearningGuide } from '../data/learningGuides';
 import { DETAILED_EXPLANATION_VERSION } from '../lib/explanationFormat';
 import { fetchAuthSession } from 'aws-amplify/auth';
@@ -539,8 +541,7 @@ export const newsApi = {
   },
   async getPersonalNews({ signal } = {}) {
     const { data } = await api.get('/news/personal', { signal, timeout: 8000 });
-    if (!Array.isArray(data?.stories) || !Array.isArray(data?.updates)) throw new Error('News preferences are not available on this server yet.');
-    return data;
+    return normalizePersonalNews(data);
   },
   async saveNewsPreferences(preferences) {
     const { data } = await api.put('/news/preferences', preferences, { timeout: 8000 });
@@ -552,16 +553,13 @@ export const newsApi = {
     if (data?.success !== true) throw new Error('Story update could not be saved.');
     return data;
   },
-  async getStoryTimeline({ query, year = 'recent', month = 'all', signal } = {}) {
+  async getStoryTimeline({ query, year = 'recent', month = 'all', signal, forceRefresh = false } = {}) {
     return storyTimelineCache.get(JSON.stringify([query, year, month]), async () => {
       const { data } = await axios.get(`${NEWS_API_BASE_URL}/latest`, {
         params: { view: 'story', query, year, month }, timeout: NEWS_API_TIMEOUT,
       });
-      if (data?.kind !== 'story-timeline' || !Array.isArray(data.articles)) {
-        throw new Error('Story timelines are not available on this server yet. Please try again later.');
-      }
-      return data;
-    }, year === 'recent' ? 60000 : 5 * 60000, { signal });
+      return normalizeStoryTimeline(data, query);
+    }, year === 'recent' ? 60000 : 5 * 60000, { signal, forceRefresh });
   },
   async getHackerNews(limit = 12, requestOptions = {}) {
     const { data: storyIds } = await axios.get(

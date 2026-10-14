@@ -12,7 +12,7 @@ import {
   setupAndroidPushTokenListener,
 } from './firebase';
 import AuthRedirectHandler from './components/AuthRedirectHandler';
-import { clearAuthDestination, readAuthDestination } from './lib/authNavigation';
+import { clearAuthDestination, isAuthenticationPath, readAuthDestination } from './lib/authNavigation';
 import InstallPrompt from './components/InstallPrompt';
 import UniversalSearch from './components/UniversalSearch';
 import PageTransition from './components/PageTransition';
@@ -356,17 +356,20 @@ function Layout() {
   const globalPullTriggeredRef = useRef(false);
   const routeReadyTimerRef = useRef(null);
 
-  const isAuthPage =
-    location.pathname === '/login' ||
-    location.pathname === '/register' ||
-    location.pathname === '/confirm';
+  const isAuthPage = isAuthenticationPath(location.pathname) ||
+    (location.pathname === '/' && new URLSearchParams(location.search).has('code'));
 
   const isAllPosts = location.pathname === '/feed' && new URLSearchParams(location.search).get('topic') === 'All';
   const feedView = getFeedView(location);
 
   const openUniversalSearch = useCallback(() => {
+    if (isAuthPage) return;
     setUniversalSearchOpen(true);
-  }, []);
+  }, [isAuthPage]);
+
+  useEffect(() => {
+    if (isAuthPage) setUniversalSearchOpen(false);
+  }, [isAuthPage]);
 
   const closeUniversalSearch = useCallback(() => {
     setUniversalSearchOpen(false);
@@ -989,12 +992,12 @@ useEffect(() => {
       <AuthRedirectHandler />
       <PageTransition />
 
-      <UniversalSearch
+      {!isAuthPage && <UniversalSearch
         open={universalSearchOpen}
         onOpen={openUniversalSearch}
         onClose={closeUniversalSearch}
         user={user}
-      />
+      />}
 
       <ReminderPopup
         title={popupNotification?.title || 'Smarty'}
@@ -1012,7 +1015,7 @@ useEffect(() => {
       {!isAuthPage && <InstallPrompt />}
 
       <div className={`app-shell ${feedView ? 'has-feed-view-switch' : ''} ${location.pathname === '/feed' && !new URLSearchParams(location.search).get('topic') ? 'is-smarty-landing' : ''}`}>
-          {feedView !== 'video' && <header className="topbar glass-topbar">
+          {!isAuthPage && feedView !== 'video' && <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
               to="/feed?topic=All"
@@ -1113,9 +1116,7 @@ useEffect(() => {
           </div>
           </header>}
 
-        <FeedViewSwitch />
-        <FeedViewSwipe />
-        <NewsUpdateNotifier />
+        {!isAuthPage && <><FeedViewSwitch /><FeedViewSwipe /><NewsUpdateNotifier /></>}
         <main
           className="content"
           onTouchStart={handleGlobalPullStart}

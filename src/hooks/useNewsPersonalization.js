@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { newsApi } from '../api/client';
@@ -7,6 +7,8 @@ import { readNewsPreference, writeNewsPreference, newsPreferenceKey } from '../l
 export default function useNewsPersonalization({ poll = false } = {}) {
   const { user } = useAuth();
   const account = String(user?.sub || user?.userId || user?.id || '');
+  const activeAccount = useRef(account);
+  activeAccount.current = account;
   const client = useQueryClient(), key = ['news-personalization', account];
   const [local, setLocal] = useState(() => ({ account, value: readNewsPreference(account) }));
   const [syncWarning, setSyncWarning] = useState('');
@@ -34,11 +36,16 @@ export default function useNewsPersonalization({ poll = false } = {}) {
       await client.cancelQueries({ queryKey: key });
       const result = await newsApi.saveNewsPreferences(preference);
       client.setQueryData(key, previous => ({ ...previous, preferences: result.preferences }));
-    } catch { setSyncWarning('Your place is saved on this device. Account sync is temporarily unavailable.'); }
+    } catch {
+      if (activeAccount.current === account) setSyncWarning('Your place is saved on this device. Account sync is temporarily unavailable.');
+    }
   }, [account, client]);
-  const mutation = useMutation({ mutationFn: newsApi.updateNewsStory,
-    onSuccess: () => client.invalidateQueries({ queryKey: key }) });
+  const mutation = useMutation({ mutationFn: ({ owner, payload }) => {
+    if (activeAccount.current !== owner) throw new Error('The active account has changed.');
+    return newsApi.updateNewsStory(payload);
+  }, onSuccess: (_data, variables) => client.invalidateQueries({ queryKey: ['news-personalization', variables.owner] }) });
+  const updateStory = useCallback(payload => mutation.mutateAsync({ owner: account, payload }), [account, mutation.mutateAsync]);
   return { account, preferences, savePreference, syncWarning, stories: state.data?.stories || [], updates: state.data?.updates || [],
-    ready: state.isSuccess, error: state.error, refresh: state.refetch,
-    updateStory: mutation.mutateAsync, pending: mutation.isPending };
+    ready: state.isSuccess || Boolean(state.data), error: state.error, refresh: state.refetch,
+    updateStory, pending: mutation.isPending };
 }

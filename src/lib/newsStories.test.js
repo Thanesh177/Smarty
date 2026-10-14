@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanStoryQuery, filterStoryReports, groupStoryReports, reportKey, storyPeriod, storyQuery, storyTimelineUrl, timelineArticles } from './newsStories.js';
+import { cleanStoryQuery, filterStoryReports, groupStoryReports, normalizeStoryTimeline, reportKey, storyPeriod, storyQuery, storyTimelineUrl, timelineArticles } from './newsStories.js';
 
 test('related headlines open the same suggested story', () => {
   assert.equal(storyQuery({ title: 'Gaza talks resume' }), 'Israel Gaza');
@@ -58,4 +58,12 @@ test('timeline excludes unsafe URLs, duplicates and undated reports, sorts both 
   const records = [last, first, first, { ...first, news_link: 'javascript:alert(1)' }, { ...last, news_link: 'https://example.org/c', published_at: '' }];
   assert.deepEqual(timelineArticles(records).map(a => a.title), ['Earlier', 'Latest']);
   assert.deepEqual(timelineArticles(records, 'newest').map(a => a.title), ['Latest', 'Earlier']);
+});
+
+test('timeline data is bounded, safe to render and specific to the requested subject', () => {
+  const safe = { title: 'A report', news_link: 'https://example.org/report', published_at: '2026-10-13T00:00:00Z' };
+  const result = normalizeStoryTimeline({ kind: 'story-timeline', query: 'SpaceX', articles: [safe, { ...safe, news_link: 'https://user:pass@example.org/private' }], notice: {}, coverageNote: {}, updatedAt: {} }, 'spacex');
+  assert.equal(result.articles.length, 1); assert.equal(result.notice, ''); assert.equal(result.coverageNote, '');
+  assert.throws(() => normalizeStoryTimeline({ kind: 'story-timeline', query: 'Unrelated', articles: [] }, 'SpaceX'), /different story/);
+  assert.throws(() => normalizeStoryTimeline({ articles: [] }), /temporarily unavailable/);
 });

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowLeft, ArrowUpRight, Bookmark, Check, History, Search, Share2 } from 'lucide-react';
 import { newsApi } from '../api/client';
-import { cleanStoryQuery, filterStoryReports, groupStoryReports, reportKey, storyPeriod, timelineArticles } from '../lib/newsStories';
+import { cleanStoryQuery, filterStoryReports, groupStoryReports, normalizeStoryTimeline, reportKey, storyPeriod, timelineArticles } from '../lib/newsStories';
 import useNewsStoryLibrary from '../hooks/useNewsStoryLibrary';
 import { NewsFollowButton } from '../components/NewsPersonalization';
 import './NewsStoryPage.css';
@@ -13,7 +13,9 @@ const KEEP_MS = 7 * 86400 * 1000;
 function cachedTimeline(key) {
   try {
     const entry = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}')[key];
-    return entry?.data?.kind === 'story-timeline' && Date.now() - entry.savedAt < KEEP_MS ? entry : null;
+    return entry?.data?.kind === 'story-timeline' && Array.isArray(entry.data.articles)
+      && Number.isFinite(entry.savedAt) && entry.savedAt <= Date.now() && Date.now() - entry.savedAt < KEEP_MS
+      ? { ...entry, data: normalizeStoryTimeline(entry.data, JSON.parse(key)[0]) } : null;
   } catch { return null; }
 }
 function cacheTimeline(key, data) {
@@ -93,14 +95,14 @@ export default function NewsStoryPage() {
       return () => controller.abort();
     }
     setResult({ key, data: cached?.data || null, loading: true, error: '' });
-    newsApi.getStoryTimeline({ query, year, month, signal: controller.signal }).then(data => {
+    newsApi.getStoryTimeline({ query, year, month, signal: controller.signal, forceRefresh: attempt > 0 }).then(data => {
       if (controller.signal.aborted) return;
       if (data.cacheStatus !== 'stale-cache') cacheTimeline(key, data);
       setResult({ key, data, loading: false, error: '' });
     }).catch(error => {
       if (controller.signal.aborted) return;
       setResult({ key, data: cached?.data || null, loading: false,
-        error: error.response?.data?.error || error.message || 'Could not load this timeline. Please try again.' });
+        error: 'Could not update this story’s coverage. Check your connection and try again.' });
     });
     return () => controller.abort();
   }, [key, query, year, month, attempt]);
@@ -163,7 +165,7 @@ export default function NewsStoryPage() {
     </form>
     <div className="news-story-controls">
       <label>Coverage<select aria-label="Coverage year" value={year} onChange={event => update({ year: event.target.value, month: 'all' })}>
-        <option value="recent">Latest 30 days</option>
+        <option value="recent">Past 30 days</option>
         {Array.from({ length: currentYear - 1999 }, (_, i) => currentYear - i).map(value => <option key={value} value={value}>{value}</option>)}
       </select></label>
       {year !== 'recent' && <label>Month<select aria-label="Coverage month" value={month} onChange={event => update({ month: event.target.value })}>

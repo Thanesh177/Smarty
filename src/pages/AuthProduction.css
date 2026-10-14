@@ -1,7 +1,7 @@
 /* One restrained composition for sign-in, recovery and registration. */
 .app-shell .content .login-page.login-page {
   background: var(--ui-bg, #080a0d) !important;
-  padding: clamp(28px, 5vh, 64px) 88px 52px 28px;
+  padding: max(28px, env(safe-area-inset-top)) 28px max(40px, env(safe-area-inset-bottom));
 }
 .login-page.login-page .login-shell {
   width: min(100%, 1040px);
@@ -99,7 +99,7 @@
 .auth-setup-key :is(span, small) { font-size: .76rem; line-height: 1.5; color: var(--ui-secondary, #a4acb9); }
 .auth-setup-key code { overflow-wrap: anywhere; user-select: all; letter-spacing: .06em; }
 @media (max-width: 760px) {
-  .app-shell .content .login-page.login-page { padding: 24px 76px 40px 16px; }
+  .app-shell .content .login-page.login-page { padding: max(24px, env(safe-area-inset-top)) 20px max(40px, env(safe-area-inset-bottom)); }
   .login-page.login-page .login-shell { max-width: 430px; grid-template-columns: minmax(0, 1fr); gap: 26px; }
   .login-page.login-page .login-hero h1 { max-width: none; font-size: clamp(26px, 6vw, 34px); margin-bottom: 10px; }
   .login-page.login-page .login-hero p { margin: 0; font-size: .87rem; }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeNewsEdition, mergeNewsBriefing, safeNewsUrl } from './newsEdition.js';
+import { normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from './newsEdition.js';
 
 const report = { id: 'one', title: 'A real report', news_link: 'https://example.com/report', summary: 'Original coverage.', section: 'World' };
 const reports = { location: {countryCode:'IN',region:'Tamil Nadu'}, articles: [report], sections: {World:[report]}, generatedAt:'2026-10-13T12:00:00Z' };
@@ -42,4 +42,11 @@ test('malformed summary prose and location labels cannot crash the reader', () =
   assert.deepEqual(result.dailySummary.overviewParagraphs,['A paragraph']);
   assert.deepEqual(result.dailySummary.sectionDigests[0].summaryParagraphs,['Good prose']);
   assert.equal(result.dailySummary.sectionDigests[0].context,'');
+});
+
+test('saved news and optional briefing metadata cannot crash the reader', () => {
+  assert.deepEqual(normalizeSavedNews([null, {}, report, report]), [normalizeNewsEdition({ articles: [report] }).articles[0]]);
+  const result = normalizeNewsEdition({ articles: [report], dailySummary: { ...summary, editionTimezone: {}, coverageWindow: [], unavailableSectors: [{}, 'Sports'] } });
+  assert.equal(result.dailySummary.editionTimezone, ''); assert.equal(result.dailySummary.coverageWindow, '');
+  assert.deepEqual(result.dailySummary.unavailableSectors, ['Sports']);
 });

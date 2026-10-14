@@ -14,7 +14,7 @@ import { editorialNewsSections, hasEditorialBriefing, newsCacheIsFresh } from '.
 import useNewsPersonalization from '../hooks/useNewsPersonalization';
 import { NewsBriefingChoice, NewsFollowButton, NewsUpdatesShelf } from '../components/NewsPersonalization';
 import { briefingPlace, readNewsPreference } from '../lib/newsPreferences';
-import { normalizeNewsEdition, mergeNewsBriefing, safeNewsUrl } from '../lib/newsEdition';
+import { normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from '../lib/newsEdition';
 import './NewsCompact.css';
 
 const CACHE_PREFIX = 'smarty_location_news_v22_';
@@ -77,7 +77,8 @@ function getCachedNews(country, region) {
       typeof cached.news.sections === 'object' &&
       Object.values(cached.news.sections).some((items) => Array.isArray(items) && items.length > 0);
     const hasArticles = Array.isArray(cached?.news?.articles) && cached.news.articles.length > 0;
-    if (!cached?.news || !cached?.timestamp || (!hasSections && !hasArticles)) return null;
+    if (!cached?.news || !Number.isFinite(cached.timestamp) || cached.timestamp > Date.now()
+      || (!hasSections && !hasArticles && !hasEditorialBriefing(cached.news))) return null;
 
     const age = Date.now() - cached.timestamp;
     if (age > CACHE_STALE_TTL) {
@@ -351,7 +352,7 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
           </summary>
           <header>
             <span className="news-brief-section-kicker">The deeper read</span>
-            <h3>The whole day, in a few minutes</h3>
+            <h3>Across today’s reporting</h3>
             <p>Read the main developments in each sector, with the original reports linked for more context.</p>
           </header>
 
@@ -400,7 +401,7 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
         </details>
       )}
       {summary.unavailableSectors?.length > 0 && (
-        <p className="news-inline-notice">No verified recent stories available for: {summary.unavailableSectors.join(', ')}.</p>
+        <p className="news-inline-notice">No recent reports collected for: {summary.unavailableSectors.join(', ')}.</p>
       )}
     </section>
   );
@@ -424,7 +425,8 @@ export default function NewsPage({ briefingOnly = false }) {
   );
   const [selectedSection, setSelectedSection] = useState(() => new URLSearchParams(location.search).get('section') || 'All');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [saved, setSaved] = useState([]);
+  const [savedState, setSavedState] = useState({ key: '', entries: [] });
+  const savedRef = useRef(savedState);
   const [actionStatus, setActionStatus] = useState('');
   const [lastUpdated, setLastUpdated] = useState(() => initialCache ? formatUpdatedAt(initialCache.news.generatedAt || initialCache.timestamp) : '');
   const [fromCache, setFromCache] = useState(Boolean(initialCache && !initialCache.isFresh));
@@ -449,6 +451,7 @@ export default function NewsPage({ briefingOnly = false }) {
     const accountId = user?.userId || user?.sub || user?.id || user?.email || 'guest';
     return `smarty-saved-news-v1-${encodeURIComponent(String(accountId))}`;
   }, [user]);
+  const saved = savedState.key === savedStorageKey ? savedState.entries : [];
 
   const preferred = briefingPlace(personal.preferences);
   useEffect(() => {
@@ -481,10 +484,12 @@ export default function NewsPage({ briefingOnly = false }) {
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(savedStorageKey) || '[]');
-      setSaved(Array.isArray(stored) ? stored : []);
+      savedRef.current = { key: savedStorageKey, entries: normalizeSavedNews(stored) };
     } catch {
-      setSaved([]);
+      savedRef.current = { key: savedStorageKey, entries: [] };
     }
+    setSavedState(savedRef.current);
+    setActionStatus('');
   }, [savedStorageKey]);
 
   useEffect(() => {
@@ -539,10 +544,15 @@ export default function NewsPage({ briefingOnly = false }) {
 
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
-      setNewsData(data);
+      // A valid same-day briefing stays readable during a manual refresh.
+      // Never blend a previous day's summary into newly collected reports.
+      const retainedBriefing = hasEditorialBriefing(cached?.news)
+        && cached.news.dailySummary.editionDate === new Date().toISOString().slice(0, 10);
+      const fastData = retainedBriefing ? mergeNewsBriefing(data, cached.news) : data;
+      setNewsData(fastData);
       setLoading(false);
       loadedLocationRef.current = nextLocation;
-      setCachedNews(targetCountry, targetRegion, data);
+      setCachedNews(targetCountry, targetRegion, fastData);
       setFromCache(data.cacheStatus === 'stale-cache');
       setLastUpdated(formatUpdatedAt(data.generatedAt || Date.now()));
       if (data.notice) setError(data.notice);
@@ -637,19 +647,22 @@ export default function NewsPage({ briefingOnly = false }) {
     'Worldwide';
 
   const toggleSave = useCallback((article) => {
-    const exists = saved.some((item) => item.news_link === article.news_link);
+    const current = savedRef.current.key === savedStorageKey ? savedRef.current.entries : [];
+    const exists = current.some((item) => item.news_link === article.news_link);
+    if (!exists && current.length >= 200) { setActionStatus('Your saved reports are full. Remove a report before saving another.'); return; }
     const updated = exists
-      ? saved.filter((item) => item.news_link !== article.news_link)
-      : [...saved, article];
+      ? current.filter((item) => item.news_link !== article.news_link)
+      : [...current, article];
 
-    setSaved(updated);
+    savedRef.current = { key: savedStorageKey, entries: updated };
+    setSavedState(savedRef.current);
     try {
       localStorage.setItem(savedStorageKey, JSON.stringify(updated));
+      setActionStatus(exists ? 'Removed from saved stories.' : 'Story saved.');
     } catch {
-      // Keep the in-memory saved state if storage is unavailable.
+      setActionStatus('Updated for this session only. Device storage is unavailable.');
     }
-    setActionStatus(exists ? 'Removed from saved stories.' : 'Story saved.');
-  }, [saved, savedStorageKey]);
+  }, [savedStorageKey]);
 
   const shareArticle = useCallback(async (article) => {
     try {

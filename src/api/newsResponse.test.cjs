@@ -6,8 +6,9 @@ const { transformSync } = require('esbuild');
 
 function client(payload) {
   let fallbackCalls = 0;
+  let reads = 0;
   const instance = { interceptors: { request: { use() {} }, response: { use() {} } } };
-  const axios = { create: () => instance, get: async () => ({ data: payload }) };
+  const axios = { create: () => instance, get: async () => { reads++; return { data: payload }; } };
   const scope = { exports: {} };
   vm.runInNewContext(transformSync(fs.readFileSync(__dirname + '/client.js', 'utf8'), {
     format: 'cjs', define: { 'import.meta.env': JSON.stringify({DEV:false,PROD:true,VITE_API_BASE_URL:'https://fixture.example'}) },
@@ -25,7 +26,7 @@ function client(payload) {
   const api = scope.exports.newsApi;
   api.getHackerNews = async () => { fallbackCalls++; return []; };
   api.getSpaceflightNews = async () => { fallbackCalls++; return []; };
-  return { api, fallbackCalls: () => fallbackCalls };
+  return { api, reads: () => reads, fallbackCalls: () => fallbackCalls };
 }
 
 test('summary-only API response is accepted without unrelated provider fallbacks', async () => {
@@ -47,4 +48,13 @@ test('empty sections still allow valid top-level reports', async () => {
 test('a genuinely empty provider response offers an error, never a false briefing', async () => {
   const fixture = client({status:200,articles:[],sections:{}});
   await assert.rejects(fixture.api.loadLatestNews({country:'IN'}),/temporarily unavailable/);
+});
+
+test('manual story refresh bypasses the read cache without duplicating normal reads', async () => {
+  const fixture = client({ kind: 'story-timeline', query: 'SpaceX', articles: [] });
+  await fixture.api.getStoryTimeline({ query: 'SpaceX' });
+  await fixture.api.getStoryTimeline({ query: 'SpaceX' });
+  assert.equal(fixture.reads(), 1);
+  await fixture.api.getStoryTimeline({ query: 'SpaceX', forceRefresh: true });
+  assert.equal(fixture.reads(), 2);
 });

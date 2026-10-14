@@ -18,6 +18,10 @@ function cleanReports(value) {
   });
 }
 
+export function normalizeSavedNews(value) {
+  return cleanReports(value).slice(0, 200);
+}
+
 const text = value => typeof value === 'string' ? value : '';
 const paragraphs = value => (Array.isArray(value) ? value : []).filter(value => typeof value === 'string' && value.trim());
 function cleanSummary(summary) {
@@ -25,7 +29,8 @@ function cleanSummary(summary) {
   const count=value=>Number.isFinite(value)&&value>=0?Math.floor(value):0;
   const themes=value=>(Array.isArray(value)?value:[]).filter(item=>typeof item?.label==='string').map(item=>({...item,storyCount:count(item.storyCount)}));
   return { ...summary, title:text(summary.title), eyebrow:text(summary.eyebrow), overview:text(summary.overview), analysisStatement:text(summary.analysisStatement), storyCount:count(summary.storyCount),sourceCount:count(summary.sourceCount),sectionCount:count(summary.sectionCount),
-    editionDate:text(summary.editionDate), generatedAt:text(summary.generatedAt), overviewParagraphs:paragraphs(summary.overviewParagraphs),
+    editionDate:text(summary.editionDate), editionTimezone:text(summary.editionTimezone), coverageWindow:text(summary.coverageWindow), nextEditionAt:text(summary.nextEditionAt), generatedAt:text(summary.generatedAt), overviewParagraphs:paragraphs(summary.overviewParagraphs),
+    unavailableSectors:paragraphs(summary.unavailableSectors),
     highlights:cleanReports(summary.highlights),
     keyTakeaways:(Array.isArray(summary.keyTakeaways)?summary.keyTakeaways:[]).filter(item=>typeof item?.title==='string'&&typeof item?.summary==='string').map(item=>({...item,stories:cleanReports(item.stories)})),
     keyThemes:themes(summary.keyThemes),

@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { safeAuthDestination, saveAuthDestination, readAuthDestination, clearAuthDestination } from './authNavigation.js';
+import { isAuthenticationPath, safeAuthDestination, saveAuthDestination, readAuthDestination, clearAuthDestination } from './authNavigation.js';
+
+test('authentication navigation stays absent on sign-in, registration and verification aliases', () => {
+  for (const value of ['/login', '/login/', '/LOGIN', '/register', '/confirm/']) assert.equal(isAuthenticationPath(value), true);
+  for (const value of ['/news', '/news/story', '/feed', '/profile', '/login-not-a-route']) assert.equal(isAuthenticationPath(value), false);
+});
 
 test('auth return paths preserve an internal page and reject external or replay destinations', () => {
   assert.equal(safeAuthDestination({ pathname: '/rooms', search: '?id=42', hash: '#chat' }), '/rooms?id=42#chat');
