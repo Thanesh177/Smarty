@@ -21,29 +21,11 @@ import LearningJourneyPanel from '../components/learning/LearningJourneyPanel';
 import PostAuthor from '../components/PostAuthor';
 import { getPostAuthorUsername } from '../lib/postAuthor';
 import { getLearningGuide } from '../data/learningGuides';
-import { DETAILED_EXPLANATION_VERSION, explanationSections, readingLessonSections, explanationBlocks } from '../lib/explanationFormat';
+import { usableDetailedExplanation as getUsableDetailedExplanation, detailedExplanationFromResponse, explanationSections, readingLessonSections, explanationBlocks } from '../lib/explanationFormat';
 import { createRequestCache } from '../lib/requestCache';
 import { getLearningLevelLabel } from '../lib/learningJourney';
 import './PostAiPage.css';
 import './PostAiReading.css';
-
-const getDetailedExplanation = (value) => {
-  const text = String(value?.aiDetailedExplanation || '').trim();
-  return text && text.toLowerCase() !== 'null' && text.toLowerCase() !== 'undefined'
-    ? text
-    : '';
-};
-
-const isLongDetailedExplanation = (text) => {
-  const clean = String(text || '').trim();
-  const wordCount = clean.split(/\s+/).filter(Boolean).length;
-
-  return (
-    wordCount >= 60 &&
-    !clean.toLowerCase().startsWith('simple version:') &&
-    !clean.toLowerCase().includes('explain this post like the reader is 15')
-  );
-};
 
 const renderTextBlocks = (value, keyPrefix) => explanationBlocks(value)
   .map((block, index) => {
@@ -91,13 +73,6 @@ const renderFormattedParagraphs = (value, className = 'post-ai-paragraphs') => {
       })}
     </div>
   );
-};
-
-const getUsableDetailedExplanation = (value) => {
-  const text = getDetailedExplanation(value);
-  const version = Number(value?.aiDetailedExplanationVersion || 0);
-  const isCurrent = value?.isLearningGuide || version >= DETAILED_EXPLANATION_VERSION;
-  return isCurrent && isLongDetailedExplanation(text) ? text : '';
 };
 
 const PostAiMessage = memo(function PostAiMessage({ message }) {
@@ -203,7 +178,11 @@ function PostStudyRoom() {
     { label: 'Work through an example', question: `Give one worked example of ${topicLabel}. Walk through it, then ask me to predict what changes if one input changes. Do not give the prediction answer yet.` },
     { label: 'Clear up a misconception', question: `Explain one common misunderstanding of ${topicLabel} and a boundary where this explanation stops applying. Identify anything not supported by the source.` },
     { label: 'Connect the next idea', question: `Which specific concept is useful after ${topicLabel}? Explain the link, the prerequisite, and a question to explore next. Stay in the same subject.` },
-  ], [topicLabel]);
+    ...(!post?.isLearningGuide ? [
+      { label: 'Explain the difficult words', question: `Which technical words or concepts in ${topicLabel} could confuse a newcomer? Define them in plain language, explain the prerequisite behind each, and show their role in this exact subject. Do not just repeat the post.` },
+      { label: 'How did this come to be?', question: `Explain the background and causes of ${topicLabel}: what conditions or problem led to it, and why? Separate established background from uncertain origins; do not invent dates, people, or current developments.` },
+    ] : []),
+  ], [topicLabel, post?.isLearningGuide]);
   const deepDiveSteps = useMemo(() => [
     {
       label: 'Mechanism',
@@ -312,13 +291,7 @@ function PostStudyRoom() {
 
         if (cancelled || !mountedRef.current) return;
 
-        const nextExplanationCandidate =
-          getUsableDetailedExplanation(data?.post) ||
-          String(data?.aiDetailedExplanation || data?.post?.aiDetailedExplanation || data?.explanation || '').trim();
-
-        const nextExplanation = isLongDetailedExplanation(nextExplanationCandidate)
-          ? nextExplanationCandidate
-          : '';
+        const nextExplanation = detailedExplanationFromResponse(data);
 
         if (data?.post) {
           setPost((prev) => ({
@@ -337,7 +310,7 @@ function PostStudyRoom() {
         });
 
         if (!nextExplanation) {
-          setStatus('The learning guide is not available for this post yet.');
+          setStatus('The updated deeper lesson is not available yet. Please try again shortly.');
         }
       } catch (err) {
         console.error('Load AI explanation failed:', err);

@@ -6,7 +6,7 @@ import { hasEditorialBriefing } from '../lib/newsAvailability';
 import { normalizePersonalNews } from '../lib/newsPersonalization';
 import { normalizeStoryTimeline } from '../lib/newsStories';
 import { getLearningGuide } from '../data/learningGuides';
-import { DETAILED_EXPLANATION_VERSION } from '../lib/explanationFormat';
+import { DETAILED_EXPLANATION_VERSION, detailedExplanationFromResponse } from '../lib/explanationFormat';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { endpoints } from './endpoints';
 import {
@@ -2193,10 +2193,11 @@ async getPostDetails(payload) {
 
     return {
       ...parsed,
-      explanation: parsed?.post?.aiDetailedExplanation || parsed?.aiDetailedExplanation || parsed?.explanation || '',
-      aiDetailedExplanation: parsed?.post?.aiDetailedExplanation || parsed?.aiDetailedExplanation || parsed?.explanation || '',
-      aiDetailedExplanationVersion:
-        parsed?.post?.aiDetailedExplanationVersion || parsed?.aiDetailedExplanationVersion || 0,
+      explanation: detailedExplanationFromResponse(parsed),
+      aiDetailedExplanation: detailedExplanationFromResponse(parsed),
+      // Preserve each text/version pair. A nested version cannot upgrade a
+      // different unversioned top-level answer into an accepted lesson.
+      aiDetailedExplanationVersion: parsed?.aiDetailedExplanationVersion || 0,
       cached: parsed?.cached === true,
       persisted: parsed?.persisted !== false,
       post: parsed?.post || {},

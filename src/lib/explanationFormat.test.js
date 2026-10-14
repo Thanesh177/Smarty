@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { explanationSections, readingLessonSections, explanationBlocks, DETAILED_EXPLANATION_VERSION } from './explanationFormat.js';
+import { explanationSections, readingLessonSections, explanationBlocks, DETAILED_EXPLANATION_VERSION, usableDetailedExplanation, detailedExplanationFromResponse } from './explanationFormat.js';
 
 test('supports saved and generated heading formats without false matches', () => {
   const sections = explanationSections('Intro text\n\n### Core idea\nA precise idea.\n\n**Worked example**: Start at 2.\n\nWhy it matters in daily life is not a heading.');
@@ -9,7 +9,7 @@ test('supports saved and generated heading formats without false matches', () =>
   assert.equal(sections[2].kind, 'example');
   assert.match(sections[2].text, /Why it matters in daily life/);
   assert.equal(new Set(sections.map((section) => section.id)).size, sections.length);
-  assert.equal(DETAILED_EXPLANATION_VERSION, 5);
+  assert.equal(DETAILED_EXPLANATION_VERSION, 7);
 });
 
 test('narrative lessons keep the opening and subject-specific chapter titles', () => {
@@ -56,4 +56,30 @@ test('normalizes terms, line endings and empty sections without executing HTML',
   assert.deepEqual(explanationBlocks('- Loss: the error.\r\n- Gradient: direction of change.'), [{type:'ul', start:undefined, items:['Loss: the error.', 'Gradient: direction of change.']}]);
   assert.equal(explanationSections('Core idea\n\nHow it works\n<script>alert(1)</script>')[0].text, '<script>alert(1)</script>');
   assert.deepEqual(explanationSections(null), []);
+});
+
+const lesson = 'A new lesson explains the underlying causes and the parts involved. '.repeat(7);
+test('only accepts current saved AI lessons, keeping curated guides independent', () => {
+  assert.equal(usableDetailedExplanation({ aiDetailedExplanation: lesson, aiDetailedExplanationVersion: 5 }), '');
+  assert.equal(usableDetailedExplanation({ aiDetailedExplanation: lesson, aiDetailedExplanationVersion: 6 }), '');
+  assert.equal(usableDetailedExplanation({ aiDetailedExplanation: lesson, aiDetailedExplanationVersion: 7 }), lesson.trim());
+  assert.equal(usableDetailedExplanation({ aiDetailedExplanation: lesson }), '');
+  assert.equal(usableDetailedExplanation({ aiDetailedExplanation: lesson, aiDetailedExplanationVersion: Infinity }), '');
+  assert.equal(usableDetailedExplanation({ aiDetailedExplanation: lesson, isLearningGuide: true }), lesson.trim());
+  assert.equal(usableDetailedExplanation({ aiDetailedExplanation: 'null', aiDetailedExplanationVersion: 6 }), '');
+});
+test('server responses cannot bypass version checks using raw fallback text', () => {
+  assert.equal(detailedExplanationFromResponse({ explanation: lesson, aiDetailedExplanationVersion: 5 }), '');
+  assert.equal(detailedExplanationFromResponse({ explanation: lesson }), '');
+  assert.equal(detailedExplanationFromResponse({ explanation: lesson, aiDetailedExplanationVersion: 7 }), lesson.trim());
+  assert.equal(detailedExplanationFromResponse({ post: { aiDetailedExplanation: lesson, aiDetailedExplanationVersion: 5 } }), '');
+  assert.equal(detailedExplanationFromResponse({ explanation: lesson, post: { aiDetailedExplanationVersion: 7 } }), '');
+  assert.equal(detailedExplanationFromResponse({ post: { aiDetailedExplanation: lesson, aiDetailedExplanationVersion: 7 } }), lesson.trim());
+});
+test('terms and their plain-language definitions stay in reading order', () => {
+  const sections = readingLessonSections('A cache keeps a calculation for reuse.\n\n## Matching a query to a key\nA vector is an ordered collection of numbers. A query represents what the current position needs.\n\nThe key is compared with the query before its value contributes to the result.');
+  const paragraphs = explanationBlocks(sections[1].text);
+  assert.equal(paragraphs.length, 2);
+  assert.match(paragraphs[0].text, /vector is an ordered collection/);
+  assert.match(paragraphs[1].text, /key is compared/);
 });

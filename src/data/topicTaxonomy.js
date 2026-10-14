@@ -57,7 +57,7 @@ export const MAIN_TOPICS = [
     domain: 'Physical and quantitative science',
     eyebrow: 'Reason and discover',
     description: 'The laws, patterns, measurements, and models that explain our world.',
-    topics: ['Physics', 'Chemistry', 'Mathematics', 'Statistics', 'Probability'],
+    topics: ['Physics', 'Chemistry', 'Mathematics', 'Statistics', 'Probability', 'Scientific Method', 'Scientific Discoveries', 'Scientific Mysteries'],
   },
   {
     id: 'life-sciences',
@@ -65,7 +65,7 @@ export const MAIN_TOPICS = [
     domain: 'Life science',
     eyebrow: 'Living systems',
     description: 'From cells and genes to brains, immunity, microbes, and the human body.',
-    topics: ['Biology', 'Genetics', 'Neuroscience', 'Human Body', 'Immunology', 'Microbiology'],
+    topics: ['Biology', 'Genetics', 'Neuroscience', 'Human Body', 'Immunology', 'Microbiology', 'Zoology', 'Botany', 'Marine Biology'],
   },
   {
     id: 'earth-space',
@@ -75,7 +75,7 @@ export const MAIN_TOPICS = [
     description: 'Planets, oceans, weather, climate, ecosystems, and the wider universe.',
     topics: [
       'Astronomy', 'Space', 'Earth Science', 'Geology', 'Oceanography',
-      'Weather', 'Climate Change', 'Ecology', 'Environment',
+      'Weather', 'Climate Change', 'Ecology', 'Environment', 'Cosmology',
     ],
   },
   {
@@ -86,7 +86,7 @@ export const MAIN_TOPICS = [
     description: 'Psychology, learning, decisions, wellbeing, movement, food, and rest.',
     topics: [
       'Psychology', 'Human Behavior', 'Decision Making', 'Memory', 'Learning',
-      'Sleep', 'Nutrition', 'Fitness', 'Health', 'Mental Health',
+      'Sleep', 'Nutrition', 'Fitness', 'Health', 'Mental Health', 'Education',
     ],
   },
   {
@@ -136,7 +136,7 @@ export const MAIN_TOPICS = [
     domain: 'Arts and creative practice',
     eyebrow: 'Create and interpret',
     description: 'Art, music, images, film, and the craft of thoughtful design.',
-    topics: ['Art History', 'Music Theory', 'Photography', 'Filmmaking', 'Product Design'],
+    topics: ['Art History', 'Music Theory', 'Photography', 'Filmmaking', 'Product Design', 'Literature'],
   },
   {
     id: 'community',
@@ -152,9 +152,9 @@ export const MAIN_TOPICS = [
 const LEGACY_TOPIC_GROUPS = {
   technology: ['AI', 'Tech', 'Technology', 'Coding', 'Programming', 'Software Development'],
   engineering: ['Innovation'],
-  'science-mathematics': ['Science', 'Gravity', 'Black Holes', 'Cosmos'],
-  'life-sciences': ['Nature'],
-  'earth-space': ['Sustainability'],
+  'science-mathematics': ['Science', 'Gravity', 'Experiments', 'Discoveries'],
+  'life-sciences': ['Nature', 'Animals', 'Plants', 'Sea Creatures', 'Microorganisms', 'Human Biology'],
+  'earth-space': ['Sustainability', 'Cosmos', 'Universe', 'Black Holes', 'Ecosystems'],
   'mind-health': [
     'Habits', 'Motivation', 'Brain Function', 'Productivity', 'Focus',
     'Self Improvement', 'Discipline', 'Education', 'Health and Wellbeing',
@@ -162,7 +162,7 @@ const LEGACY_TOPIC_GROUPS = {
   'money-business': ['Trading', 'Entrepreneurship'],
   history: ['Ancient Empires', 'History Between Nations', 'War', 'Wars and Conflicts'],
   'society-ideas': ['Law', 'Society'],
-  'arts-design': ['Art', 'Poems', 'Poetry', 'Blog'],
+  'arts-design': ['Art', 'Poems', 'Poetry', 'Blog', 'Books'],
 };
 
 const topicLookup = new Map();

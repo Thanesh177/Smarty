@@ -1,4 +1,26 @@
-export const DETAILED_EXPLANATION_VERSION = 5;
+export const DETAILED_EXPLANATION_VERSION = 7;
+
+// Never quietly render an old server lesson while a newer teaching format is
+// required. Curated local guides are intentionally independent of AI versions.
+export function usableDetailedExplanation(value) {
+  const text = String(value?.aiDetailedExplanation || '').trim();
+  const version = Number(value?.aiDetailedExplanationVersion || 0);
+  const current = value?.isLearningGuide === true || (Number.isFinite(version) && version >= DETAILED_EXPLANATION_VERSION);
+  if (!current || text.split(/\s+/).filter(Boolean).length < 60) return '';
+  if (/^simple version:/i.test(text) || /explain this post like the reader is 15/i.test(text)) return '';
+  return text;
+}
+
+export function detailedExplanationFromResponse(data) {
+  // Use the version accompanying the selected text, never the nested post's
+  // version to legitimise a different, unversioned top-level answer.
+  const nested = usableDetailedExplanation(data?.post);
+  if (nested) return nested;
+  return usableDetailedExplanation({
+    aiDetailedExplanation: data?.aiDetailedExplanation || data?.explanation,
+    aiDetailedExplanationVersion: data?.aiDetailedExplanationVersion,
+  });
+}
 export const EXPLANATION_SECTION_NAMES = [
   'Core idea', 'Simple explanation', 'Essential terms', 'Key terms',
   'How it works', 'Worked example', 'Real-life example', 'Common misconception',
