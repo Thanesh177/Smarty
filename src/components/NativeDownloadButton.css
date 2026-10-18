@@ -5,8 +5,8 @@
   color: inherit; background: transparent; padding: 8px; font: inherit;
   cursor: pointer; transition: background-color 160ms ease;
 }
-.native-download-control > button:hover { background: #ffffff0a; }
-.native-download-control > button:focus-visible { outline: 2px solid #a6d0df; outline-offset: 2px; }
+.native-download-control > button:hover { background: var(--ui-surface-hover, #ffffff0a); }
+.native-download-control > button:focus-visible { outline: 2px solid var(--ui-accent, #b0c8e4); outline-offset: 2px; }
 .native-download-control > button:disabled { cursor: progress; opacity: .65; }
 .native-download-control > [role="status"] { font-size: 12px; max-width: 240px; line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) { .native-download-control > button { transition: none; } }

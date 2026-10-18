@@ -1,9 +1,14 @@
 /* Smarty rail: one compact vertical surface, floating above every page. */
 body .app-shell[inert] > .content { overflow: hidden !important; touch-action: none !important; }
 /* The rail does not reserve a header row or a sidebar in the page layout. */
-body .app-shell > .content { width: 100%; max-width: none; margin-inline: 0; }
+body .app-shell > .content {
+  width: 100%; max-width: none; margin-inline: 0;
+  /* Page cards, sticky headers and animations cannot overtake the rail.
+     Body-portaled confirmations/search remain above it for safe interaction. */
+  position: relative; isolation: isolate; z-index: 0;
+}
 body .app-shell > .topbar.glass-topbar {
-  position: fixed !important; z-index: 30000 !important;
+  position: fixed !important; z-index: 32000 !important;
   inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) auto !important;
   width: 56px !important; max-width: 56px !important;
   margin: 0 !important; padding: 0 !important; border: 1px solid #ffffff17 !important;

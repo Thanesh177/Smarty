@@ -1,11 +1,11 @@
 /* Shared conversation surfaces. No motion on message bubbles or scroll layers. */
 .chat-page.has-active-chat,
-.rooms-workspace.has-active-room { --conversation-ink: #e8edf2; --conversation-muted: #93a1ad; }
+.rooms-workspace.has-active-room { --conversation-ink: var(--ui-text, #f0f0ed); --conversation-muted: var(--ui-muted, #a1a5ad); }
 .chat-page.has-active-chat .chat-window,
-.rooms-workspace.has-active-room .chat-window { background: #080b0e !important; }
+.rooms-workspace.has-active-room .chat-window { background: var(--ui-bg, #08090b) !important; }
 .chat-page.has-active-chat .messages,
 .rooms-workspace.has-active-room .messages {
-  background: #080b0e !important;
+  background: var(--ui-bg, #08090b) !important;
   overscroll-behavior-y: contain;
   overflow-anchor: none;
   scroll-behavior: auto !important;
@@ -15,7 +15,7 @@
 }
 .chat-page.has-active-chat .chat-window-top,
 .rooms-workspace.has-active-room .chat-header {
-  background: #0b0f13 !important;
+  background: var(--ui-surface, #111316) !important;
   border-bottom: 1px solid #ffffff0b !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
@@ -26,11 +26,11 @@
   animation: none !important;
   transition: none !important;
   color: var(--conversation-ink) !important;
-  background: #151b21 !important;
+  background: var(--ui-surface, #111316) !important;
   border: 0 !important;
 }
 .chat-page .message.mine,
-.rooms-workspace.has-active-room .msg.mine { background: #19303c !important; }
+.rooms-workspace.has-active-room .msg.mine { background: var(--ui-accent-soft, #1b232d) !important; }
 .chat-page .message p,
 .rooms-workspace.has-active-room .msg p { font-size: 15px !important; line-height: 1.6 !important; white-space: pre-wrap; }
 .chat-page .message:has(.message-media-preview),
