@@ -35,6 +35,10 @@ import {
 
 
 import './ChatPage.css';
+import NativeDownloadButton from '../components/NativeDownloadButton';
+import { chatBackupPayload, mediaDownloadPayload } from '../lib/nativeDownloads';
+import { scrollConversationToEnd } from '../lib/chatScroll';
+import './ConversationPolish.css';
 
 
 
@@ -741,6 +745,7 @@ const ChatMediaPreview = memo(function ChatMediaPreview({ msg, onRefreshMediaUrl
           <span>{msg.mediaName || 'Open attachment'}</span>
         </a>
       )}
+      <NativeDownloadButton label="Download attachment" payload={()=>mediaDownloadPayload(msg, mediaSource)}/>
     </div>
   );
 });
@@ -810,6 +815,7 @@ export default function ChatPage() {
   const [fullscreenImage, setFullscreenImage] = useState('');
   const [visibleMessageLimit, setVisibleMessageLimit] = useState(40);
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
+  const [showLatest, setShowLatest] = useState(false);
 
   // Avatar fallback/cache state
   const [failedProfileAvatarIds, setFailedProfileAvatarIds] = useState({});
@@ -870,7 +876,7 @@ export default function ChatPage() {
     setChats(readChatListCache(userId));
   }, [userId]);
 
-function scrollMessagesToBottom(force = false) {
+function scrollMessagesToBottom(force = false, smooth = false) {
   if (scrollRafRef.current) window.cancelAnimationFrame(scrollRafRef.current);
 
   scrollRafRef.current = window.requestAnimationFrame(() => {
@@ -879,7 +885,7 @@ function scrollMessagesToBottom(force = false) {
     const target = scrollRef.current;
     if (!force && !shouldStickToBottomRef.current) return;
 
-    target.scrollTop = Math.max(0, target.scrollHeight - target.clientHeight);
+    scrollConversationToEnd(target, {smooth, reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches});
     if (force) shouldStickToBottomRef.current = true;
   });
 }
@@ -911,6 +917,7 @@ const handleMessagesScroll = useCallback((event) => {
   const distanceFromBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
 
   shouldStickToBottomRef.current = distanceFromBottom <= 110;
+  setShowLatest(distanceFromBottom > 220);
 
   if (target.scrollTop <= 320) {
     loadOlderVisibleMessages();
@@ -1245,7 +1252,7 @@ useLayoutEffect(() => {
     return;
   }
 
-  scrollMessagesToBottom();
+  scrollMessagesToBottom(false, addedMessageCount > 0);
 }, [activeChat?.chatId, messages.length]);
 
 useLayoutEffect(() => {
@@ -1265,6 +1272,7 @@ useLayoutEffect(() => {
 
 useEffect(() => {
   setVisibleMessageLimit(MESSAGE_PAGE_SIZE);
+  setShowLatest(false);
   setOlderMessagesLoading(false);
   olderMessagesLoadingRef.current = false;
   prependScrollAnchorRef.current = null;
@@ -2791,6 +2799,8 @@ const runDeleteChat = useCallback(() => {
 
   {actionsOpen && (
     <div className="chat-actions-menu" id="chat-conversation-actions" role="group" aria-label="Conversation options">
+      <NativeDownloadButton label="Back up loaded messages" onStatus={setStatus}
+        payload={()=>chatBackupPayload({id:'direct:'+activeChat.chatId,title:getUserDisplayName(activeChat),messages,userId})}/>
       <button className="btn-report" type="button" onClick={runReportUser}>
         <Flag size={16} aria-hidden="true" /> Report
       </button>
@@ -2948,6 +2958,7 @@ const runDeleteChat = useCallback(() => {
 
               )}
 
+             {showLatest && <button type="button" className="conversation-latest" onClick={()=>{scrollMessagesToBottom(true, true);setShowLatest(false);}} aria-label="Go to latest messages">Latest <span aria-hidden="true">↓</span></button>}
              <div className="composer-shell">
   {showComposerTools && !isBlocked && (
     <div className="composer-tools-panel">

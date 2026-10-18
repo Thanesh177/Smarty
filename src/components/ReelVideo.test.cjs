@@ -28,7 +28,7 @@ function renderPlayer(overrides = {}) {
     module: scope, exports: scope.exports, queueMicrotask, URL,
     document: { visibilityState: 'visible', addEventListener: (name, handler) => listeners.set(name, handler), removeEventListener: name => listeners.delete(name) },
     window: { addEventListener: (name, handler) => listeners.set(name, handler), removeEventListener: name => listeners.delete(name) },
-    require: name => name === 'react' ? hookReact : name === './PostAuthor' ? { default: () => null } : name === '../lib/videoFeed' ? require('../lib/videoFeed.js') : require(name),
+    require: name => name === 'react' ? hookReact : ['./PostAuthor', './NativeDownloadButton'].includes(name) ? { default: () => null } : name === '../lib/videoFeed' ? require('../lib/videoFeed.js') : require(name),
   });
   const tree = scope.exports.default({
     post: { id: 'video-one', videoUrl: 'https://media.example/one.mp4', title: 'One specific idea' },

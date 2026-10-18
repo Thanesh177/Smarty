@@ -3,6 +3,7 @@ import { Bookmark, Maximize, MessageCircle, MoreHorizontal, Pause, Play, Refresh
 import { Link } from 'react-router-dom';
 import PostAuthor from './PostAuthor';
 import { formatVideoTime, getPostVideoUrl, getVideoPostId } from '../lib/videoFeed';
+import NativeDownloadButton from './NativeDownloadButton';
 
 export default memo(function ReelVideo({ post, active, nearby, muted = false, onMute, onSave, onSafety, saved, busy }) {
   const videoRef = useRef(null);
@@ -117,6 +118,7 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
           {post.body && <details className="reel-video-caption"><summary>About this video</summary><p>{post.body}</p></details>}
         </div>
         <div className="reel-video-actions" role="group" aria-label="Video actions">
+          {post.downloadAllowed !== false && <NativeDownloadButton iconOnly label="Download video" payload={{kind:'video',sourceId:id,title,url:source}}/>}
           <button type="button" onClick={() => onSave(post, saved)} disabled={busy} aria-label={saved ? 'Unsave video' : 'Save video'} aria-pressed={saved}><Bookmark size={21} fill={saved ? 'currentColor' : 'none'} /></button>
           <Link to={'/comments/' + encodeURIComponent(id)} state={{ post }} aria-label="View video comments"><MessageCircle size={21} /></Link>
           <button type="button" onClick={fullscreen} aria-label="View fullscreen"><Maximize size={20} /></button>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import { roomApi } from '../api/client';
 import RoomMediaPreview from './RoomMediaPreview';
+import { hasNativeDownloads, mediaDownloadPayload, requestNativeDownload } from '../lib/nativeDownloads';
 
 const ROOM_MESSAGES_FETCH_LIMIT = 10;
 const ROOM_INITIAL_VISIBLE_MESSAGES = 1;
@@ -275,6 +276,7 @@ export default function RoomMediaModal({
   registerMediaViewerOpener,
 }) {
   const [mediaViewer, setMediaViewer] = useState(null);
+  const [downloadNotice, setDownloadNotice] = useState('');
   const [roomMediaGridVisibleCount, setRoomMediaGridVisibleCount] = useState(ROOM_MEDIA_GRID_INITIAL_ITEMS);
 
   const roomMediaGridListRef = useRef(null);
@@ -665,11 +667,17 @@ export default function RoomMediaModal({
       });
   }
 
-  function downloadRoomMedia(message) {
+  async function downloadRoomMedia(message) {
     const normalizedMessage = normalizeRoomMessageMedia(message);
     const mediaUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl || '';
 
     if (!mediaUrl || !isSafeExternalMediaUrl(mediaUrl)) return;
+
+    if (hasNativeDownloads()) {
+      try { await requestNativeDownload(mediaDownloadPayload(normalizedMessage, mediaUrl)); setDownloadNotice('Saved in your offline library.'); }
+      catch (error) { setDownloadNotice(error.message); }
+      return;
+    }
 
     const fileName =
       normalizedMessage.fileName ||
@@ -840,6 +848,7 @@ export default function RoomMediaModal({
           style={{ zIndex: mediaViewer ? 1000 : 4000 }}
         >
           <section className="standalone-media-panel" onClick={(event) => event.stopPropagation()}>
+            {downloadNotice && <p role="status" style={{padding:'12px 20px',fontSize:13}}>{downloadNotice}</p>}
             <header className="standalone-media-header">
               <div>
                 <p>Shared media</p>

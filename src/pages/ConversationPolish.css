@@ -1,0 +1,74 @@
+/* Shared conversation surfaces. No motion on message bubbles or scroll layers. */
+.chat-page.has-active-chat,
+.rooms-workspace.has-active-room { --conversation-ink: #e8edf2; --conversation-muted: #93a1ad; }
+.chat-page.has-active-chat .chat-window,
+.rooms-workspace.has-active-room .chat-window { background: #080b0e !important; }
+.chat-page.has-active-chat .messages,
+.rooms-workspace.has-active-room .messages {
+  background: #080b0e !important;
+  overscroll-behavior-y: contain;
+  overflow-anchor: none;
+  scroll-behavior: auto !important;
+  touch-action: pan-y pinch-zoom;
+  scrollbar-width: thin;
+  scrollbar-color: #303840 transparent;
+}
+.chat-page.has-active-chat .chat-window-top,
+.rooms-workspace.has-active-room .chat-header {
+  background: #0b0f13 !important;
+  border-bottom: 1px solid #ffffff0b !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+.chat-page .message,
+.rooms-workspace.has-active-room .msg {
+  box-shadow: none !important;
+  animation: none !important;
+  transition: none !important;
+  color: var(--conversation-ink) !important;
+  background: #151b21 !important;
+  border: 0 !important;
+}
+.chat-page .message.mine,
+.rooms-workspace.has-active-room .msg.mine { background: #19303c !important; }
+.chat-page .message p,
+.rooms-workspace.has-active-room .msg p { font-size: 15px !important; line-height: 1.6 !important; white-space: pre-wrap; }
+.chat-page .message:has(.message-media-preview),
+.rooms-workspace.has-active-room .msg:has(.room-message-media-stable) { background: transparent !important; padding: 3px 0 7px !important; }
+.chat-page .message-media-preview { max-width: min(100%, 420px); overflow: hidden; border-radius: 14px; }
+.chat-page .message-media-preview > img {
+  display: block; width: 100%; aspect-ratio: 4 / 3; height: auto !important;
+  max-height: 360px; object-fit: contain !important; background: #10161c;
+}
+.chat-page .message-media-preview > .native-download-control { padding: 4px 0; }
+.chat-page .native-download-control > button,
+.rooms-workspace .native-download-control > button,
+.standalone-media-modal .native-download-control > button {
+  font: inherit; font-size: 12px; color: #b8cbd5; background: transparent;
+  border: 0; border-radius: 9px; padding: 6px 10px; box-shadow: none;
+}
+.chat-page .native-download-control > button:hover,
+.rooms-workspace .native-download-control > button:hover { background: #ffffff09; }
+.chat-page .native-download-control > button:focus-visible,
+.rooms-workspace .native-download-control > button:focus-visible { outline: 2px solid #a6d0df; outline-offset: 2px; }
+.chat-page .chat-actions-menu .native-download-control,
+.rooms-workspace .active-room-menu-popover .native-download-control { display: flex !important; width: 100%; }
+.chat-page .chat-actions-menu .native-download-control > button,
+.rooms-workspace .active-room-menu-popover .native-download-control > button { width: 100%; justify-content: flex-start !important; text-align: left; }
+.chat-page .conversation-latest {
+  position: absolute; z-index: 12; right: 24px; bottom: calc(106px + env(safe-area-inset-bottom));
+  display: inline-flex; align-items: center; gap: 9px; min-height: 44px;
+  padding: 0 16px; border: 1px solid #ffffff12; border-radius: 24px;
+  background: #18222a; color: #deebf2; font-size: 13px;
+}
+.chat-page .message-menu-btn { min-width: 32px; min-height: 32px; }
+@media (hover: none) { .chat-page .message-menu-btn { opacity: .75 !important; } }
+@media (max-width: 680px) {
+  .chat-page.has-active-chat .messages { padding: 16px 14px 126px !important; }
+  .chat-page .message { max-width: 88% !important; }
+  .chat-page .message:has(.message-media-preview) { max-width: 92% !important; }
+  .rooms-workspace.has-active-room .msg { max-width: 90% !important; border-radius: 14px !important; }
+  .chat-page .composer-shell { width: calc(100% - 20px) !important; border-radius: 18px !important; }
+  .chat-page .composer-shell input,
+  .rooms-workspace.has-active-room .input input { font-size: 16px !important; }
+}

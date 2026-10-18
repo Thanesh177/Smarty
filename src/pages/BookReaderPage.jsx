@@ -9,6 +9,7 @@ import { bookParagraphs, findBookMatches, normalizeReaderSettings, splitBookSect
 import { readBookTextCache, saveBookTextCache, validBookText } from '../lib/bookTextCache';
 import './BookReaderPage.css';
 import './BooksReaderPolish.css';
+import NativeDownloadButton from '../components/NativeDownloadButton';
 
 function getSettings() {
   try { return normalizeReaderSettings(JSON.parse(localStorage.getItem('reader_settings') || '{}')); }
@@ -174,7 +175,8 @@ export default function BookReaderPage() {
         <div className="reader-progress-text"><strong>{title}</strong><span>{progress}% read · Section {chapter+1} of {chapters.length}</span></div>
         <div className="reader-tools"><button type="button" aria-label="Reader settings" aria-expanded={panel==='settings'} aria-controls="reader-panel" onClick={()=>togglePanel('settings')}>Aa</button>
           <button type="button" aria-label="Find in book" aria-expanded={panel==='search'} onClick={()=>togglePanel('search')}><Search size={18}/></button>
-          <button type="button" aria-label={marked?'Remove section bookmark':'Bookmark this section'} aria-pressed={marked} onClick={toggleBookmark}>{marked?<Check size={18}/>:<Bookmark size={18}/>}</button></div>
+          <button type="button" aria-label={marked?'Remove section bookmark':'Bookmark this section'} aria-pressed={marked} onClick={toggleBookmark}>{marked?<Check size={18}/>:<Bookmark size={18}/>}</button>
+          <NativeDownloadButton iconOnly label="Download book for offline reading" payload={()=>({kind:'book',sourceId:bookId,title,author,chapters})} onStatus={setNotice}/></div>
       </div>
       <header className="reader-hero-card"><div className="reader-hero-copy"><p className="reader-kicker">{author}</p><h1>{title}</h1><p>Section {chapter+1} · About {minutes} min to read{fromCache?' · Saved text':''}</p></div></header>
       {(notice||refreshing||error||library.error)&&<p className="reader-status" role="status">{library.error||error||notice||(slow?'Still updating. Your current section is available.':'Updating the text without losing your place…')}</p>}

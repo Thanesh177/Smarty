@@ -27,6 +27,10 @@ import RoomMediaModal from './RoomMediaModal';
 import RoomMediaPreview from './RoomMediaPreview';
 import RoomInfoPage from './RoomInfoPage';
 import { createPortal, flushSync } from 'react-dom';
+import NativeDownloadButton from '../components/NativeDownloadButton';
+import { chatBackupPayload, hasNativeDownloads, mediaDownloadPayload, requestNativeDownload } from '../lib/nativeDownloads';
+import { scrollConversationToEnd, shouldPrefetchChatHistory } from '../lib/chatScroll';
+import './ConversationPolish.css';
 
 const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
 const API_ORIGIN = 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com';
@@ -49,10 +53,10 @@ const ROOM_IMAGE_RENDER_LIMIT = 10;
 const ROOM_PRELOADED_VISIBLE_MEDIA = 0;
 const MAX_RENDERED_MEDIA_MESSAGES = 180;
 const ROOM_MESSAGES_FETCH_LIMIT = 30;
-const ROOM_INITIAL_FETCH_LIMIT = 10;
-const ROOM_MESSAGES_REVEAL_STEP = 5;
+const ROOM_INITIAL_FETCH_LIMIT = 30;
+const ROOM_MESSAGES_REVEAL_STEP = 20;
 const ROOM_OLDER_PREFETCH_THRESHOLD_PX = 720;
-const ROOM_INITIAL_VISIBLE_MESSAGES = 5;
+const ROOM_INITIAL_VISIBLE_MESSAGES = 20;
 const ROOM_OLDER_MESSAGES_LAYOUT_STABILIZE_MS = 260;
 const ROOM_PAGE_DEFERRED_LOAD_MS = 450;
 
@@ -802,20 +806,7 @@ const scrollMessagesToBottom = useCallback((options = {}) => {
 
   if (!container) return;
 
-  const previousBehavior = container.style.scrollBehavior;
-  const previousOverflowAnchor = container.style.overflowAnchor;
-
-  container.style.scrollBehavior = behavior;
-  container.style.overflowAnchor = 'none';
-container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-
-  window.requestAnimationFrame(() => {
-    const latestContainer = messagesRef.current;
-    if (!latestContainer) return;
-
-    latestContainer.style.scrollBehavior = previousBehavior;
-    latestContainer.style.overflowAnchor = previousOverflowAnchor;
-  });
+  scrollConversationToEnd(container, {smooth: behavior === 'smooth', reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches});
 }, []);
 
 const jumpMessagesToBottomOnce = useCallback(() => {
@@ -1055,7 +1046,7 @@ useLayoutEffect(() => {
   shouldAutoScrollToNewestRef.current = false;
 
   if (!olderMessagesLoadingRef.current) {
-    scrollMessagesToBottom({ behavior: 'auto' });
+    scrollMessagesToBottom({ behavior: 'smooth' });
   }
 }, [activeRoom?.roomId, renderedMessages.length, messagesLoading, scrollMessagesToBottom]);
   useEffect(() => {
@@ -1118,11 +1109,6 @@ async function loadOlderRoomMessages() {
     if (!mountedRef.current || activeRoomRef.current?.roomId !== room.roomId) return;
 
     const fetched = extractRoomArray(data, ['messages', 'Items']).map(normalizeRoomMessageMedia);
-
-    if (fetched.length === 0) {
-      setHasOlderMessages(false);
-      return;
-    }
 
     const merged = sortRoomMessages(dedupeMessages([
       ...fetched,
@@ -1188,9 +1174,10 @@ async function loadOlderRoomMessages() {
     };
 
     restorePosition();
+    const restoredTop = messagesRef.current?.scrollTop;
     window.requestAnimationFrame(() => {
-      restorePosition();
-      window.requestAnimationFrame(restorePosition);
+      // Don't pull the reader back if they moved while layout settled.
+      if (Math.abs((messagesRef.current?.scrollTop ?? 0) - (restoredTop ?? 0)) < 2) restorePosition();
     });
   } catch (err) {
     console.error('OLDER MESSAGES LOAD ERROR:', err);
@@ -1419,12 +1406,8 @@ const appendRoomMessage = useCallback((roomId, message, options = {}) => {
   if (shouldFollowMessage) {
     shouldAutoScrollToNewestRef.current = true;
 
-    window.requestAnimationFrame(() => {
-      scrollMessagesToBottom({
-        behavior: options.behavior || 'auto',
-        restoreDelay: options.restoreDelay || 360,
-      });
-    });
+    // The single layout-follow effect owns scrolling. Starting a second
+    // animation here used to interrupt that movement as messages arrived.
   }
 }, [
   isMessagesNearBottom,
@@ -2526,7 +2509,7 @@ const visibleMessages = loadedMessages.slice(-ROOM_INITIAL_VISIBLE_MESSAGES);
 
           setMessages(visibleMessages);
           messagesStateRef.current = visibleMessages;
-          setHasOlderMessages(loadedMessages.length >= ROOM_INITIAL_FETCH_LIMIT);
+          setHasOlderMessages(loadedMessages.length > visibleMessages.length || loadedMessages.length >= ROOM_INITIAL_FETCH_LIMIT);
 
           jumpMessagesToBottomOnce();
         }
@@ -3377,7 +3360,7 @@ async function openRoom(room, options = {}) {
     setMessages(latestMessages);
     messagesStateRef.current = latestMessages;
 
-    setHasOlderMessages(loadedMessages.length >= ROOM_INITIAL_FETCH_LIMIT);
+    setHasOlderMessages(loadedMessages.length > latestMessages.length || loadedMessages.length >= ROOM_INITIAL_FETCH_LIMIT);
     setMessagesLoading(false);
 
     window.requestAnimationFrame(() => {
@@ -3869,11 +3852,17 @@ async function deleteRoom(room) {
 }
 
 
-  function downloadRoomMedia(message) {
+  async function downloadRoomMedia(message) {
   const normalizedMessage = normalizeRoomMessageMedia(message);
   const mediaUrl = normalizedMessage.mediaUrl || normalizedMessage.fileUrl || '';
 
   if (!mediaUrl) return;
+
+  if (hasNativeDownloads()) {
+    try { await requestNativeDownload(mediaDownloadPayload(normalizedMessage, mediaUrl)); setStatus('Saved in Downloads on this device.'); }
+    catch (error) { setStatus(error.message); }
+    return;
+  }
 
   const fileName =
     normalizedMessage.fileName ||
@@ -4468,6 +4457,8 @@ return (
 <button type="button" onClick={openActiveRoomMediaPopup}>
   Media
 </button>
+<NativeDownloadButton label="Back up loaded messages" onStatus={setStatus}
+  payload={()=>chatBackupPayload({id:'room:'+activeRoom.roomId,title:activeRoom.name||activeRoom.title||'Room conversation',messages,userId})}/>
   </div>
 )}
             </div>
@@ -4485,11 +4476,7 @@ return (
     shouldAutoScrollToNewestRef.current = distanceFromBottom <= 110;
     setShowScrollToBottom(distanceFromBottom > 220);
 
-if (
-  element.scrollTop <= 60 &&
-  hasOlderMessages &&
-  !olderMessagesLoadingRef.current
-) {
+if (shouldPrefetchChatHistory(element, olderMessagesLoadingRef.current, hasOlderMessages)) {
   if (olderScrollTriggerRafRef.current) return;
 
   olderScrollTriggerRafRef.current = requestAnimationFrame(() => {
@@ -4623,18 +4610,9 @@ onClick={() => {
   shouldAutoScrollToNewestRef.current = true;
 
   scrollMessagesToBottom({
-    behavior: 'auto',
-    restoreDelay: 520,
+    behavior: 'smooth',
   });
-
-  window.setTimeout(() => {
-    scrollMessagesToBottom({
-      behavior: 'auto',
-      restoreDelay: 360,
-    });
-
-    setShowScrollToBottom(false);
-  }, 180);
+  setShowScrollToBottom(false);
 }}
   >
     <ArrowDown size={19} aria-hidden="true" />
