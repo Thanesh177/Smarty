@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowDown, ArrowUpRight, Bookmark, BriefcaseBusiness, Cpu, FlaskConical, Globe2, HeartPulse, Landmark, Leaf, Newspaper, RefreshCw, Search, Share2, Trophy } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUpRight, Bookmark, BriefcaseBusiness, Check, Cpu, FlaskConical, Globe2, HeartPulse, Landmark, Leaf, Newspaper, RefreshCw, Search, Share2, Trophy } from 'lucide-react';
 import { newsApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -15,6 +15,9 @@ import useNewsPersonalization from '../hooks/useNewsPersonalization';
 import { NewsBriefingChoice, NewsFollowButton, NewsUpdatesShelf } from '../components/NewsPersonalization';
 import { briefingPlace, readNewsPreference } from '../lib/newsPreferences';
 import { normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from '../lib/newsEdition';
+import { balancedNewsReports, newsPreviewParagraphs, reportBriefingContext, selectNewsReports } from '../lib/newsReader';
+import useNewsReader from '../hooks/useNewsReader';
+import NewsReader from '../components/NewsReader';
 import './NewsCompact.css';
 
 const CACHE_PREFIX = 'smarty_location_news_v22_';
@@ -162,10 +165,11 @@ function NewsSkeleton() {
   );
 }
 
-const NewsCard = memo(function NewsCard({ article, index, saved, onToggleSave, onShare, variant = 'grid' }) {
+const NewsCard = memo(function NewsCard({ article, index, saved, opened, context, onOpen, onToggleSave, onShare, variant = 'grid' }) {
   const [imageFailed, setImageFailed] = useState(false);
   const hasImage = Boolean(article.image_link) && !imageFailed;
   const publishedAt = formatPublishedAt(article.published_at);
+  const preview = newsPreviewParagraphs(article).join(' ');
 
   return (
     <article className={`news-card news-card--${variant}${variant === 'featured' ? ' featured' : ''}${hasImage ? '' : ' news-card--text'}`}>
@@ -184,17 +188,19 @@ const NewsCard = memo(function NewsCard({ article, index, saved, onToggleSave, o
         <div className="news-card-meta">
           <span className="section-label">{article.section || 'News'}</span>
           {publishedAt && <time dateTime={article.published_at}>{publishedAt}</time>}
+          {opened && <span className="news-opened-label"><Check size={11} aria-hidden="true" />Opened</span>}
         </div>
 
-        <h3><a href={safeNewsUrl(article.news_link)} target="_blank" rel="noopener noreferrer">{article.title || 'Untitled news'}</a></h3>
-        <p>{article.summary || `Current reporting from ${article.source || 'this source'}.`}</p>
+        <h3><button type="button" className="news-card-title" onClick={() => onOpen(article)}>{article.title || 'Untitled news'}</button></h3>
+        {(preview || context) && <p>{preview || context.summary}</p>}
+        {!preview && context && <small className="news-card-context-label">Briefing context · AI-assisted</small>}
         <span className="news-card-source">{article.source || 'News source'}</span>
         <div className="news-card-story-tools"><NewsStoryLink story={article} /><NewsFollowButton story={article}/></div>
 
         <div className="news-actions">
-          <a href={article.news_link} target="_blank" rel="noopener noreferrer">
-            Read story <ArrowUpRight size={14} aria-hidden="true" />
-          </a>
+          <button type="button" className="news-quick-read" onClick={() => onOpen(article)} aria-label={`Quick read: ${article.title}`}>
+            Quick read <ArrowRight size={14} aria-hidden="true" />
+          </button>
           <button
             type="button"
             aria-pressed={saved}
@@ -409,6 +415,8 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
 
 export default function NewsPage({ briefingOnly = false }) {
   const { user } = useAuth();
+  const readerAccount = String(user?.userId || user?.sub || user?.id || user?.email || 'guest');
+  const reader = useNewsReader(readerAccount);
   const personal = useNewsPersonalization();
   const location = useLocation();
   const initialCountry = useMemo(() => {
@@ -424,6 +432,9 @@ export default function NewsPage({ briefingOnly = false }) {
     () => new URLSearchParams(location.search).get('search') || ''
   );
   const [selectedSection, setSelectedSection] = useState(() => new URLSearchParams(location.search).get('section') || 'All');
+  const [reportView, setReportView] = useState('edition');
+  const [reportOrder, setReportOrder] = useState('edition');
+  const [readerSelection, setReaderSelection] = useState(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [savedState, setSavedState] = useState({ key: '', entries: [] });
   const savedRef = useRef(savedState);
@@ -443,15 +454,18 @@ export default function NewsPage({ briefingOnly = false }) {
   const loaderRef = useRef(null);
   const newsStoriesRef = useRef(null);
   const summaryHeadingRef = useRef(null);
+  const reportsHeadingRef = useRef(null);
   const requestIdRef = useRef(0);
   const mountedRef = useRef(true);
   const abortControllerRef = useRef(null);
   const loadedLocationRef = useRef(initialCache ? getCacheKey(initialCountry, region) : '');
   const savedStorageKey = useMemo(() => {
-    const accountId = user?.userId || user?.sub || user?.id || user?.email || 'guest';
-    return `smarty-saved-news-v1-${encodeURIComponent(String(accountId))}`;
-  }, [user]);
+    return `smarty-saved-news-v1-${encodeURIComponent(readerAccount)}`;
+  }, [readerAccount]);
   const saved = savedState.key === savedStorageKey ? savedState.entries : [];
+  const selectedReport = readerSelection?.account === readerAccount ? readerSelection.article : null;
+
+  useEffect(() => { setReaderSelection(null); }, [readerAccount, location.pathname, location.search, country, region]);
 
   const preferred = briefingPlace(personal.preferences);
   useEffect(() => {
@@ -482,14 +496,20 @@ export default function NewsPage({ briefingOnly = false }) {
   }, []);
 
   useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(savedStorageKey) || '[]');
-      savedRef.current = { key: savedStorageKey, entries: normalizeSavedNews(stored) };
-    } catch {
-      savedRef.current = { key: savedStorageKey, entries: [] };
-    }
-    setSavedState(savedRef.current);
+    const load = () => {
+      try {
+        const stored = JSON.parse(localStorage.getItem(savedStorageKey) || '[]');
+        savedRef.current = { key: savedStorageKey, entries: normalizeSavedNews(stored) };
+      } catch {
+        savedRef.current = { key: savedStorageKey, entries: [] };
+      }
+      setSavedState(savedRef.current);
+    };
+    load();
     setActionStatus('');
+    const changed = event => { if (event.key === savedStorageKey || event.key === null) load(); };
+    window.addEventListener('storage', changed);
+    return () => window.removeEventListener('storage', changed);
   }, [savedStorageKey]);
 
   useEffect(() => {
@@ -608,32 +628,24 @@ export default function NewsPage({ briefingOnly = false }) {
     }
     return Object.entries(sectionMap).filter(([, items]) => Array.isArray(items) && items.length);
   }, [newsData]);
-  const sectionNames = useMemo(() => ['All', ...sections.map(([name]) => name)], [sections]);
+  const editionArticles = useMemo(() => balancedNewsReports(sections.flatMap(([sectionName, items]) =>
+    items.map(item => ({ ...item, section: item.section || sectionName }))
+  )), [sections]);
+  const sourceArticles = useMemo(() => reportView === 'saved' && !briefingOnly ? [...saved].reverse() : editionArticles,
+    [reportView, briefingOnly, saved, editionArticles]);
+  const sectionNames = useMemo(() => ['All', ...new Set(sourceArticles.map(article => article.section || 'World'))], [sourceArticles]);
   const sectionCounts = useMemo(() => {
-    const counts = new Map(sections.map(([name, items]) => [name, items.length]));
-    counts.set('All', sections.reduce((total, [, items]) => total + items.length, 0));
+    const counts = new Map();
+    for (const article of sourceArticles) {
+      if (reportView === 'unopened' && reader.opened.has(article.news_link)) continue;
+      counts.set(article.section, (counts.get(article.section) || 0) + 1);
+      counts.set('All', (counts.get('All') || 0) + 1);
+    }
     return counts;
-  }, [sections]);
-  const articles = useMemo(() => {
-    let nextArticles = sections.flatMap(([sectionName, items]) =>
-      items.map((item) => ({ ...item, section: item.section || sectionName }))
-    );
-
-    if (selectedSection !== 'All') {
-      nextArticles = nextArticles.filter((item) => item.section === selectedSection);
-    }
-
-    const query = search.trim().toLowerCase();
-    if (query) {
-      nextArticles = nextArticles.filter((item) =>
-        `${item.title || ''} ${item.summary || ''} ${item.section || ''} ${item.source || ''}`
-          .toLowerCase()
-          .includes(query)
-      );
-    }
-
-    return nextArticles;
-  }, [search, sections, selectedSection]);
+  }, [sourceArticles, reportView, reader.opened]);
+  const articles = useMemo(() => selectNewsReports(sourceArticles, {
+    section: selectedSection, search, unopened: reportView === 'unopened', order: reportOrder,
+  }, reader.opened), [sourceArticles, search, selectedSection, reportView, reportOrder, reader.opened]);
   const visibleArticles = useMemo(
     () => articles.slice(0, visibleCount),
     [articles, visibleCount]
@@ -645,6 +657,14 @@ export default function NewsPage({ briefingOnly = false }) {
   const locationLabel = newsData?.location?.label ||
     NEWS_COUNTRIES.find((item) => item.code === country)?.name ||
     'Worldwide';
+  const openReport = useCallback(article => {
+    reader.markOpened(article.news_link);
+    setReaderSelection({ account: readerAccount, article });
+  }, [readerAccount, reader.markOpened]);
+  const closeReport = useCallback(() => setReaderSelection(null), []);
+  const nextReports = useMemo(() => selectedReport ? editionArticles.filter(article =>
+    article.news_link !== selectedReport.news_link && article.section === selectedReport.section
+    && !reader.opened.has(article.news_link)).slice(0, 2) : [], [editionArticles, selectedReport, reader.opened]);
 
   const toggleSave = useCallback((article) => {
     const current = savedRef.current.key === savedStorageKey ? savedRef.current.entries : [];
@@ -658,7 +678,7 @@ export default function NewsPage({ briefingOnly = false }) {
     setSavedState(savedRef.current);
     try {
       localStorage.setItem(savedStorageKey, JSON.stringify(updated));
-      setActionStatus(exists ? 'Removed from saved stories.' : 'Story saved.');
+      setActionStatus(exists ? 'Removed from saved reports.' : 'Report saved on this device. Find it under Saved reports.');
     } catch {
       setActionStatus('Updated for this session only. Device storage is unavailable.');
     }
@@ -692,11 +712,14 @@ export default function NewsPage({ briefingOnly = false }) {
         index={index}
         variant={index === 0 && selectedSection === 'All' && !search.trim() ? 'featured' : 'grid'}
         saved={savedLinks.has(article.news_link)}
+        opened={reader.opened.has(article.news_link)}
+        context={reportBriefingContext(newsData?.dailySummary, article)}
+        onOpen={openReport}
         onToggleSave={toggleSave}
         onShare={shareArticle}
       />
     )),
-    [savedLinks, search, selectedSection, shareArticle, toggleSave, visibleArticles]
+    [savedLinks, search, selectedSection, shareArticle, toggleSave, visibleArticles, reader.opened, openReport, newsData?.dailySummary]
   );
 
   const summarySections = useMemo(() => (
@@ -713,7 +736,7 @@ export default function NewsPage({ briefingOnly = false }) {
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [country, region, search, selectedSection]);
+  }, [country, region, search, selectedSection, reportView, reportOrder]);
 
   useEffect(() => {
     const available = briefingOnly && summarySections.length ? ['All', ...summarySections.map(digest => digest.section)] : sectionNames;
@@ -721,7 +744,7 @@ export default function NewsPage({ briefingOnly = false }) {
   }, [newsData, sectionNames, selectedSection, briefingOnly, summarySections]);
 
   useEffect(() => {
-    if (!loaderRef.current) return undefined;
+    if (!loaderRef.current || typeof IntersectionObserver === 'undefined') return undefined;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -734,14 +757,16 @@ export default function NewsPage({ briefingOnly = false }) {
 
     observer.observe(loaderRef.current);
     return () => observer.disconnect();
-  }, [articles.length, loading, selectedSection, search, visibleCount]);
+  }, [articles.length, loading, selectedSection, search, visibleCount, reportView]);
 
   const handlePlaceChange = useCallback(place => {
     setCountry(place.country); setRegion(place.region);
+    setReportView('edition');
     setSelectedSection('All'); setSearch(''); setSummarySearch('');
   }, []);
 
   const handleBriefSectionSelect = useCallback((section) => {
+    setReportView('edition');
     setSelectedSection(section);
     requestAnimationFrame(() => {
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -768,8 +793,14 @@ export default function NewsPage({ briefingOnly = false }) {
     });
   };
 
+  const readerPanel = selectedReport && <NewsReader article={selectedReport}
+    saved={savedLinks.has(selectedReport.news_link)} context={reportBriefingContext(dailyBriefing, selectedReport)}
+    nextReports={nextReports} comfortableText={comfortableText} status={actionStatus} onToggleText={toggleComfortableText}
+    onToggleSave={toggleSave} onShare={shareArticle} onOpen={openReport} onClose={closeReport} returnFocusRef={reportsHeadingRef} />;
+
   if (briefingOnly) return (
     <section className={`news-page news-compact news-feed-briefing${comfortableText ? ' news-comfortable-text' : ''}`} aria-label="Daily news feed">
+      {readerPanel}
       <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
       <NewsUpdatesShelf personal={personal}/>
       {briefingPending && <div className="news-briefing-pending" role="status"><span/>Reports are ready. Your daily summary is being prepared in the background.</div>}
@@ -917,6 +948,7 @@ export default function NewsPage({ briefingOnly = false }) {
 
   return (
     <section className="news-page news-compact news-newsroom">
+      {readerPanel}
       <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
       <NewsUpdatesShelf personal={personal}/>
       {actionStatus && (
@@ -950,14 +982,28 @@ export default function NewsPage({ briefingOnly = false }) {
           <Search size={17} aria-hidden="true" />
           <input
             type="search"
-            aria-label="Search current news"
-            placeholder={`Search ${locationLabel} news`}
+            aria-label={reportView === 'saved' ? 'Search saved reports' : 'Search current news'}
+            placeholder={reportView === 'saved' ? 'Search your saved reports' : `Search ${locationLabel} news`}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
 
       </div>
+
+      <div className="news-reader-tools">
+        <div className="news-reader-views" role="group" aria-label="Report collection">
+          {[['edition', 'Latest', editionArticles.length], ['unopened', 'Unopened', editionArticles.filter(article => !reader.opened.has(article.news_link)).length], ['saved', 'Saved reports', saved.length]].map(([value, label, count]) =>
+            <button type="button" key={value} aria-pressed={reportView === value} onClick={() => { setReportView(value); setSelectedSection('All'); }}>
+              {label}<small>{count}</small>
+            </button>)}
+        </div>
+        <label className="news-report-order">Order<select aria-label="Order reports" value={reportOrder} onChange={event => setReportOrder(event.target.value)}>
+          <option value="edition">{reportView === 'saved' ? 'Recently saved' : 'Balanced coverage'}</option><option value="newest">Newest first</option>
+        </select></label>
+      </div>
+      {reportView === 'saved' && <p className="news-reader-note">Saved previews from every edition, kept on this device for your account. Original articles need a connection.</p>}
+      {reportView === 'unopened' && <p className="news-reader-note">Reports you haven’t opened in Smarty on this device. Opening a quick read marks it as opened.</p>}
 
       {(fromCache || newsData?.notice) && !loading && (
         <p className="cache-note">
@@ -969,13 +1015,13 @@ export default function NewsPage({ briefingOnly = false }) {
         <p className="news-inline-notice" role="status">{error}</p>
       )}
 
-      {loading && (
+      {loading && reportView !== 'saved' && (
         <div className="news-grid">
           {Array.from({ length: 6 }).map((_, index) => <NewsSkeleton key={index} />)}
         </div>
       )}
 
-      {!loading && !newsData && error && (
+      {!loading && !newsData && error && reportView !== 'saved' && (
         <div className="news-retry" role="alert">
           <h2>Today’s briefing is unavailable.</h2>
           <p>{error}</p>
@@ -985,10 +1031,10 @@ export default function NewsPage({ briefingOnly = false }) {
         </div>
       )}
 
-      {!loading && newsData && (
+      {((!loading && newsData) || reportView === 'saved') && (
         <>
-          {briefingPending && <div className="news-briefing-pending" role="status"><span/>Reports are ready. Your daily summary is being prepared in the background.</div>}
-          {dailyBriefing && !briefingPending && <DailyBrief
+          {reportView !== 'saved' && briefingPending && <div className="news-briefing-pending" role="status"><span/>Reports are ready. Your daily summary is being prepared in the background.</div>}
+          {reportView === 'edition' && !search.trim() && dailyBriefing && !briefingPending && <DailyBrief
             summary={dailyBriefing}
             locationLabel={locationLabel}
             onSelectSection={handleBriefSectionSelect}
@@ -1021,8 +1067,8 @@ export default function NewsPage({ briefingOnly = false }) {
             <div className="news-results-column">
               <div className="news-stream-heading">
                 <div>
-                  <span>{selectedSection === 'All' ? `${locationLabel} · Latest` : locationLabel}</span>
-                  <h2>{selectedSection === 'All' ? 'Today’s reporting' : `${selectedSection} stories`}</h2>
+                  <span>{reportView === 'saved' ? 'Your reading list · On this device' : locationLabel}</span>
+                  <h2 ref={reportsHeadingRef} tabIndex={-1}>{reportView === 'saved' ? 'Saved reports' : reportView === 'unopened' ? 'Still to explore' : selectedSection === 'All' ? 'Today’s reporting' : `${selectedSection} stories`}</h2>
                 </div>
                 <small>{articles.length} {articles.length === 1 ? 'story' : 'stories'}</small>
               </div>
@@ -1042,17 +1088,21 @@ export default function NewsPage({ briefingOnly = false }) {
                       <button type="button" className="news-load-more" onClick={() => setVisibleCount(current => Math.min(current + PAGE_SIZE, articles.length))}>
                         Show more reports
                       </button>
-                    ) : 'You’ve reached the end of this edition'}
+                    ) : reportView === 'saved' ? 'You’re up to date with your saved reports.' : 'You’ve reached the end of this edition'}
                   </div>
                 </>
               ) : (
-                <p className="news-status">No stories match this search.</p>
+                <div className="news-reader-empty" role="status">
+                  <h3>{search.trim() || selectedSection !== 'All' ? 'No matching reports' : reportView === 'saved' ? 'Keep something worth coming back to.' : reportView === 'unopened' ? 'You’re caught up with this edition.' : 'No reports in this edition yet.'}</h3>
+                  <p>{search.trim() || selectedSection !== 'All' ? 'Try another phrase or clear your filters.' : reportView === 'saved' ? 'Tap the bookmark on a report to save its preview here, even when you’re offline.' : reportView === 'unopened' ? 'Browse the full edition again, or switch places to explore more.' : 'Try refreshing or choosing another place.'}</p>
+                  <button type="button" onClick={() => { setSearch(''); setSelectedSection('All'); if (!search.trim() && selectedSection === 'All') setReportView('edition'); }}>{search.trim() || selectedSection !== 'All' ? 'Clear filters' : 'Browse latest reports'}</button>
+                </div>
               )}
             </div>
           </div>
 
-          <p className="news-provider-note">
-            {newsData.sources?.length > 0 && (
+          {reportView !== 'saved' && <p className="news-provider-note">
+            {newsData?.sources?.length > 0 && (
               <>
                 News discovery provided by{' '}
                 {newsData.sources.map((source, index) => (
@@ -1064,7 +1114,7 @@ export default function NewsPage({ briefingOnly = false }) {
               </>
             )}{' '}
             {country === 'GLOBAL' && 'Worldwide also includes Hacker News and Spaceflight News.'}
-          </p>
+          </p>}
         </>
       )}
     </section>
