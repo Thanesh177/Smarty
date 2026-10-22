@@ -1,0 +1,31 @@
+.deletion-document { margin: 0; background: #08090b; color: #ecf0f4; }
+.deletion-page { width: 100%; height: 100dvh; min-height: 0; overflow: auto; background: #08090b; color: #ecf0f4; font: 400 16px/1.75 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-align: left; }
+.deletion-page * { box-sizing: border-box; }
+.deletion-page .deletion-container { width: min(100%, 800px); margin: 0 auto; padding: 0 clamp(22px, 5vw, 54px) 32px; }
+.deletion-page .deletion-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 94px; border-bottom: 1px solid #ffffff12; }
+.deletion-page .deletion-header > span { color: #949da9; font-size: 12px; text-align: right; }
+.deletion-page .deletion-brand { display: inline-flex; gap: 10px; align-items: center; color: #f0f4f8; font-size: 19px; font-weight: 650; text-decoration: none; }
+.deletion-page .deletion-brand > span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: #b9d2ea; color: #10151c; font-size: 19px; }
+.deletion-page main { padding: clamp(36px, 7vw, 68px) 0 12px; }
+.deletion-page .deletion-eyebrow { margin: 0 0 14px; color: #adc8e2; font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.deletion-page h1 { margin: 0 0 20px; max-width: 15ch; color: #f1f4f8; font-size: clamp(32px, 6vw, 48px); font-weight: 580; line-height: 1.14; letter-spacing: -.045em; }
+.deletion-page .deletion-lead { font-size: 17px; line-height: 1.75; color: #bac2cd; }
+.deletion-page section { margin: 38px 0 0; }
+.deletion-page h2 { margin: 0 0 14px; font-size: 19px; line-height: 1.45; letter-spacing: -.02em; font-weight: 600; color: #edf2f7; }
+.deletion-page p { margin: 0 0 16px; color: #b1bac6; overflow-wrap: anywhere; }
+.deletion-page strong { font-weight: 600; color: #e5eaf0; }
+.deletion-page ul { margin: 14px 0 20px; padding-left: 22px; color: #b1bac6; }
+.deletion-page li { margin: 10px 0; padding-left: 4px; }
+.deletion-page a { color: #b9d6f0; text-decoration: underline; text-underline-offset: 4px; overflow-wrap: anywhere; }
+.deletion-page a:hover { color: #e4f2ff; }
+.deletion-page a:focus-visible { outline: 2px solid #b9d6f0; outline-offset: 5px; border-radius: 3px; }
+.deletion-page .deletion-request { background: #10141a; border: 1px solid #ffffff0e; padding: clamp(20px, 4vw, 30px); border-radius: 16px; }
+.deletion-page .deletion-action { display: inline-flex; align-items: center; justify-content: space-between; gap: 28px; min-height: 48px; margin: 8px 0 22px; padding: 12px 18px; background: #b9d2ea; color: #10151c; border-radius: 9px; font-size: 14px; font-weight: 650; line-height: 1.5; text-decoration: none; }
+.deletion-page .deletion-action:hover { color: #10151c; background: #d1e4f6; }
+.deletion-page .deletion-hint, .deletion-page .deletion-safety { font-size: 13px; line-height: 1.8; }
+.deletion-page .deletion-safety { margin: 20px 0 0; padding-top: 18px; border-top: 1px solid #ffffff10; color: #959fac; }
+.deletion-page .deletion-footer { display: flex; flex-wrap: wrap; column-gap: 24px; row-gap: 14px; margin-top: 38px; padding-top: 24px; border-top: 1px solid #ffffff12; font-size: 12px; }
+.deletion-page .deletion-footer > span { flex-basis: 100%; color: #7e8997; }
+.deletion-page .deletion-skip { position: absolute; left: 16px; top: -100px; z-index: 10; padding: 10px 16px; background: #172331; }
+.deletion-page .deletion-skip:focus { top: 16px; }
+@media (max-width: 420px) { .deletion-page .deletion-header { min-height: 80px; gap: 12px; } .deletion-page .deletion-header > span { max-width: 120px; } .deletion-page .deletion-action { display: flex; width: 100%; gap: 16px; } .deletion-page .deletion-lead { font-size: 16px; } }

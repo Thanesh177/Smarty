@@ -6,7 +6,12 @@ export default function PrivacyPage() {
       <div className="legal-container">
 
         <h1>Privacy Policy</h1>
-        <p className="updated">Last Updated: July 13, 2026</p>
+        <p className="updated">Last Updated: October 22, 2026</p>
+
+        <p>
+          <a href="/delete-account.html">Delete your Smarty account and associated data</a> or{' '}
+          <a href="/delete-data.html">request deletion of selected data</a>. These request pages do not require sign-in or app installation.
+        </p>
 
         <p>
           This Privacy Policy explains how we collect, use, disclose, and
@@ -125,6 +130,12 @@ export default function PrivacyPage() {
           We retain information only as long as necessary to operate the
           platform, maintain security, resolve disputes, and comply with legal
           obligations.
+        </p>
+
+        <p>
+          After verifying account ownership, we complete account or selected-data deletion requests within 14 days and confirm the outcome by email.
+          If limited records must be retained for security, fraud prevention, dispute resolution or legal obligations, we explain the records, reason and applicable retention period or deletion date when responding to your request.
+          Such records are kept only as long as that specific reason requires. Copies independently saved by others and local device downloads or backups are outside the scope of server-side deletion.
         </p>
 
         <h2>8. Security</h2>

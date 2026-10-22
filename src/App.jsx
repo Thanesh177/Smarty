@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import SupportPage from './pages/SupportPage';
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
+import PublicDeletionPage from './pages/PublicDeletionPage';
+import { getDeletionPageKind } from './lib/deletionPages';
 import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import NavbarMenu from './components/NavbarMenu';
 import { notificationApi, chatApi, getPendingRoomInvite } from './api/client';
@@ -1864,6 +1866,10 @@ function AppExperience() {
 }
 
 export default function App() {
+  const { pathname } = useLocation();
+  const deletionKind = getDeletionPageKind(pathname);
+  // Public deletion requests must not wait for authentication or the app splash.
+  if (deletionKind) return <PublicDeletionPage kind={deletionKind} />;
   return (
     <AuthProvider>
       <ActionConfirmationProvider>

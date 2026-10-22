@@ -48,6 +48,11 @@ export default function SupportPage() {
           Account deletion permanently removes your Smarty account.
         </p>
 
+        <p>
+          You can also <a href="/delete-account.html">request account and associated data deletion</a> without signing in or installing the app.
+          To keep your account and remove selected information, <a href="/delete-data.html">request selected data deletion</a>.
+        </p>
+
         <h3>Notifications</h3>
 
         <p>
