@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 import random
 import sys
@@ -97,6 +98,25 @@ LAMBDA = _load_lambda_module()
 
 
 class ContentCatalogTests(unittest.TestCase):
+    def test_image_queries_normalize_keyword_arrays_without_python_punctuation(self):
+        self.assertEqual(LAMBDA.normalize_image_search_query(["deep sea", "lanternfish", 2]), "deep sea lanternfish")
+        self.assertEqual(LAMBDA.normalize_image_search_query({"query": "fish"}), "")
+
+    def test_release_probe_is_bounded_and_does_not_publish(self):
+        with (mock.patch.object(LAMBDA, "call_bedrock_text", return_value="READY") as invoke,
+              mock.patch.object(LAMBDA, "create_post") as publish):
+            result = LAMBDA.lambda_handler({"source": "smarty.ai.release-check"}, None)
+        self.assertEqual(result['statusCode'], 200)
+        self.assertEqual(invoke.call_args.kwargs['max_tokens'], 32)
+        publish.assert_not_called()
+
+    def test_api_events_cannot_enter_release_probe(self):
+        with (mock.patch.object(LAMBDA, "call_bedrock_text") as invoke,
+              mock.patch.object(LAMBDA, "handle_details", return_value={'statusCode': 404})):
+            result = LAMBDA.lambda_handler({'source': 'smarty.ai.release-check', 'httpMethod': 'POST', 'path': '/posts/details'}, None)
+        self.assertEqual(result['statusCode'], 404)
+        invoke.assert_not_called()
+
     def test_scheduled_retries_share_an_id_but_each_daily_slot_is_distinct(self):
         event = {"source": "smarty.learning.schedule", "scheduledTime": "2026-09-19T02:30:00Z"}
         first = LAMBDA.scheduled_post_id(event)
@@ -122,19 +142,8 @@ class ContentCatalogTests(unittest.TestCase):
 
     @staticmethod
     def complete_explanation():
-        sentence = (
-            "This section names the important parts, follows the cause and effect, "
-            "and explains why each change produces the next observable result. "
-        )
-        return (sentence * 4 + "\n\n" + "\n\n".join(
-            f"## {heading}\n\n{sentence * 6}"
-            for heading in (
-                "Why earlier tokens need not start over",
-                "Following one token through the cache",
-                "The memory bill behind a faster answer",
-                "From saved keys to the next prediction",
-            )
-        )).strip()
+        from explanation_fixture import LESSON
+        return LESSON
 
     def test_catalog_is_broad_and_every_target_is_narrow(self):
         self.assertGreaterEqual(len(LAMBDA.TOPIC_SUBTOPICS), 80)
@@ -157,6 +166,19 @@ class ContentCatalogTests(unittest.TestCase):
         ]
         self.assertEqual(len(domain_topics), len(set(domain_topics)))
         self.assertEqual(set(domain_topics), set(LAMBDA.BASE_TOPICS))
+
+    def test_new_subjects_have_specific_paths_without_resetting_existing_paths(self):
+        for topic in ('Cosmology', 'Zoology', 'Botany', 'Marine Biology', 'Scientific Method',
+                      'Scientific Discoveries', 'Scientific Mysteries', 'Education', 'Literature'):
+            path = LAMBDA.topic_learning_path(topic)
+            self.assertEqual(path[0]['level'], 'foundation')
+            self.assertEqual(path[-1]['level'], 'advanced')
+            self.assertGreaterEqual(len(path), 7)
+            self.assertEqual(len({step['subTopic'] for step in path}), len(path))
+        self.assertEqual(LAMBDA.CURRICULUM_VERSION, 1, 'Existing authored paths have not been reordered')
+        self.assertEqual(LAMBDA.POST_MODEL_ID, 'us.anthropic.claude-sonnet-4-6')
+        self.assertEqual(LAMBDA.DETAILS_MODEL_ID, 'us.anthropic.claude-sonnet-4-6')
+        self.assertEqual(LAMBDA.ANSWER_MODEL_ID, 'us.amazon.nova-2-lite-v1:0')
 
     def test_persistent_rotation_covers_catalog_before_repeating(self):
         random.seed(19)
@@ -223,6 +245,47 @@ class ContentCatalogTests(unittest.TestCase):
         )
         self.assertTrue(valid, reason)
 
+    def test_regular_posts_are_written_for_non_specialists_without_an_extra_model_pass(self):
+        paragraph = (
+            "A model keeps earlier attention keys and values in a cache. "
+            "This is stored information about earlier tokens it can use again. Each new token adds "
+            "one entry rather than rebuilding earlier entries. A token is one "
+            "piece of text the model handles. Reusing these entries reduces "
+            "repeated work, but keeping them takes memory as the text grows."
+        )
+        draft = {"title": "How a KV Cache Saves Earlier Work",
+                 "mechanismParagraph": paragraph, "exampleParagraph": paragraph,
+                 "image_search_query": "computer model memory", "sourceIds": []}
+        with (mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
+              mock.patch.object(LAMBDA, "call_bedrock_text", return_value=json.dumps(draft)) as model,
+              mock.patch.object(LAMBDA, "review_concept_text", return_value=True)):
+            result = LAMBDA.generate_specific_post("Artificial Intelligence", "how a KV cache avoids recomputing earlier tokens", LAMBDA.resolve_content_angle("mechanism"), [])
+        self.assertIsNotNone(result)
+        self.assertEqual(model.call_count, 1)
+        prompt = model.call_args.args[0]
+        guide = model.call_args.kwargs["system_prompt"]
+        self.assertEqual(guide, LAMBDA.POST_WRITING_GUIDE)
+        for instruction in ("no specialist background", "define each immediately", "Expand an acronym", "less accurate", "hypothetical"):
+            self.assertIn(instruction, guide)
+        self.assertIn("80 to 120 words", prompt)
+        self.assertIn("varied length", prompt)
+        self.assertNotIn("4 to 6 short sentences", prompt)
+        self.assertNotIn("8 to 18 words", guide)
+        self.assertEqual(model.call_args.kwargs["max_tokens"], 850)
+        self.assertIn("sourceIds", prompt)
+        for instruction in ("complete mini-lesson", "not a shortened summary",
+                            "Retain the complete causal chain", "Earn curiosity",
+                            "vary sentence length", "current post must still stand on its own"):
+            self.assertIn(instruction, guide)
+
+    def test_richer_posts_keep_room_for_detail_without_changing_the_two_paragraph_contract(self):
+        paragraph = "cache earlier tokens " * 40
+        valid, reason = LAMBDA.validate_generated_post(
+            {"title": "How a KV Cache Reuses Earlier Tokens", "body": f"{paragraph.strip()}\n\n{paragraph.strip()}"},
+            "Artificial Intelligence", "how a KV cache avoids recomputing earlier tokens", [],
+        )
+        self.assertTrue(valid, reason)
+
     def test_quality_gate_rejects_generic_title(self):
         paragraph = " ".join(["specific"] * 80)
         valid, reason = LAMBDA.validate_generated_post(
@@ -237,11 +300,23 @@ class ContentCatalogTests(unittest.TestCase):
         self.assertFalse(valid)
         self.assertEqual(reason, "title was generic")
 
+    def test_simple_titles_cannot_promise_unlimited_or_guaranteed_results(self):
+        paragraph = " ".join(["specific"] * 80)
+        for title in ("How a Model Learns Once and Answers Forever", "How Model Training Gives Guaranteed Results"):
+            valid, reason = LAMBDA.validate_generated_post(
+                {"title": title, "body": f"{paragraph}\n\n{paragraph}"},
+                "Artificial Intelligence", "why training changes model weights", [],
+            )
+            self.assertFalse(valid)
+            self.assertEqual(reason, "title promised an unsupported absolute")
+
     def test_detailed_explanation_requires_the_complete_learning_structure(self):
         generated = self.complete_explanation()
         captured = {}
 
         def fake_bedrock(prompt, **kwargs):
+            if kwargs.get("max_tokens") == 450:
+                return '{"accurate":true,"issues":[]}'
             captured["prompt"] = prompt
             captured["options"] = kwargs
             return generated
@@ -266,6 +341,8 @@ class ContentCatalogTests(unittest.TestCase):
         self.assertIn("hypothetical", captured["prompt"])
         self.assertTrue(captured["options"]["require_complete"])
         self.assertEqual(captured["options"]["max_tokens"], 2800)
+        self.assertIn('EXACTLY FOUR chapters', captured['options']['system_prompt'])
+        self.assertIn('NOT an authoritative reference', captured['options']['system_prompt'])
 
     def test_missing_or_empty_sections_are_not_saved_as_complete_guides(self):
         complete = self.complete_explanation()
@@ -282,13 +359,22 @@ class ContentCatalogTests(unittest.TestCase):
             result["stopReason"] = "end_turn"
             self.assertTrue(LAMBDA.is_complete_detailed_explanation(LAMBDA.call_bedrock_text("Teach", require_complete=True)))
 
+    def test_teacher_instructions_are_sent_in_the_system_role(self):
+        result = {"output": {"message": {"content": [{"text": "An answer."}]}}, "stopReason": "end_turn"}
+        with mock.patch.object(LAMBDA.bedrock, 'converse', return_value=result, create=True) as converse:
+            LAMBDA.call_bedrock_text('Source data', system_prompt='Correct false premises.')
+            self.assertEqual(converse.call_args.kwargs['system'], [{'text': 'Correct false premises.'}])
+            self.assertEqual(converse.call_args.kwargs['messages'][0]['content'][0]['text'], 'Source data')
+            LAMBDA.call_bedrock_text('Ordinary answer')
+            self.assertNotIn('system', converse.call_args.kwargs)
+
     def test_rejected_lesson_does_not_get_saved_as_an_outline(self):
         with mock.patch.object(LAMBDA, "call_bedrock_text", return_value="## A short outline\nOne sentence."):
             self.assertEqual(LAMBDA.generate_detailed_explanation("A mechanism", "Source"), "")
 
     def test_old_version_cache_is_not_reused(self):
-        self.assertEqual(LAMBDA.EXPLANATION_SCHEMA_VERSION, 5)
-        self.assertTrue(LAMBDA.explanation_cache_id("post-1", "hash").startswith("post#v5#"))
+        self.assertEqual(LAMBDA.EXPLANATION_SCHEMA_VERSION, 7)
+        self.assertTrue(LAMBDA.explanation_cache_id("post-1", "hash").startswith("post#v7#"))
 
     def test_saved_explanation_is_reused_without_a_second_model_call(self):
         class MemoryTable:

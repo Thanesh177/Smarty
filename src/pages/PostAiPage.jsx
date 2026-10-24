@@ -1,18 +1,14 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  BookOpen,
   BrainCircuit,
   ChevronRight,
-  CircleHelp,
   Layers3,
   LockKeyhole,
   MessageCircle,
   Network,
-  Send,
-  Workflow,
   X,
 } from 'lucide-react';
 import { postApi } from '../api/client';
@@ -75,14 +71,6 @@ const renderFormattedParagraphs = (value, className = 'post-ai-paragraphs') => {
   );
 };
 
-const PostAiMessage = memo(function PostAiMessage({ message }) {
-  return (
-    <div className={message.role === 'user' ? 'post-ai-msg mine' : 'post-ai-msg'}>
-      {renderFormattedParagraphs(message.text, 'post-ai-message-paragraphs')}
-    </div>
-  );
-});
-
 export default function PostAiPage() {
   const { postId } = useParams();
   const { user } = useAuth();
@@ -96,12 +84,10 @@ function PostStudyRoom() {
   const location = useLocation();
   const navigate = useNavigate();
   const mountedRef = useRef(true);
-  const askLockRef = useRef(false);
   const detailRequestsRef = useRef(null);
   if (!detailRequestsRef.current) detailRequestsRef.current = createRequestCache({ maxEntries: 1 });
-  const messagesRef = useRef(null);
   const premiumCloseRef = useRef(null);
-  const { user, loading: authLoading } = useAuth();
+  const { loading: authLoading } = useAuth();
 
   const postFromState = useMemo(() => getLearningGuide(postId) || location.state?.post || null, [location.state, postId]);
   const [post, setPost] = useState(postFromState);
@@ -109,9 +95,6 @@ function PostStudyRoom() {
   const [explanation, setExplanation] = useState(() => getUsableDetailedExplanation(postFromState));
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
-  const [question, setQuestion] = useState('');
-  const [asking, setAsking] = useState(false);
-  const [messages, setMessages] = useState([]);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [deepPreviewOpen, setDeepPreviewOpen] = useState(false);
   const [premiumDialogOpen, setPremiumDialogOpen] = useState(false);
@@ -119,11 +102,6 @@ function PostStudyRoom() {
     cached: Boolean(getUsableDetailedExplanation(postFromState)),
     persisted: Boolean(getUsableDetailedExplanation(postFromState)),
   }));
-
-  const userId = useMemo(
-    () => user?.sub || user?.userId || user?.id || user?.username || '',
-    [user]
-  );
 
   const title = useMemo(() => post?.title || 'Post explanation', [post]);
   const body = useMemo(() => post?.body || '', [post]);
@@ -139,7 +117,7 @@ function PostStudyRoom() {
     const lowerMessage = String(message).toLowerCase();
 
     if (statusCode === 401) {
-      return 'Sign in to use the full learning guide and ask follow-up questions.';
+      return 'Sign in to use the full learning guide.';
     }
 
     if (
@@ -172,17 +150,6 @@ function PostStudyRoom() {
   }, [body, displayExplanation]);
   const lessonJumps = useMemo(() => readingLessonSections(displayExplanation)
     .filter((section) => section.heading).slice(0, 5), [displayExplanation]);
-  const suggestedQuestions = useMemo(() => [
-    { label: 'Start with the basics', question: `Teach the prerequisites for ${topicLabel} using the source lesson. Define essential terms, then connect them to this mechanism.` },
-    { label: 'Show each step', question: `Explain ${topicLabel} as a cause-and-effect sequence. Explain why each step leads to the next, and distinguish assumptions from facts.` },
-    { label: 'Work through an example', question: `Give one worked example of ${topicLabel}. Walk through it, then ask me to predict what changes if one input changes. Do not give the prediction answer yet.` },
-    { label: 'Clear up a misconception', question: `Explain one common misunderstanding of ${topicLabel} and a boundary where this explanation stops applying. Identify anything not supported by the source.` },
-    { label: 'Connect the next idea', question: `Which specific concept is useful after ${topicLabel}? Explain the link, the prerequisite, and a question to explore next. Stay in the same subject.` },
-    ...(!post?.isLearningGuide ? [
-      { label: 'Explain the difficult words', question: `Which technical words or concepts in ${topicLabel} could confuse a newcomer? Define them in plain language, explain the prerequisite behind each, and show their role in this exact subject. Do not just repeat the post.` },
-      { label: 'How did this come to be?', question: `Explain the background and causes of ${topicLabel}: what conditions or problem led to it, and why? Separate established background from uncertain origins; do not invent dates, people, or current developments.` },
-    ] : []),
-  ], [topicLabel, post?.isLearningGuide]);
   const deepDiveSteps = useMemo(() => [
     {
       label: 'Mechanism',
@@ -200,16 +167,6 @@ function PostStudyRoom() {
       text: 'Work through adaptive examples and harder questions that respond to your progress.',
     },
   ], [topicLabel]);
-
-  const renderedMessages = useMemo(
-    () => messages.map((message, index) => (
-      <PostAiMessage
-        key={`${message.role || 'msg'}-${index}-${String(message.text || '').slice(0, 16)}`}
-        message={message}
-      />
-    )),
-    [messages]
-  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -235,15 +192,6 @@ function PostStudyRoom() {
       previouslyFocused?.focus?.();
     };
   }, [premiumDialogOpen]);
-
-  useEffect(() => {
-    const container = messagesRef.current;
-    if (!container) return;
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: messages.length > 1 ? 'smooth' : 'auto',
-    });
-  }, [asking, messages]);
 
   useEffect(() => {
     // Wait for account restoration before starting an authenticated guide
@@ -326,80 +274,6 @@ function PostStudyRoom() {
     return () => { cancelled = true; };
   }, [authLoading, loadAttempt, postId, postFromState, readableError]);
 
-  const askQuestion = useCallback(async (value) => {
-    const cleanQuestion = String(value || '').trim();
-    if (!cleanQuestion || askLockRef.current || cleanQuestion.length > 2000) return;
-    askLockRef.current = true;
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: 'user',
-        text: cleanQuestion,
-      },
-    ]);
-
-    setQuestion('');
-    setAsking(true);
-
-    try {
-      const guidePrompt = post?.isLearningGuide && suggestedQuestions.findIndex((item) => item.question === cleanQuestion);
-      if (typeof guidePrompt === 'number' && guidePrompt >= 0) {
-        const sectionIndex = [0, 1, 2, 3][guidePrompt];
-        const nextGuide = getLearningGuide(`smarty-guide-${post.nextGuides?.[0] || ''}`);
-        const answer = guidePrompt === 4
-          ? (nextGuide ? `Next, explore “${nextGuide.title}”. ${nextGuide.body} Open it in Your next connection above.` : `Continue with ${post.relatedTopics?.[0] || post.topic}. Use Your next connection above to choose a specific lesson.`)
-          : `${post.sections[sectionIndex][0]}: ${post.sections[sectionIndex][1]}`;
-        setMessages((prev) => [...prev, { role: 'ai', text: answer }]);
-        return;
-      }
-      const data = await postApi.askPostDoubt({
-        postId,
-        id: postId,
-        reelId: postId,
-        userId,
-        title,
-        body,
-        explanation: displayExplanation || getUsableDetailedExplanation(post),
-        question: cleanQuestion,
-      });
-
-      if (!mountedRef.current) return;
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'ai',
-          text:
-            data?.answer ||
-            data?.explanation ||
-            data?.text ||
-            'I could not answer that right now.',
-        },
-      ]);
-    } catch (err) {
-      console.error('Ask doubt failed:', err);
-
-      if (mountedRef.current) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'ai',
-            text: readableError(err, 'Sorry, I could not answer that right now.'),
-          },
-        ]);
-      }
-    } finally {
-      askLockRef.current = false;
-      if (mountedRef.current) setAsking(false);
-    }
-  }, [asking, body, displayExplanation, post, postId, readableError, suggestedQuestions, title, userId]);
-
-  const askDoubt = useCallback((event) => {
-    event.preventDefault();
-    askQuestion(question);
-  }, [askQuestion, question]);
-
   const goBack = useCallback(() => {
     const savedScrollY = location.state?.scrollY;
 
@@ -409,17 +283,6 @@ function PostStudyRoom() {
 
     navigate(-1);
   }, [location.state, navigate]);
-
-  const handleQuestionChange = useCallback((event) => {
-    setQuestion(event.target.value);
-  }, []);
-
-  const handleQuestionKeyDown = useCallback((event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      askQuestion(question);
-    }
-  }, [askQuestion, question]);
 
   return (
     <main ref={pageRef} className="post-ai-page is-reading-layout">
@@ -604,73 +467,6 @@ function PostStudyRoom() {
           />
         </div>
 
-        <section className="post-ai-chat" aria-labelledby="post-ai-chat-title">
-          <div className="post-ai-chat-head">
-            <div className="post-ai-section-head">
-              <span className="post-ai-section-icon" aria-hidden="true">
-                <CircleHelp size={18} />
-              </span>
-              <div>
-                <span className="post-ai-section-kicker">Continue learning</span>
-                <h2 id="post-ai-chat-title">Ask what the post leaves open</h2>
-              </div>
-            </div>
-            <p>Choose how you want to learn, or ask in your own words. AI explanations can make mistakes; compare important details with the source.</p>
-          </div>
-
-          {messages.length === 0 && (
-            <div className="post-ai-prompts" aria-label="Suggested questions">
-              {suggestedQuestions.map((suggestion, index) => (
-                <button
-                  type="button"
-                  key={suggestion.label}
-                  onClick={() => askQuestion(suggestion.question)}
-                  disabled={asking}
-                >
-                  <span>{String(index + 1).padStart(2, '0')}</span>
-                  {suggestion.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div
-            className="post-ai-messages"
-            ref={messagesRef}
-            aria-live="polite"
-            aria-busy={asking}
-          >
-            {messages.length === 0 && (
-              <p className="post-ai-empty">Your follow-up conversation will appear here.</p>
-            )}
-            {renderedMessages}
-            {asking && (
-              <div className="post-ai-thinking" role="status">
-                <i /><i /><i />
-                Thinking through the lesson
-              </div>
-            )}
-          </div>
-
-          <form className="post-ai-form" onSubmit={askDoubt}>
-            <textarea
-              rows="1"
-              value={question}
-              maxLength={2000}
-              onChange={handleQuestionChange}
-              onKeyDown={handleQuestionKeyDown}
-              placeholder="Ask about a mechanism, term, or example…"
-              disabled={asking}
-              aria-label="Ask a follow-up question"
-            />
-
-            <button type="submit" disabled={asking || !question.trim()} aria-label="Send question">
-              <Send size={17} aria-hidden="true" />
-              <span>Ask</span>
-            </button>
-          </form>
-          <small className="post-ai-input-hint">Enter to ask · Shift + Enter for a new line</small>
-        </section>
       </section>
 
       {premiumDialogOpen && createPortal(

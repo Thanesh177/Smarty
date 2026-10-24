@@ -814,11 +814,12 @@ module "scheduler" {
       target_arn                   = "arn:aws:lambda:us-east-1:147179611217:function:AIcontent"
       role_arn                     = "arn:aws:iam::147179611217:role/service-role/Smarty_Daily_Content"
       flexible_window_minutes      = 0
-      input = jsonencode({
-        source        = "smarty.learning.schedule"
-        scheduledTime = "<aws.scheduler.scheduled-time>"
-        scheduleArn   = "<aws.scheduler.schedule-arn>"
-      })
+      maximum_event_age_in_seconds = 3600
+      maximum_retry_attempts       = 3
+      // Keep context placeholders literal; jsonencode escapes their brackets.
+      input = <<-JSON
+        {"source":"smarty.learning.schedule","scheduledTime":"<aws.scheduler.scheduled-time>","scheduleArn":"<aws.scheduler.schedule-arn>"}
+      JSON
     }
 
     Daily_remainder = {
@@ -828,6 +829,14 @@ module "scheduler" {
       role_arn                     = "arn:aws:iam::147179611217:role/service-role/Amazon_EventBridge_Scheduler_LAMBDA_ecb6730e17"
     }
   }
+}
+
+// Scheduler retries delivery failures; Lambda retries execution failures.
+// Both retain the scheduled timestamp and reuse the same saved publication.
+resource "aws_lambda_function_event_invoke_config" "learning_publication" {
+  function_name                = "AIcontent"
+  maximum_event_age_in_seconds = 3600
+  maximum_retry_attempts       = 2
 }
 
 module "cloudfront" {

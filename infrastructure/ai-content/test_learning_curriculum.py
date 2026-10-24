@@ -25,7 +25,7 @@ class LearningCurriculumTests(unittest.TestCase):
         self.stack.enter_context(mock.patch.object(LAMBDA, "paginated_scan_recent_posts", return_value=[]))
         self.stack.enter_context(mock.patch.object(LAMBDA, "fetch_pexels_image", return_value=None))
         self.stack.enter_context(mock.patch.object(LAMBDA, "get_cached_image", return_value="default/tech.jpg"))
-        self.stack.enter_context(mock.patch.object(LAMBDA, "generate_detailed_explanation", return_value=""))
+        self.details = self.stack.enter_context(mock.patch.object(LAMBDA, "generate_detailed_explanation", return_value=quality.ContentCatalogTests.complete_explanation()))
         self.generate = self.stack.enter_context(mock.patch.object(LAMBDA, "generate_specific_post", return_value={
             "title": "How model training changes the weights used for inference",
             "body": "A specific model mechanism.\n\nA concrete example with a constraint.",
@@ -105,6 +105,119 @@ class LearningCurriculumTests(unittest.TestCase):
             with self.assertRaises(RuntimeError): self.publish("failed-write")
         self.assertEqual(LAMBDA.read_learning_path_state("Artificial Intelligence")["nextIndex"], 0)
 
+    def test_empty_or_incomplete_lesson_is_not_published_or_advanced(self):
+        for lesson in ('', 'A short incomplete outline.'):
+            self.details.return_value = lesson
+            with self.assertRaisesRegex(RuntimeError, 'remains unpublished'):
+                self.publish('not-ready')
+        self.assertEqual(self.posts.items, {})
+        self.assertEqual(LAMBDA.read_learning_path_state('Artificial Intelligence')['nextIndex'], 0)
+        self.assertEqual(self.generate.call_count, 1)
+
+    def test_failed_lesson_retries_saved_source_instead_of_generating_another_post(self):
+        self.details.return_value = ''
+        with self.assertRaises(RuntimeError):
+            self.publish('retry-lesson')
+        self.generate.reset_mock()
+        self.details.return_value = quality.ContentCatalogTests.complete_explanation()
+        post = self.publish('retry-lesson')['post']
+        self.assertEqual(post['learningOrder'], 1)
+        self.assertTrue(post['aiDetailedExplanation'])
+        self.generate.assert_not_called()
+
+    def test_shared_lesson_saved_before_post_becomes_visible(self):
+        write = self.posts.put_item
+        def verify_ready(Item, **kwargs):
+            source_hash = LAMBDA.explanation_source_hash(Item)
+            self.assertEqual(LAMBDA.read_explanation_cache(Item['id'], source_hash, Item['body']), Item['aiDetailedExplanation'])
+            self.assertEqual(Item['aiDetailedExplanationReviewVersion'], LAMBDA.EXPLANATION_REVIEW_VERSION)
+            return write(Item=Item, **kwargs)
+        with mock.patch.object(self.posts, 'put_item', side_effect=verify_ready):
+            self.publish('ready-before-visible')
+
+    def test_failed_feed_write_reuses_source_and_completed_lesson_on_retry(self):
+        with mock.patch.object(self.posts, 'put_item', side_effect=RuntimeError('feed unavailable')):
+            with self.assertRaises(RuntimeError):
+                self.publish('retry-feed-write')
+        post = self.publish('retry-feed-write')['post']
+        self.assertEqual(self.generate.call_count, 1)
+        self.assertEqual(self.details.call_count, 1)
+        self.assertEqual(post['aiDetailedExplanation'], quality.ContentCatalogTests.complete_explanation())
+
+    def test_shared_cache_failure_prevents_publication(self):
+        with mock.patch.object(LAMBDA, 'cache_post_explanation', side_effect=RuntimeError('cache unavailable')):
+            with self.assertRaises(RuntimeError):
+                self.publish('failed-cache-write')
+        self.assertEqual(self.posts.items, {})
+        self.assertEqual(LAMBDA.read_learning_path_state('Artificial Intelligence')['nextIndex'], 0)
+
+    def test_near_timeout_saves_source_and_defers_lesson_until_next_invocation(self):
+        context = mock.Mock()
+        context.get_remaining_time_in_millis.return_value = 60000
+        with self.assertRaisesRegex(RuntimeError, 'draft saved'):
+            LAMBDA.create_post(publication_id='deferred', context=context)
+        self.details.assert_not_called()
+        self.assertEqual(self.posts.items, {})
+        context.get_remaining_time_in_millis.return_value = 180000
+        LAMBDA.create_post(publication_id='deferred', context=context)
+        self.assertEqual(self.generate.call_count, 1)
+        self.assertEqual(self.details.call_count, 1)
+
+    def test_draft_database_failure_does_not_call_the_lesson_model(self):
+        write = self.progress.put_item
+        def fail_draft(Item, **kwargs):
+            if Item.get('entryType') == 'learningDraft':
+                raise RuntimeError('draft write unavailable')
+            return write(Item=Item, **kwargs)
+        with mock.patch.object(self.progress, 'put_item', side_effect=fail_draft):
+            with self.assertRaises(RuntimeError):
+                self.publish('failed-draft-storage')
+        self.details.assert_not_called()
+        self.assertEqual(self.posts.items, {})
+
+    def test_expired_draft_is_not_reused(self):
+        self.details.return_value = ''
+        with self.assertRaises(RuntimeError):
+            self.publish('expired-draft')
+        draft = next(item for item in self.progress.items.values() if item.get('entryType') == 'learningDraft')
+        draft['expiresAt'] = 1
+        self.details.return_value = quality.ContentCatalogTests.complete_explanation()
+        self.publish('expired-draft')
+        self.assertEqual(self.generate.call_count, 2)
+
+    def test_readers_reuse_the_prepared_lesson_without_a_model_call(self):
+        post = self.publish('prepared-for-readers')['post']
+        self.details.reset_mock()
+        with mock.patch.object(LAMBDA, 'call_bedrock_text') as model:
+            first = LAMBDA.ensure_post_explanation(post['id'], post)
+            second = LAMBDA.ensure_post_explanation(post['id'], post)
+        self.assertEqual(first, (post['aiDetailedExplanation'], True, True))
+        self.assertEqual(second, first)
+        self.details.assert_not_called()
+        model.assert_not_called()
+
+    def test_pending_lesson_model_upgrade_reuses_source_but_not_old_model_cache(self):
+        with mock.patch.object(self.posts, 'put_item', side_effect=RuntimeError('feed unavailable')):
+            with self.assertRaises(RuntimeError):
+                self.publish('upgrade-pending')
+        with mock.patch.object(LAMBDA, 'DETAILS_MODEL_ID', 'test-upgraded-lesson-model'):
+            post = self.publish('upgrade-pending')['post']
+        self.assertEqual(self.generate.call_count, 1)
+        self.assertEqual(self.details.call_count, 2)
+        self.assertEqual(post['aiDetailedExplanationModelId'], 'test-upgraded-lesson-model')
+
+    def test_outdated_current_report_draft_is_refreshed_before_publication(self):
+        self.generate.return_value.update(editorialMode='current', sourceEvidence={
+            'mode': 'current', 'sources': [{'publishedAt': 1}],
+        })
+        self.details.return_value = ''
+        with self.assertRaises(RuntimeError):
+            self.publish('stale-report')
+        self.details.return_value = quality.ContentCatalogTests.complete_explanation()
+        self.generate.return_value.update(editorialMode='concept', sourceEvidence={})
+        self.publish('stale-report')
+        self.assertEqual(self.generate.call_count, 2)
+
     def test_busy_path_does_not_generate_a_concurrent_step(self):
         with LAMBDA.generation_lease(self.progress, "explanationId", LAMBDA.learning_path_id("Artificial Intelligence")):
             with self.assertRaises(LAMBDA.GenerationBusy): self.publish("busy-slot")
@@ -168,10 +281,10 @@ class LearningCurriculumTests(unittest.TestCase):
         self.assertIn('"stage": "advanced"', prompt)
         self.assertIn(target["prerequisiteSubject"], prompt)
         self.assertIn("test assumptions and edge cases", prompt)
-        with mock.patch.object(LAMBDA, "call_bedrock_text", return_value=quality.ContentCatalogTests.complete_explanation()) as details:
+        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[quality.ContentCatalogTests.complete_explanation(), '{"accurate":true,"issues":[]}']) as details:
             GENERATE_DETAILS("LoRA adapters", "Source", "Artificial Intelligence", target["subTopic"], learning_target=target)
-        self.assertIn('"stage": "advanced"', details.call_args.args[0])
-        self.assertIn(target["nextLearningSubject"], details.call_args.args[0])
+        self.assertIn('"stage": "advanced"', details.call_args_list[0].args[0])
+        self.assertIn(target["nextLearningSubject"], details.call_args_list[0].args[0])
 
     def test_generated_explanation_is_source_matched_in_post_before_cache_backfill(self):
         with mock.patch.object(LAMBDA, "generate_detailed_explanation", return_value=quality.ContentCatalogTests.complete_explanation()), mock.patch.object(LAMBDA, "persist_post_explanation"):

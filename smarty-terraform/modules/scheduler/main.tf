@@ -19,8 +19,8 @@ resource "aws_scheduler_schedule" "this" {
     input    = each.value.input
 
     retry_policy {
-      maximum_event_age_in_seconds = 86400
-      maximum_retry_attempts       = 0
+      maximum_event_age_in_seconds = each.value.maximum_event_age_in_seconds
+      maximum_retry_attempts       = each.value.maximum_retry_attempts
     }
   }
 

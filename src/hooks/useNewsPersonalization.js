@@ -25,6 +25,7 @@ export default function useNewsPersonalization({ poll = false } = {}) {
     if (state.data?.preferences && !readNewsPreference(account)) {
       const value = writeNewsPreference(account, state.data.preferences);
       setLocal({ account, value });
+      window.dispatchEvent(new CustomEvent('smarty-news-place-changed', { detail: account }));
     }
   }, [account, state.data?.preferences]);
   const savePreference = useCallback(async value => {

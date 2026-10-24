@@ -645,6 +645,74 @@ TOPIC_SUBTOPICS = {
 }
 
 
+# New paths leave the order and signatures of existing paths unchanged. Readers
+# do not lose curriculum progress when additional subjects join the rotation.
+TOPIC_SUBTOPICS.update({
+    "Cosmology": (
+        "how redshift relates distant galaxy spectra to cosmic expansion",
+        "how the cosmic microwave background records an early hot universe",
+        "why the observable universe is not the same as all that may exist",
+        "how gravitational lensing measures mass without relying on emitted light",
+        "why dark matter and dark energy describe different unresolved problems",
+    ),
+    "Zoology": (
+        "how octopus chromatophores change the color of the skin",
+        "how a bee waggle dance communicates a food source direction",
+        "how bat echolocation separates returning echoes from emitted calls",
+        "how countercurrent heat exchange reduces heat loss in bird legs",
+        "how metamorphosis reorganizes an insect body between life stages",
+    ),
+    "Botany": (
+        "how guard cells use water pressure to open and close stomata",
+        "how xylem carries water from roots to leaves through transpiration",
+        "how auxin distribution bends a growing shoot toward light",
+        "how chloroplast membranes turn light into usable chemical energy",
+        "how seed dormancy separates favorable germination conditions from brief rain",
+    ),
+    "Marine Biology": (
+        "how luciferase produces light in some marine organisms",
+        "how chemosynthetic microbes support food webs at deep sea vents",
+        "how fish gills use countercurrent flow to absorb dissolved oxygen",
+        "how daily vertical migration carries organic carbon deeper into the ocean",
+        "how sharks detect weak electric fields through specialized sensory organs",
+    ),
+    "Scientific Method": (
+        "how a control group separates an intervention from other changing conditions",
+        "how measurement uncertainty differs from variation between samples",
+        "why replication can distinguish a robust effect from a chance result",
+        "how blinding reduces expectation effects in an experiment",
+        "why a failed prediction can revise a scientific model without explaining everything",
+    ),
+    "Scientific Discoveries": (
+        "how bacterial growth patterns can reveal an antibiotic effect",
+        "how spectral lines reveal the presence of an element in a star",
+        "how interference patterns reveal wave behavior in a controlled experiment",
+        "how transit measurements reveal a planet passing across a distant star",
+        "how radioactive decay measurements distinguish isotopes with different half lives",
+    ),
+    "Scientific Mysteries": (
+        "why galaxy rotation measurements motivate hypotheses about unseen mass",
+        "how competing hypotheses approach the origin of life without a settled answer",
+        "why measuring sleep functions does not settle every question about dreaming",
+        "how ocean exploration separates unobserved habitats from claims about unknown species",
+        "why the search for extraterrestrial life distinguishes evidence from possibility",
+    ),
+    "Education": (
+        "how spaced retrieval strengthens recall more than repeated rereading",
+        "how a worked example reduces the mental load of learning a new procedure",
+        "how feedback can distinguish a mistaken rule from a calculation mistake",
+        "why mixing related problem types can improve choosing the right method",
+        "how a learner explains a concept to reveal gaps hidden by familiar wording",
+    ),
+    "Literature": (
+        "how an unreliable narrator separates a character account from story evidence",
+        "how dramatic irony gives a reader information a character does not have",
+        "how a recurring motif links distant scenes without stating a theme directly",
+        "how free indirect discourse blends narrator language with a character viewpoint",
+        "how changing narrative time alters the interpretation of a story event",
+    ),
+})
+
 # Rotate between these domains before returning to a similar area. The topic
 # catalog remains the source of truth; this grouping only controls variety.
 TOPIC_DOMAINS = {
@@ -679,6 +747,7 @@ TOPIC_DOMAINS = {
         "Mathematics",
         "Statistics",
         "Probability",
+        "Scientific Method", "Scientific Discoveries", "Scientific Mysteries",
     ),
     "Life science": (
         "Biology",
@@ -687,6 +756,7 @@ TOPIC_DOMAINS = {
         "Human Body",
         "Immunology",
         "Microbiology",
+        "Zoology", "Botany", "Marine Biology",
     ),
     "Earth and space": (
         "Astronomy",
@@ -698,6 +768,7 @@ TOPIC_DOMAINS = {
         "Climate Change",
         "Ecology",
         "Environment",
+        "Cosmology",
     ),
     "Mind, learning, and health": (
         "Psychology",
@@ -710,6 +781,7 @@ TOPIC_DOMAINS = {
         "Fitness",
         "Health",
         "Mental Health",
+        "Education",
     ),
     "Money and enterprise": (
         "Finance",
@@ -759,6 +831,7 @@ TOPIC_DOMAINS = {
         "Photography",
         "Filmmaking",
         "Product Design",
+        "Literature",
     ),
 }
 
@@ -931,6 +1004,18 @@ TOPIC_PATH_BOOKENDS = {
     "Filmmaking": ("how shot size and camera position guide a viewer's attention", "how editing continuity and frame-rate choices change the perception of a scene"),
     "Product Design": ("how a user's goal differs from the interface control used to reach it", "how progressive disclosure and error prevention trade simplicity for discoverability"),
 }
+
+TOPIC_PATH_BOOKENDS.update({
+    "Cosmology": ("how observations separate a model of the universe from an unsupported story", "how expansion and lensing constrain cosmic models while leaving open questions"),
+    "Zoology": ("how animal body structures solve different survival and movement problems", "how sensory specialization and energy costs constrain an animal adaptation"),
+    "Botany": ("how roots stems and leaves exchange water gases and sugars", "how water transport and light availability constrain plant growth"),
+    "Marine Biology": ("how light depth and dissolved oxygen change a marine habitat", "how microbial production and animal migration connect deep ocean food webs"),
+    "Scientific Method": ("how an observation becomes a testable question about a natural phenomenon", "how confounding measurement uncertainty and replication limit a causal conclusion"),
+    "Scientific Discoveries": ("how a repeatable measurement can reveal a previously unnoticed natural pattern", "how independent measurements strengthen a discovery while preserving its limits"),
+    "Scientific Mysteries": ("how an unanswered scientific question differs from an unsupported explanation", "how competing hypotheses become distinguishable through a specific observation"),
+    "Education": ("how attention practice and feedback play different roles in learning", "how retrieval feedback and transfer reveal whether learning survives a new context"),
+    "Literature": ("how a narrator viewpoint shapes which story details a reader receives", "how narrative voice and structure change an interpretation without changing story events"),
+})
 
 LEVEL_INSTRUCTIONS = {
     "foundation": "Assume no prior study. Define every necessary term in place, use one familiar example, and teach a single causal chain without unexplained notation.",

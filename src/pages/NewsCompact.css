@@ -126,7 +126,7 @@
 .app-shell .content .news-page.news-compact .news-actions button[aria-pressed='true'] { color: var(--ui-accent); }
 
 /* News in the feed uses the same spacing and readable, uncompressed copy. */
-.app-shell .content .news-page.news-compact .news-feed-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 340px) auto; align-items: center; gap: 16px 24px; margin: 0 0 20px; padding: 0; border: 0; }
+.app-shell .content .news-page.news-compact .news-feed-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px 24px; margin: 0 0 20px; padding: 0; border: 0; }
 .app-shell .content .news-page.news-compact .news-feed-heading { display: grid; min-width: 0; gap: 6px !important; }
 .app-shell .content .news-page.news-compact .news-feed-heading .news-kicker { font-size: 11px; letter-spacing: .08em; }
 .app-shell .content .news-page.news-compact .news-feed-heading strong { color: var(--ui-muted); font-size: 12px; font-weight: 400; }
@@ -143,12 +143,15 @@
 .app-shell .content .news-page.news-compact .news-topic-tabs { margin: 24px 0; }
 .app-shell .content .news-page.news-compact .news-summary-feed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 24px; }
 .app-shell .content .news-page.news-compact .news-summary-post { padding: clamp(20px, 2.5vw, 32px); border-radius: 12px; background: #ffffff02; }
+.app-shell .content .news-page.news-compact .news-summary-post:only-child { grid-column: 1 / -1; }
 .app-shell .content .news-page.news-compact .news-summary-post header { gap: 14px; padding-bottom: 20px; }
 .app-shell .content .news-page.news-compact .news-summary-post h3 { font-size: 19px; }
 .app-shell .content .news-page.news-compact .news-summary-post-copy { margin: 24px 0; }
 .app-shell .content .news-page.news-compact .news-summary-post-copy p { font-size: 16px; line-height: 1.85; }
-.app-shell .content .news-page.news-compact .news-summary-context { padding-top: 20px; gap: 20px; }
-.app-shell .content .news-page.news-compact .news-summary-context dd { font-size: 14px; line-height: 1.8; }
+.app-shell .content .news-page.news-compact .news-summary-context { padding-top: 20px; gap: 12px; }
+.app-shell .content .news-page.news-compact .news-summary-context h4 { margin: 0; color: var(--ui-accent); font-size: 12px; line-height: 1.5; font-weight: 500; }
+.app-shell .content .news-page.news-compact .news-summary-context p { margin: 0; color: var(--ui-secondary); font-size: 14px; line-height: 1.8; }
+.app-shell .content .news-page.news-compact.news-comfortable-text .news-summary-context p { font-size: 18px; line-height: 1.9; }
 .app-shell .content .news-page.news-compact .news-summary-end { gap: 16px; margin-top: 28px; padding-block: 24px; }
 .app-shell .content .news-page.news-compact .news-summary-end p { font-size: 12px; }
 .app-shell .content .news-page.news-compact .news-reading-tools { display: flex; flex-direction: row; gap: 12px; }

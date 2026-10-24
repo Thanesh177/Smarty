@@ -63,11 +63,20 @@ def historical_sources(subject, now):
     anchor = max(names, key=len) if names else ""
     # Introductory history lessons have a central concept rather than an event
     # name. Search that concept instead of AND-ing a whole causal question.
+    concept_anchor = False
     if not anchor:
         concepts = ("primary source", "trade route", "irrigation", "land tenure", "chartered company", "standardized time", "cuneiform", "logistics", "ledger", "treaty", "frontier", "monsoon")
         anchor = next((term for term in concepts if term in subject.lower()), "")
+        concept_anchor = bool(anchor)
     query = 'intitle:"' + anchor + '"' if anchor else " ".join(terms[:10])
     params = {"action": "query", "format": "json", "formatversion": "2", "generator": "search", "gsrsearch": query, "gsrnamespace": "0", "gsrlimit": "2", "prop": "extracts|info", "explaintext": "1", "exintro": "1", "exchars": "1200", "exlimit": "2", "inprop": "url"}
+    if concept_anchor:
+        # Search ranking can omit the exact concept ("trade route" returned
+        # narrower routes), so resolve the foundation article directly. Keep
+        # the same excerpt, relevance, host and factual-review requirements.
+        for key in ("generator", "gsrsearch", "gsrnamespace", "gsrlimit"):
+            params.pop(key)
+        params.update({"titles": anchor, "redirects": "1"})
     data = json.loads(download("https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode(params)))
     sources = []
     for page in data.get("query", {}).get("pages", []):

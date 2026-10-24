@@ -28,6 +28,7 @@ import ReminderPopup from './components/ReminderPopup';
 import useDailyReminder from './hooks/useDailyReminder';
 import useNativePush from './hooks/useNativePush';
 import useNewsPushPreferences from './hooks/useNewsPushPreferences';
+import useBriefingPreload from './hooks/useBriefingPreload';
 import { nativeNotificationRequest, supportsNativeReminders } from './lib/nativeNotifications';
 import { ActionConfirmationProvider } from './components/ActionConfirmation';
 import {
@@ -364,6 +365,7 @@ function Layout() {
   const isAllPosts = location.pathname === '/feed' && new URLSearchParams(location.search).get('topic') === 'All';
   const feedView = getFeedView(location);
   const showNavigationRail = !isAuthPage && feedView !== 'video';
+  useBriefingPreload(String(user?.sub || user?.userId || user?.id || ''), authLoading, !isAuthPage);
 
   const openUniversalSearch = useCallback(() => {
     if (isAuthPage) return;

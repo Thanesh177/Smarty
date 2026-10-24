@@ -43,9 +43,27 @@ class SourceRetrievalTests(unittest.TestCase):
         with mock.patch.object(sources, "download", return_value=json.dumps(data).encode()) as download:
             result = sources.historical_sources("how a primary source differs from a later interpretation of an event", 100)
         self.assertEqual(len(result), 1)
-        self.assertIn('intitle%3A%22primary+source%22', download.call_args.args[0])
+        self.assertIn('titles=primary+source', download.call_args.args[0])
+        self.assertNotIn('generator=search', download.call_args.args[0])
         self.assertIn('exintro=1', download.call_args.args[0])
         self.assertIn('exchars=1200', download.call_args.args[0])
+
+    def test_trade_route_resolves_the_foundation_not_search_ranked_routes(self):
+        data = {"query": {"pages": [{"pageid": 7, "title": "Trade route",
+                "fullurl": "https://en.wikipedia.org/wiki/Trade_route",
+                "extract": "Trade routes connect goods and people across regions. " * 20}]}}
+        with mock.patch.object(sources, "download", return_value=json.dumps(data).encode()) as download:
+            result = sources.historical_sources("how a trade route connects goods, people, and ideas across regions", 100)
+        self.assertEqual([item["id"] for item in result], ["history-7"])
+        self.assertIn('titles=trade+route', download.call_args.args[0])
+        self.assertIn('redirects=1', download.call_args.args[0])
+
+    def test_exact_concept_still_rejects_missing_or_unrelated_articles(self):
+        data = {"query": {"pages": [{"title": "trade route", "missing": True},
+                {"pageid": 8, "title": "Sea lane", "fullurl": "https://en.wikipedia.org/wiki/Sea_lane",
+                 "extract": "Trade routes connect goods and people across regions. " * 20}]}}
+        with mock.patch.object(sources, "download", return_value=json.dumps(data).encode()):
+            self.assertEqual(sources.historical_sources("how a trade route connects goods and people", 100), [])
 
     def test_bad_links_empty_excerpts_and_unrelated_history_are_rejected(self):
         pages = [{"pageid": 1, "title": "Suez Canal", "fullurl": "https://evil.example/canal", "extract": "canal shipping " * 100},
@@ -125,11 +143,17 @@ class EditorialPublicationTests(unittest.TestCase):
 
     def test_missing_recent_reports_fall_back_to_a_concept_not_invented_news(self):
         draft = {**self.candidate(), "sourceIds": []}
-        with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "current", "sources": []}), mock.patch.object(LAMBDA, "call_bedrock_text", return_value=json.dumps(draft)):
+        with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "current", "sources": []}), mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(draft), '{"accurate":true,"issues":[]}']):
             post = LAMBDA.generate_specific_post("Engineering", "how the Suez Canal changed shipping trade", LAMBDA.resolve_content_angle("current_connection"), [])
         self.assertEqual(post["editorialMode"], "concept")
         self.assertEqual(post["contentAngle"], "mechanism")
         self.assertEqual(post["sources"], [])
+
+    def test_conceptual_error_stops_publication(self):
+        draft = {**self.candidate(), "sourceIds": []}
+        with (mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
+              mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(draft), '{"accurate":false,"issues":["incorrect mechanism"]}'])):
+            self.assertIsNone(LAMBDA.generate_specific_post("Engineering", "how a canal changes shipping routes", LAMBDA.resolve_content_angle("mechanism"), []))
 
     def test_recent_report_is_retained_with_its_original_date(self):
         pack = evidence("current")

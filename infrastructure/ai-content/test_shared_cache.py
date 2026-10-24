@@ -46,6 +46,29 @@ class SharedCacheTests(unittest.TestCase):
         answer = next(v for v in self.doubts.items.values() if v.get("answer"))
         self.assertNotIn("userId", answer)
 
+    def test_questions_use_their_own_model_after_a_lesson_upgrade(self):
+        with (mock.patch.object(LAMBDA, "DETAILS_MODEL_ID", "us.anthropic.claude-sonnet-4-6"),
+              mock.patch.object(LAMBDA, "ANSWER_MODEL_ID", "us.amazon.nova-2-lite-v1:0"),
+              mock.patch.object(LAMBDA, "call_bedrock_text", return_value="Keys match queries.") as model):
+            self.ask("alice", "How do attention keys work?")
+        self.assertEqual(model.call_args.kwargs['model_id'], 'us.amazon.nova-2-lite-v1:0')
+        answer = next(v for v in self.doubts.items.values() if v.get('answer'))
+        self.assertEqual(answer['modelId'], 'us.amazon.nova-2-lite-v1:0')
+
+    def test_lesson_model_change_does_not_discard_inexpensive_saved_answers(self):
+        with mock.patch.object(LAMBDA, "call_bedrock_text", return_value="Keys match queries.") as model:
+            self.ask("alice", "How do attention keys work?")
+            with mock.patch.object(LAMBDA, "DETAILS_MODEL_ID", "test-upgraded-lesson-model"):
+                self.ask("bob", "How do attention keys work?")
+        self.assertEqual(model.call_count, 1)
+
+    def test_answer_model_change_invalidates_only_answer_cache_identity(self):
+        with mock.patch.object(LAMBDA, "call_bedrock_text", return_value="Keys match queries.") as model:
+            self.ask("alice", "How do attention keys work?")
+            with mock.patch.object(LAMBDA, "ANSWER_MODEL_ID", "test-new-answer-model"):
+                self.ask("bob", "How do attention keys work?")
+        self.assertEqual(model.call_count, 2)
+
     def test_personal_question_stays_per_user(self):
         with mock.patch.object(LAMBDA, "call_bedrock_text", return_value="An explanation.") as model:
             self.ask("alice", "Why is my model failing?")
@@ -63,7 +86,7 @@ class SharedCacheTests(unittest.TestCase):
     def test_teaching_version_invalidates_old_followup_answers(self):
         with mock.patch.object(LAMBDA, "call_bedrock_text", return_value="An explanation.") as model:
             self.ask("alice", "How do attention keys work?")
-            with mock.patch.object(LAMBDA, "EXPLANATION_SCHEMA_VERSION", 6):
+            with mock.patch.object(LAMBDA, "EXPLANATION_SCHEMA_VERSION", LAMBDA.EXPLANATION_SCHEMA_VERSION + 1):
                 self.ask("bob", "How do attention keys work?")
         self.assertEqual(model.call_count, 2)
 
@@ -125,11 +148,41 @@ class SharedCacheTests(unittest.TestCase):
             LAMBDA.ensure_post_explanation("p1", self.post)
         self.assertEqual(model.call_count, 1)
 
+    def test_inline_nova_lesson_upgrades_to_claude_once_on_backend_request(self):
+        lesson = quality.ContentCatalogTests.complete_explanation()
+        self.post.update(
+            aiDetailedExplanation=lesson,
+            aiDetailedExplanationVersion=LAMBDA.EXPLANATION_SCHEMA_VERSION,
+            aiDetailedExplanationSourceHash=LAMBDA.explanation_source_hash(self.post),
+            aiDetailedExplanationModelId='us.amazon.nova-2-lite-v1:0',
+        )
+        with mock.patch.object(LAMBDA, 'generate_detailed_explanation', return_value=lesson) as model:
+            first = LAMBDA.ensure_post_explanation('p1', self.post)
+            second = LAMBDA.ensure_post_explanation('p1', self.post)
+        self.assertEqual(first, (lesson, False, True))
+        self.assertEqual(second, (lesson, True, True))
+        self.assertEqual(model.call_count, 1)
+
+    def test_unreviewed_claude_cache_is_not_used_as_a_reviewed_lesson(self):
+        lesson = quality.ContentCatalogTests.complete_explanation()
+        source_hash = LAMBDA.explanation_source_hash(self.post)
+        LAMBDA.persist_post_explanation('p1', self.post, lesson, source_hash)
+        record = self.explanations.items[LAMBDA.explanation_cache_id('p1', source_hash)]
+        record.pop('reviewVersion')
+        self.post.pop('aiDetailedExplanationReviewVersion', None)
+        self.assertEqual(LAMBDA.read_explanation_cache('p1', source_hash, self.post['body']), '')
+        with mock.patch.object(LAMBDA, 'generate_detailed_explanation', return_value=lesson) as model:
+            first = LAMBDA.ensure_post_explanation('p1', self.post)
+            second = LAMBDA.ensure_post_explanation('p1', self.post)
+        self.assertEqual(first, (lesson, False, True))
+        self.assertEqual(second, (lesson, True, True))
+        self.assertEqual(model.call_count, 1)
+
     def test_old_teaching_format_upgrades_once_then_reuses_the_shared_lesson(self):
         explanation = quality.ContentCatalogTests.complete_explanation()
         self.post.update(
             aiDetailedExplanation=explanation,
-            aiDetailedExplanationVersion=4,
+            aiDetailedExplanationVersion=5,
             aiDetailedExplanationSourceHash=LAMBDA.explanation_source_hash(self.post),
             aiDetailedExplanationModelId=LAMBDA.DETAILS_MODEL_ID,
         )
@@ -144,6 +197,28 @@ class SharedCacheTests(unittest.TestCase):
         with mock.patch.object(LAMBDA, "generate_detailed_explanation", return_value=""), mock.patch.object(LAMBDA, "persist_post_explanation") as persist:
             self.assertEqual(LAMBDA.ensure_post_explanation("p1", self.post), ("", False, False))
         persist.assert_not_called()
+
+    def test_schema_upgrade_keeps_older_database_records(self):
+        source_hash = LAMBDA.explanation_source_hash(self.post)
+        old_key = LAMBDA.explanation_cache_id('p1', source_hash).replace('post#v7#', 'post#v5#')
+        old_record = {'explanationId': old_key, 'schemaVersion': 5, 'explanation': 'Earlier guide'}
+        self.explanations.items[old_key] = dict(old_record)
+        lesson = quality.ContentCatalogTests.complete_explanation()
+        with mock.patch.object(LAMBDA, 'generate_detailed_explanation', return_value=lesson) as model:
+            LAMBDA.ensure_post_explanation('p1', self.post)
+            LAMBDA.ensure_post_explanation('p1', self.post)
+        self.assertEqual(self.explanations.items[old_key], old_record)
+        self.assertEqual(model.call_count, 1)
+
+    def test_copied_current_version_cache_is_not_reused(self):
+        lesson = quality.ContentCatalogTests.complete_explanation()
+        self.post['body'] = lesson
+        source_hash = LAMBDA.explanation_source_hash(self.post)
+        LAMBDA.persist_post_explanation('p1', self.post, lesson, source_hash)
+        self.assertEqual(LAMBDA.read_explanation_cache('p1', source_hash, self.post['body']), '')
+        with mock.patch.object(LAMBDA, 'generate_detailed_explanation', return_value='') as model:
+            self.assertEqual(LAMBDA.ensure_post_explanation('p1', self.post), ('', False, False))
+        model.assert_called_once()
 
     def test_cache_read_failure_does_not_trigger_ai(self):
         with mock.patch.object(self.explanations, "get_item", side_effect=RuntimeError("db unavailable")), mock.patch.object(LAMBDA, "generate_detailed_explanation") as model:
