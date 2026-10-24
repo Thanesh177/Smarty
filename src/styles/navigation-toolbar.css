@@ -1,16 +1,23 @@
 /* Smarty rail: one compact vertical surface, floating above every page. */
+body .app-shell.has-overlay-navigation {
+  --app-rail-width: 56px;
+  --app-rail-layer: 32000;
+  --app-rail-right: max(12px, env(safe-area-inset-right));
+  --app-rail-bottom: max(12px, env(safe-area-inset-bottom));
+  --app-rail-scroll-room: calc(280px + env(safe-area-inset-bottom));
+}
 body .app-shell[inert] > .content { overflow: hidden !important; touch-action: none !important; }
 /* The rail does not reserve a header row or a sidebar in the page layout. */
 body .app-shell > .content {
-  width: 100%; max-width: none; margin-inline: 0;
+  width: 100% !important; max-width: none !important; min-width: 0; margin-inline: 0 !important;
   /* Page cards, sticky headers and animations cannot overtake the rail.
      Body-portaled confirmations/search remain above it for safe interaction. */
   position: relative; isolation: isolate; z-index: 0;
 }
 body .app-shell > .topbar.glass-topbar {
-  position: fixed !important; z-index: 32000 !important;
-  inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) auto !important;
-  width: 56px !important; max-width: 56px !important;
+  position: fixed !important; z-index: var(--app-rail-layer, 32000) !important;
+  inset: auto var(--app-rail-right, max(12px, env(safe-area-inset-right))) var(--app-rail-bottom, max(12px, env(safe-area-inset-bottom))) auto !important;
+  width: var(--app-rail-width, 56px) !important; max-width: var(--app-rail-width, 56px) !important;
   margin: 0 !important; padding: 0 !important; border: 1px solid #ffffff17 !important;
   border-radius: 16px !important; background: #111316f5 !important;
   box-shadow: 0 8px 28px #0006, inset 0 1px 0 #ffffff06 !important;
@@ -20,6 +27,27 @@ body .app-shell > .topbar.glass-topbar {
   opacity: 1 !important; visibility: visible !important; pointer-events: auto;
   flex: none; box-sizing: border-box;
 }
+
+/* One overlay contract for every route. Older screens reserved a right-hand
+   column inside their copy/list containers; the rail must not narrow them.
+   Small action-row clearances are deliberately retained for touch safety. */
+body .app-shell.has-overlay-navigation > .content :is(
+  .single-post-heading, .single-post-layout, .single-post-reading, .single-post-discussion,
+  .public-profile-header, .public-profile-tabs, .public-profile-collection, .public-profile-identity p,
+  .post-editor .composer-details, .creator-dashboard-page .community-toolbar,
+  .saved-page .saved-topic, .saved-page .saved-title-btn, .saved-page .saved-card-body > p,
+  .chat-page .chat-list
+) { padding-right: 0 !important; }
+body .app-shell.has-overlay-navigation > .content .single-post-page .learning-journey { margin-right: 0; }
+body .app-shell.has-overlay-navigation > .content .profile-page :is(.friend-results-list, .friend-search-row) { margin-right: 0 !important; }
+body .app-shell.has-overlay-navigation > .content .post-ai-page:not(.is-reading-layout) { padding-right: var(--ui-gutter) !important; }
+body .app-shell.has-overlay-navigation > .content .quiz-workspace > :is(.question-card, .result-card) { padding-right: clamp(20px, 4vw, 44px) !important; }
+/* Scroll the last item past the rail rather than reserving a permanent lane. */
+body .app-shell.has-overlay-navigation > .content :is(
+  .single-post-page, .public-profile-page, .saved-page.community-workspace,
+  .post-composer.post-editor, .post-ai-page.is-reading-layout, .learn-page,
+  .chat-page .chat-list
+) { padding-bottom: var(--app-rail-scroll-room) !important; }
 body .app-shell .topbar.glass-topbar .topbar-row { display: flex !important; flex-direction: column !important; gap: 0; }
 body .app-shell .topbar.glass-topbar .brand-actions {
   display: flex !important; flex-direction: column !important; align-items: center !important;

@@ -137,6 +137,7 @@ export default function NewsStoryPage() {
 
   return <section className="news-page news-story-page" aria-labelledby="story-title">
     <Link className="news-story-back" to={backTo}><ArrowLeft size={16} aria-hidden="true" /> Back to news</Link>
+    <div className="news-story-overview">
     <header className="news-story-hero">
       <span className="news-story-eyebrow"><History size={16} aria-hidden="true" /> Story timeline</span>
       <h1 id="story-title" tabIndex={-1} ref={heading}>{query ? query[0].toLocaleUpperCase() + query.slice(1) : 'Follow a story'}</h1>
@@ -158,6 +159,7 @@ export default function NewsStoryPage() {
       {status && <p className="news-story-feedback" role="status">{status}</p>}
       {shareLink && <label className="news-story-share-link">Story link<input readOnly value={shareLink} onFocus={event => event.target.select()} /></label>}
     </header>
+    <div className="news-story-explorer">
     <form className="news-story-search" onSubmit={event => { event.preventDefault(); update({ q: cleanStoryQuery(draft), year: 'recent', month: 'all' }); }}>
       <label htmlFor="story-query">Refine the story</label>
       <div><input id="story-query" type="search" value={draft} onChange={event => setDraft(event.target.value)} maxLength={100} minLength={3} required placeholder="A story, event or subject" />
@@ -180,6 +182,8 @@ export default function NewsStoryPage() {
     </div>
     <details className="news-story-coverage"><summary>About this coverage</summary><p>{current.data?.coverageNote || 'Available dated reports, not a complete archive. Choose a year to explore the background, or a month for more detail.'}</p>
       <p>Matching headlines from the same day are grouped together. Saved stories and opened-report progress stay on this device, separately for each account. The news archive is shared across readers.</p></details>
+    </div>
+    </div>
     {current.data?.notice && <p className="news-story-notice" role="status">{current.data.notice}</p>}
     {current.error && <div className="news-story-notice" role="alert"><p>{current.error}</p>
       {current.data && <p>Showing your saved coverage for this period.</p>}

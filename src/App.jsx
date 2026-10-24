@@ -363,6 +363,7 @@ function Layout() {
 
   const isAllPosts = location.pathname === '/feed' && new URLSearchParams(location.search).get('topic') === 'All';
   const feedView = getFeedView(location);
+  const showNavigationRail = !isAuthPage && feedView !== 'video';
 
   const openUniversalSearch = useCallback(() => {
     if (isAuthPage) return;
@@ -1016,8 +1017,8 @@ useEffect(() => {
 
       {!isAuthPage && <InstallPrompt />}
 
-      <div className={`app-shell ${feedView ? 'has-feed-view-switch' : ''} ${location.pathname === '/feed' && !new URLSearchParams(location.search).get('topic') ? 'is-smarty-landing' : ''}`}>
-          {!isAuthPage && feedView !== 'video' && <header className="topbar glass-topbar">
+      <div className={`app-shell ${showNavigationRail ? 'has-overlay-navigation' : ''} ${feedView ? 'has-feed-view-switch' : ''} ${location.pathname === '/feed' && !new URLSearchParams(location.search).get('topic') ? 'is-smarty-landing' : ''}`}>
+          {showNavigationRail && <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
               to="/feed?topic=All"

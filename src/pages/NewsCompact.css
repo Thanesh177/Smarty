@@ -1,160 +1,211 @@
-/* A quiet newsroom. Scoped so Books and other discovery pages stay unchanged. */
+/* News owns its layout. These selectors beat the legacy cross-page adapters,
+   including when route styles are lazy-loaded in a different order. */
 .app-shell .content .news-page.news-compact {
-  --discover-bg: #080a0d; --discover-surface: #101317; --discover-accent: #b8cee2;
-  width: 100% !important; max-width: 1440px !important; min-height: 0;
-  margin: 0 auto; padding: 16px clamp(14px, 3vw, 44px) 100px !important;
-  background: transparent !important;
+  --news-gutter: clamp(16px, 3vw, 48px);
+  --news-space: clamp(24px, 3vw, 40px);
+  --discover-bg: var(--ui-bg); --discover-surface: var(--ui-surface); --discover-accent: var(--ui-accent);
+  width: 100% !important; max-width: none !important; min-height: 100%; margin: 0;
+  padding: clamp(20px, 2.5vw, 36px) var(--news-gutter) calc(280px + env(safe-area-inset-bottom)) !important;
+  background: transparent !important; overflow-x: clip;
 }
-.app-shell .content .news-compact :is(.news-place-choice, .news-updates-shelf, .news-story-shelf) {
-  max-width: none; margin: 0 0 14px; padding: 0; border-top: 0; border-bottom: 1px solid var(--ui-line);
+.app-shell .content .news-page.news-compact :is(.news-hero, .news-daily-brief, .news-discovery-layout, .news-grid, .news-provider-note, .news-inline-notice, .news-retry, .cache-note, .news-briefing-pending) { width: 100%; max-width: none; min-width: 0; margin-inline: 0; }
+
+/* Compact masthead, edition controls and one aligned search/filter area. */
+.app-shell .content .news-page.news-compact .news-hero {
+  display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 16px;
+  margin: 0 0 20px; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none;
 }
-.app-shell .content .news-compact .news-place-switch { min-height: 44px; gap: 8px; flex-direction: row; align-items: center; padding-bottom: 8px; }
-.app-shell .content .news-compact .news-place-switch > div { min-width: 0; flex: 1; flex-wrap: wrap; gap: 4px; }
-.app-shell .content .news-compact .news-place-switch button { padding: 0 9px; font-size: 12px; border: 0; background: transparent; }
-.app-shell .content .news-compact .news-place-switch button[aria-pressed='true'] { color: var(--ui-text); background: var(--ui-accent-soft); border-radius: 6px; }
-.app-shell .content .news-compact .news-place-choice form { padding: 8px 0 16px; }
-.app-shell .content .news-compact .news-place-choice h2 { font-size: 20px; margin: 0 0 5px; }
-.app-shell .content .news-compact .news-place-choice header p { margin: 0; font-size: 13px; }
-.app-shell .content .news-compact .news-place-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; max-width: 640px; }
-.app-shell .content .news-compact .news-place-fields select { height: 44px; }
-.app-shell .content .news-compact .news-place-choice footer button { font-size: 12px; }
-.app-shell .content .news-compact :is(.news-updates-shelf, .news-story-shelf) summary { min-height: 44px; font-size: 13px; padding: 0; }
-.app-shell .content .news-compact .news-hero {
-  display: flex; flex-direction: row; align-items: center; gap: 12px;
-  max-width: none; margin: 0 0 16px; padding: 0 !important;
-  border-bottom: 0 !important; box-shadow: none;
+.app-shell .content .news-page.news-compact .news-hero h1 {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; max-width: none; margin: 0;
+  font-size: clamp(28px, 2.8vw, 40px) !important; font-weight: 550; line-height: 1.2; letter-spacing: -.045em;
 }
-.app-shell .content .news-compact .news-hero h1 {
-  display: flex; align-items: baseline; flex-wrap: wrap; gap: 12px; margin: 0;
-  font-size: clamp(25px, 3vw, 34px) !important; line-height: 1.2; font-weight: 550; letter-spacing: -.045em;
+.app-shell .content .news-page.news-compact .news-heading-place { color: var(--ui-muted); font-size: 13px; font-weight: 400; letter-spacing: 0; }
+.app-shell .content .news-page.news-compact .last-updated { margin-top: 6px; color: var(--ui-muted); font-size: 11px; font-weight: 400; }
+.app-shell .content .news-page.news-compact .news-hero > .news-header-actions { display: flex; align-items: center; justify-content: end; flex: none; width: auto; gap: 12px; }
+.app-shell .content .news-page.news-compact .news-header-actions .news-feed-link { gap: 6px; margin: 0; font-size: 13px; white-space: nowrap; }
+.app-shell .content .news-page.news-compact .refresh-news-btn { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 44px; padding: 0; border: 0 !important; border-radius: 8px; background: transparent !important; color: var(--ui-secondary); box-shadow: none; }
+.app-shell .content .news-page.news-compact .news-edition-controls { display: grid; gap: 0 24px; margin-bottom: 20px; border-block: 1px solid var(--ui-line); }
+.app-shell .content .news-page.news-compact :is(.news-place-choice, .news-updates-shelf, .news-story-shelf) { width: 100%; max-width: none; min-width: 0; margin: 0; padding: 0; border: 0; }
+.app-shell .content .news-page.news-compact .news-edition-controls > :is(.news-updates-shelf, .news-story-shelf) { border-top: 1px solid var(--ui-line); }
+.app-shell .content .news-page.news-compact .news-place-switch { min-height: 56px; flex-direction: row; align-items: center; gap: 12px; padding: 4px 0; }
+.app-shell .content .news-page.news-compact .news-place-switch > div { flex: 1; min-width: 0; flex-wrap: wrap; gap: 4px; }
+.app-shell .content .news-page.news-compact .news-place-switch button { padding: 0 10px; border: 0; background: transparent; font-size: 12px; }
+.app-shell .content .news-page.news-compact .news-place-switch button[aria-pressed='true'] { border-radius: 6px; color: var(--ui-text); background: var(--ui-accent-soft); }
+.app-shell .content .news-page.news-compact .news-place-choice form { padding: 20px 0; }
+.app-shell .content .news-page.news-compact .news-place-choice h2 { margin: 0 0 6px; font-size: 21px; }
+.app-shell .content .news-page.news-compact .news-place-choice header p { margin: 0; font-size: 13px; }
+.app-shell .content .news-page.news-compact .news-place-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 760px; gap: 16px; margin: 20px 0; }
+.app-shell .content .news-page.news-compact .news-place-fields select { height: 46px; }
+.app-shell .content .news-page.news-compact .news-place-choice footer button { font-size: 13px; }
+.app-shell .content .news-page.news-compact :is(.news-updates-shelf, .news-story-shelf) summary { min-height: 48px; padding: 0; font-size: 13px; }
+.app-shell .content .news-page.news-compact .news-browse-controls { display: grid; align-items: center; gap: 12px 28px; margin-bottom: var(--news-space); }
+.app-shell .content .news-page.news-compact .news-controls.news-compact-search { display: block; position: static; top: auto; z-index: auto; width: 100%; max-width: none; margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.app-shell .content .news-page.news-compact :is(.news-search-control, .news-summary-search) { display: flex; align-items: center; min-width: 0; min-height: 48px; gap: 10px; padding: 0 14px; border: 1px solid var(--ui-line); border-radius: 10px; background: #ffffff03; color: var(--ui-muted); }
+.app-shell .content .news-page.news-compact :is(.news-search-control, .news-summary-search) svg { flex: none; }
+.app-shell .content .news-page.news-compact :is(.news-search-control, .news-summary-search) input { width: 100%; min-width: 0; min-height: 46px; margin: 0; padding: 0 !important; border: 0 !important; border-radius: 0; background: transparent !important; box-shadow: none !important; color: var(--ui-text); font-size: 16px; font-weight: 400; }
+.app-shell .content .news-page.news-compact :is(.news-search-control, .news-summary-search):focus-within { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.app-shell .content .news-page.news-compact :is(.news-search-control, .news-summary-search) input:focus { outline: none; }
+.app-shell .content .news-page.news-compact .news-reader-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; margin: 0; border: 0; }
+.app-shell .content .news-page.news-compact .news-reader-views { display: flex; flex: none; gap: 22px; }
+.app-shell .content .news-page.news-compact .news-reader-views button { gap: 6px; min-height: 46px; padding: 0 1px; font-size: 13px; }
+.app-shell .content .news-page.news-compact .news-report-order { flex: none; width: auto; margin: 0 0 0 auto; border: 0; gap: 6px; }
+.app-shell .content .news-page.news-compact .news-report-order select { min-height: 44px; max-width: 180px; border: 0; background-color: transparent; font-size: 12px; }
+
+/* One calm editorial surface rather than nested briefing boxes. */
+.app-shell .content .news-page.news-compact .news-daily-brief { margin: 0 0 var(--news-space); padding: clamp(20px, 2.8vw, 36px); border: 1px solid var(--ui-line); border-radius: 14px; background: #ffffff02 !important; box-shadow: none; }
+.app-shell .content .news-page.news-compact .news-daily-brief::after { display: none; }
+.app-shell .content .news-page.news-compact :is(.news-daily-brief, .news-card) { opacity: 1; animation: none; }
+.app-shell .content .news-page.news-compact .news-brief-lead { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; gap: clamp(28px, 4vw, 64px); }
+.app-shell .content .news-page.news-compact .news-brief-eyebrow { margin-bottom: 12px; font-size: 10px; }
+.app-shell .content .news-page.news-compact .news-daily-brief h2 { margin: 0 0 16px; font-size: clamp(25px, 2.6vw, 38px); font-weight: 550; line-height: 1.2; letter-spacing: -.04em; }
+.app-shell .content .news-page.news-compact .news-daily-brief :is(h2, h3, strong) { color: var(--ui-text); }
+.app-shell .content .news-page.news-compact .news-brief-prose { width: 100%; }
+.app-shell .content .news-page.news-compact .news-brief-prose p { margin: 0 0 16px; color: var(--ui-secondary); font-size: 15px; line-height: 1.8; }
+.app-shell .content .news-page.news-compact .news-brief-stats { display: flex; flex-wrap: wrap; gap: 14px 24px; margin: 20px 0 16px; padding: 0; border: 0; }
+.app-shell .content .news-page.news-compact .news-brief-stats > div { display: flex; align-items: baseline; gap: 8px; }
+.app-shell .content .news-page.news-compact .news-brief-stats dt { font-size: 10px; font-weight: 400; letter-spacing: .04em; }
+.app-shell .content .news-page.news-compact .news-brief-stats dd { margin: 0; font-size: 17px; font-weight: 500; }
+.app-shell .content .news-page.news-compact .news-analysis-scope { margin: 0; color: var(--ui-muted); font-size: 11px; line-height: 1.7; }
+.app-shell .content .news-page.news-compact .news-analysis-scope > span { display: none; }
+.app-shell .content .news-page.news-compact .news-brief-highlights { padding: 0; border: 0; border-radius: 0; background: transparent; }
+.app-shell .content .news-page.news-compact .news-brief-highlights > span { display: block; padding-bottom: 8px; font-size: 10px; }
+.app-shell .content .news-page.news-compact .news-brief-highlights a { padding: 16px 0; gap: 14px; }
+.app-shell .content .news-page.news-compact .news-brief-highlights strong { font-size: 14px; line-height: 1.5; font-weight: 500; }
+.app-shell .content .news-page.news-compact .news-brief-highlights small { margin-top: 6px; font-size: 11px; }
+.app-shell .content .news-page.news-compact :is(.news-brief-more, .news-brief-insight-grid, .news-briefing-takeaways) { display: block; margin: 16px 0 0; }
+.app-shell .content .news-page.news-compact :is(.news-brief-more, .news-brief-insight-grid, .news-briefing-takeaways) > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; color: var(--ui-accent); font-size: 13px; list-style: none; cursor: pointer; }
+.app-shell .content .news-page.news-compact :is(.news-brief-more, .news-brief-insight-grid, .news-briefing-takeaways) > summary::-webkit-details-marker { display: none; }
+.app-shell .content .news-page.news-compact :is(.news-brief-more, .news-brief-insight-grid, .news-briefing-takeaways) > summary::after { content: '+'; margin-left: auto; }
+.app-shell .content .news-page.news-compact :is(.news-brief-more, .news-brief-insight-grid, .news-briefing-takeaways)[open] > summary::after { content: '−'; }
+.app-shell .content .news-page.news-compact .news-brief-insight-grid { padding-top: 12px; border-top: 1px solid var(--ui-line); }
+.app-shell .content .news-page.news-compact .news-brief-insight-grid :is(.news-brief-takeaways, .news-brief-themes) { margin: 12px 0 0; padding: 16px 0 0; border: 0; background: transparent; }
+
+/* Sections stay horizontal on every screen, never a leftover sidebar. */
+.app-shell .content .news-page.news-compact .news-discovery-layout { display: block; }
+.app-shell .content .news-page.news-compact .news-section-rail { position: static; margin: 0 0 24px; padding: 0; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.app-shell .content .news-page.news-compact .news-section-rail > div { display: none; }
+.app-shell .content .news-page.news-compact :is(.section-tabs, .news-section-rail .section-tabs) {
+  display: flex; flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 24px;
+  width: 100%; max-width: none; margin: 0; padding: 0; overflow-x: auto;
+  overscroll-behavior-inline: contain; scrollbar-width: thin; scrollbar-color: var(--ui-line) transparent;
+  border-bottom: 1px solid var(--ui-line); touch-action: pan-x pan-y;
 }
-.app-shell .content .news-compact .news-heading-place { font-size: 12px; color: var(--ui-muted); font-weight: 400; letter-spacing: 0; }
-.app-shell .content .news-compact .last-updated { margin-top: 5px; font-size: 11px; color: var(--ui-muted); }
-.app-shell .content .news-compact .news-hero > .news-header-actions { display: flex; align-items: center; justify-content: end; gap: 8px; flex: none; width: auto; }
-.app-shell .content .news-compact .news-header-actions .news-feed-link { margin: 0; gap: 5px; font-size: 12px; white-space: nowrap; }
-.app-shell .content .news-compact .refresh-news-btn {
-  display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 44px;
-  padding: 0; border: 0 !important; border-radius: 8px; background: transparent !important; box-shadow: none; color: var(--ui-secondary);
-}
-.app-shell .content .news-compact .news-refreshing { animation: news-compact-spin 1.2s linear infinite; }
-.app-shell .content .news-compact .news-controls.news-compact-search { display: block; max-width: none; margin: 0 0 18px; padding: 0; background: transparent; border: 0; box-shadow: none; }
-.app-shell .content .news-compact :is(.news-search-control, .news-summary-search) {
-  display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 44px; padding: 0 12px;
-  border: 1px solid var(--ui-line); border-radius: 8px; background: #ffffff03; color: var(--ui-muted);
-}
-.app-shell .content .news-compact :is(.news-search-control, .news-summary-search) input {
-  width: 100%; min-width: 0; min-height: 44px; padding: 0 !important; border: 0 !important;
-  border-radius: 0; background: transparent !important; font-size: 16px; box-shadow: none !important;
-  font-weight: 400; color: var(--ui-text);
-}
-.app-shell .content .news-compact :is(.news-search-control, .news-summary-search):focus-within { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
-.app-shell .content .news-compact .news-search-control input:focus { outline: none; }
-.app-shell .content .news-compact .news-daily-brief { margin: 0 0 22px; padding: 20px; background: #ffffff02 !important; border: 1px solid var(--ui-line); border-radius: 10px; }
-.app-shell .content .news-compact .news-daily-brief::after { display: none; }
-.app-shell .content .news-compact :is(.news-daily-brief, .news-card) { opacity: 1; animation: none; }
-.app-shell .content .news-compact .news-brief-lead { gap: 24px; }
-.app-shell .content .news-compact .news-brief-eyebrow { margin-bottom: 10px; font-size: 10px; }
-.app-shell .content .news-compact .news-daily-brief h2 { margin: 0 0 12px; font-size: clamp(24px, 3vw, 34px); line-height: 1.15; letter-spacing: -.035em; }
-.app-shell .content .news-compact .news-daily-brief :is(h2, h3, strong) { color: var(--ui-text); }
-.app-shell .content .news-compact .news-daily-brief p { color: var(--ui-secondary); }
-.app-shell .content .news-compact .news-brief-prose p { margin: 0 0 12px; font-size: 15px; line-height: 1.75; }
-.app-shell .content .news-compact .news-brief-stats { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 14px 0; padding: 0; border: 0; }
-.app-shell .content .news-compact .news-brief-stats > div { display: flex; flex-direction: row; align-items: baseline; gap: 7px; }
-.app-shell .content .news-compact .news-brief-stats dt { font-size: 11px; }
-.app-shell .content .news-compact .news-brief-stats dd { margin: 0; font-size: 16px; }
-.app-shell .content .news-compact .news-analysis-scope { font-size: 11px; margin: 0; }
-.app-shell .content .news-compact .news-brief-highlights { padding: 0; background: transparent; border: 0; }
-.app-shell .content .news-compact .news-brief-highlights a { padding: 10px 0; }
-.app-shell .content .news-compact .news-brief-highlights strong { font-size: 14px; line-height: 1.4; }
-.app-shell .content .news-compact :is(.news-brief-more, .news-brief-insight-grid, .news-briefing-takeaways) { display: block; margin: 12px 0 0; }
-.app-shell .content .news-compact :is(.news-brief-more, .news-brief-insight-grid, .news-briefing-takeaways) > summary { min-height: 44px; display: flex; gap: 10px; align-items: center; color: var(--ui-accent); font-size: 13px; cursor: pointer; }
-.app-shell .content .news-compact :is(.news-brief-more, .news-brief-insight-grid, .news-briefing-takeaways) > summary::after { content: '+'; margin-left: auto; }
-.app-shell .content .news-compact :is(.news-brief-more, .news-brief-insight-grid, .news-briefing-takeaways)[open] > summary::after { content: '−'; }
-.app-shell .content .news-compact .news-brief-insight-grid { border-top: 1px solid var(--ui-line); }
-.app-shell .content .news-compact .news-discovery-layout { display: block; }
-.app-shell .content .news-compact .news-section-rail { position: static; padding: 0; background: transparent; border: 0; margin: 0 0 16px; }
-.app-shell .content .news-compact .news-section-rail > div { display: none; }
-.app-shell .content .news-compact .section-tabs { display: flex; flex-direction: row; gap: 16px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 0; margin: 0 0 14px; border-bottom: 1px solid var(--ui-line); }
-.app-shell .content .news-compact .section-tabs::-webkit-scrollbar { display: none; }
-.app-shell .content .news-compact .section-tabs button {
-  flex: none; width: auto; display: inline-flex; gap: 6px; align-items: center; min-height: 44px; padding: 0 2px;
+.app-shell .content .news-page.news-compact :is(.section-tabs, .news-section-rail .section-tabs) button {
+  display: inline-flex; align-items: center; justify-content: start; gap: 8px; flex: 0 0 auto;
+  width: auto; min-height: 48px; padding: 0 1px;
   border: 0 !important; border-bottom: 2px solid transparent !important; border-radius: 0 !important;
-  background: transparent !important; box-shadow: none; font-size: 13px; font-weight: 500; color: var(--ui-muted);
+  background: transparent !important; color: var(--ui-muted); box-shadow: none;
+  font-size: 13px; font-weight: 500; transform: none;
 }
-.app-shell .content .news-compact .section-tabs button.active { border-bottom-color: var(--ui-accent) !important; color: var(--ui-text); }
-.app-shell .content .news-compact .news-stream-heading { margin: 0 0 12px; padding-bottom: 12px; gap: 12px; }
-.app-shell .content .news-compact .news-stream-heading h2 { font-size: 20px; letter-spacing: -.025em; }
-.app-shell .content .news-compact .news-stream-heading > div > span { font-size: 10px; }
-.app-shell .content .news-compact .news-results-column .news-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
-.app-shell .content .news-compact .news-card, .app-shell .content .news-compact .news-card.featured {
-  display: flex; flex-direction: column; grid-column: auto; min-height: 0;
-  padding: 16px 0; border: 0 !important; border-bottom: 1px solid var(--ui-line) !important;
-  border-radius: 0 !important; background: transparent !important; box-shadow: none !important; transform: none !important;
+.app-shell .content .news-page.news-compact .section-tabs button.active { border-bottom-color: var(--ui-accent) !important; color: var(--ui-text); }
+.app-shell .content .news-page.news-compact .news-stream-heading { gap: 16px; margin: 0 0 4px; padding: 0 0 20px; border-bottom: 0; }
+.app-shell .content .news-page.news-compact .news-stream-heading h2 { font-size: clamp(21px, 2vw, 28px); line-height: 1.3; letter-spacing: -.03em; }
+.app-shell .content .news-page.news-compact .news-stream-heading > div > span { font-size: 10px; }
+.app-shell .content .news-page.news-compact .news-results-column .news-grid,
+.app-shell .content .news-page.news-compact > .news-grid,
+.app-shell .content .news-page.news-compact .news-report-fallback .news-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px 32px; }
+.app-shell .content .news-page.news-compact .news-card,
+.app-shell .content .news-page.news-compact .news-card.featured {
+  display: flex; flex-direction: column; grid-column: auto; min-width: 0; min-height: 0; padding: 24px 0;
+  border: 0 !important; border-top: 1px solid var(--ui-line) !important; border-radius: 0 !important;
+  background: transparent !important; box-shadow: none !important; transform: none !important;
 }
-.app-shell .content .news-compact .news-card :is(img, .skeleton-image) { width: 100%; height: 150px; min-height: 0; object-fit: cover; border-radius: 8px; margin-bottom: 14px; }
-.app-shell .content .news-compact .news-card .news-card-body { padding: 0; background: transparent; }
-.app-shell .content .news-compact .news-card h3 { margin: 8px 0; font-size: 18px; line-height: 1.4; letter-spacing: -.015em; -webkit-line-clamp: unset; }
-.app-shell .content .news-compact .news-card h3 a { color: var(--ui-text); text-decoration: none; }
-.app-shell .content .news-compact .news-card p { font-size: 14px; line-height: 1.65; }
-.app-shell .content .news-compact .news-card-meta { margin-bottom: 0; }
-.app-shell .content .news-compact .section-label { margin: 0; font-size: 10px; color: var(--ui-muted); font-weight: 500; }
-.app-shell .content .news-compact .news-card-source { margin-top: 8px; font-size: 11px; }
-.app-shell .content .news-compact .news-card-story-tools { display: flex; flex-wrap: wrap; align-items: center; column-gap: 14px; margin-top: 6px; }
-.app-shell .content .news-compact .news-card-story-tools :is(a, button) { min-height: 44px; font-size: 12px; }
-.app-shell .content .news-compact .news-card .news-actions { margin-top: 0; padding-top: 0; gap: 6px; }
-.app-shell .content .news-compact .news-actions :is(a, button) { min-height: 44px; display: inline-flex; justify-content: center; align-items: center; gap: 5px; padding: 0 10px; border: 0 !important; border-radius: 6px; color: var(--ui-secondary); background: transparent !important; font-size: 12px; font-weight: 500; }
-.app-shell .content .news-compact .news-actions a { margin-right: 8px; padding-left: 0; }
-.app-shell .content .news-compact .news-actions button { min-width: 44px; }
-.app-shell .content .news-compact .news-actions button[aria-pressed='true'] { color: var(--ui-accent); }
-.app-shell .content .news-compact .news-feed-toolbar { margin: 0 0 18px; padding: 0 0 12px; gap: 12px; }
-.app-shell .content .news-compact .news-feed-heading { gap: 5px; flex-direction: column; align-items: start; }
-.app-shell .content .news-compact .news-feed-heading strong { font-size: 11px; font-weight: 400; }
-.app-shell .content .news-compact .news-feed-actions { gap: 8px; }
-.app-shell .content .news-compact .news-feed-actions a { font-size: 12px; }
-.app-shell .content .news-compact .news-topic-summary { padding: 22px; border-radius: 10px; background: #ffffff02; }
-.app-shell .content .news-compact .news-topic-summary h2 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin: 10px 0 16px; }
-.app-shell .content .news-compact .news-topic-summary p { font-size: 16px; line-height: 1.75; }
-.app-shell .content .news-compact .news-topic-summary dl { display: flex; flex-wrap: wrap; gap: 12px 20px; }
-.app-shell .content .news-compact .news-topic-summary dl > div { display: flex; align-items: baseline; gap: 7px; }
-.app-shell .content .news-compact .news-topic-summary dd { margin: 0; font-size: 12px; font-weight: 400; }
-.app-shell .content .news-compact .news-summary-feed { gap: 16px; }
-.app-shell .content .news-compact .news-summary-post { padding: 20px; border-radius: 10px; }
-.app-shell .content .news-compact .news-summary-post-copy { margin: 16px 0; }
-.app-shell .content .news-compact .news-summary-post-copy p { line-height: 1.75; font-size: 15px; }
-.app-shell .content .news-compact .news-summary-post header { padding-bottom: 12px; }
-.app-shell .content .news-compact .news-summary-context { padding-top: 14px; gap: 12px; }
-.app-shell .content .news-compact .news-summary-context dd { font-size: 14px; }
-.app-shell .content .news-compact .news-reading-tools button { font-size: 12px; padding: 0 10px; }
-.app-shell .content .news-compact .news-summary-end { margin-top: 20px; padding-block: 16px; gap: 12px; }
-.app-shell .content .news-compact .news-summary-end p { font-size: 12px; }
-.app-shell .content .news-compact :is(.news-provider-note, .news-inline-notice) { font-size: 12px; line-height: 1.6; }
-.app-shell .content .news-compact :is(.news-load-more, .news-retry button) { min-height: 44px; }
-.app-shell .content .news-compact :is(button, a, summary):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.app-shell .content .news-page.news-compact .news-card :is(img, .skeleton-image) { width: 100%; height: clamp(150px, 15vw, 200px); min-height: 0; margin-bottom: 18px; border-radius: 10px; object-fit: cover; }
+.app-shell .content .news-page.news-compact .news-card .news-card-body { display: flex; flex: 1; flex-direction: column; min-width: 0; padding: 0; background: transparent; }
+.app-shell .content .news-page.news-compact .news-card h3 { display: block; margin: 12px 0; font-size: clamp(18px, 1.5vw, 21px); font-weight: 550; line-height: 1.45; letter-spacing: -.025em; -webkit-line-clamp: unset; }
+.app-shell .content .news-page.news-compact .news-card h3 a { color: var(--ui-text); text-decoration: none; }
+.app-shell .content .news-page.news-compact .news-card p { margin: 0; color: var(--ui-secondary); font-size: 14px; line-height: 1.75; }
+.app-shell .content .news-page.news-compact .news-card-meta { gap: 8px 12px; margin: 0; }
+.app-shell .content .news-page.news-compact .section-label { margin: 0; color: var(--ui-muted); font-size: 10px; font-weight: 500; letter-spacing: .04em; }
+.app-shell .content .news-page.news-compact .news-card-source { display: block; margin: 12px 0 16px; color: var(--ui-muted); font-size: 12px; font-weight: 400; }
+.app-shell .content .news-page.news-compact .news-card-story-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 0 20px; margin-top: auto; padding-top: 8px; border-top: 1px solid var(--ui-line); }
+.app-shell .content .news-page.news-compact .news-card-story-tools :is(a, button) { min-height: 44px; font-size: 12px; }
+.app-shell .content .news-page.news-compact .news-card .news-actions { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; margin: 0; padding: 4px 48px 0 0; }
+.app-shell .content .news-page.news-compact .news-actions :is(a, button) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 0 10px; border: 0 !important; border-radius: 7px; background: transparent !important; color: var(--ui-secondary); font-size: 12px; font-weight: 500; }
+.app-shell .content .news-page.news-compact .news-actions .news-quick-read { justify-content: start; margin-right: auto; padding-left: 0; color: var(--ui-accent); }
+.app-shell .content .news-page.news-compact .news-actions button[aria-pressed='true'] { color: var(--ui-accent); }
+
+/* News in the feed uses the same spacing and readable, uncompressed copy. */
+.app-shell .content .news-page.news-compact .news-feed-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 340px) auto; align-items: center; gap: 16px 24px; margin: 0 0 20px; padding: 0; border: 0; }
+.app-shell .content .news-page.news-compact .news-feed-heading { display: grid; min-width: 0; gap: 6px !important; }
+.app-shell .content .news-page.news-compact .news-feed-heading .news-kicker { font-size: 11px; letter-spacing: .08em; }
+.app-shell .content .news-page.news-compact .news-feed-heading strong { color: var(--ui-muted); font-size: 12px; font-weight: 400; }
+.app-shell .content .news-page.news-compact .news-toolbar-search { width: 100%; box-sizing: border-box; }
+.app-shell .content .news-page.news-compact .news-feed-toolbar .news-feed-actions { grid-column: auto; flex-wrap: nowrap; gap: 12px; }
+.app-shell .content .news-page.news-compact .news-feed-actions a { gap: 6px; white-space: nowrap; font-size: 13px; }
+.app-shell .content .news-page.news-compact .news-topic-summary { gap: 24px; margin-bottom: 24px; padding: clamp(20px, 3vw, 40px); border-radius: 14px; background: #ffffff02; }
+.app-shell .content .news-page.news-compact .news-topic-summary > div:first-child { columns: auto; }
+.app-shell .content .news-page.news-compact .news-topic-summary h2 { max-width: none; margin: 12px 0 20px; font-size: clamp(28px, 3vw, 42px); line-height: 1.2; letter-spacing: -.04em; }
+.app-shell .content .news-page.news-compact .news-topic-summary p { max-width: 90ch; font-size: 16px; line-height: 1.85; }
+.app-shell .content .news-page.news-compact .news-topic-summary dl { display: flex; flex-wrap: wrap; gap: 16px 32px; }
+.app-shell .content .news-page.news-compact .news-topic-summary dl > div { display: grid; gap: 5px; }
+.app-shell .content .news-page.news-compact .news-topic-summary dd { margin: 0; font-size: 12px; font-weight: 400; }
+.app-shell .content .news-page.news-compact .news-topic-tabs { margin: 24px 0; }
+.app-shell .content .news-page.news-compact .news-summary-feed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 24px; }
+.app-shell .content .news-page.news-compact .news-summary-post { padding: clamp(20px, 2.5vw, 32px); border-radius: 12px; background: #ffffff02; }
+.app-shell .content .news-page.news-compact .news-summary-post header { gap: 14px; padding-bottom: 20px; }
+.app-shell .content .news-page.news-compact .news-summary-post h3 { font-size: 19px; }
+.app-shell .content .news-page.news-compact .news-summary-post-copy { margin: 24px 0; }
+.app-shell .content .news-page.news-compact .news-summary-post-copy p { font-size: 16px; line-height: 1.85; }
+.app-shell .content .news-page.news-compact .news-summary-context { padding-top: 20px; gap: 20px; }
+.app-shell .content .news-page.news-compact .news-summary-context dd { font-size: 14px; line-height: 1.8; }
+.app-shell .content .news-page.news-compact .news-summary-end { gap: 16px; margin-top: 28px; padding-block: 24px; }
+.app-shell .content .news-page.news-compact .news-summary-end p { font-size: 12px; }
+.app-shell .content .news-page.news-compact .news-reading-tools { display: flex; flex-direction: row; gap: 12px; }
+.app-shell .content .news-page.news-compact .news-reading-tools button { padding-inline: 12px; font-size: 12px; }
+.app-shell .content .news-page.news-compact :is(.news-provider-note, .news-inline-notice) { font-size: 12px; line-height: 1.7; }
+.app-shell .content .news-page.news-compact :is(.news-load-more, .news-retry button) { min-height: 44px; }
+.app-shell .content .news-page.news-compact .news-refreshing { animation: news-compact-spin 1.2s linear infinite; }
+.app-shell .content .news-page.news-compact :is(button, a, summary):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+
+@media (min-width: 1200px) {
+  .app-shell .content .news-page.news-compact .news-browse-controls { grid-template-columns: minmax(240px, 1fr) auto; }
+  .app-shell .content .news-page.news-compact .news-results-column .news-grid,
+  .app-shell .content .news-page.news-compact > .news-grid,
+  .app-shell .content .news-page.news-compact .news-report-fallback .news-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8px clamp(28px, 3vw, 48px); }
+}
+@media (max-width: 900px) {
+  .app-shell .content .news-page.news-compact .news-brief-lead { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .app-shell .content .news-page.news-compact .news-brief-highlights { padding-top: 24px; border-top: 1px solid var(--ui-line); }
+  .app-shell .content .news-page.news-compact .news-summary-feed { grid-template-columns: minmax(0, 1fr); }
+  .app-shell .content .news-page.news-compact .news-feed-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+  .app-shell .content .news-page.news-compact .news-toolbar-search { grid-column: 1 / -1; grid-row: 2; }
+  .app-shell .content .news-page.news-compact .news-feed-toolbar .news-feed-actions { grid-column: 2; grid-row: 1; }
+}
+@media (max-width: 600px) {
+  .app-shell .content .news-page.news-compact .news-hero { gap: 12px; }
+  .app-shell .content .news-page.news-compact .news-hero h1 { gap: 8px; }
+  .app-shell .content .news-page.news-compact .news-heading-place { font-size: 11px; }
+  .app-shell .content .news-page.news-compact .news-hero > .news-header-actions { gap: 4px; }
+  .app-shell .content .news-page.news-compact .news-header-actions .news-feed-link { font-size: 12px; }
+  .app-shell .content .news-page.news-compact .news-place-switch { gap: 4px; }
+  .app-shell .content .news-page.news-compact .news-place-switch > button { font-size: 11px; padding-inline: 4px; }
+  .app-shell .content .news-page.news-compact .news-place-fields { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .app-shell .content .news-page.news-compact .news-reader-views { width: 100%; justify-content: space-between; gap: 10px; }
+  .app-shell .content .news-page.news-compact .news-reader-views button { font-size: 12px; }
+  .app-shell .content .news-page.news-compact .news-reader-tools { gap: 0; }
+  .app-shell .content .news-page.news-compact .news-report-order { justify-content: start; width: 100%; margin: 8px 0 0; }
+  .app-shell .content .news-page.news-compact .news-daily-brief { padding: 20px; }
+  .app-shell .content .news-page.news-compact .news-brief-stats { gap: 12px 20px; }
+  .app-shell .content .news-page.news-compact .news-brief-stats > div { flex-direction: column-reverse; align-items: start; gap: 3px; }
+  .app-shell .content .news-page.news-compact .news-brief-stats dt { font-size: 9px; }
+  .app-shell .content .news-page.news-compact .news-brief-stats dd { font-size: 21px; }
+  .app-shell .content .news-page.news-compact .news-brief-highlights a { gap: 10px; }
+  .app-shell .content .news-page.news-compact .news-results-column .news-grid,
+  .app-shell .content .news-page.news-compact > .news-grid,
+  .app-shell .content .news-page.news-compact .news-report-fallback .news-grid { grid-template-columns: minmax(0, 1fr) !important; gap: 0; }
+  .app-shell .content .news-page.news-compact .news-card :is(img, .skeleton-image) { height: clamp(160px, 48vw, 240px); }
+  /* Full-width copy, with clearance just for actions and enough bottom scroll
+     room for the final article to pass the floating rail. */
+  .app-shell .content .news-page.news-compact .news-summary-heading { align-items: start; flex-direction: column; gap: 12px; }
+  .app-shell .content .news-page.news-compact .news-reading-tools { width: 100%; justify-content: space-between; }
+  .app-shell .content .news-page.news-compact .news-summary-post header { gap: 12px; }
+  .app-shell .content .news-page.news-compact .news-summary-mark { width: 36px; height: 36px; border-radius: 9px; }
+  .app-shell .content .news-page.news-compact .news-summary-post header span { font-size: 11px; }
+  .app-shell .content .news-page.news-compact .news-feed-heading .news-kicker { font-size: 10px; letter-spacing: .04em; }
+  .app-shell .content .news-page.news-compact .news-feed-actions { gap: 4px !important; }
+  .app-shell .content .news-page.news-compact .news-feed-actions a { font-size: 12px; }
+  .app-shell .content .news-page.news-compact .news-briefing-takeaways > div { padding-top: 16px; }
+}
 @keyframes news-compact-spin { to { transform: rotate(360deg); } }
-@media (max-width: 700px) {
-  .app-shell .content .news-compact .news-results-column .news-grid { grid-template-columns: minmax(0, 1fr); }
-  .app-shell .content .news-compact .news-brief-lead { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .app-shell .content .news-compact .news-daily-brief, .app-shell .content .news-compact .news-topic-summary { padding: 16px; }
-  .app-shell .content .news-compact .news-place-switch > button { font-size: 11px; }
-  .app-shell .content .news-compact .news-place-fields { gap: 8px; }
-  .app-shell .content .news-compact .news-feed-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
-  .app-shell .content .news-compact .news-toolbar-search { grid-column: 1 / -1; grid-row: 2; width: 100%; }
-  .app-shell .content .news-compact .news-feed-toolbar .news-feed-heading { grid-column: 1; grid-row: 1; }
-  .app-shell .content .news-compact .news-feed-toolbar .news-feed-actions { grid-column: 2; grid-row: 1; flex-wrap: nowrap; }
-  .app-shell .content .news-compact .news-feed-actions a { gap: 4px; white-space: nowrap; line-height: 1.4; }
-  .app-shell .content .news-compact .news-summary-heading { flex-direction: row; align-items: center; }
-  .app-shell .content .news-compact .news-reading-tools { width: auto; justify-content: end; }
-  .app-shell .content .news-compact .news-reading-tools small { display: none; }
-  .app-shell .content .news-compact .news-hero h1 { gap: 7px; }
-  .app-shell .content .news-compact .news-header-actions { gap: 2px; }
-  .app-shell .content .news-compact .news-header-actions .news-feed-link { font-size: 11px; }
-  .app-shell .content .news-compact .news-actions { padding-right: 48px; }
-  /* Card surfaces fill the width; the reading column clears the floating rail. */
-  .app-shell .content .news-compact :is(.news-daily-brief, .news-topic-summary, .news-summary-post) { padding-right: 60px; }
-  .app-shell .content .news-compact .news-card .news-card-body { padding-right: 52px; }
-  .app-shell .content .news-compact .news-card .news-actions { padding-right: 0; }
-  .app-shell .content .news-compact .news-summary-post header { gap: 8px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .app-shell .content .news-compact .news-refreshing { animation: none; }
-}
+@media (prefers-reduced-motion: reduce) { .app-shell .content .news-page.news-compact .news-refreshing { animation: none; } }

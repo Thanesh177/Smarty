@@ -84,7 +84,6 @@ body .app-shell .topbar.glass-topbar .brand-actions {
   .app-shell .content .profile-page .friend-result-person { flex-basis: 100%; }
   .app-shell .content .profile-page .friend-result-card > button:not(.friend-result-person) { margin-left: 52px; }
 }
-.app-shell .content .news-page.news-story-page { padding-right: var(--ui-gutter) !important; }
 @media (max-width: 820px) {
   .app-shell .content .post-ai-page.post-ai-page { padding-inline: var(--ui-gutter) !important; }
   .app-shell .content .learn-page { padding-right: var(--ui-gutter) !important; }

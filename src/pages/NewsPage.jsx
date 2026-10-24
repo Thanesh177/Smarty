@@ -801,8 +801,6 @@ export default function NewsPage({ briefingOnly = false }) {
   if (briefingOnly) return (
     <section className={`news-page news-compact news-feed-briefing${comfortableText ? ' news-comfortable-text' : ''}`} aria-label="Daily news feed">
       {readerPanel}
-      <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
-      <NewsUpdatesShelf personal={personal}/>
       {briefingPending && <div className="news-briefing-pending" role="status"><span/>Reports are ready. Your daily summary is being prepared in the background.</div>}
       {actionStatus && <p className="news-action-status" role="status" aria-live="polite">{actionStatus}</p>}
       <div className="news-feed-toolbar">
@@ -820,6 +818,10 @@ export default function NewsPage({ briefingOnly = false }) {
           <button type="button" className="refresh-news-btn" disabled={loading || refreshing}
             aria-label="Refresh daily briefing" title="Refresh daily briefing" onClick={() => fetchNews(country, region, true)}><RefreshCw size={16} aria-hidden="true" className={refreshing ? 'news-refreshing' : ''}/></button>
         </div>
+      </div>
+      <div className="news-edition-controls">
+        <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
+        <NewsUpdatesShelf personal={personal}/>
       </div>
       {loading && <div role="status"><p>Opening your daily briefing…</p><div className="news-summary-feed"><NewsSkeleton /><NewsSkeleton /></div></div>}
       {(error || newsData?.notice || fromCache) && <p className="news-inline-notice" role="status">
@@ -949,8 +951,6 @@ export default function NewsPage({ briefingOnly = false }) {
   return (
     <section className="news-page news-compact news-newsroom">
       {readerPanel}
-      <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
-      <NewsUpdatesShelf personal={personal}/>
       {actionStatus && (
         <p className="news-action-status" role="status" aria-live="polite">
           {actionStatus}
@@ -976,7 +976,12 @@ export default function NewsPage({ briefingOnly = false }) {
         </button></div>
       </div>
 
-      <SavedNewsStories collapsed />
+      <div className="news-edition-controls">
+        <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
+        <NewsUpdatesShelf personal={personal}/>
+        <SavedNewsStories collapsed />
+      </div>
+      <div className="news-browse-controls">
       <div className="news-controls news-compact-search">
         <label className="news-search-control">
           <Search size={17} aria-hidden="true" />
@@ -1001,6 +1006,7 @@ export default function NewsPage({ briefingOnly = false }) {
         <label className="news-report-order">Order<select aria-label="Order reports" value={reportOrder} onChange={event => setReportOrder(event.target.value)}>
           <option value="edition">{reportView === 'saved' ? 'Recently saved' : 'Balanced coverage'}</option><option value="newest">Newest first</option>
         </select></label>
+      </div>
       </div>
       {reportView === 'saved' && <p className="news-reader-note">Saved previews from every edition, kept on this device for your account. Original articles need a connection.</p>}
       {reportView === 'unopened' && <p className="news-reader-note">Reports you haven’t opened in Smarty on this device. Opening a quick read marks it as opened.</p>}
