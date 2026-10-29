@@ -3,6 +3,7 @@ import { Layers, Newspaper, Play } from 'lucide-react';
 import { FEED_VIEWS, getFeedView } from '../lib/feedViews';
 import { MAIN_TOPIC_LABELS } from '../data/topicTaxonomy';
 import FeedTopicPicker from './FeedTopicPicker';
+import AppearanceSwitch from './AppearanceSwitch';
 import './FeedViewSwitch.css';
 
 const icons = { all: Layers, news: Newspaper, video: Play };
@@ -33,6 +34,7 @@ export default function FeedViewSwitch() {
       })}
     </nav>
     <div className="feed-view-topics">
+      {active === 'video' && <AppearanceSwitch compact />}
       <FeedTopicPicker compact selected={selected} choices={choices}
         onSelect={topic => navigate('/feed?topic=' + encodeURIComponent(topic))} onBrowse={() => navigate('/topics')} />
     </div>

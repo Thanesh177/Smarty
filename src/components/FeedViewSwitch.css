@@ -35,7 +35,7 @@
 .feed-view-compact-label { display: none; }
 .feed-view-brand { display: inline-flex; justify-self: start; align-items: center; gap: 9px; min-height: 44px; color: var(--ui-text); font-size: 20px; font-weight: 600; letter-spacing: -.055em; text-decoration: none; }
 .feed-view-brand-mark { display: grid; place-items: center; width: 28px; height: 30px; border-radius: 8px; background: var(--ui-brand-bg); color: var(--ui-brand-ink); font-size: 17px; font-weight: 650; letter-spacing: -.04em; box-shadow: inset 0 1px #ffffff20; }
-.feed-view-topics { display: flex; justify-content: end; min-width: 0; }
+.feed-view-topics { display: flex; justify-content: end; align-items: center; gap: 4px; min-width: 0; }
 .feed-view-topics .feed-topic-trigger {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   min-width: 44px; min-height: 44px; padding: 0 12px; border: 1px solid transparent; border-radius: 8px;
@@ -56,7 +56,7 @@ body .app-shell.has-feed-view-switch { --feed-header-height: 0px; }
   .feed-view-topics .feed-topic-trigger:hover { background: var(--ui-surface-hover); border-color: var(--ui-line-strong); color: var(--ui-text); }
 }
 @media (max-width: 640px) {
-  .app-shell > .feed-view-switchbar { grid-template-columns: auto minmax(0, 1fr) 44px; gap: 10px; padding: calc(9px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 9px max(12px, env(safe-area-inset-left)); }
+  .app-shell > .feed-view-switchbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; padding: calc(9px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 9px max(12px, env(safe-area-inset-left)); }
   .feed-view-brand { font-size: 18px; }
   .feed-view-brand-mark { display: none; }
   .feed-view-topics .feed-topic-trigger { width: 44px; padding: 0; }

@@ -39,9 +39,18 @@ test('the switch is accessible and available before and after sign-in', () => {
   const component = read('components/AppearanceSwitch.jsx');
   assert.match(component, /role="group" aria-label="Appearance"/); assert.match(component, /aria-pressed=\{theme === 'day'\}/);
   assert.match(component, /aria-label=\{label\}/);
-  for (const file of ['components/NavbarMenu.jsx', 'pages/LoginPage.jsx', 'pages/RegisterPage.jsx', 'components/landing/SmartyLanding.jsx']) assert.match(read(file), /<AppearanceSwitch/);
+  for (const file of ['App.jsx', 'components/NavbarMenu.jsx', 'pages/LoginPage.jsx', 'pages/RegisterPage.jsx', 'components/landing/SmartyLanding.jsx']) assert.match(read(file), /<AppearanceSwitch/);
   assert.match(css, /@media \(pointer: coarse\)[^}]+min-height: 44px/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
+test('a one-tap appearance control lives in the rail, with a fallback only when videos hide the rail', () => {
+  assert.match(read('App.jsx'), /<AppearanceSwitch compact rail\s*\/>/);
+  assert.match(read('components/AppearanceSwitch.jsx'), /quick-icon-link appearance-rail-toggle/);
+  assert.match(read('components/AppearanceSwitch.jsx'), /className="nav-control-label" aria-hidden="true"/);
+  assert.match(read('components/FeedViewSwitch.jsx'), /active === 'video' && <AppearanceSwitch compact\s*\/>/);
+  assert.match(css, /\.appearance-quick-toggle[^}]+width: 44px[^}]+height: 44px/);
+  assert.match(read('components/FeedViewSwitch.css'), /grid-template-columns: auto minmax\(0, 1fr\) auto/);
 });
 
 test('day mode keeps media and reader preferences independent and does not add scrolling or layout locks', () => {

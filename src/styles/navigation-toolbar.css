@@ -4,7 +4,7 @@ body .app-shell.has-overlay-navigation {
   --app-rail-layer: 32000;
   --app-rail-right: max(12px, env(safe-area-inset-right));
   --app-rail-bottom: max(12px, env(safe-area-inset-bottom));
-  --app-rail-scroll-room: calc(280px + env(safe-area-inset-bottom));
+  --app-rail-scroll-room: calc(328px + env(safe-area-inset-bottom));
 }
 body .app-shell[inert] > .content { overflow: hidden !important; touch-action: none !important; }
 /* The rail does not reserve a header row or a sidebar in the page layout. */
@@ -45,7 +45,7 @@ body .app-shell.has-overlay-navigation > .content .quiz-workspace > :is(.questio
 /* Scroll the last item past the rail rather than reserving a permanent lane. */
 body .app-shell.has-overlay-navigation > .content :is(
   .single-post-page, .public-profile-page, .saved-page.community-workspace,
-  .post-composer.post-editor, .post-ai-page.is-reading-layout, .learn-page,
+  .post-composer, .post-ai-page.is-reading-layout, .learn-page,
   .chat-page .chat-list
 ) { padding-bottom: var(--app-rail-scroll-room) !important; }
 body .app-shell .topbar.glass-topbar .topbar-row { display: flex !important; flex-direction: column !important; gap: 0; }
@@ -110,7 +110,7 @@ body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):focus
   body .app-shell .topbar.glass-topbar .brand-actions { gap: 0 !important; padding: 4px !important; }
   body .app-shell .topbar.glass-topbar .navbar-menu { margin-top: 2px; padding-top: 2px; }
 }
-@media (max-height: 300px) {
+@media (max-height: 360px) {
   body .app-shell > .topbar.glass-topbar { max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; scrollbar-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -15,7 +15,7 @@ function contrast(a, b) { const values = [luminance(a), luminance(b)].sort((a,b)
 
 test('black, cobalt and white have distinct action, surface and text tokens', () => {
   assert.equal(token('--ui-bg'), '#06070a');
-  assert.equal(token('--ui-primary'), '#2457ff');
+  assert.equal(token('--ui-primary'), '#3a6bec');
   assert.equal(token('--ui-primary-ink'), '#ffffff');
   assert.notEqual(token('--ui-primary'), token('--ui-accent'), 'Dark surfaces need a lighter blue for small link text');
   assert.notEqual(token('--ui-surface'), token('--ui-bg'));
@@ -46,7 +46,7 @@ test('finishing styles load after the shared and navigation styles without chang
 test('brand and opening screens agree with the app palette before React starts', () => {
   const boot = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
   assert.match(boot, /name="theme-color" content="#06070a"/);
-  assert.match(boot, /\.boot-loader-orb[^}]+color: #ffffff; background: #2457ff/);
+  assert.match(boot, /\.boot-loader-orb[^}]+color: #ffffff; background: #3a6bec/);
   const rail = read('styles/navigation-toolbar.css');
   assert.match(rail, /background: var\(--ui-primary\) !important; color: var\(--ui-primary-ink\)/);
   assert.match(read('components/FeedViewSwitch.css'), /background: var\(--ui-primary\)/);

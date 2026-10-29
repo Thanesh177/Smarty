@@ -45,13 +45,13 @@
       #root { min-height: 100vh; min-height: 100dvh; background: #06070a; }
       .boot-loader { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; background: #06070a; }
       .boot-loader-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; text-align: center; }
-      .boot-loader-orb { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 16px; border-radius: 14px; color: #ffffff; background: #2457ff; }
+      .boot-loader-orb { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 16px; border-radius: 14px; color: #ffffff; background: #3a6bec; }
       .boot-loader-orb::after { content: "S"; font-size: 27px; font-weight: 650; letter-spacing: -.06em; }
       .boot-loader-card strong { font-size: 25px; font-weight: 550; line-height: 1.2; letter-spacing: -.055em; }
       .boot-loader-card > span { font-size: 13px; line-height: 1.6; color: #a1a5ad; }
       .boot-loader-card .boot-loader-status { margin-top: 24px; color: #a1a5ad; font-size: 12px; }
       .boot-loader-line { position: relative; width: 96px; height: 2px; margin-top: 9px; overflow: hidden; border-radius: 2px; background: #252a31; }
-      .boot-loader-line::after { content: ""; position: absolute; inset: 0; background: #2457ff; animation: bootReadingLine 1.8s ease-in-out infinite; transform-origin: left; }
+      .boot-loader-line::after { content: ""; position: absolute; inset: 0; background: #3a6bec; animation: bootReadingLine 1.8s ease-in-out infinite; transform-origin: left; }
       @keyframes bootReadingLine { 0% { transform: translateX(-100%) scaleX(.45); } 100% { transform: translateX(100%) scaleX(.45); } }
       @media (prefers-reduced-motion: reduce) { .boot-loader-line::after { animation: none; opacity: .6; } }
       html[data-app-theme='day'], html[data-app-theme='day'] body,

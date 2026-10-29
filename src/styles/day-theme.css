@@ -47,7 +47,7 @@
 .appearance-options { display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid var(--ui-line); border-radius: 11px; background: var(--ui-control-bg); }
 .appearance-options button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 7px 11px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--ui-muted); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: color 160ms ease, background-color 160ms ease; }
 .appearance-options button[aria-pressed='true'] { color: var(--ui-accent-strong); background: var(--ui-accent-soft); border-color: var(--ui-accent-line); }
-.appearance-quick-toggle { display: inline-grid; place-items: center; width: 44px; min-width: 44px; height: 44px; padding: 0; border: 1px solid var(--ui-line); border-radius: 50%; color: var(--ui-secondary); background: transparent; cursor: pointer; transition: background-color 160ms ease; }
+.appearance-quick-toggle { display: inline-grid; place-items: center; width: 44px; min-width: 44px; height: 44px; padding: 0; border: 1px solid transparent; border-radius: 11px; color: var(--ui-secondary); background: transparent; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 160ms ease; }
 .appearance-quick-toggle svg, .appearance-options svg { flex: none; stroke-width: 1.7; }
 .appearance-quick-toggle:focus-visible, .appearance-options button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
 .auth-appearance-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }

@@ -8,6 +8,7 @@ import PublicDeletionPage from './pages/PublicDeletionPage';
 import { getDeletionPageKind } from './lib/deletionPages';
 import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import NavbarMenu from './components/NavbarMenu';
+import AppearanceSwitch from './components/AppearanceSwitch';
 import { notificationApi, chatApi, getPendingRoomInvite } from './api/client';
 import {
   listenForForegroundMessages,
@@ -1111,6 +1112,7 @@ useEffect(() => {
 
 
 
+              <AppearanceSwitch compact rail />
               <NavbarMenu
                 user={user}
                 logout={logout}

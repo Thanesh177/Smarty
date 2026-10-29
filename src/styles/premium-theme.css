@@ -24,10 +24,10 @@
   --ui-faint: #8996ad;
   --ui-label: #b5c2da;
   /* Solid cobalt is for actions. Lighter blue is for readable links on black. */
-  --ui-primary: #2457ff;
-  --ui-primary-rgb: 36, 87, 255;
-  --ui-primary-hover: #3867ff;
-  --ui-primary-pressed: #1944d8;
+  --ui-primary: #3a6bec;
+  --ui-primary-rgb: 58, 107, 236;
+  --ui-primary-hover: #3e6ded;
+  --ui-primary-pressed: #315bd5;
   --ui-primary-ink: #ffffff;
   --ui-accent: #8dabff;
   --ui-accent-strong: #c1d2ff;
@@ -39,7 +39,7 @@
   --ui-control-bg: #111622;
   --ui-control-hover: #1b2437;
   --ui-control-line: #343e52;
-  --ui-brand-bg: #2457ff;
+  --ui-brand-bg: #3a6bec;
   --ui-brand-ink: #ffffff;
   --ui-danger: #f2a2a9;
   --ui-success: #a6d6b5;
