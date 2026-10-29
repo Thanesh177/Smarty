@@ -60,15 +60,19 @@ test('switching appearance updates native browser chrome and form color scheme',
 });
 
 test('the first paint restores day mode before the app, including when storage is blocked', () => {
-  const script = fs.readFileSync(new URL('../../public/appearance.js', import.meta.url), 'utf8');
+  const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const script = html.match(/<script id="smarty-appearance">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(script, 'The startup preference must not depend on a separate network request');
+  const compatibilityScript = fs.readFileSync(new URL('../../public/appearance.js', import.meta.url), 'utf8');
+  assert.equal(script.trim(), compatibilityScript.trim());
   for (const value of ['day', 'dark', null, 'invalid', 'blocked']) {
     const doc = documentFixture();
     vm.runInNewContext(script, { document: doc, localStorage: { getItem: key => { assert.equal(key, APP_THEME_KEY); if (value === 'blocked') throw Error('Unavailable'); return value; } } });
     assert.equal(doc.attributes.get('data-app-theme'), value === 'day' ? 'day' : 'dark');
     assert.equal(doc.documentElement.style.backgroundColor, value === 'day' ? '#f4efe6' : '#06070a');
   }
-  const html = fs.readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
-  assert.ok(html.indexOf('src="/appearance.js"') < html.indexOf('<body'));
+  assert.ok(html.indexOf('id="smarty-appearance"') < html.indexOf('<body'));
+  assert.doesNotMatch(html, /<script[^>]+src="\/appearance\.js"/);
   assert.match(html, /html\[data-app-theme='day'\] \.boot-loader-orb \{ background: #214d40/);
   assert.doesNotMatch(script, /fetch\(|cookie|removeItem|clear\(/);
 });
