@@ -74,11 +74,11 @@
 .sl-hero-copy > p { font-size: clamp(14px, 1.13vw, 16px); line-height: 1.8; color: var(--sl-muted); max-width: 380px; margin-top: 26px; }
 .sl-hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 30px; }
 .smarty-landing .sl-action { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; gap: 18px; padding: 12px 18px; border: 1px solid var(--sl-line); border-radius: 7px; background: var(--ui-surface-raised); color: var(--ui-secondary); font-size: 12px; font-weight: 600; line-height: 1.5; transition: background 160ms, transform 200ms var(--sl-ease); }
-.smarty-landing .sl-action-primary { background: var(--sl-accent); color: var(--ui-accent-ink); border-color: var(--sl-accent); }
+.smarty-landing .sl-action-primary { background: var(--ui-primary); color: var(--ui-primary-ink); border-color: var(--ui-primary); }
 .smarty-landing .sl-action-subtle { background: none; border-color: transparent; color: var(--ui-label); }
 .sl-action svg, .sl-text-action svg { transition: transform 220ms var(--sl-ease); }
 .sl-action:hover svg, .sl-text-action:hover svg { transform: translate(2px, -1px); }
-.smarty-landing .sl-action-primary:hover { background: var(--ui-accent-hover); }
+.smarty-landing .sl-action-primary:hover { background: var(--ui-primary-hover); }
 .sl-hero-note { display: flex; align-items: center; gap: 12px; margin-top: 44px; color: var(--ui-faint); font-size: 11px; line-height: 1.7; }
 .sl-hero-note strong { color: var(--ui-label); font-weight: 500; }
 .sl-note-symbol { font-size: 29px; color: var(--ui-muted); }

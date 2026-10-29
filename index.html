@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" style="background:#08090b;color-scheme:dark">
+<html lang="en" style="background:#06070a;color-scheme:dark">
   <head>
     <meta name="google-site-verification" content="ezwg4QB42n2FerroHL1xTrKwOqvI_LxOudW32OnzvxY" />
     <meta charset="UTF-8" />
@@ -9,8 +9,9 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#08090b" />
+    <meta name="theme-color" content="#06070a" />
     <meta name="color-scheme" content="dark" />
+    <script src="/appearance.js"></script>
 
     <!-- Apple -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -25,24 +26,30 @@
     <title>Smarty</title>
 
     <style>
-      html, body { margin: 0; padding: 0; width: 100%; min-height: 100%; background: #08090b; color: #f0f0ed; overflow-x: hidden; }
+      html, body { margin: 0; padding: 0; width: 100%; min-height: 100%; background: #06070a; color: #f7f9ff; overflow-x: hidden; }
       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      #root { min-height: 100vh; min-height: 100dvh; background: #08090b; }
-      .boot-loader { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; background: #08090b; }
+      #root { min-height: 100vh; min-height: 100dvh; background: #06070a; }
+      .boot-loader { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; background: #06070a; }
       .boot-loader-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; text-align: center; }
-      .boot-loader-orb { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 16px; border-radius: 14px; color: #121820; background: #eeefed; }
+      .boot-loader-orb { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 16px; border-radius: 14px; color: #ffffff; background: #2457ff; }
       .boot-loader-orb::after { content: "S"; font-size: 27px; font-weight: 650; letter-spacing: -.06em; }
       .boot-loader-card strong { font-size: 25px; font-weight: 550; line-height: 1.2; letter-spacing: -.055em; }
       .boot-loader-card > span { font-size: 13px; line-height: 1.6; color: #a1a5ad; }
       .boot-loader-card .boot-loader-status { margin-top: 24px; color: #a1a5ad; font-size: 12px; }
       .boot-loader-line { position: relative; width: 96px; height: 2px; margin-top: 9px; overflow: hidden; border-radius: 2px; background: #252a31; }
-      .boot-loader-line::after { content: ""; position: absolute; inset: 0; background: #b0c8e4; animation: bootReadingLine 1.8s ease-in-out infinite; transform-origin: left; }
+      .boot-loader-line::after { content: ""; position: absolute; inset: 0; background: #2457ff; animation: bootReadingLine 1.8s ease-in-out infinite; transform-origin: left; }
       @keyframes bootReadingLine { 0% { transform: translateX(-100%) scaleX(.45); } 100% { transform: translateX(100%) scaleX(.45); } }
       @media (prefers-reduced-motion: reduce) { .boot-loader-line::after { animation: none; opacity: .6; } }
+      html[data-app-theme='day'], html[data-app-theme='day'] body,
+      html[data-app-theme='day'] #root, html[data-app-theme='day'] .boot-loader { background: #f4efe6 !important; color: #202b26; }
+      html[data-app-theme='day'] .boot-loader-orb { background: #214d40; }
+      html[data-app-theme='day'] .boot-loader-card > span { color: #57645b; }
+      html[data-app-theme='day'] .boot-loader-line { background: #e8e0f0; }
+      html[data-app-theme='day'] .boot-loader-line::after { background: #214d40; }
     </style>
   </head>
 
-  <body style="background:#08090b">
+  <body style="background:#06070a">
     <div id="root">
       <div class="boot-loader" role="status" aria-live="polite">
         <div class="boot-loader-card">

@@ -7,40 +7,47 @@
 
 :root {
   color-scheme: dark;
-  --ui-bg: #08090b;
-  --ui-bg-deep: #08090b;
-  --ui-bg-rgb: 8, 9, 11;
-  --ui-surface: #111316;
-  --ui-surface-rgb: 17, 19, 22;
-  --ui-surface-raised: #191c20;
-  --ui-surface-soft: rgba(219, 231, 247, 0.045);
-  --ui-surface-hover: rgba(219, 231, 247, 0.075);
-  --ui-surface-pressed: rgba(219, 231, 247, 0.11);
-  --ui-line: rgba(219, 231, 247, 0.09);
-  --ui-line-strong: rgba(219, 231, 247, 0.17);
-  --ui-text: #f0f0ed;
-  --ui-secondary: #c9cbce;
-  --ui-muted: #a1a5ad;
-  --ui-faint: #8b919b;
-  --ui-label: #b2b9c2;
-  --ui-accent: #b0c8e4;
-  --ui-accent-strong: #dce5ee;
-  --ui-accent-rgb: 176, 200, 228;
-  --ui-accent-hover: #eef2f6;
-  --ui-accent-ink: #121820;
-  --ui-accent-soft: #1b232d;
-  --ui-accent-line: #3c4d61;
-  --ui-control-bg: #15181c;
-  --ui-control-hover: #20252b;
-  --ui-control-line: #32373f;
-  --ui-brand-bg: #eeefed;
+  --ui-bg: #06070a;
+  --ui-bg-deep: #06070a;
+  --ui-bg-rgb: 6, 7, 10;
+  --ui-surface: #0e1118;
+  --ui-surface-rgb: 14, 17, 24;
+  --ui-surface-raised: #171c28;
+  --ui-surface-soft: rgba(222, 232, 255, 0.04);
+  --ui-surface-hover: rgba(222, 232, 255, 0.07);
+  --ui-surface-pressed: rgba(222, 232, 255, 0.11);
+  --ui-line: rgba(222, 232, 255, 0.10);
+  --ui-line-strong: rgba(222, 232, 255, 0.21);
+  --ui-text: #f7f9ff;
+  --ui-secondary: #c9d0e0;
+  --ui-muted: #a0acc1;
+  --ui-faint: #8996ad;
+  --ui-label: #b5c2da;
+  /* Solid cobalt is for actions. Lighter blue is for readable links on black. */
+  --ui-primary: #2457ff;
+  --ui-primary-rgb: 36, 87, 255;
+  --ui-primary-hover: #3867ff;
+  --ui-primary-pressed: #1944d8;
+  --ui-primary-ink: #ffffff;
+  --ui-accent: #8dabff;
+  --ui-accent-strong: #c1d2ff;
+  --ui-accent-rgb: 141, 171, 255;
+  --ui-accent-hover: #b3c8ff;
+  --ui-accent-ink: #081126;
+  --ui-accent-soft: #111f43;
+  --ui-accent-line: #3354a8;
+  --ui-control-bg: #111622;
+  --ui-control-hover: #1b2437;
+  --ui-control-line: #343e52;
+  --ui-brand-bg: #2457ff;
+  --ui-brand-ink: #ffffff;
   --ui-danger: #f2a2a9;
   --ui-success: #a6d6b5;
-  --ui-radius: 10px;
-  --ui-radius-large: 14px;
-  --ui-radius-small: 7px;
-  --ui-gutter: clamp(16px, 2.8vw, 42px);
-  --ui-section-space: clamp(28px, 4.5vw, 64px);
+  --ui-radius: 12px;
+  --ui-radius-large: 16px;
+  --ui-radius-small: 8px;
+  --ui-gutter: clamp(18px, 3vw, 48px);
+  --ui-section-space: clamp(24px, 4vw, 56px);
   --ui-shadow-float: 0 18px 48px rgba(0, 0, 0, 0.28);
   --ui-ease: cubic-bezier(.2, .7, .2, 1);
 }
@@ -292,8 +299,8 @@ body {
   button[type='submit']:not(.composer-icon-btn)
 ) {
   border-color: transparent !important;
-  background: var(--ui-accent-strong) !important;
-  color: var(--ui-accent-ink) !important;
+  background: var(--ui-primary) !important;
+  color: var(--ui-primary-ink) !important;
   box-shadow: none !important;
 }
 
@@ -332,8 +339,8 @@ body {
     button[type='submit']:not(.composer-icon-btn)
   ):hover {
     border-color: transparent !important;
-    background: var(--ui-accent-hover) !important;
-    color: var(--ui-accent-ink) !important;
+    background: var(--ui-primary-hover) !important;
+    color: var(--ui-primary-ink) !important;
   }
 }
 

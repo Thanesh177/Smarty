@@ -289,9 +289,9 @@ input, select, textarea { accent-color: var(--ui-accent); }
   .room-invite-join-btn, .notification-save-bar button, .learning-primary-action,
   .books-actions button:not(.secondary), .books-empty-state button
 ) {
-  background: var(--ui-accent) !important;
-  border-color: var(--ui-accent) !important;
-  color: var(--ui-accent-ink) !important;
+  background: var(--ui-primary) !important;
+  border-color: var(--ui-primary) !important;
+  color: var(--ui-primary-ink) !important;
 }
 
 .app-shell .content :is(.secondary-btn, .ghost-btn, .room-invite-secondary-btn) {
@@ -489,7 +489,7 @@ input, select, textarea { accent-color: var(--ui-accent); }
 .app-shell .topbar .quick-icon-link svg { color: inherit; }
 .app-shell .topbar, .app-shell .topbar .navbar-menu { contain: none; will-change: auto; }
 .app-shell .topbar .menu-panel { position: fixed !important; right: calc(80px + env(safe-area-inset-right)) !important; bottom: calc(16px + env(safe-area-inset-bottom)) !important; }
-.app-shell .smarty-brand-mark, .menu-panel .smarty-brand-mark { background: var(--ui-brand-bg) !important; color: var(--ui-accent-ink) !important; border-radius: 10px !important; border: 0 !important; box-shadow: none !important; }
+.app-shell .smarty-brand-mark, .menu-panel .smarty-brand-mark { background: var(--ui-brand-bg) !important; color: var(--ui-brand-ink) !important; border-radius: 10px !important; border: 0 !important; box-shadow: none !important; }
 .app-shell .smarty-brand-mark::before, .app-shell .smarty-brand-mark::after,
 .menu-panel .smarty-brand-mark::before, .menu-panel .smarty-brand-mark::after { display: none; }
 .app-shell .smarty-brand-copy strong, .menu-panel .smarty-brand-copy strong { font-weight: 550; letter-spacing: -.055em; }
@@ -544,7 +544,7 @@ input, select, textarea { accent-color: var(--ui-accent); }
 /* Opening and loading surfaces do not flash a different palette. */
 .app-opening-screen, .app-page-loader, .reader-loading { background: var(--ui-bg) !important; color: var(--ui-text); }
 .app-opening-atmosphere { display: none; }
-.app-opening-mark { background: var(--ui-brand-bg) !important; color: var(--ui-accent-ink) !important; border-color: transparent !important; box-shadow: none !important; }
+.app-opening-mark { background: var(--ui-brand-bg) !important; color: var(--ui-brand-ink) !important; border-color: transparent !important; box-shadow: none !important; }
 .app-opening-progress { color: var(--ui-accent); }
 .app-page-loader-card, .reader-loading-card { background: var(--ui-surface); color: var(--ui-text); border-color: var(--ui-line); box-shadow: none; border-radius: 12px; }
 
@@ -555,9 +555,9 @@ input, select, textarea { accent-color: var(--ui-accent); }
     box-shadow: none !important;
   }
   .app-shell .content :is(.primary-btn, .btn-primary, .publish-btn, .submit-answer-btn, .learn-primary):hover:not(:disabled) {
-    color: var(--ui-accent-ink) !important;
-    background: var(--ui-accent-hover) !important;
-    border-color: var(--ui-accent-hover) !important;
+    color: var(--ui-primary-ink) !important;
+    background: var(--ui-primary-hover) !important;
+    border-color: var(--ui-primary-hover) !important;
   }
   .app-shell .content .option-btn:hover:not(:disabled):not(.selected) { background: var(--ui-accent-soft) !important; border-color: var(--ui-accent) !important; }
   .app-shell .topbar :is(.quick-icon-link, .hamburger-btn):hover { background: var(--ui-control-hover) !important; color: var(--ui-accent) !important; }

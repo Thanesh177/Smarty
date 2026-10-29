@@ -1,0 +1,192 @@
+/* Appearance is a device preference, not an account or reading-mode setting. */
+:root[data-app-theme='day'] {
+  color-scheme: light;
+  --ui-bg: #f4efe6;
+  --ui-bg-deep: #f4efe6;
+  --ui-bg-rgb: 244, 239, 230;
+  --ui-surface: #fbf8f2;
+  --ui-surface-rgb: 251, 248, 242;
+  --ui-surface-raised: #eee8de;
+  --ui-surface-soft: rgba(48, 72, 57, .035);
+  --ui-surface-hover: rgba(48, 72, 57, .065);
+  --ui-surface-pressed: rgba(48, 72, 57, .10);
+  --ui-line: rgba(36, 61, 48, .13);
+  --ui-line-strong: rgba(36, 61, 48, .26);
+  --ui-text: #202b26;
+  --ui-secondary: #38473e;
+  --ui-muted: #57645b;
+  --ui-faint: #59665c;
+  --ui-label: #4b5b51;
+  --ui-primary: #214d40;
+  --ui-primary-rgb: 33, 77, 64;
+  --ui-primary-hover: #2a5d4d;
+  --ui-primary-pressed: #17392f;
+  --ui-primary-ink: #ffffff;
+  --ui-accent: #325a49;
+  --ui-accent-strong: #234b3d;
+  --ui-accent-rgb: 50, 90, 73;
+  --ui-accent-hover: #244737;
+  --ui-accent-ink: #ffffff;
+  --ui-accent-soft: #e8e0f0;
+  --ui-accent-line: #b9a9c9;
+  --ui-control-bg: #f9f5ed;
+  --ui-control-hover: #ede5f2;
+  --ui-control-line: #aeb6aa;
+  --ui-brand-bg: #214d40;
+  --ui-brand-ink: #ffffff;
+  --ui-danger: #a43240;
+  --ui-success: #245d44;
+  --ui-success-soft: #e3eee2;
+  --ui-danger-soft: #f8e4e5;
+  --ui-shadow-float: 0 16px 48px rgba(36, 61, 48, .12);
+}
+
+/* A small, reusable switch. No new fixed controls or route layout changes. */
+.appearance-setting { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0 2px; border-top: 1px solid var(--ui-line); }
+.appearance-label { color: var(--ui-muted); font-size: 12px; font-weight: 450; }
+.appearance-options { display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid var(--ui-line); border-radius: 11px; background: var(--ui-control-bg); }
+.appearance-options button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 7px 11px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--ui-muted); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: color 160ms ease, background-color 160ms ease; }
+.appearance-options button[aria-pressed='true'] { color: var(--ui-accent-strong); background: var(--ui-accent-soft); border-color: var(--ui-accent-line); }
+.appearance-quick-toggle { display: inline-grid; place-items: center; width: 44px; min-width: 44px; height: 44px; padding: 0; border: 1px solid var(--ui-line); border-radius: 50%; color: var(--ui-secondary); background: transparent; cursor: pointer; transition: background-color 160ms ease; }
+.appearance-quick-toggle svg, .appearance-options svg { flex: none; stroke-width: 1.7; }
+.appearance-quick-toggle:focus-visible, .appearance-options button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.auth-appearance-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.auth-appearance-row .login-brand { margin-bottom: 0 !important; min-width: 0; }
+.auth-appearance-row .appearance-quick-toggle { flex: none; }
+@media (hover: hover) { .appearance-quick-toggle:hover { background: var(--ui-accent-soft); } .appearance-options button:not([aria-pressed='true']):hover { color: var(--ui-text); background: var(--ui-surface-hover); } }
+@media (pointer: coarse) { .appearance-options button { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .appearance-quick-toggle, .appearance-options button { transition: none; } }
+
+/* Legacy dark surfaces are named explicitly. Photographs, video overlays,
+   code samples, and the reader's own paper/sepia modes are not recolored. */
+:root[data-app-theme='day'] body :is(.snap-feed-page, .feed-inner-header, .feed-topics-page,
+  .news-page, .news-story-page, .books-workspace, .learn-page, .learning-page,
+  .profile-page, .creator-profile-container, .public-profile-page, .saved-page,
+  .creator-dashboard-page, .create-page, .post-ai-page, .single-post-page,
+  .notification-settings-page, .progress-page, .quiz-progress-page, .comments-page) {
+  color: var(--ui-text); background: var(--ui-bg) !important;
+}
+:root[data-app-theme='day'] body :is(.snap-post, .post-content, .feed-news-brief,
+  .news-daily-brief, .news-section-digest-card, .news-card, .news-story-explorer,
+  .quiz-practice-setup, .profile-card, .profile-overview-card, .dashboard-panel,
+  .saved-card, .library-dialog, .profile-modal, .post-editor .composer-details,
+  .notification-settings-card, .progress-card, .quiz-progress-card,
+  .quiz-progress-empty, .unlock-card, .mistake-review-card) {
+  background: var(--ui-surface) !important; border-color: var(--ui-line) !important; box-shadow: none !important;
+}
+:root[data-app-theme='day'] body :is(.snap-post, .post-content) { background: transparent !important; }
+:root[data-app-theme='day'] body .app-shell .content :is(h1, h2, h3, h4, h5) { color: var(--ui-text) !important; text-shadow: none !important; }
+:root[data-app-theme='day'] body .app-shell .content :is(.post-content > p, .post-body, .reel-body,
+  .post-ai-explanation-paragraphs, .post-ai-explanation-paragraphs p, .learning-article p,
+  .news-daily-brief p, .news-brief-summary, .news-section-digest-card p,
+  .news-card p, .profile-bio, .public-profile-identity p, .library-card p) { color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .content :is(.quiz-masthead, .quiz-library-stats,
+  .quiz-study-sidebar, .quiz-library-layout, .quiz-subject-bottom, .library-toolbar,
+  .library-filters, .library-tabs, .news-tabs, .news-toolbar, .news-hero,
+  .news-location-controls, .profile-tabs, .profile-header, .post-actions, .auth-mode-nav) { border-color: var(--ui-line) !important; }
+:root[data-app-theme='day'] body .app-shell .content :is(.quiz-text-control, .quiz-settings-toggle,
+  .quiz-library-stats, .quiz-subject-bottom, .quiz-subject-areas, .quiz-subject-open,
+  .quiz-library-filters button, .quiz-setup-fields label, .quiz-mode-picker button,
+  .quiz-sound-control, .quiz-session-stats, .login-card label, .login-legal-note,
+  .library-card-author, .library-card-summary, .library-shelf-count, .news-story-explorer p,
+  .last-updated, .news-card-source, .news-card-time, .news-source-note) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .app-shell .content :is(.creator-link, .post-author,
+  .post-author-row, .feed-view-brand, .feed-topic-trigger, .news-card-title-btn,
+  .news-card h3 button, .library-card h3 button, .auth-mode-option.active,
+  .quiz-library-stats strong, .quiz-library-filters button[aria-pressed='true']) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .app-shell .content .post-topic { background: var(--ui-accent-soft) !important; border-color: var(--ui-accent-line) !important; color: var(--ui-accent-strong) !important; }
+:root[data-app-theme='day'] body .app-shell .content :is(.post-actions button, .post-translation select,
+  .learning-journey a, .feed-home-status button, .library-card-actions button,
+  .news-refresh-btn, .quiz-workspace .profile-mini-btn) {
+  color: var(--ui-secondary) !important; background: var(--ui-control-bg) !important; border-color: var(--ui-line-strong) !important;
+}
+:root[data-app-theme='day'] body .app-shell .content :is(.quiz-setup-fields, .login-card,
+  .profile-editor-field, .composer-details, .library-filters) :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), select, textarea) {
+  color: var(--ui-text) !important; background: var(--ui-control-bg) !important; border-color: var(--ui-control-line) !important;
+}
+:root[data-app-theme='day'] body .app-shell .content :is(input, textarea)::placeholder,
+:root[data-app-theme='day'] .universal-search-panel input::placeholder { color: var(--ui-faint) !important; opacity: 1; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-workspace .option-btn.correct { background: var(--ui-success-soft) !important; color: var(--ui-success) !important; border-color: var(--ui-success) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-workspace .option-btn.wrong { background: var(--ui-danger-soft) !important; color: var(--ui-danger) !important; border-color: var(--ui-danger) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-workspace :is(.quiz-choice-key, .quiz-choice-indicator) { border-color: var(--ui-control-line); color: inherit; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-workspace .score-ring > span { color: var(--ui-primary); }
+:root[data-app-theme='day'] body .app-shell .content .quiz-mode-picker button[aria-pressed='true'] { color: var(--ui-accent-strong) !important; }
+:root[data-app-theme='day'] body .app-shell .content :is(.answer-feedback.correct, .answer-feedback.correct p, .answer-feedback.correct strong) { color: var(--ui-success) !important; background-color: var(--ui-success-soft); border-color: var(--ui-success); }
+:root[data-app-theme='day'] body .app-shell .content :is(.answer-feedback.wrong, .answer-feedback.wrong p, .answer-feedback.wrong strong) { color: var(--ui-danger) !important; background-color: var(--ui-danger-soft); border-color: var(--ui-danger); }
+:root[data-app-theme='day'] body .app-shell .content .quiz-progress-workspace :is(p, small, summary, .quiz-level-meta, .quiz-level-summary > span,
+  .quiz-progress-facts span, .quiz-progress-section-head > span, .quiz-subject-record > div > span,
+  .quiz-notebook-count > span, .quiz-notebook-record > div > span, .quiz-notebook-subject > span,
+  .mistake-label, .mistake-answer-grid span, .unlock-status, .unlock-card-top) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-progress-workspace :is(.quiz-progress-facts strong,
+  .quiz-level-summary > strong, .quiz-notebook-count strong, .mistake-answer-grid strong) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-progress-workspace :is(.quiz-progress-summary, .quiz-progress-facts,
+  .quiz-subject-record, .quiz-subject-records, .quiz-progress-details, .quiz-notebook-layout,
+  .quiz-notebook-record, .quiz-notebook-sidebar, .mistake-explanation) { border-color: var(--ui-line) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-progress-workspace :is(.profile-level-track, .quiz-record-track) { background: var(--ui-surface-raised) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-progress-workspace :is(.profile-level-fill, .quiz-record-track > div) { background: var(--ui-primary) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-progress-workspace :is(.unlock-action-btn, .remove-mistake-btn) { color: var(--ui-accent-strong); background: var(--ui-accent-soft); border-color: var(--ui-accent-line); }
+:root[data-app-theme='day'] body .app-shell .content .news-page :is(.news-inline-notice, .cache-note, .news-provider-note, .news-brief-highlights a > span) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .news-card :is(.skeleton-image, .skeleton-line) { background: var(--ui-surface-raised); }
+
+/* The rail remains a light floating surface, with a pine active action. */
+:root[data-app-theme='day'] body .app-shell > .topbar.glass-topbar { border-color: var(--ui-line-strong) !important; box-shadow: 0 8px 28px #243d3017 !important; }
+:root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .navbar-menu { border-color: var(--ui-line) !important; }
+:root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .hamburger-btn { color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .hamburger-btn.is-open { color: var(--ui-accent-strong) !important; background: var(--ui-accent-soft) !important; }
+:root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .nav-control-label { background: var(--ui-surface); color: var(--ui-text); border-color: var(--ui-line-strong); box-shadow: var(--ui-shadow-float); }
+:root[data-app-theme='day'] body .navigation-dialog.menu-overlay { background: #202b2638; }
+:root[data-app-theme='day'] body .navigation-dialog .menu-panel { box-shadow: var(--ui-shadow-float) !important; }
+:root[data-app-theme='day'] body .navigation-dialog :is(.menu-footer, .menu-personal-section) { border-color: var(--ui-line); }
+:root[data-app-theme='day'] body .smarty-brand-copy strong { color: var(--ui-text); }
+:root[data-app-theme='day'] body .smarty-brand-copy small { color: var(--ui-muted); }
+:root[data-app-theme='day'] body :is(.universal-search-layer, .feed-topic-picker-layer) { background: #202b264a; backdrop-filter: none; -webkit-backdrop-filter: none; }
+:root[data-app-theme='day'] body .universal-search-panel :is(input, h2, strong) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .universal-search-panel :is(p, small, kbd, .universal-search-meta, .universal-search-input-row, .universal-search-footer) { color: var(--ui-muted) !important; border-color: var(--ui-line); }
+:root[data-app-theme='day'] body .universal-search-panel :is(.universal-search-close, .universal-search-clear, .universal-search-filters button, .universal-search-result, .universal-search-quick-grid button) { color: var(--ui-secondary); border-color: var(--ui-line); }
+:root[data-app-theme='day'] body .universal-search-panel :is(.universal-search-result.is-selected, .universal-search-filters button[aria-pressed='true']) { background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
+:root[data-app-theme='day'] body .feed-topic-picker :is(button, input, h2) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .feed-topic-picker input { background: var(--ui-control-bg); border-color: var(--ui-control-line); }
+
+/* Conversation surfaces retain their message/media layout and scroll behavior. */
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace { --room-border: var(--ui-line); --room-muted: var(--ui-muted); }
+:root[data-app-theme='day'] body .app-shell .content :is(.rooms-workspace .room-search,
+  .rooms-workspace .room-name, .chat-page .chat-content strong, .chat-page .chat-info h2) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace :is(.room-description, .room-preview, .room-meta, .rooms-list-heading > span, .rooms-sidebar-heading > span, .msg-time) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace .input :is(input, textarea) { background: transparent !important; color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .app-shell .content :is(.rooms-workspace .rooms-menu-btn, .rooms-workspace .active-room-menu-btn, .rooms-workspace .mobile-back-btn, .rooms-workspace .room-card-menu-btn) { background: var(--ui-control-bg) !important; color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .rooms-dialog-portal :is(.members-card, .create-form) { color: var(--ui-text); }
+:root[data-app-theme='day'] body .rooms-dialog-portal :is(h2, h3, label, input, select, textarea) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .rooms-dialog-portal p { color: var(--ui-muted); }
+
+/* Status meaning is preserved rather than turned into a decorative accent. */
+:root[data-app-theme='day'] body :is(.status.error, .login-error, .form-error, .news-error, .error-message) { color: var(--ui-danger) !important; background-color: var(--ui-danger-soft); }
+:root[data-app-theme='day'] body :is(.status.success, .form-success) { color: var(--ui-success) !important; }
+:root[data-app-theme='day'] body .app-shell .content :is(.login-hero p, .login-card-header p, .login-legal-note, .auth-loading-copy, .login-highlights span) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .app-shell .content .login-legal-note a { color: var(--ui-accent-strong); }
+:root[data-app-theme='day'] body .app-shell .content .login-divider { color: var(--ui-muted); }
+:root[data-app-theme='day'] body .app-shell .content .login-divider::before,
+:root[data-app-theme='day'] body .app-shell .content .login-divider::after { background: var(--ui-line); }
+:root[data-app-theme='day'] body .app-shell .content .post-content a:not([class]) { color: var(--ui-accent); }
+:root[data-app-theme='day'] body .library-skeletons :is(span, i) { background: var(--ui-surface-raised); }
+:root[data-app-theme='day'] .app-opening-screen :is(p, small, .app-opening-caption) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] .app-opening-wordmark strong { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] .app-opening-wordmark span,
+:root[data-app-theme='day'] .app-opening-status { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] .app-opening-progress { background: var(--ui-accent-soft) !important; }
+:root[data-app-theme='day'] .app-opening-progress > span { background: var(--ui-primary) !important; }
+:root[data-app-theme='day'] .sl-nav nav a:hover { color: var(--ui-text); }
+
+/* Keep deliberate dark reading/video experiences independent of app chrome. */
+:root[data-app-theme='day'] :is(.reader-theme-dark, .reader-theme-sepia, .video-topic-page) {
+  color-scheme: dark; --ui-bg: #06070a; --ui-bg-deep: #06070a; --ui-surface: #0e1118;
+  --ui-surface-raised: #171c28; --ui-text: #f7f9ff; --ui-secondary: #c9d0e0;
+  --ui-muted: #a0acc1; --ui-faint: #8996ad; --ui-accent: #8dabff;
+  --ui-control-bg: #111622; --ui-control-hover: #1b2437; --ui-line: #dee8ff1a;
+}
+@media (hover: hover) {
+  :root[data-app-theme='day'] body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):hover:not([aria-current='page']):not(.topbar-create-btn) { background: var(--ui-accent-soft) !important; color: var(--ui-accent-strong) !important; }
+}
+@media (max-width: 700px) {
+  .smarty-landing .sl-nav nav { gap: 10px; }
+  .auth-appearance-row { gap: 10px; }
+}

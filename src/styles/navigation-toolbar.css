@@ -19,7 +19,7 @@ body .app-shell > .topbar.glass-topbar {
   inset: auto var(--app-rail-right, max(12px, env(safe-area-inset-right))) var(--app-rail-bottom, max(12px, env(safe-area-inset-bottom))) auto !important;
   width: var(--app-rail-width, 56px) !important; max-width: var(--app-rail-width, 56px) !important;
   margin: 0 !important; padding: 0 !important; border: 1px solid #ffffff17 !important;
-  border-radius: 16px !important; background: #111316f5 !important;
+  border-radius: 16px !important; background: rgba(var(--ui-surface-rgb), .97) !important;
   box-shadow: 0 8px 28px #0006, inset 0 1px 0 #ffffff06 !important;
   transform: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
   /* Legacy scroll-hiding and containment must not clip or hide this overlay. */
@@ -59,7 +59,7 @@ body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) {
   flex-direction: row; align-items: center; justify-content: center; gap: 0 !important;
   width: 44px !important; height: 44px !important; min-width: 44px !important; min-height: 44px !important;
   padding: 0 !important; border: 0 !important; border-radius: 11px !important;
-  background: transparent !important; color: #9ba3ad !important;
+  background: transparent !important; color: var(--ui-muted) !important;
   box-shadow: none !important; transform: none !important; filter: none !important;
   backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
   touch-action: manipulation; -webkit-tap-highlight-color: transparent;
@@ -74,23 +74,23 @@ body .app-shell .topbar.glass-topbar .navbar-menu {
 body .app-shell .topbar.glass-topbar .hamburger-btn { width: 44px !important; color: #d8dce2 !important; }
 body .app-shell .topbar.glass-topbar .dock-menu-label { display: none; }
 body .app-shell .topbar.glass-topbar .quick-icon-link[aria-current='page'] {
-  color: #b8d5f6 !important; background: #203043 !important;
+  color: var(--ui-primary-ink) !important; background: var(--ui-primary) !important;
 }
 body .app-shell .topbar.glass-topbar .quick-icon-link[aria-current='page']::after {
   content: ''; position: absolute; bottom: 4px; left: calc(50% - 2px);
-  width: 4px; height: 2px; border-radius: 2px; background: #b8d5f6;
+  width: 4px; height: 2px; border-radius: 2px; background: var(--ui-primary-ink);
 }
 body .app-shell .topbar.glass-topbar .topbar-create-btn {
-  background: #d9e7f6 !important; color: #142232 !important;
+  background: var(--ui-primary) !important; color: var(--ui-primary-ink) !important;
 }
 body .app-shell .topbar.glass-topbar .hamburger-btn.is-open {
-  background: #ffffff0c !important; color: #f0f3f7 !important;
+  background: var(--ui-accent-soft) !important; color: var(--ui-accent-strong) !important;
 }
 body .app-shell .topbar.glass-topbar .nav-create-symbol { font-size: 24px; font-weight: 350; line-height: 1; }
 body .app-shell .topbar.glass-topbar .nav-badge {
   top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 3px;
   border: 1px solid #111316; font-size: 10px; font-weight: 600; line-height: 16px;
-  background: #b8d5f6 !important; color: #142232 !important;
+  background: var(--ui-primary) !important; color: var(--ui-primary-ink) !important;
 }
 body .app-shell .topbar.glass-topbar .nav-control-label {
   display: none; position: absolute; inset: 50% calc(100% + 12px) auto auto;
@@ -99,11 +99,11 @@ body .app-shell .topbar.glass-topbar .nav-control-label {
   background: #191d23; color: #e2e7ee; font-size: 11px; font-weight: 450; line-height: 1.2;
   pointer-events: none; box-shadow: 0 5px 16px #0005;
 }
-body .app-shell .topbar.glass-topbar :is(button, a):focus-visible { outline: 2px solid #b8d5f6; outline-offset: 2px; }
+body .app-shell .topbar.glass-topbar :is(button, a):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
 body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):focus-visible > .nav-control-label { display: block; }
 @media (hover: hover) {
   body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):hover:not([aria-current='page']):not(.topbar-create-btn) { background: #ffffff0b !important; color: #e5eaf1 !important; }
-  body .app-shell .topbar.glass-topbar .topbar-create-btn:hover { background: #eef5fd !important; }
+  body .app-shell .topbar.glass-topbar .topbar-create-btn:hover { background: var(--ui-primary-hover) !important; }
   body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):hover > .nav-control-label { display: block; }
 }
 @media (max-height: 380px) {

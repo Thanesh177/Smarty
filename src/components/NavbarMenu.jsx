@@ -19,6 +19,7 @@ import {
 import './NavbarMenu.css';
 import './NavigationPanel.css';
 import SmartyBrand from './SmartyBrand';
+import AppearanceSwitch from './AppearanceSwitch';
 import { isAdminUser } from '../lib/adminAccess';
 
 function NavbarMenu({ user, logout, onOpenSearch }) {
@@ -233,6 +234,8 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
               </NavLink>
 
             </nav>
+
+            <AppearanceSwitch />
 
             {user && <nav className="menu-section menu-personal-section" aria-label="Your space">
               <NavLink to="/saved" onClick={closeMenu} className="menu-icon-link">

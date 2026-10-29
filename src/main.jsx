@@ -11,6 +11,9 @@ import './styles/feed-learning-home.css';
 import './styles/interface-polish.css';
 import './styles/form-controls.css';
 import './styles/navigation-toolbar.css';
+import './styles/cobalt-theme.css';
+import './styles/day-theme.css';
+import { AppearanceProvider } from './contexts/AppearanceContext';
 import 'aws-amplify/auth/enable-oauth-listener';
 import { claimChunkRecovery, isChunkLoadFailure } from './lib/chunkRecovery';
 import {
@@ -79,7 +82,9 @@ function mountApp() {
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <App />
+          <AppearanceProvider>
+            <App />
+          </AppearanceProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </React.StrictMode>

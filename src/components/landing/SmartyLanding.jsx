@@ -7,6 +7,7 @@ import {
   Bookmark, Languages, PenLine, ChartNoAxesCombined, Gamepad2, Route, UserRound, Bell,
 } from 'lucide-react';
 import SmartyBrand from '../SmartyBrand';
+import AppearanceSwitch from '../AppearanceSwitch';
 import { MAIN_TOPICS, getMainTopicDefinition } from '../../data/topicTaxonomy';
 import './SmartyLanding.css';
 
@@ -58,7 +59,7 @@ function AttentionDiagram() {
         </g>
         <g fontFamily="inherit" fontSize="14" textAnchor="middle" fill="var(--ui-secondary)">
           <text x="41" y="45">The</text><text x="41" y="102">sky</text><text x="41" y="159">is</text>
-          <text x="405" y="102" fill="var(--ui-accent-ink)" fontWeight="650">blue</text>
+          <text x="405" y="102" fill="var(--ui-brand-ink)" fontWeight="650">blue</text>
         </g>
         <g stroke="var(--ui-accent)" strokeWidth="1.3">
           <path d="M217 97h26M230 84v26M221 88l18 18M221 106l18-18" />
@@ -209,6 +210,7 @@ export default function SmartyLanding({ onSelect, onOpenSearch }) {
           <a href="#topic-catalog" onClick={(event) => scrollToSection(event, 'topic-catalog')}>Topics</a>
           <a href="#smarty-features" onClick={(event) => scrollToSection(event, 'smarty-features')}>Features</a>
           <button className="sl-nav-search" onClick={onOpenSearch} aria-label="Search Smarty"><Search size={17} strokeWidth={1.7} /></button>
+          <AppearanceSwitch compact />
           <Link className="sl-nav-open" to="/feed?topic=All">Open Smarty <ArrowUpRight size={15} /></Link>
         </nav>
       </header>

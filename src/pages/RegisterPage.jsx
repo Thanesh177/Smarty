@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SmartyBrand from '../components/SmartyBrand';
+import AppearanceSwitch from '../components/AppearanceSwitch';
 import TermsAgreement, {
   recordTermsAcceptance,
 } from '../components/TermsAgreement';
@@ -199,10 +200,10 @@ export default function RegisterPage() {
       <div className="login-shell">
         <section className="login-hero">
           <div>
-            <SmartyBrand
+            <div className="auth-appearance-row"><SmartyBrand
               className="login-brand"
               tagline="Learn something worth keeping"
-            />
+            /><AppearanceSwitch compact /></div>
             <h1>Make learning yours.</h1>
             <p>
               Create one account for your feed, saved ideas, conversations,

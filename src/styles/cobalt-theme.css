@@ -1,0 +1,115 @@
+/* Finishing layer for legacy workspaces. Geometry stays with each route;
+   color and spacing follow the shared black / cobalt / white tokens. */
+body .app-shell .content :is(.quiz-workspace, .rooms-workspace),
+body .rooms-dialog-portal { background: var(--ui-bg) !important; color: var(--ui-text); }
+body .app-shell .content .quiz-workspace :is(.quiz-subject-card, .quiz-loading-card, .quiz-saved-review),
+body .app-shell .content .rooms-workspace:not(.has-active-room) .room-item {
+  background: var(--ui-surface) !important; border-color: var(--ui-line) !important;
+}
+body .app-shell .content .quiz-workspace :is(.question-card, .result-card) { background: var(--ui-surface) !important; }
+body .app-shell .content .quiz-workspace .quiz-subject-card p { color: var(--ui-muted) !important; }
+body .app-shell .content :is(.quiz-subject-top, .quiz-subject-areas, .quiz-library-count, .quiz-sidebar-note, .quiz-prep-note,
+  .quiz-stat-detail, .quiz-session-stats, .quiz-eyebrow) { color: var(--ui-muted) !important; }
+body .app-shell .content :is(.quiz-art-accent, .quiz-art-node) { stroke: var(--ui-accent); }
+body .app-shell .content .quiz-art-node { fill: var(--ui-accent); }
+body .app-shell .content .quiz-workspace .quiz-mode-picker button[aria-pressed='true'] {
+  background: var(--ui-accent-soft) !important; color: var(--ui-accent-strong) !important;
+}
+body .app-shell .content .quiz-workspace .quiz-library-filters button[aria-pressed='true'] {
+  color: var(--ui-text); border-color: var(--ui-primary);
+}
+body .app-shell .content .quiz-workspace .option-btn:not(.correct):not(.wrong) {
+  background: var(--ui-control-bg) !important; border-color: var(--ui-control-line) !important;
+}
+body .app-shell .content .quiz-workspace .option-btn.selected:not(.correct):not(.wrong) {
+  background: var(--ui-accent-soft) !important; border-color: var(--ui-accent) !important;
+}
+
+/* White-on-cobalt is reserved for the action that moves a task forward. */
+body .app-shell .content :is(.login-submit, .register-submit, .profile-edit-btn, .dashboard-primary,
+  .quiz-progress-primary, .quiz-next-primary, .learning-primary-action, .learn-primary,
+  .submit-answer-btn, .publish-btn, .composer-publish-btn, .room-invite-join-btn, .library-primary),
+body .app-shell .content .quiz-workspace .submit-answer-btn,
+body .app-shell .content .books-actions button:not(.secondary),
+body .app-shell .content .admin-user-search button,
+body .app-shell .content .notification-save-bar button,
+body .app-shell .content .chat-page .message-form button[type='submit'],
+body .app-shell .content .rooms-workspace .send-message-btn,
+body .app-shell .content .rooms-workspace:not(.has-active-room) .rooms-create-plus-btn,
+body .rooms-dialog-portal .create-form button[type='submit'],
+body .menu-panel .login-pill {
+  background: var(--ui-primary) !important; color: var(--ui-primary-ink) !important;
+  border-color: var(--ui-primary) !important; box-shadow: inset 0 1px 0 #ffffff14 !important;
+}
+body .app-shell .content :is(.mini-progress-fill, .progress-fill, .quiz-loading-lines span),
+body .app-shell .content .quiz-workspace .progress-fill,
+body .notification-toggle[aria-checked='true'], body .notification-toggle.is-on { background: var(--ui-primary) !important; }
+body .app-shell .content .chat-page .chat-preview .unread-badge,
+body .app-shell .content .rooms-workspace .room-unread-badge {
+  background: var(--ui-primary) !important; color: var(--ui-primary-ink) !important;
+}
+
+/* Conversation media, book artwork, correct/wrong answers and user-selected
+   paper/sepia reading modes deliberately retain their own visual meaning. */
+body .app-shell .content .rooms-workspace :is(.sidebar, .chat, .chat-header) { background: var(--ui-bg) !important; }
+body .app-shell .content .rooms-workspace .room-item.active {
+  background: var(--ui-accent-soft) !important; border-color: var(--ui-accent-line) !important;
+}
+body .app-shell .content .rooms-workspace .input {
+  background: var(--ui-control-bg) !important; border-color: var(--ui-control-line) !important;
+}
+body .app-shell .content .rooms-workspace .msg:not(.mine):not(:has(.room-message-media-tap)) { background: var(--ui-surface-raised) !important; border-color: var(--ui-line) !important; }
+body .app-shell .content .rooms-workspace .msg.mine:not(:has(.room-message-media-tap)) { background: var(--ui-accent-soft) !important; border-color: var(--ui-accent-line) !important; }
+body .rooms-dialog-portal :is(.create-form, .members-card),
+body .universal-search-layer .universal-search-panel,
+body .feed-topic-picker { background: var(--ui-surface) !important; border-color: var(--ui-line-strong) !important; }
+body .rooms-dialog-portal .create-form :is(input:not([type='file']), select) { background: var(--ui-control-bg) !important; color: var(--ui-text) !important; border-color: var(--ui-control-line) !important; }
+body .feed-topic-picker-list button.is-active { background: var(--ui-accent-soft); }
+body .app-shell .content :is(.library-cover, .library-cover img, .library-dialog) { background-color: var(--ui-surface) !important; }
+body .app-shell .content .books-workspace select { background: var(--ui-control-bg); }
+body .app-shell .content .auth-loading-mark { background: var(--ui-brand-bg); color: var(--ui-brand-ink); }
+body .app-shell .content .login-page .login-card {
+  background: var(--ui-surface) !important; border-color: var(--ui-line-strong) !important;
+}
+body .smarty-landing .smarty-brand-mark { color: var(--ui-brand-ink) !important; }
+body .app-shell .content .smarty-landing .sl-hero { gap: clamp(28px, 5vw, 80px); }
+body .app-shell .content .smarty-landing .sl-action-primary { color: var(--ui-primary-ink); background: var(--ui-primary); }
+
+/* Consistent breathing room, without adding a sidebar lane for the rail. */
+body .app-shell .content .quiz-workspace { padding-inline: var(--ui-gutter) !important; }
+body .app-shell .content .quiz-workspace .quiz-library-intro { padding-block: clamp(28px, 4vw, 48px); gap: 24px; }
+body .app-shell .content .quiz-workspace .quiz-library-intro h1 { font-size: clamp(34px, 4vw, 56px); line-height: 1.12; }
+body .app-shell .content .quiz-workspace .quiz-library-intro p { color: var(--ui-muted); line-height: 1.75; }
+body .app-shell .content .quiz-workspace .quiz-library-stats { min-width: 180px; padding-left: 24px; }
+body .app-shell .content .quiz-workspace .topic-grid { gap: clamp(16px, 1.8vw, 24px) !important; }
+body .app-shell .content .quiz-workspace .quiz-subject-card { min-height: 264px; padding: 24px !important; }
+body .app-shell .content .is-learning-home .snap-post .post-author-row .creator-link { font-size: 12px; }
+body .app-shell .content .is-learning-home .snap-post .post-content > p { font-size: clamp(16px, 1.2vw, 17px); line-height: 1.85; }
+body .app-shell .content :is(.profile-content, .saved-grid, .dashboard-grid) { gap: clamp(16px, 2vw, 24px); }
+body .app-shell .content :is(.profile-card, .dashboard-panel, .saved-card) { overflow-wrap: anywhere; }
+body .app-shell .content .post-ai-explanation-paragraphs { line-height: 1.85; }
+body .app-shell .content .post-ai-explanation-paragraphs :is(p, li) { font-size: clamp(16px, 1.1vw, 18px); }
+body .menu-panel :is(.menu-search-launch, .menu-section a, .menu-link-btn) { min-height: 48px; }
+body .menu-panel .menu-body { padding-block: 12px; }
+body .universal-search-layer .universal-search-suggestions { gap: 8px; }
+
+@media (hover: hover) and (pointer: fine) {
+  body .app-shell .content :is(.login-submit, .register-submit, .profile-edit-btn, .dashboard-primary,
+    .quiz-progress-primary, .quiz-next-primary, .learning-primary-action, .learn-primary,
+    .submit-answer-btn, .publish-btn, .composer-publish-btn, .room-invite-join-btn, .library-primary):hover:not(:disabled),
+  body .app-shell .content .quiz-workspace .submit-answer-btn:hover:not(:disabled),
+  body .menu-panel .login-pill:hover { background: var(--ui-primary-hover) !important; border-color: var(--ui-primary-hover) !important; }
+  body .app-shell .content .quiz-workspace .quiz-subject-card:hover { border-color: var(--ui-accent-line) !important; background: var(--ui-surface-raised) !important; }
+}
+@media (max-width: 700px) {
+  body .app-shell .content .quiz-workspace .quiz-subject-card { padding: 18px !important; min-height: 238px; }
+  body .app-shell .content .quiz-workspace .quiz-library-stats { min-width: 0; padding-left: 0; }
+  body .app-shell .content .is-learning-home .snap-post .post-content > p { line-height: 1.8; }
+  body .app-shell .content :is(.learn-hero, .library-hero, .quiz-progress-intro) { padding-block: 24px; }
+  body .app-shell .content .smarty-landing .sl-hero { gap: 32px; }
+}
+@media (pointer: coarse) {
+  body .app-shell .content :is(.category-btn, .access-filter-btn, .section-tabs button,
+    .saved-toolbar button, .profile-tabs button, .auth-mode-option),
+  body .smarty-landing .sl-nav-search { min-height: 44px; }
+}

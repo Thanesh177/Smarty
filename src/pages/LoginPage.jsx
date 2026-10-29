@@ -6,6 +6,7 @@ import {
 } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SmartyBrand from '../components/SmartyBrand';
+import AppearanceSwitch from '../components/AppearanceSwitch';
 import { startSocialLogin } from '../lib/cognito';
 import { clearAuthDestination, safeAuthDestination, saveAuthDestination } from '../lib/authNavigation';
 import {
@@ -391,10 +392,10 @@ export default function LoginPage() {
       <div className="login-shell">
         <section className="login-hero">
           <div>
-            <SmartyBrand
+            <div className="auth-appearance-row"><SmartyBrand
               className="login-brand"
               tagline="Learn something worth keeping"
-            />
+            /><AppearanceSwitch compact /></div>
             <h1>Welcome back.</h1>
             <p>
               Continue learning, saving, and creating from where you left off.
