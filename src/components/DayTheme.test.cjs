@@ -51,3 +51,12 @@ test('day mode keeps media and reader preferences independent and does not add s
   assert.match(css, /\.option-btn\.correct/); assert.match(css, /\.option-btn\.wrong/);
   assert.doesNotMatch(css, /filter:\s*invert|position:\s*fixed|scroll-snap-type|touch-action:\s*none|transition:\s*all/);
 });
+
+test('legacy quiz captions and search arrows use readable day-mode text', () => {
+  const rules = postcss.parse(css).nodes.filter(node => node.type === 'rule');
+  for (const selector of ['.quiz-masthead > span', '.universal-search-quick-grid button > svg:last-child']) {
+    const rule = rules.find(node => node.selector.includes(selector));
+    assert.ok(rule, selector);
+    assert.ok(rule.nodes.some(node => node.prop === 'color' && node.value === 'var(--ui-muted)'));
+  }
+});

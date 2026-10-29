@@ -111,6 +111,7 @@
 :root[data-app-theme='day'] body .app-shell .content .quiz-workspace :is(.quiz-choice-key, .quiz-choice-indicator) { border-color: var(--ui-control-line); color: inherit; }
 :root[data-app-theme='day'] body .app-shell .content .quiz-workspace .score-ring > span { color: var(--ui-primary); }
 :root[data-app-theme='day'] body .app-shell .content .quiz-mode-picker button[aria-pressed='true'] { color: var(--ui-accent-strong) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-masthead > span { color: var(--ui-muted); }
 :root[data-app-theme='day'] body .app-shell .content :is(.answer-feedback.correct, .answer-feedback.correct p, .answer-feedback.correct strong) { color: var(--ui-success) !important; background-color: var(--ui-success-soft); border-color: var(--ui-success); }
 :root[data-app-theme='day'] body .app-shell .content :is(.answer-feedback.wrong, .answer-feedback.wrong p, .answer-feedback.wrong strong) { color: var(--ui-danger) !important; background-color: var(--ui-danger-soft); border-color: var(--ui-danger); }
 :root[data-app-theme='day'] body .app-shell .content .quiz-progress-workspace :is(p, small, summary, .quiz-level-meta, .quiz-level-summary > span,
@@ -144,6 +145,7 @@
 :root[data-app-theme='day'] body .universal-search-panel :is(p, small, kbd, .universal-search-meta, .universal-search-input-row, .universal-search-footer) { color: var(--ui-muted) !important; border-color: var(--ui-line); }
 :root[data-app-theme='day'] body .universal-search-panel :is(.universal-search-close, .universal-search-clear, .universal-search-filters button, .universal-search-result, .universal-search-quick-grid button) { color: var(--ui-secondary); border-color: var(--ui-line); }
 :root[data-app-theme='day'] body .universal-search-panel :is(.universal-search-result.is-selected, .universal-search-filters button[aria-pressed='true']) { background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
+:root[data-app-theme='day'] body .universal-search-quick-grid button > svg:last-child { color: var(--ui-muted); }
 :root[data-app-theme='day'] body .feed-topic-picker :is(button, input, h2) { color: var(--ui-text) !important; }
 :root[data-app-theme='day'] body .feed-topic-picker input { background: var(--ui-control-bg); border-color: var(--ui-control-line); }
 
