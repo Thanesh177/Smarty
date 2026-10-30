@@ -178,6 +178,40 @@
 :root[data-app-theme='day'] .app-opening-progress > span { background: var(--ui-primary) !important; }
 :root[data-app-theme='day'] .sl-nav nav a:hover { color: var(--ui-text); }
 
+/* Legacy conversation and lesson styles used their own dark-only palettes. */
+:root[data-app-theme='day'] body .app-shell .content .chat-page {
+  --chat-canvas: var(--ui-bg); --chat-sidebar: var(--ui-bg); --chat-surface: var(--ui-surface);
+  --chat-surface-hover: var(--ui-control-hover); --chat-ink: var(--ui-text);
+  --chat-muted: var(--ui-muted); --chat-accent: var(--ui-accent); --chat-line: var(--ui-line);
+}
+:root[data-app-theme='day'] body .app-shell .content .chat-page :is(.message, .chat-actions-menu, .message-options-menu, .chat-avatar, .chat-header-avatar) { background: var(--ui-surface) !important; color: var(--ui-text) !important; border-color: var(--ui-line) !important; }
+:root[data-app-theme='day'] body .app-shell .content .chat-page .message.mine { background: var(--ui-accent-soft) !important; color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .app-shell .content .chat-page :is(.chat-empty-state p, .chat-empty-state h2, .chat-more-btn, .chat-actions-menu button, .message-menu-btn, .date-divider span, .voice-btn, .media-tool-btn) { color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .content .chat-page .message:has(.message-media-preview, .audio-mini-card) { background: transparent !important; }
+:root[data-app-theme='day'] body .app-shell .content .chat-page :is(.btn-delete-chat, .btn-block, .blocked-banner, .recording) { color: var(--ui-danger) !important; }
+:root[data-app-theme='day'] body .app-shell .content .chat-page .blocked-banner { background: var(--ui-danger-soft) !important; }
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace :is(.room-name-badge-row > strong, .active-room-heading strong, .msg p, .msg > b) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace :is(.room-card-description, .room-card-open, .room-card-visibility, .room-owner-badge, .active-room-heading small, .rooms-list-heading h2, .rooms-sidebar-heading p, .room-privacy-help, .room-modal-eyebrow, .room-create-field, .msg-time) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace :is(.room-search-wrap, .room-image-wrap, .active-room-image, .room-status, .room-card-menu, .active-room-menu) { background: var(--ui-control-bg) !important; color: var(--ui-secondary) !important; border-color: var(--ui-control-line) !important; }
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace .input .room-media-picker-btn { background: var(--ui-control-bg) !important; color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace .msg:not(:has(.room-message-media-tap)) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .rooms-dialog-portal :is(.room-create-field, .room-privacy-help, .create-room-image-picker small, .close-members) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .rooms-dialog-portal select { color-scheme: light; }
+:root[data-app-theme='day'] body .app-shell .content .post-ai-page { --post-ai-ink: var(--ui-text); --post-ai-accent: var(--ui-accent); --post-ai-accent-rgb: var(--ui-accent-rgb); }
+:root[data-app-theme='day'] body .post-ai-page::before { background: none; }
+:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-topline, .post-ai-card, .post-ai-deeper, .post-ai-deeper-preview, .post-ai-premium-gate, .post-ai-msg, .post-ai-form, .post-ai-journey-wrap .learning-journey) { background: var(--ui-surface) !important; color: var(--ui-text) !important; border-color: var(--ui-line) !important; box-shadow: none; }
+:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-explanation-paragraphs, .post-ai-text-section-body, .post-ai-text-section-body li, .post-ai-lesson-opening, .post-study-objective p, .post-ai-deeper-intro p, .post-ai-depth-list p, .post-ai-msg) { color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-meta, .post-ai-progress-label, .post-ai-eyebrow, .post-ai-context-label, .post-ai-section-head small, .post-ai-empty, .post-ai-input-hint, .post-ai-chat-head > p, .post-ai-section-kicker) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-back, .post-ai-comments, .post-ai-reading-nav a, .post-ai-deeper-toggle, .post-ai-prompts button, .post-study-objective a, .post-study-sources a) { color: var(--ui-accent-strong) !important; background: var(--ui-accent-soft) !important; border-color: var(--ui-accent-line) !important; }
+:root[data-app-theme='day'] body .post-ai-premium-dialog { background: var(--ui-surface) !important; color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .post-ai-premium-dialog :is(p, small, button) { color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .content .post-ai-page .post-ai-text-section-body ol li::marker { color: var(--ui-accent); }
+
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace .room-privacy-toggle button { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .app-shell .content .rooms-workspace .room-privacy-toggle button.active { color: var(--ui-accent-strong) !important; border-color: var(--ui-accent) !important; }
+:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-study-objective > span, .post-study-sources > span, .post-ai-premium-label, .post-ai-depth-list article > span, .post-ai-depth-list article > small) { color: var(--ui-accent-strong) !important; }
+:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-premium-gate p, .post-ai-status, .post-ai-empty-guide, .post-ai-depth-list article p) { color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .content .post-ai-page .post-ai-form textarea { color: var(--ui-text) !important; }
 /* Keep deliberate dark reading/video experiences independent of app chrome. */
 :root[data-app-theme='day'] :is(.reader-theme-dark, .reader-theme-sepia, .video-topic-page) {
   color-scheme: dark; --ui-bg: #06070a; --ui-bg-deep: #06070a; --ui-surface: #0e1118;

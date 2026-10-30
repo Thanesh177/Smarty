@@ -105,6 +105,18 @@
 @media (max-width: 380px) {
   .navigation-dialog .compact-menu-section .menu-icon-link { padding: 12px; }
 }
+.navigation-dialog .menu-settings-title { color: var(--ui-text); font-size: 20px; font-weight: 550; letter-spacing: -.035em; }
+.navigation-dialog :is(.menu-settings-launch, .menu-settings-offline, .menu-settings-back) { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 12px; border: 1px solid var(--ui-line); border-radius: 10px; background: var(--ui-surface-soft); color: var(--ui-secondary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.navigation-dialog :is(.menu-settings-launch, .menu-settings-offline) > span { flex: 1; }
+.navigation-dialog :is(.menu-settings-launch, .menu-settings-offline) small { display: block; margin-top: 5px; font-size: 12px; color: var(--ui-muted); line-height: 1.5; }
+.navigation-dialog .menu-settings-back { border: 0; background: transparent; color: var(--ui-muted); }
+.navigation-dialog .menu-settings-content { display: grid; gap: 16px; }
+.navigation-dialog .menu-settings-content .appearance-setting { padding: 10px 2px; border: 0; }
+.navigation-dialog .menu-settings-links { grid-template-columns: minmax(0, 1fr); gap: 0; border: 1px solid var(--ui-line); border-radius: 12px; overflow: hidden; }
+.navigation-dialog .menu-settings-links .menu-icon-link { min-height: 52px; border-radius: 0; }
+.navigation-dialog .menu-settings-links .menu-icon-link + .menu-icon-link { border-top: 1px solid var(--ui-line) !important; }
+/* Older native builds inject device shortcuts here; Settings now owns them. */
+#smarty-navigation-panel .compact-menu-section > .smarty-native-menu-link { display: none !important; }
 @keyframes navigationBackdropIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes navigationBackdropOut { from { opacity: 1; } to { opacity: 0; } }
 @keyframes navigationPanelIn { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }

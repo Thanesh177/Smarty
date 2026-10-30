@@ -6,6 +6,7 @@ import { hasEditorialBriefing } from '../lib/newsAvailability';
 import { normalizePersonalNews } from '../lib/newsPersonalization';
 import { normalizeStoryTimeline } from '../lib/newsStories';
 import { getLearningGuide } from '../data/learningGuides';
+import { getPostAuthorId } from '../lib/postAuthor';
 import { DETAILED_EXPLANATION_VERSION, detailedExplanationFromResponse } from '../lib/explanationFormat';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { endpoints } from './endpoints';
@@ -2230,13 +2231,12 @@ async editComment(payload) {
 
 
   async getPostsByCreator(userId) {
+    const authorId = String(userId ?? '').trim();
+    if (!authorId) return [];
     if (USE_MOCK) {
       await delay(250);
       return mockFeed.filter(
-        (post) =>
-          post.authorId === userId ||
-          post.userId === userId ||
-          post.creatorId === userId
+        (post) => getPostAuthorId(post) === authorId
       );
     }
 
@@ -2244,10 +2244,7 @@ async editComment(payload) {
     const posts = normalizeList(data);
 
     return posts.filter(
-      (post) =>
-        post.authorId === userId ||
-        post.userId === userId ||
-        post.creatorId === userId
+      (post) => getPostAuthorId(post) === authorId
     );
   },
 

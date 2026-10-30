@@ -15,6 +15,9 @@ import {
   Search,
   Compass,
   X,
+  Settings2,
+  ChevronLeft,
+  Download,
 } from 'lucide-react';
 import './NavbarMenu.css';
 import './NavigationPanel.css';
@@ -24,6 +27,7 @@ import { isAdminUser } from '../lib/adminAccess';
 
 function NavbarMenu({ user, logout, onOpenSearch }) {
   const [open, setOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [present, setPresent] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [logoutError, setLogoutError] = useState('');
@@ -37,11 +41,13 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
   const closeMenu = useCallback((options = {}) => {
     restoreFocusRef.current = options.restoreFocus !== false;
     setOpen(false);
+    setSettingsOpen(false);
   }, []);
 
   const toggleMenu = useCallback(() => {
     restoreFocusRef.current = true;
     setLogoutError('');
+    setSettingsOpen(false);
     setOpen((prev) => !prev);
   }, []);
 
@@ -92,7 +98,7 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
     const focusable = () => [...(panelRef.current?.querySelectorAll('a[href], button:not(:disabled)') || [])]
       .filter(element => element.getClientRects().length);
     const frame = window.requestAnimationFrame(() => {
-      (panelRef.current?.querySelector('.menu-section a') || focusable()[0])?.focus({ preventScroll: true });
+      (panelRef.current?.querySelector(settingsOpen ? '.menu-settings-back' : '.menu-section a') || focusable()[0])?.focus({ preventScroll: true });
     });
 
     const handleEscape = (event) => {
@@ -136,7 +142,7 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
       window.removeEventListener('keydown', handleEscape, true);
       if (restoreFocusRef.current && triggerRef.current?.getClientRects().length) triggerRef.current.focus({ preventScroll: true });
     };
-  }, [closeMenu, open, openSearch]);
+  }, [closeMenu, open, openSearch, settingsOpen]);
 
   return (
     <div className="navbar-menu">
@@ -176,7 +182,7 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
             ref={panelRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Main navigation"
+            aria-label={settingsOpen ? 'Settings' : 'Main navigation'}
             inert={!open ? '' : undefined}
             onClick={(event) => {
               event.stopPropagation();
@@ -189,7 +195,7 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
                 className="menu-brand-link"
                 aria-label="Smarty — view all posts"
               >
-                <SmartyBrand compact tagline="Your space to learn" />
+                {settingsOpen ? <span className="menu-settings-title">Settings</span> : <SmartyBrand compact tagline="Your space to learn" />}
               </NavLink>
 
               <button
@@ -203,6 +209,8 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
             </div>
 
             <div className="menu-body">
+            {settingsOpen && <button type="button" className="menu-settings-back" onClick={() => setSettingsOpen(false)}><ChevronLeft size={16} aria-hidden="true" />Back to menu</button>}
+            {!settingsOpen && <>
             <button type="button" className="menu-search-launch" onClick={openSearch} aria-label="Search Smarty">
               <Search size={18} aria-hidden="true" /><span>Search Smarty</span><ArrowUpRight size={16} aria-hidden="true" />
             </button>
@@ -235,9 +243,14 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
 
             </nav>
 
-            <AppearanceSwitch />
+            <button type="button" className="menu-settings-launch" onClick={() => setSettingsOpen(true)}><Settings2 size={18} aria-hidden="true" /><span>Settings<small>Appearance, library & account</small></span><ArrowUpRight size={16} aria-hidden="true" /></button>
+            </>}
 
-            {user && <nav className="menu-section menu-personal-section" aria-label="Your space">
+            {settingsOpen && <section className="menu-settings-content" aria-label="Settings">
+            <AppearanceSwitch />
+            {typeof window.webkit?.messageHandlers?.smartyNative?.postMessage === 'function' && <button type="button" className="menu-settings-offline" data-smarty-native-screen="downloads" onClick={() => { closeMenu(); window.webkit.messageHandlers.smartyNative.postMessage({ action: 'nativeScreen', screen: 'downloads' }); }}><Download size={18} aria-hidden="true" /><span>Offline library<small>Downloaded books, media & backups</small></span><ArrowUpRight size={15} aria-hidden="true" /></button>}
+
+            {user && <nav className="menu-section menu-settings-links" aria-label="Library and account settings">
               <NavLink to="/saved" onClick={closeMenu} className="menu-icon-link">
                 <span className="menu-link-left"><Bookmark size={18} /><span>Saved</span></span>
                 <ArrowUpRight className="menu-link-arrow" size={15} aria-hidden="true" />
@@ -262,6 +275,7 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
                 </NavLink>
               )}
             </nav>}
+            </section>}
             </div>
 
             <div className="menu-footer" aria-busy={signingOut}>

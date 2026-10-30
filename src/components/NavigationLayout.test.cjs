@@ -55,7 +55,7 @@ test('last reading/list items can scroll clear of the floating rail', () => {
   assert.ok(clearance.selector.includes('.chat-page .chat-list'));
   assert.ok(clearance.selector.includes('.post-composer,'), 'Add post and Edit post both clear the rail');
   assert.equal(declaration(clearance, 'padding-bottom').important, true);
-  assert.match(declaration(rule('body .app-shell.has-overlay-navigation'), '--app-rail-scroll-room').value, /328px/);
+  assert.match(declaration(rule('body .app-shell.has-overlay-navigation'), '--app-rail-scroll-room').value, /280px/);
 });
 
 test('active conversations still use their own controls instead of the app rail', () => {

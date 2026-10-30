@@ -1,7 +1,8 @@
+const isAccountUuid = value => typeof value === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value.trim());
 const publicName = value => {
   if (typeof value !== 'string') return '';
   const text = value.trim();
-  if (!text || ['null', 'undefined', 'none', 'unknown', 'user', 'creator', 'post'].includes(text.toLowerCase())) return '';
+  if (!text || isAccountUuid(text) || ['null', 'undefined', 'none', 'unknown', 'user', 'creator', 'post'].includes(text.toLowerCase())) return '';
   // Never expose an email address, even when a legacy post stores it as a name.
   if (text.includes('@') && !/^@[\w.-]+$/.test(text)) return '';
   return text.slice(0, 80);
@@ -15,18 +16,30 @@ export function isSystemPostAuthor(post) {
 
 export function getPostAuthorId(post) {
   if (isSystemPostAuthor(post)) return '';
+  const nested = [post?.author, post?.creator, post?.user, post?.owner, post?.createdBy]
+    .filter(value => value && typeof value === 'object');
   const id = [post?.creatorId, post?.creatorID, post?.creator_id, post?.authorId, post?.authorID, post?.author_id,
-    post?.userId, post?.userID, post?.user_id, post?.author?.id, post?.author?.userId, post?.author?.sub,
-    post?.creator?.id, post?.creator?.userId, post?.user?.id, post?.user?.userId, post?.user?.sub]
-    .find(value => (typeof value === 'string' || typeof value === 'number') && String(value).trim() && !String(value).includes('@'));
+    post?.userId, post?.userID, post?.user_id, post?.ownerId, post?.owner_id,
+    post?.authorSub, post?.creatorSub, post?.createdById, post?.createdByUserId,
+    ...nested.flatMap(value => [value.userId, value.userID, value.user_id, value.sub, value.id]),
+    // Some old records store only the account UUID in `author` or `createdBy`.
+    // A display name or public handle must never be guessed to be an account ID.
+    ...[post?.author, post?.createdBy].filter(isAccountUuid)]
+    .find(value => (typeof value === 'string' || typeof value === 'number') && String(value).trim()
+      && !String(value).includes('@') && !['null', 'undefined', 'none', 'unknown', 'smarty-ai'].includes(String(value).trim().toLowerCase()));
   return id == null ? '' : String(id).trim();
+}
+
+export function getPostAuthorProfilePath(post) {
+  const id = getPostAuthorId(post);
+  return id ? `/creator/${encodeURIComponent(id)}` : '';
 }
 
 export function getPostAuthorUsername(post, response = null) {
   if (post?.isLearningGuide) return 'Smarty learning guide';
   if (isSystemPostAuthor(post)) return 'Smarty AI';
   const profile = response?.profile || response?.user || response || {};
-  const nested = [post?.author, post?.creator, post?.user].filter(value => value && typeof value === 'object');
+  const nested = [post?.author, post?.creator, post?.user, post?.owner, post?.createdBy].filter(value => value && typeof value === 'object');
   const candidates = [profile.username, profile.userName, profile.handle,
     post?.creatorUsername, post?.authorUsername, post?.username, post?.userName,
     ...nested.flatMap(value => [value.username, value.userName, value.handle]),

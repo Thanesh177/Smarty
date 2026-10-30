@@ -4,7 +4,7 @@ body .app-shell.has-overlay-navigation {
   --app-rail-layer: 32000;
   --app-rail-right: max(12px, env(safe-area-inset-right));
   --app-rail-bottom: max(12px, env(safe-area-inset-bottom));
-  --app-rail-scroll-room: calc(328px + env(safe-area-inset-bottom));
+  --app-rail-scroll-room: calc(280px + env(safe-area-inset-bottom));
 }
 body .app-shell[inert] > .content { overflow: hidden !important; touch-action: none !important; }
 /* The rail does not reserve a header row or a sidebar in the page layout. */

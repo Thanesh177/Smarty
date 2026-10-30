@@ -37,6 +37,7 @@ import SmartyBrand from '../components/SmartyBrand';
 import { postApi, creatorApi, chatApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import FeedHeader from '../components/FeedHeader';
+import PostAuthor from '../components/PostAuthor';
 import useFeed from '../hooks/useFeed';
 import { isVideoTopicPost } from '../lib/videoFeed';
 import { getPostAuthorId as getPostCreatorId, getPostAuthorUsername as getDisplayUsername, isSystemPostAuthor as isSystemGeneratedPost } from '../lib/postAuthor';
@@ -545,6 +546,7 @@ const FeedPostCard = memo(function FeedPostCard({
   index,
   creatorName,
   creatorId,
+  creatorProfile,
   postId,
   isSaved,
   translatedText,
@@ -555,7 +557,6 @@ const FeedPostCard = memo(function FeedPostCard({
   onTopicClick,
   onSave,
   onOpenPost,
-  onOpenCreator,
   onComments,
   onExplain,
   onTranslateChange,
@@ -621,38 +622,8 @@ const FeedPostCard = memo(function FeedPostCard({
 
         <div className="post-author-row">
         <div className="post-author">
-          {creatorId ? (
-            <Link
-  to={`/creator/${encodeURIComponent(
-    String(creatorId)
-  )}`}
-  className="creator-link"
-  title={`Open ${creatorName}'s creator profile`}
-  aria-label={`Open ${creatorName}'s creator profile`}
-  onClick={(event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onOpenCreator(creatorId, postId);
-  }}
-  state={{
-    fromPostId: postId,
-    creatorId,
-    databaseAuthorId: creatorId,
-    databaseAuthor: post.author || '',
-    source: 'feed-author-link',
-  }}
->
-  {creatorName}
-</Link>
-          ) : (
-            <span
-              className="creator-link creator-link-disabled"
-              title="Creator profile unavailable for this post"
-              aria-label="Creator profile unavailable for this post"
-            >
-              {creatorName}
-            </span>
-          )}
+          <PostAuthor post={post} profileData={creatorProfile} resolve={false}
+            className="creator-link" state={{ fromPostId: postId, source: 'feed-author-link' }} />
         </div>
 
           {canModerate && (
@@ -2890,35 +2861,6 @@ const handleTopicClick = useCallback(
     [navigate]
   );
 
-  const handleOpenCreator = useCallback(
-  (creatorId, postId = '') => {
-    const normalizedCreatorId = String(
-      creatorId || ''
-    ).trim();
-
-    if (!normalizedCreatorId) {
-      showToast('Creator profile unavailable');
-      return;
-    }
-
-    navigate(
-      `/creator/${encodeURIComponent(
-        normalizedCreatorId
-      )}`,
-      {
-        state: {
-          fromPostId: postId,
-          creatorId: normalizedCreatorId,
-          databaseAuthorId:
-            normalizedCreatorId,
-          source: 'feed-author-link',
-        },
-      }
-    );
-  },
-  [navigate, showToast]
-);
-
   const handleOpenPost = useCallback(
     (post, creatorName) => {
       const postId = getPostId(post);
@@ -3163,6 +3105,7 @@ const handleTopicCanvasScroll =
   postId={postId}
   isSaved={isSaved}
   creatorId={creatorId}
+  creatorProfile={creatorProfile}
   creatorName={creatorName}
   translatedText={translations[postId]}
   isTranslated={Boolean(showTranslated[postId])}
@@ -3172,7 +3115,6 @@ const handleTopicCanvasScroll =
   onTopicClick={handleTopicClick}
   onSave={handleSave}
   onOpenPost={handleOpenPost}
-  onOpenCreator={handleOpenCreator}
   onComments={handleComments}
   onExplain={handleExplain}
   onTranslateChange={handleTranslateChange}
@@ -3190,7 +3132,6 @@ const handleTopicCanvasScroll =
       explaining,
       renderedFeedPosts,
 handleOpenPost,
-handleOpenCreator,
 handleComments,
       currentUserId,
       handleExplain,
