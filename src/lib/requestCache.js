@@ -2,6 +2,15 @@
 export function createRequestCache({ maxEntries = 64, now = Date.now, isFresh } = {}) {
   const limit = Number.isFinite(maxEntries) ? Math.max(1, Math.floor(maxEntries)) : 64;
   const entries = new Map();
+  // Active reads are never evicted: evicting their promises would let a
+  // second subscriber start the same request while the first is still running.
+  const trim = target => {
+    while (entries.size > target) {
+      const settled = [...entries.keys()].find(key => !entries.get(key)?.pending);
+      if (settled === undefined) break;
+      entries.delete(settled);
+    }
+  };
   let generation = 0;
   return {
     clear() { generation += 1; entries.clear(); },
@@ -24,7 +33,7 @@ export function createRequestCache({ maxEntries = 64, now = Date.now, isFresh } 
         return subscribe(Promise.resolve(existing.value));
       }
       entries.delete(key);
-      while (entries.size >= limit) entries.delete(entries.keys().next().value);
+      trim(limit - 1);
       const epoch = generation;
       const entry = {};
       entry.pending = Promise.resolve().then(load).then(value => {
@@ -33,6 +42,7 @@ export function createRequestCache({ maxEntries = 64, now = Date.now, isFresh } 
           entry.timestamp = now();
           entry.expiresAt = entry.timestamp + Math.max(0, Number(ttlMs) || 0);
           delete entry.pending;
+          trim(limit);
         }
         return value;
       }, error => {

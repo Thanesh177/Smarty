@@ -70,7 +70,6 @@ const DEFAULT_TOPICS = [
 ];
 
 const QUICK_DESTINATIONS = [
-  { key: 'quick-learning', label: 'My learning', meta: 'Resume a lesson or revisit an idea', path: '/learn', type: 'book' },
   { key: 'quick-topics', label: 'Explore topics', meta: 'Complete catalog', path: '/topics', type: 'topic' },
   { key: 'quick-books', label: 'Read books', meta: 'Free library', path: '/read-books', type: 'book' },
   { key: 'quick-news', label: "Today's briefing", meta: 'Local and global news', path: '/news', type: 'news' },

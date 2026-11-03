@@ -78,10 +78,9 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId,
 
   return (
     <section className="learning-journey" aria-labelledby={titleId}>
-      <div className="learning-journey-head">
-        {getLearningLevelLabel(context) && <span className="learning-path-meta">{getLearningLevelLabel(context)}{context.learningOrder > 0 && ` · Lesson ${context.learningOrder}${context.learningTotalSteps ? ` of ${context.learningTotalSteps}` : ''}`}</span>}
-        <Link className="learning-journey-topic" to="/learn">My learning <ChevronRight size={13} /></Link>
-      </div>
+      {getLearningLevelLabel(context) && <div className="learning-journey-head">
+        <span className="learning-path-meta">{getLearningLevelLabel(context)}{context.learningOrder > 0 && ` · Lesson ${context.learningOrder}${context.learningTotalSteps ? ` of ${context.learningTotalSteps}` : ''}`}</span>
+      </div>}
       {sequencePosts.data?.previous && <Link className="learning-prerequisite-link" to={'/post-ai/' + encodeURIComponent(context.previousLearningPostId)} state={{ post: sequencePosts.data.previous }}>Revisit the previous idea <ChevronRight size={13} /></Link>}
 
       {!progress.read && <button type="button" className="learning-secondary-action" onClick={() => completeStep('read')}><Check size={16} /> I’ve read the source</button>}

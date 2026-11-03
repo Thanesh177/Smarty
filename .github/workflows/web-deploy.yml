@@ -79,6 +79,10 @@ jobs:
         working-directory: release
         run: npm run build
 
+      - name: Check release before publication
+        working-directory: release
+        run: npm test && npm run test:performance
+
       - name: Add release identity
         shell: bash
         run: |

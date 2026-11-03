@@ -2,6 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequestCache } from './requestCache.js';
 
+test('capacity pressure does not evict active requests or create duplicates', async () => {
+  const cache = createRequestCache({ maxEntries: 1 });
+  let finish, calls = 0;
+  const first = cache.get('slow', () => { calls++; return new Promise(resolve => { finish = resolve; }); });
+  await Promise.resolve();
+  await cache.get('another', async () => 'other');
+  const second = cache.get('slow', () => { calls++; return 'duplicate'; });
+  finish('original');
+  assert.deepEqual(await Promise.all([first, second]), ['original', 'original']);
+  assert.equal(calls, 1);
+});
+
 test('simultaneous reads share a request, then use the cached result', async () => {
   const cache = createRequestCache();
   let calls = 0;

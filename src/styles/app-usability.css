@@ -1,0 +1,19 @@
+/* Shared usability refinements across every route. Do not change scroll
+   containers, media overlays, the reader's paper, or page-specific layouts. */
+.app-shell .content :where(button,a,input,textarea,select,summary) { -webkit-tap-highlight-color: transparent; }
+.app-shell .content :where(button,a,summary) { touch-action: manipulation; }
+.app-shell .content :where(button,a,input,textarea,select,summary):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.app-shell .content :where(input,textarea)::placeholder { opacity: 1; }
+.app-shell .content :where(label,legend) { line-height: 1.5; }
+.app-shell .content :where(h1,h2,h3) { text-wrap: balance; }
+.app-shell .content :where(p,li) { overflow-wrap: break-word; }
+.app-shell .content :where(img,video) { max-width: 100%; }
+/* Consistent reading rhythm in information workspaces, not message bubbles. */
+.app-shell .content :where(.profile-bio,.public-profile-identity p,.news-card p,.library-card-summary,.post-ai-text-section-body p,.legal-page p,.notification-settings-hero p) { line-height: 1.75; }
+.app-shell .content :where(.community-toolbar,.library-toolbar,.news-toolbar,.profile-actions,.saved-toolbar) { row-gap: 12px; }
+.app-shell .content :where(.status,.form-error,.error-message) { line-height: 1.6; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .app-shell .content :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),textarea,select) { font-size: max(16px, 1em); }
+  .app-shell .content :where(.community-search,.library-search,.friend-search-row,.news-search,.profile-editor-field) { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .settings-share summary > svg:last-child { transition: none; } }

@@ -38,3 +38,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Regression and startup budget checks
+        run: npm test && npm run test:performance

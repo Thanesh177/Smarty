@@ -11,6 +11,7 @@ import { nextReminderAt, reminderTime } from '../lib/dailyReminder';
 import { getUserScope } from '../lib/userScopedStorage';
 import { nativeNotificationRequest, supportsNativeReminders } from '../lib/nativeNotifications';
 import './NotificationSettingsPage.css';
+import AppActivityInbox from '../components/AppActivityInbox';
 
 const CATEGORY_ROWS = [
   {
@@ -208,6 +209,7 @@ export default function NotificationSettingsPage() {
       </section>
 
       <section className="notification-settings-shell" aria-label="Notification preferences">
+        <AppActivityInbox key={userId} userId={userId} />
         <div className="notification-master-card">
           <span className="notification-setting-icon"><BellRing size={20} /></span>
           <div>

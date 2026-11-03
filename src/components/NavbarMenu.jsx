@@ -13,7 +13,6 @@ import {
   ArrowUpRight,
   LayoutGrid,
   Search,
-  Compass,
   X,
   Settings2,
   ChevronLeft,
@@ -23,6 +22,7 @@ import './NavbarMenu.css';
 import './NavigationPanel.css';
 import SmartyBrand from './SmartyBrand';
 import AppearanceSwitch from './AppearanceSwitch';
+import AppSettingsEngagement from './AppSettingsEngagement';
 import { isAdminUser } from '../lib/adminAccess';
 
 function NavbarMenu({ user, logout, onOpenSearch }) {
@@ -95,7 +95,7 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
     document.body.style.overflow = 'hidden';
     if (shell) shell.inert = true;
     if (scroller) scroller.style.overflowY = 'hidden';
-    const focusable = () => [...(panelRef.current?.querySelectorAll('a[href], button:not(:disabled)') || [])]
+    const focusable = () => [...(panelRef.current?.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary') || [])]
       .filter(element => element.getClientRects().length);
     const frame = window.requestAnimationFrame(() => {
       (panelRef.current?.querySelector(settingsOpen ? '.menu-settings-back' : '.menu-section a') || focusable()[0])?.focus({ preventScroll: true });
@@ -122,7 +122,8 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
           event.preventDefault(); first.focus();
         }
       }
-      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && panelRef.current?.contains(document.activeElement)) {
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && panelRef.current?.contains(document.activeElement) &&
+          !event.target.closest('input,select,textarea,[contenteditable="true"]')) {
         const items = focusable();
         const index = items.indexOf(document.activeElement);
         const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
@@ -215,12 +216,6 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
               <Search size={18} aria-hidden="true" /><span>Search Smarty</span><ArrowUpRight size={16} aria-hidden="true" />
             </button>
             <nav className="menu-section compact-menu-section" aria-label="Explore Smarty">
-              <NavLink to="/learn" onClick={closeMenu} className="menu-icon-link">
-                <span className="menu-link-left">
-                  <Compass size={18} />
-                  <span className="menu-link-copy"><strong>My learning</strong></span>
-                </span>
-              </NavLink>
               <NavLink to="/booksinfo" onClick={closeMenu} className="menu-icon-link">
                 <span className="menu-link-left">
                   <BookOpen size={18} strokeWidth={2.2} />
@@ -275,6 +270,7 @@ function NavbarMenu({ user, logout, onOpenSearch }) {
                 </NavLink>
               )}
             </nav>}
+            <AppSettingsEngagement user={user} onNavigate={closeMenu} />
             </section>}
             </div>
 

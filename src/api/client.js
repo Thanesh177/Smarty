@@ -2467,7 +2467,7 @@ export const userApi = {
   },
 
   getMe: async () => {
-    try {
+    return readCache.get('profile:me', async () => { try {
       const res = await api.get('/users/profile');
       const parsed = parseApiBody(res.data);
       return normalizeUserProfile(parsed.profile || parsed);
@@ -2480,7 +2480,7 @@ export const userApi = {
       }
 
       throw error;
-    }
+    } }, 0);
   },
 
   async followUser(followingId) {
@@ -2490,6 +2490,7 @@ export const userApi = {
 
   updateProfile: async (payload) => {
     const res = await api.put('/users/profile', payload);
+    readCache.delete('profile:me');
     return res.data.profile || res.data;
   },
 

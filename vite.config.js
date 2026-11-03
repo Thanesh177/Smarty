@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => {
     assetsInlineLimit: 4096, // Inlining small assets reduces HTTP requests
 
     cssCodeSplit: true, // Split CSS to match chunk loading
+    manifest: true,
 
     chunkSizeWarningLimit: 1200,
 
@@ -36,13 +37,8 @@ export default defineConfig(({ mode }) => {
 
     rollupOptions: {
       output: {
-        // REMOVED: manualChunks: () => 'everything.js'
-        // This splits your vendor dependencies naturally so mobiles don't crash
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            return 'vendor';
-          }
-        },
+        // Dynamic route imports own their dependencies instead of forcing
+        // every screen's libraries into one eagerly downloaded vendor chunk.
       },
     },
   },

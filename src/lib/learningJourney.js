@@ -1,3 +1,5 @@
+import { recordMeaningfulEngagement } from './appEngagement.js';
+
 const TOPIC_FAMILIES = [
   ['Artificial Intelligence', 'Machine Learning', 'Data Science', 'Robotics', 'Technology'],
   ['Cybersecurity', 'Cryptography', 'Computer Networks', 'Software Systems', 'Cloud Computing'],
@@ -154,6 +156,7 @@ export function markLearningProgress(postId, userId, stage, context = {}) {
 
   const current = readLearningProgress(postId, userId);
   if (stage === 'challenge') return current; // Only a scored quiz can complete this step.
+  if (stage === 'understand' && !current.understand) recordMeaningfulEngagement(userId, { kind: 'lesson', id: postId });
   return writeProgress(postId, userId, { ...current, [stage]: true }, context);
 }
 

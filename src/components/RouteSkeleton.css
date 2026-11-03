@@ -1,0 +1,12 @@
+.route-skeleton { padding: var(--ui-gutter, 24px); min-height: 60dvh; color: var(--ui-muted); }
+.route-skeleton-label { display: block; font-size: 13px; margin-bottom: 24px; }
+.route-skeleton-heading { height: 30px; width: min(60%, 320px); border-radius: 7px; background: var(--ui-surface-raised); margin-bottom: 32px; }
+.route-skeleton-layout { display: grid; gap: 20px; max-width: 1120px; }
+.route-skeleton-block { padding: clamp(18px, 3vw, 32px); border: 1px solid var(--ui-line); border-radius: 12px; background: var(--ui-surface); }
+.route-skeleton-block i { display: block; height: 12px; margin-block: 12px; background: var(--ui-surface-raised); border-radius: 4px; animation: route-skeleton-pulse 1.8s ease-in-out infinite alternate; }
+.route-skeleton-block i:first-child { width: 65%; }
+.route-skeleton-block i:last-child { width: 82%; }
+.route-skeleton--conversation .route-skeleton-block { max-width: 620px; }
+.route-skeleton--conversation .route-skeleton-block:nth-child(2) { margin-left: auto; width: 70%; }
+@keyframes route-skeleton-pulse { to { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .route-skeleton-block i { animation: none; } }

@@ -13,6 +13,7 @@ import './styles/form-controls.css';
 import './styles/navigation-toolbar.css';
 import './styles/cobalt-theme.css';
 import './styles/day-theme.css';
+import './styles/app-usability.css';
 import { AppearanceProvider } from './contexts/AppearanceContext';
 import 'aws-amplify/auth/enable-oauth-listener';
 import { claimChunkRecovery, isChunkLoadFailure } from './lib/chunkRecovery';

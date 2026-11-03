@@ -1,5 +1,6 @@
 import { Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import RouteSkeleton from './components/RouteSkeleton';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import SupportPage from './pages/SupportPage';
 import TermsPage from './pages/TermsPage';
@@ -25,6 +26,9 @@ import { getFeedView } from './lib/feedViews';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
 import ReminderPopup from './components/ReminderPopup';
+import EngagementNudge from './components/EngagementNudge';
+import { addAppActivity } from './lib/appActivity';
+import { ENGAGEMENT_EVENT } from './lib/appEngagement';
 import useDailyReminder from './hooks/useDailyReminder';
 import useNativePush from './hooks/useNativePush';
 import useNewsPushPreferences from './hooks/useNewsPushPreferences';
@@ -47,6 +51,7 @@ import {
 import { getUserScopedStorageKey } from './lib/userScopedStorage';
 import {
   getNotificationBody,
+  classifyNotification,
   getNotificationDecision,
   getNotificationFingerprint,
   loadNotificationPreferences,
@@ -58,34 +63,35 @@ import {
 } from './lib/notificationPreferences';
 
 import JoinRoomPage from './pages/JoinRoomPage';
-import Booksinfo from './pages/Booksinfo';
-import QuizPage from './pages/QuizPage';
-import ProgressPage from './pages/progress/ProgressPage';
-import GameProfile from './pages/profile/GameProfile';
+const Booksinfo = lazy(() => import('./pages/Booksinfo'));
+const QuizPage = lazy(() => import('./pages/QuizPage'));
+const ProgressPage = lazy(() => import('./pages/progress/ProgressPage'));
+const GameProfile = lazy(() => import('./pages/profile/GameProfile'));
 import CommentsPage from './pages/CommentsPage';
-import EditPostPage from './pages/EditPostPage';
+const EditPostPage = lazy(() => import('./pages/EditPostPage'));
 import FeedEntry from './components/FeedEntry';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ProfilePage from './pages/ProfilePage';
 import SavedPage from './pages/SavedPage';
-import CreatePostPage from './pages/CreatePostPage';
+const CreatePostPage = lazy(() => import('./pages/CreatePostPage'));
 import TopicsPage from './pages/TopicsPage';
 import ConfirmPage from './pages/ConfirmPage';
-import ChatPage from './pages/ChatPage';
+const ChatPage = lazy(() => import('./pages/ChatPage'));
 import CreatorProfilePage from './pages/CreatorProfilePage';
 import CreatorDashboardPage from './pages/CreatorDashboardPage';
 import FollowRequestsPage from './pages/FollowRequestsPage';
-import TopicRoomsPage from './pages/TopicRoomsPage';
+const TopicRoomsPage = lazy(() => import('./pages/TopicRoomsPage'));
 import ReelDetailPage from './pages/ReelDetailPage';
 import NewsPage, { NewsStoryRoute as NewsStoryPage } from './components/NewsRoute';
-import ReadBookPage from './pages/ReadBookPage';
-import BookReaderPage from './pages/BookReaderPage';
-import PostAiPage from './pages/PostAiPage';
+const ReadBookPage = lazy(() => import('./pages/ReadBookPage'));
+const BookReaderPage = lazy(() => import('./pages/BookReaderPage'));
+const PostAiPage = lazy(() => import('./pages/PostAiPage'));
 import LearningPage from './pages/LearningPage';
-import AdminModerationPage from './pages/AdminModerationPage';
+const AdminModerationPage = lazy(() => import('./pages/AdminModerationPage'));
 import { isAdminUser } from './lib/adminAccess';
 import './styles/production-pages.css';
+import './styles/routePresentation';
 import './styles/ipad.css';
 import { useQueryClient } from '@tanstack/react-query';
 import { canStartPull, isVerticalPull, PULL_THRESHOLD, requestPageRefresh } from './lib/pullRefresh';
@@ -880,6 +886,10 @@ useEffect(() => {
     const syncPreferences = (event) => {
       const preferences = activateNotificationPreferences(currentUserId);
       syncNotificationPreferencesToWorker(preferences, currentUserId);
+      if (currentUserId && preferences.enabled && preferences.categories.product) addAppActivity(currentUserId, {
+        id: 'settings-sharing-v1', category: 'product', title: 'Share Smarty your way',
+        body: 'Settings now has ready-to-send invitations and a link to leave an honest Google Play review.', url: '/feed?topic=All',
+      });
     };
 
     syncPreferences();
@@ -964,6 +974,12 @@ useEffect(() => {
       }
 
       const preferences = loadNotificationPreferences(currentUserId);
+      const category = classifyNotification(detail);
+      if (preferences.enabled && preferences.categories[category] && ['learning', 'news', 'product'].includes(category)) {
+        addAppActivity(currentUserId, { id: getNotificationFingerprint(detail), category,
+          title: detail.title || 'Smarty update', body: getNotificationBody(detail, preferences),
+          url: getNotificationPath(detail.url, window.location.origin) });
+      }
       const decision = getNotificationDecision(detail, preferences);
       if (!decision.deliver) return;
 
@@ -979,6 +995,14 @@ useEffect(() => {
     };
 
     window.addEventListener('smarty-notification', handleSmartyNotification);
+    const learningComplete = event => {
+      if (!currentUserId || String(event.detail?.userId) !== currentUserId) return;
+      const preferences = loadNotificationPreferences(currentUserId);
+      if (!preferences.enabled || !preferences.categories.learning) return;
+      addAppActivity(currentUserId, { id: event.detail.id, category: 'learning', title: 'Keep your learning going',
+        body: 'Revisit an idea, practice a knowledge check, or explore a related lesson.', url: '/learn' });
+    };
+    window.addEventListener(ENGAGEMENT_EVENT, learningComplete);
     const openNotification = event => {
       if (currentUserId) navigate(getNotificationPath(event.detail?.url, window.location.origin));
     };
@@ -986,6 +1010,7 @@ useEffect(() => {
 
     return () => {
       window.removeEventListener('smarty-notification', handleSmartyNotification);
+      window.removeEventListener(ENGAGEMENT_EVENT, learningComplete);
       window.removeEventListener('smarty-notification-open', openNotification);
     };
   }, [currentUserId, navigate]);
@@ -996,6 +1021,7 @@ useEffect(() => {
     <>
       <AuthRedirectHandler />
       <PageTransition />
+      <EngagementNudge user={user} />
 
       {!isAuthPage && <UniversalSearch
         open={universalSearchOpen}
@@ -1153,6 +1179,7 @@ useEffect(() => {
           )}
 
           <RouteErrorBoundary key={`${location.pathname}:${pageRefreshVersion}`} resetKey={location.pathname + location.search}>
+            <Suspense fallback={<RouteSkeleton />}>
             <Routes>
                 <Route
                   path="/"
@@ -1343,6 +1370,7 @@ useEffect(() => {
 
                 <Route path="*" element={<Navigate to="/feed" replace />} />
               </Routes>
+            </Suspense>
           </RouteErrorBoundary>
         </main>
       </div>

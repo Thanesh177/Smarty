@@ -1,6 +1,7 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import confetti from "canvas-confetti";
+import { recordMeaningfulEngagement } from '../lib/appEngagement';
 import {
   getProgress,
   getProgressUserId,
@@ -962,6 +963,9 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
     setSaving(false);
     return;
   }
+
+  // Count completion, never a particular score or a positive opinion.
+  if (result.total >= 3) recordMeaningfulEngagement(userId, { kind: 'quiz', id: attemptId });
 
   const finishRewards = () => {
     const unlocked = checkAchievements({

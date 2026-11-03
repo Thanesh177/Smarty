@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { responsiveImage } from '../lib/imageDelivery';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowRight,
@@ -522,7 +523,7 @@ useEffect(() => {
   return (
     <img
       ref={imgRef}
-      src={shouldLoad ? src : undefined}
+      {...(shouldLoad ? responsiveImage(src) : {})}
       data-src={src}
       alt={alt}
       loading={
