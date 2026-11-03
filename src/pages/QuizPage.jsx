@@ -31,6 +31,11 @@ import "./QuizLearning.css";
 import "./QuizWorkspace.css";
 import { normalizeGeneratedQuestions, needsQuizReview, getQuizResult, getSavedReviewDeck, readQuizFlag, clearQuizFlag } from '../lib/quizLearning.js';
 import { QUIZ_SUBJECTS, SUBJECT_QUESTIONS } from '../data/quizSubjects.js';
+import { getQuizLessons, getQuizLesson, getQuizConceptId, getRelatedQuizLessons, makeLessonQuizTopic } from '../data/quizLessons.js';
+import { getLessonTopicQuestions } from '../data/quizLessonQuestions.js';
+import { selectLessonQuestions, getLessonQuestionStyle, summarizeLessonSkills } from '../lib/quizLessonPractice.js';
+import QuizLessonLibrary from '../components/QuizLessonLibrary';
+import './QuizLessons.css';
 import { checkAchievements } from "../components/achievements/achievementEngine";
 import AchievementToast from "../components/achievements/AchievementToast";
 import useSoundFeedback from "../components/audio/useSoundFeedback";
@@ -338,14 +343,14 @@ const TopicCard = memo(function TopicCard({ item, progress, onStart, ordinal }) 
       type="button"
       className="topic-card quiz-subject-card"
       onClick={() => onStart(item)}
-      aria-label={`Start ${item.title} quiz`}
+      aria-label={`Explore ${item.title} lessons`}
     >
       <div className="quiz-subject-top"><span>{String(ordinal).padStart(2, '0')}</span><span>{progress.attempts ? 'In practice' : 'Start here'}</span></div>
       <QuizSubjectArt subject={item.id} />
       <h3>{item.title}</h3>
       <p>{item.desc}</p>
       <div className="quiz-subject-areas">{(item.subjects || []).slice(0, 3).map((area) => <span key={area}>{area}</span>)}</div>
-      <div className="quiz-subject-bottom"><span>{progress.attempts ? `${progress.bestPercent}% best practice` : 'Recall. Reason. Apply.'}</span><span className="quiz-subject-open"><ArrowUpRight size={17} aria-hidden="true" /><span className="sr-only">Start</span></span></div>
+      <div className="quiz-subject-bottom"><span>{getQuizLessons(item.id).length} focused lessons</span><span className="quiz-subject-open"><ArrowUpRight size={17} aria-hidden="true" /><span className="sr-only">Explore lessons</span></span></div>
     </button>
   );
 });
@@ -567,6 +572,8 @@ function QuizSession() {
 const navigate = useNavigate();
 const location = useLocation();
 const { user } = useAuth();
+const selectedLibrarySubject = useMemo(() => TOPICS.find(item => item.id === new URLSearchParams(location.search).get('subject')) || null, [location.search]);
+const openSubject = useCallback(item => navigate('/quiz?subject=' + encodeURIComponent(item.id)), [navigate]);
 const [comboCount, setComboCount] = useState(1);
 const SURVIVAL_TIME = 12;
 const [survivalTimeLeft, setSurvivalTimeLeft] = useState(SURVIVAL_TIME);
@@ -586,6 +593,7 @@ const [settingsOpen, setSettingsOpen] = useState(() => window.matchMedia('(min-w
 const [confidence, setConfidence] = useState('unmarked');
 const [reviewFilter, setReviewFilter] = useState('all');
 const [reviewRevision, setReviewRevision] = useState(0);
+const quizLocationRef = useRef(location.key);
 const finishRequestRef = useRef('');
 const questionHeadingRef = useRef(null);
 const transitionLockRef = useRef(false);
@@ -689,7 +697,7 @@ const gameTopic = { technology: 'ai_technology', engineering: 'physics', 'scienc
   'money-business': 'personal_finance', history: 'world_history', 'society-ideas': 'critical_thinking',
   'arts-design': 'communication', news: 'media_literacy', community: 'communication' }[topic.id] || topic.id;
 const games = GAME_STEPS[gameTopic] || [];
-  if (reviewMode || sessionMode === 'practice') {
+  if (reviewMode || sessionMode === 'practice' || topic.lessonId) {
     return quizQuestions.map((question) => ({ type: "mcq", ...question }));
   }
   return [
@@ -707,7 +715,9 @@ const topicProgressDetails = useMemo(() => {
   const details = {};
 
   for (const item of TOPICS) {
-    details[item.id] = getTopicProgressDetails(item.id, topicProgressMap);
+    details[item.id] = { ...getTopicProgressDetails(item.id, topicProgressMap),
+      attempts: Object.entries(topicProgressMap).filter(([id]) => id === item.id || id.startsWith(item.id + '--'))
+        .reduce((total, [, record]) => total + (Number(record?.attempts) || 0), 0) };
   }
 
   return details;
@@ -781,14 +791,20 @@ const renderedReviewItems = useMemo(
       ...(selectedTopic.difficultyPreference ? { difficulty: selectedTopic.difficultyPreference,
         minimumDifficulty: selectedTopic.difficultyPreference,
         depth: { Easy: 'Foundation', Medium: 'Application', Hard: 'Challenge' }[selectedTopic.difficultyPreference] } : {}) };
-    const seen = getRecentQuestionFingerprints(quizUserId, topicId);
+    const seen = [...new Set([...getRecentQuestionFingerprints(quizUserId, topicId),
+      ...(selectedTopic.baseTopicId ? getRecentQuestionFingerprints(quizUserId, selectedTopic.baseTopicId, 500) : [])])];
+    const recentPrompts = [...new Set([...getRecentQuestionPrompts(quizUserId, topicId),
+      ...(selectedTopic.baseTopicId ? getRecentQuestionPrompts(quizUserId, selectedTopic.baseTopicId) : [])])];
     const guide = getLearningGuide(selectedTopic.postId);
+    const lessonQuestions = selectedTopic.lessonId ? selectLessonQuestions(selectedTopic, {
+      seen, difficulty: challengeProfile.difficulty, review: selectedTopic.reviewQuestions,
+    }).map(question => ({ ...question, options: shuffleItems(question.options) })) : [];
     setLoadingAI(true);
     setAiQuestions((prev) => ({ ...prev, [topicId]: [] }));
 
     const useLocalQuestions = () => {
       if (!isCurrent()) return;
-      const questions = guide
+      const questions = selectedTopic.lessonId ? lessonQuestions : guide
         ? filterUnseenQuestions(getGuideQuestions(guide.id), selectedTopic.reviewQuestions ? [] : seen)
             .map((question) => ({ ...question, source: selectedTopic.reviewQuestions ? 'review' : question.source,
               options: shuffleItems(question.options), fingerprint: getQuestionFingerprint(question) }))
@@ -802,8 +818,13 @@ const renderedReviewItems = useMemo(
       setAiQuestions((prev) => ({ ...prev, [topicId]: questions }));
       setQuizNotice(questions.length
         ? (selectedTopic.reviewQuestions ? 'Review practice · no new XP or exam-readiness score'
-          : guide ? 'Guide check · concepts, examples, and limits' : 'Original practice bank · general preparation, not a complete exam syllabus')
-        : selectedTopic.postId
+          : selectedTopic.lessonId ? `${questions.length} built-in lesson questions · ${challengeProfile.depth.toLowerCase()} practice with worked explanations`
+            : guide ? 'Guide check · concepts, examples, and limits' : 'Original practice bank · general preparation, not a complete exam syllabus')
+        : selectedTopic.lessonId
+          ? (getLessonTopicQuestions(selectedTopic).length
+            ? 'No unseen built-in questions remain at this level. Try a fresh online set, choose another level, or review this lesson’s built-in questions.'
+            : 'This topic needs online questions. Check your connection and try again, or choose a lesson marked Built-in practice. We won’t substitute unrelated questions.')
+          : selectedTopic.postId
           ? (guide ? 'You have seen this guide’s questions. Choose review practice to revisit them, or explore a new lesson.'
             : 'A focused quiz is unavailable right now. Revisit the lesson or try again shortly.')
           : 'No unseen built-in questions remain. Reconnect for a fresh challenge.');
@@ -811,7 +832,7 @@ const renderedReviewItems = useMemo(
 
     let timeout;
     try {
-      if (guide || selectedTopic.reviewQuestions || !CAN_USE_REMOTE_QUIZ_API) {
+      if (guide || selectedTopic.reviewQuestions || !CAN_USE_REMOTE_QUIZ_API || lessonQuestions.length >= 3) {
         useLocalQuestions();
         return;
       }
@@ -830,7 +851,8 @@ const renderedReviewItems = useMemo(
         const questions = normalizeGeneratedQuestions(active, topicId, {
           excludedFingerprints: seen,
           fallbackDifficulty: challengeProfile.difficulty,
-          requiredDifficulty: selectedTopic.difficultyPreference || '',
+          requiredDifficulty: selectedTopic.lessonId ? challengeProfile.difficulty : selectedTopic.difficultyPreference || '',
+          excludedPrompts: recentPrompts,
         });
         if (questions.length) {
           setAiQuestions((prev) => ({ ...prev, [topicId]: questions }));
@@ -853,7 +875,9 @@ const renderedReviewItems = useMemo(
           studyTrack: selectedTopic.studyTrack || 'college', examTarget: selectedTopic.examTarget || '',
           subjectAreas: selectedTopic.subjects || [],
           learnerLevel: challengeProfile.level, learnerDepth: challengeProfile.depth,
-          questionStyle: selectedTopic.postId
+          questionStyle: selectedTopic.lessonId
+            ? challengeProfile.questionStyle + '. ' + getLessonQuestionStyle(selectedTopic)
+            : selectedTopic.postId
             ? challengeProfile.questionStyle + '. Test the source concept: mechanism, cause and effect, a new example, and a limitation. Do not ask for the post title or generic study advice.'
             : challengeProfile.questionStyle + '. Prepare a learner for ' + (selectedTopic.studyTrack || 'college')
               + ' study. ' + (selectedTopic.examTarget ? `Requested exam or skill: ${selectedTopic.examTarget}. ` : '')
@@ -861,12 +885,13 @@ const renderedReviewItems = useMemo(
           requestedCount: 5 - collected.length, generationAttempt: attempt,
           weakAreas: getSavedReviewDeck(getWrongQuestions(quizUserId)[topicId]).slice(-5).map((item) => item.q),
           recentQuestionFingerprints: [...excluded].slice(-100),
-          excludeQuestions: getRecentQuestionPrompts(quizUserId, topicId),
+          excludeQuestions: [...recentPrompts, ...collected.map(question => question.q)].slice(-40),
         }, { signal: controller.signal });
         if (!isCurrent()) return;
         const batch = normalizeGeneratedQuestions(data, topicId, {
           excludedFingerprints: [...excluded], fallbackDifficulty: challengeProfile.difficulty, limit: 5 - collected.length,
-          requiredDifficulty: selectedTopic.difficultyPreference || '',
+          requiredDifficulty: selectedTopic.lessonId ? challengeProfile.difficulty : selectedTopic.difficultyPreference || '',
+          excludedPrompts: [...recentPrompts, ...collected.map(question => question.q)],
         }).filter((question) => !selectedTopic.postId || !/which title|what exact concept|name of (the|this) (post|lesson)/i.test(question.q));
         batch.forEach((question) => { collected.push(question); excluded.add(question.fingerprint); });
       }
@@ -895,7 +920,7 @@ const renderedReviewItems = useMemo(
     }
 
     const sessionTopic = { ...item, studyTrack, examTarget: examTarget.trim().slice(0, 120),
-      difficultyPreference: item.nextDifficulty || difficultyPreference };
+      difficultyPreference: item.nextDifficulty || item.difficultyPreference || difficultyPreference };
     setTopic(sessionTopic);
     setReviewMode(Boolean(item.reviewQuestions));
     transitionLockRef.current = false;
@@ -929,17 +954,17 @@ const renderedTopics = useMemo(
     const groups = { stem: ['technology', 'engineering', 'science-mathematics', 'life-sciences', 'earth-space'],
       people: ['history', 'society-ideas', 'arts-design', 'community'], everyday: ['news', 'mind-health', 'money-business', 'food-agriculture'] };
     return (libraryFilter === 'all' || item.group === libraryFilter || groups[libraryFilter]?.includes(item.id))
-      && `${item.title} ${item.desc} ${(item.subjects || []).join(' ')}`.toLocaleLowerCase().includes(subjectQuery.trim().toLocaleLowerCase());
+      && `${item.title} ${item.desc} ${(item.subjects || []).join(' ')} ${getQuizLessons(item.id).map(lesson => `${lesson.title} ${lesson.concepts.join(' ')}`).join(' ')}`.toLocaleLowerCase().includes(subjectQuery.trim().toLocaleLowerCase());
   }).map((item) => (
     <TopicCard
       key={item.id}
       item={item}
       ordinal={TOPICS.indexOf(item) + 1}
       progress={topicProgressDetails[item.id]}
-      onStart={startQuiz}
+      onStart={openSubject}
     />
   )),
-  [topicProgressDetails, startQuiz, subjectQuery, libraryFilter]
+  [topicProgressDetails, openSubject, subjectQuery, libraryFilter]
 );
 
 const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
@@ -988,7 +1013,10 @@ const saveQuizProgress = useCallback(async (finalScore, finalAnswers) => {
     }
   };
 
-  try { recordQuestionHistory(userId, topic.id, finalAnswers); } catch { /* Keep results visible if storage is unavailable. */ }
+  try {
+    recordQuestionHistory(userId, topic.id, finalAnswers);
+    if (topic.baseTopicId) recordQuestionHistory(userId, topic.baseTopicId, finalAnswers);
+  } catch { /* Keep results visible if storage is unavailable. */ }
 
   if (topic?.postId) {
     const checks = finalAnswers.filter((answer) => Array.isArray(answer.options) && answer.options.length > 1);
@@ -1115,12 +1143,16 @@ useEffect(() => {
           xp: 0,
           options: currentOptions,
           confidence: 'unsure', topicTitle: topic.title, postId: topic.postId, learningContext: topic.learningContext,
+          kind: current.kind, baseTopicId: topic.baseTopicId, lessonId: topic.lessonId, conceptId: topic.conceptId,
         };
 
         const nextAnswers = [...answers, timeoutAnswer];
         setAnswers(nextAnswers);
         if (current.type === "mcq") saveWrongQuestion(topic.id, timeoutAnswer, quizUserId);
-        try { recordQuestionHistory(quizUserId, topic.id, [timeoutAnswer]); } catch { /* Keep the timer responsive if storage is unavailable. */ }
+        try {
+          recordQuestionHistory(quizUserId, topic.id, [timeoutAnswer]);
+          if (topic.baseTopicId) recordQuestionHistory(quizUserId, topic.baseTopicId, [timeoutAnswer]);
+        } catch { /* Keep the timer responsive if storage is unavailable. */ }
 
         if (index + 1 < mixedSteps.length) {
           setIndex((prevIndex) => prevIndex + 1);
@@ -1175,6 +1207,7 @@ const submitAnswer = useCallback(() => {
       xp: earnedXP,
       options: currentOptions,
       confidence, topicTitle: topic.title, postId: topic.postId, learningContext: topic.learningContext,
+      kind: current.kind, baseTopicId: topic.baseTopicId, lessonId: topic.lessonId, conceptId: topic.conceptId,
     };
 
   if (needsQuizReview(answerRecord)) {
@@ -1184,7 +1217,10 @@ const submitAnswer = useCallback(() => {
   }
   setReviewRevision((value) => value + 1);
 
-  try { recordQuestionHistory(quizUserId, topic.id, [answerRecord]); } catch { /* An answer still counts if storage is unavailable. */ }
+  try {
+    recordQuestionHistory(quizUserId, topic.id, [answerRecord]);
+    if (topic.baseTopicId) recordQuestionHistory(quizUserId, topic.baseTopicId, [answerRecord]);
+  } catch { /* An answer still counts if storage is unavailable. */ }
 
   const nextAnswers = [...answers, answerRecord];
 
@@ -1278,6 +1314,12 @@ const restart = useCallback(() => {
   setComboCount(1);
 }, []);
 
+useEffect(() => {
+  if (quizLocationRef.current === location.key) return;
+  quizLocationRef.current = location.key;
+  if (topic && !focusedLearningTopic) restart();
+}, [location.key, topic, focusedLearningTopic, restart]);
+
 const returnToFocusedLesson = useCallback(() => {
   if (!focusedLearningTopic?.postId) return;
 
@@ -1355,6 +1397,7 @@ const startReview = useCallback((reviewTopic, records) => {
     options: shuffleItems(answer.options),
     answer: answer.correctAnswer || answer.answer,
     explanation: answer.explanation,
+    kind: answer.kind,
     difficulty: answer.difficulty || "Adaptive",
     source: "review",
     fingerprint: answer.fingerprint || getQuestionFingerprint({
@@ -1385,6 +1428,9 @@ const startReview = useCallback((reviewTopic, records) => {
 }, []);
 
 const startMistakeReview = useCallback(() => startReview(topic, missedQuestions), [startReview, topic, missedQuestions]);
+const relatedLessonOptions = useMemo(() => topic?.lessonId ? getRelatedQuizLessons(topic.baseTopicId, topic.lessonId) : [], [topic?.baseTopicId, topic?.lessonId]);
+const nextTopicsInLesson = useMemo(() => topic?.conceptId ? (getQuizLesson(topic.baseTopicId, topic.lessonId)?.concepts || []).filter(concept => getQuizConceptId(concept) !== topic.conceptId).slice(0, 2) : [], [topic?.baseTopicId, topic?.lessonId, topic?.conceptId]);
+const lessonSkills = useMemo(() => summarizeLessonSkills(answers), [answers]);
 
   const result = getQuizResult(answers);
   const finalScore = result.correct;
@@ -1518,7 +1564,7 @@ if (topic && bossMode && !finished) {
                 Try Again
               </button>
             )}
-            {!loadingAI && (getLearningGuide(topic?.postId) || QUESTIONS[topic.id]?.length > 0) && <button type="button" className="submit-answer-btn" onClick={() => startQuiz({ ...topic, reviewQuestions: true })}>Review available questions</button>}
+            {!loadingAI && (getLearningGuide(topic?.postId) || QUESTIONS[topic.id]?.length > 0 || getLessonTopicQuestions(topic).length > 0) && <button type="button" className="submit-answer-btn" onClick={() => startQuiz({ ...topic, reviewQuestions: true })}>Review available questions</button>}
             {!loadingAI && topic?.postId && <button type="button" className="back-btn" onClick={returnToFocusedLesson}>Return to the lesson</button>}
           </div>
         </section>
@@ -1536,14 +1582,14 @@ if (topic && bossMode && !finished) {
     <span>Smarty <span aria-hidden="true">/</span> Practice</span>
     <button type="button" className="quiz-text-control" onClick={() => navigate('/game-profile')}>Your progress <ArrowUpRight size={16} aria-hidden="true" /></button>
   </div>
-  <header className="quiz-library-intro">
-    <div><span className="quiz-eyebrow">A little curiosity. A clearer mind.</span><h1>Put what you know<br />to the test.</h1><p>Pick a subject. Think it through. Understand the why.</p></div>
+  {!selectedLibrarySubject && <header className="quiz-library-intro">
+    <div><span className="quiz-eyebrow">A little curiosity. A clearer mind.</span><h1>One idea.<br />A deeper understanding.</h1><p>Choose a subject, find a lesson, and learn by working through it.</p></div>
     <div className="quiz-library-stats" aria-label="Quiz progress summary">
       <span><strong>{TOPICS.length}</strong> subjects to explore</span>
-      <span><strong>{overallLevel}</strong> current level <span className="quiz-stat-detail">· {totalXP} XP earned</span></span>
+      <span><strong>{TOPICS.reduce((total, item) => total + getQuizLessons(item.id).length, 0)}</strong> focused lessons</span>
       <span><strong>{visitProgress.streak}</strong> day{visitProgress.streak === 1 ? '' : 's'} of practice</span>
     </div>
-  </header>
+  </header>}
   <div className="quiz-library-layout">
     <aside className="quiz-study-sidebar">
         <section className={`quiz-practice-setup ${settingsOpen ? 'is-open' : ''}`} aria-labelledby="quiz-setup-title">
@@ -1572,16 +1618,24 @@ if (topic && bossMode && !finished) {
           </div>
           <button type="button" className="quiz-sound-control" aria-pressed={soundEnabled} onClick={() => setSoundEnabled((value) => !value)}>{soundEnabled ? <Volume2 size={16} aria-hidden="true" /> : <VolumeX size={16} aria-hidden="true" />}{soundEnabled ? 'Sound on' : 'Sound off'}</button>
           <p className="quiz-prep-note">Original and AI practice sets. For general preparation, not an official exam syllabus.</p>
+          {selectedLibrarySubject && <p className="quiz-prep-note">Games join mixed-subject sets. Lesson and topic quizzes stay focused on their questions.</p>}
           </div>
         </section>
         <p className="quiz-sidebar-note">Knowing the answer is a start.<br />Knowing why is the point.</p>
     </aside>
     <div className="quiz-library-main">
+      {selectedLibrarySubject ? <QuizLessonLibrary key={selectedLibrarySubject.id} subject={selectedLibrarySubject} progress={topicProgressMap} onStart={startQuiz} onBack={() => navigate('/quiz')} /> : <>
         {savedReviews.length > 0 && <section className="quiz-saved-review" aria-labelledby="quiz-review-title">
           <div className="quiz-section-heading"><h2 id="quiz-review-title">Worth another look</h2><span>Saved on this device</span></div>
           <p>Missed and uncertain answers. Revisit them without changing your first-attempt score.</p>
           <div className="quiz-review-subjects">{savedReviews.map((entry) => <button key={entry.id} type="button" onClick={() => {
             const first = entry.records[0];
+            const parent = TOPICS.find(item => item.id === first.baseTopicId);
+            const savedLesson = parent && getQuizLesson(parent.id, first.lessonId);
+            if (savedLesson) {
+              const concept = savedLesson.concepts.find(item => getQuizConceptId(item) === first.conceptId) || '';
+              startReview(makeLessonQuizTopic(parent, savedLesson, concept), entry.records); return;
+            }
             startReview(TOPICS.find((item) => item.id === entry.id) || LEGACY_TOPICS.find((item) => item.id === entry.id)
               || { id: entry.id, title: entry.title, postId: first.postId, learningContext: first.learningContext, emoji: '◎', color: 'cyan' }, entry.records);
           }}>{entry.title} <span>{entry.records.length}</span><span aria-hidden="true">↗</span></button>)}</div>
@@ -1596,6 +1650,7 @@ if (topic && bossMode && !finished) {
 {renderedTopics}
           {renderedTopics.length === 0 && <div className="quiz-empty"><p>No matching subjects.</p><button type="button" onClick={() => { setSubjectQuery(''); setLibraryFilter('all'); }}>Clear search</button></div>}
         </section>
+      </>}
     </div>
   </div>
 {quizShellExtras}
@@ -1691,10 +1746,10 @@ if (topic && bossMode && !finished) {
             <div className="quiz-next-actions">
               <button type="button" className="quiz-next-primary" onClick={missedQuestions.length > 0
                 ? startMistakeReview
-                : () => navigate(`/learn?topic=${encodeURIComponent(focusedLearningTopic?.topic || topic.topic || topic.title)}`)}>
-                {missedQuestions.length > 0 ? 'Practice missed & unsure' : 'Explore this subject'} <span aria-hidden="true">→</span>
+                : topic.lessonId ? restart : () => navigate(`/learn?topic=${encodeURIComponent(focusedLearningTopic?.topic || topic.topic || topic.title)}`)}>
+                {missedQuestions.length > 0 ? 'Practice missed & unsure' : topic.lessonId ? 'Explore more lessons' : 'Explore this subject'} <span aria-hidden="true">→</span>
               </button>
-              {!reviewMode && percentage >= 80 && activeChallengeProfile.difficulty !== 'Hard' && <button type="button" className="quiz-next-secondary" onClick={() => startQuiz({ ...topic, reviewQuestions: false,
+              {!reviewMode && result.total >= 3 && percentage >= 80 && activeChallengeProfile.difficulty !== 'Hard' && <button type="button" className="quiz-next-secondary" onClick={() => startQuiz({ ...topic, reviewQuestions: false,
                 nextDifficulty: activeChallengeProfile.difficulty === 'Easy' ? 'Medium' : 'Hard' })}>Try the next level</button>}
               {focusedLearningTopic?.postId && <button type="button" className="quiz-next-secondary" onClick={returnToFocusedLesson}>Revisit the explanation</button>}
             </div>
@@ -1708,6 +1763,25 @@ if (topic && bossMode && !finished) {
               </div>
             )}
           </section>
+
+          {nextTopicsInLesson.length > 0 && <section className="quiz-next-lessons" aria-labelledby="quiz-next-topic-title">
+            <h2 id="quiz-next-topic-title">Continue inside this lesson</h2><p>{topic.lessonTitle}</p>
+            <div className="quiz-next-lesson-options">{nextTopicsInLesson.map(concept => <button type="button" key={concept} onClick={() => {
+              const parent = TOPICS.find(item => item.id === topic.baseTopicId);
+              const lesson = getQuizLesson(topic.baseTopicId, topic.lessonId);
+              if (parent && lesson) startQuiz(makeLessonQuizTopic(parent, lesson, concept));
+            }}><span><strong>{concept}</strong><small>Connect another part of the same lesson.</small></span><ArrowUpRight size={18} aria-hidden="true" /></button>)}</div>
+          </section>}
+
+          {topic.lessonId && relatedLessonOptions.length > 0 && <section className="quiz-next-lessons" aria-labelledby="quiz-related-lessons-title">
+            <h2 id="quiz-related-lessons-title">Connect this to another idea</h2>
+            <p>Keep building in {topic.branch}, or explore how another lesson connects.</p>
+            <div className="quiz-next-lesson-options">{relatedLessonOptions.map(lesson => <button type="button" key={lesson.id} onClick={() => {
+              const parent = TOPICS.find(item => item.id === topic.baseTopicId);
+              if (parent) startQuiz(makeLessonQuizTopic(parent, lesson));
+            }}><span><strong>{lesson.title}</strong><small>{lesson.outcome}</small></span><ArrowUpRight size={18} aria-hidden="true" /></button>)}</div>
+          </section>}
+          {lessonSkills.length > 0 && <div className="quiz-skill-summary" aria-label="Reasoning practised in this set">{lessonSkills.map(skill => <span key={skill.kind}>{skill.kind}: {skill.correct}/{skill.total}{skill.unsure ? ` · ${skill.unsure} unsure` : ''}</span>)}</div>}
 
           <div className="review-panel">
 
@@ -1726,7 +1800,7 @@ if (topic && bossMode && !finished) {
             <button type="button" onClick={() => startQuiz({ ...topic, reviewQuestions: false, nextDifficulty: '' })}>New question set</button>
 
             <button type="button" onClick={restart} className="secondary-btn">
-              Choose Another Topic
+              {topic.lessonId ? 'Choose another lesson' : 'Choose another topic'}
             </button>
 
             {focusedLearningTopic?.topic && (
@@ -1796,7 +1870,7 @@ if (topic && bossMode && !finished) {
 
         <div className="quiz-top-row">
           <div className="top-left">
-            <button className="back-btn" onClick={restart}><Grid2X2 size={16} aria-hidden="true" /> Library</button>
+            <button className="back-btn" onClick={restart}><Grid2X2 size={16} aria-hidden="true" />{topic.lessonId ? 'Lessons' : 'Library'}</button>
           </div>
 
           <span>
@@ -1830,6 +1904,7 @@ if (topic && bossMode && !finished) {
           <span className={comboCount > 1 ? "is-active" : ""}>Combo <strong>{comboCount}×</strong></span>
         </div>
           {quizNotice && <p className="quiz-source-notice">{quizNotice}</p>}
+        {topic.lessonId && <div className="quiz-lesson-context"><span>{topic.topic} / {topic.lessonTitle}</span><h1>{topic.focusTitle || topic.title}</h1><p>{topic.focusTitle ? `Focused practice on ${topic.focusTitle.toLocaleLowerCase()}, inside “${topic.lessonTitle}”.` : topic.desc}</p></div>}
         {focusedLearningTopic && (
           <div className="focused-quiz-source">
             <span>Focused lesson</span>
@@ -1845,6 +1920,7 @@ if (topic && bossMode && !finished) {
 
 
         <div key={current?.id || `${topic?.id}-${index}`} className="quiz-question-stage">
+          {current?.kind && <span className="quiz-question-kind">{current.kind}</span>}
           <h2 ref={questionHeadingRef} tabIndex={-1}>{current?.q || "Challenge question"}</h2>
 
 <div className="option-list">
@@ -1893,7 +1969,7 @@ if (topic && bossMode && !finished) {
       <span>Why this works</span>
       <p>{answerFeedback.explanation}</p>
     </div>
-    {answerFeedback.confidence === 'unsure' && <p className="quiz-review-tag">Saved for review, even if you answered correctly.</p>}
+    {answerFeedback.confidence === 'unsure' && <p className="quiz-review-tag">{answerFeedback.isCorrect ? 'Saved for review, even though your answer was correct.' : 'Saved for another practice, with the explanation.'}</p>}
   </div>
 )}
 

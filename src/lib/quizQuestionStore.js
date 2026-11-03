@@ -43,6 +43,10 @@ export function getQuestionFingerprint(question) {
   return prompt ? `q-${hashText(`${prompt}|${answer}`)}` : "";
 }
 
+export function getQuestionPromptKey(value) {
+  return String(value || '').normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+}
+
 export function getQuizContextKey(topic = {}) {
   const context = [
     topic.id,
@@ -53,6 +57,8 @@ export function getQuizContextKey(topic = {}) {
     topic.sourceBody,
     topic.studyTrack,
     topic.examTarget,
+    ...(topic.lessonId ? [topic.lessonId, topic.lessonVersion, topic.conceptId,
+      Array.isArray(topic.objectives) ? topic.objectives.join(' ') : ''] : []),
   ].map(value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim()).join("|");
 
   return `ctx-${hashText(context || "general")}`;
@@ -166,11 +172,14 @@ export function getRecentQuestionPrompts(userId, topicId, limit = 20) {
 export function filterUnseenQuestions(questions, seenFingerprints = []) {
   const seen = new Set(seenFingerprints);
   const included = new Set();
+  const includedPrompts = new Set();
 
   return (Array.isArray(questions) ? questions : []).filter((question) => {
     const fingerprint = question?.fingerprint || getQuestionFingerprint(question);
-    if (!fingerprint || seen.has(fingerprint) || included.has(fingerprint)) return false;
+    const prompt = getQuestionPromptKey(question?.q || question?.question || question?.prompt);
+    if (!fingerprint || seen.has(fingerprint) || included.has(fingerprint) || includedPrompts.has(prompt)) return false;
     included.add(fingerprint);
+    includedPrompts.add(prompt);
     return true;
   });
 }

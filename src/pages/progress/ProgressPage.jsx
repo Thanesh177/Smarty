@@ -9,11 +9,12 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Grid2X2, X } from 'lucide-react';
 import { QUIZ_SUBJECTS } from '../../data/quizSubjects.js';
+import { getQuizLessonLabel } from '../../data/quizLessons.js';
 import "./ProgressPage.css";
 import '../QuizWorkspace.css';
 import './QuizProgress.css';
 
-const subjectTitle = (id) => QUIZ_SUBJECTS.find((subject) => subject.id === id)?.title || id.replaceAll('_', ' ').replaceAll('-', ' ');
+const subjectTitle = (id) => getQuizLessonLabel(id) || QUIZ_SUBJECTS.find((subject) => subject.id === id)?.title || id.replaceAll('_', ' ').replaceAll('-', ' ');
 
 const MistakeReviewCard = memo(function MistakeReviewCard({ topicId, item, index, onRemove }) {
   const question = item.q || item.question || "Saved mistake";

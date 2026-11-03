@@ -1,4 +1,4 @@
-import { filterUnseenQuestions, getQuestionFingerprint } from './quizQuestionStore.js';
+import { filterUnseenQuestions, getQuestionFingerprint, getQuestionPromptKey } from './quizQuestionStore.js';
 
 const cleanOption = (value) => String(value?.text ?? value?.label ?? value ?? '')
   .replace(/^\s*[A-D][.):\-]\s*/i, '').trim();
@@ -13,13 +13,14 @@ export function clearQuizFlag(key) {
 
 // Numeric answer indexes are zero-based; letter answer keys are A–D.
 export function normalizeGeneratedQuestions(payload, topicId, {
-  excludedFingerprints = [], fallbackDifficulty = 'Adaptive', requiredDifficulty = '', limit = 5,
+  excludedFingerprints = [], excludedPrompts = [], fallbackDifficulty = 'Adaptive', requiredDifficulty = '', limit = 5,
 } = {}) {
   let parsed = payload;
   if (typeof parsed?.body === 'string') {
     try { parsed = JSON.parse(parsed.body); } catch { return []; }
   }
   const rows = Array.isArray(parsed) ? parsed : parsed?.questions ?? parsed?.items;
+  const excluded = new Set(excludedPrompts.map(getQuestionPromptKey));
   const questions = (Array.isArray(rows) ? rows : []).flatMap((row, index) => {
     const q = String(row?.q ?? row?.question ?? row?.prompt ?? '').trim();
     const rawOptions = row?.options ?? row?.choices ?? row?.answers;
@@ -41,6 +42,7 @@ export function normalizeGeneratedQuestions(payload, topicId, {
     const label = String(row?.difficulty ?? '').toLowerCase();
     const difficulty = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }[label] ?? fallbackDifficulty;
     if (requiredDifficulty && difficulty !== requiredDifficulty) return [];
+    if (excluded.has(getQuestionPromptKey(q))) return [];
     const question = { id: row?.id || `generated-${topicId}-${index + 1}`, q, options, answer,
       explanation, difficulty, source: 'generated' };
     return [{ ...question, fingerprint: getQuestionFingerprint(question) }];

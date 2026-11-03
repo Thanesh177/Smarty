@@ -5,6 +5,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, Grid2X2, LockKeyhole, Check } from 'lucide-react';
 import { QUIZ_SUBJECTS } from '../../data/quizSubjects.js';
+import { getQuizLessonLabel } from '../../data/quizLessons.js';
 import { getWrongQuestions } from '../../lib/progressStore';
 import './GameProfile.css';
 import '../QuizWorkspace.css';
@@ -300,7 +301,7 @@ export default function GameProfile() {
       <section className="quiz-subject-records" aria-labelledby="practice-record-title">
         <div className="quiz-progress-section-head"><h2 id="practice-record-title">Your subject record</h2><span>Best practice scores, not exam readiness</span></div>
         {studiedSubjects.length ? studiedSubjects.map(([id, item]) => <div className="quiz-subject-record" key={id}>
-          <div><strong>{QUIZ_SUBJECTS.find((subject) => subject.id === id)?.title || id.replaceAll('_', ' ').replaceAll('-', ' ')}</strong><span>{item.attempts || 0} practice sets · {item.totalXP || 0} XP</span></div>
+          <div><strong>{getQuizLessonLabel(id) || QUIZ_SUBJECTS.find((subject) => subject.id === id)?.title || id.replaceAll('_', ' ').replaceAll('-', ' ')}</strong><span>{item.attempts || 0} practice sets · {item.totalXP || 0} XP</span></div>
           <div className="quiz-record-score"><span>{Math.min(100, Math.max(0, Number(item.bestPercent) || 0))}%</span><div className="quiz-record-track"><div style={{ width: `${Math.min(100, Math.max(0, Number(item.bestPercent) || 0))}%` }} /></div></div>
         </div>) : <div className="quiz-progress-empty"><h3>Your first subject starts here.</h3><p>Complete a practice set to build your record. There’s no rush.</p><button type="button" className="quiz-text-control" onClick={() => navigate('/quiz')}>Explore the library <ArrowUpRight size={16} aria-hidden="true" /></button></div>}
       </section>
