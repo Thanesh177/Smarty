@@ -1970,7 +1970,7 @@
 .has-inner-feed .snap-post.no-media p {
   max-width: 720px;
   margin-top: 20px;
-  color: #cbd5e1;
+  color: #000000;
   font-size: clamp(0.98rem, 1.2vw, 1.08rem);
   line-height: 1.72;
 }
