@@ -5,7 +5,7 @@ import PostAuthor from './PostAuthor';
 import { formatVideoTime, getPostVideoUrl, getVideoPostId } from '../lib/videoFeed';
 import NativeDownloadButton from './NativeDownloadButton';
 
-export default memo(function ReelVideo({ post, active, nearby, muted = false, onMute, onSave, onSafety, saved, busy }) {
+export default memo(function ReelVideo({ post, active, nearby, muted = false, onMute, onSave, onSafety, onReload, saved, busy }) {
   const videoRef = useRef(null);
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -15,10 +15,53 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [retry, setRetry] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [failureMessage, setFailureMessage] = useState('');
+  const mounted = useRef(true);
+  const autoRenewed = useRef(false);
+  const reloadLock = useRef(false);
   const id = getVideoPostId(post);
   const title = post.title || 'Community video';
   const source = getPostVideoUrl(post);
   const poster = getPostVideoUrl({ videoUrl: post.thumbUrl || post.imageUrl });
+
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    setPlaying(false); setWaiting(false); setFailed(false); setReady(videoRef.current?.readyState >= 2);
+    setDuration(0); setPosition(0); setFailureMessage('');
+  }, [source, retry, nearby]);
+
+  const reloadSource = async () => {
+    if (reloadLock.current) return;
+    reloadLock.current = true;
+    setRefreshing(true);
+    videoRef.current?.pause();
+    try {
+      // Media links can expire while an article remains in the feed cache.
+      // Ask for current media rather than retrying an expired link forever.
+      if (onReload) {
+        const fresh = await onReload(id);
+        if (!getPostVideoUrl(fresh)) throw new Error('Unavailable');
+      }
+      if (mounted.current) { setFailed(false); setWaiting(false); setReady(false); setRetry(value => value + 1); }
+    } catch {
+      if (mounted.current) { setFailed(true); setFailureMessage('The video could not be refreshed. Check your connection and try again.'); }
+    } finally {
+      reloadLock.current = false;
+      if (mounted.current) setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!active || !nearby || failed || refreshing || (ready && !waiting)) return undefined;
+    const timer = window.setTimeout(() => {
+      videoRef.current?.pause();
+      setWaiting(false); setFailed(true);
+      setFailureMessage('This video is taking too long to load. Check your connection or try the next video.');
+    }, 18000);
+    return () => window.clearTimeout(timer);
+  }, [active, nearby, ready, waiting, failed, refreshing, retry, source]);
 
   const preparePreview = video => {
     if (!poster && video.paused && video.readyState >= 1 && video.currentTime === 0 && Number.isFinite(video.duration) && video.duration > 0) {
@@ -64,8 +107,8 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
     if (!video.paused) { video.pause(); return; }
     setWaiting(true);
     video.muted = muted;
-    video.play()?.then(() => { if (!activeRef.current || document.visibilityState === 'hidden') video.pause(); })
-      .catch(() => { setPlaying(false); setWaiting(false); });
+    video.play()?.then(() => { if (!activeRef.current || videoRef.current !== video || document.visibilityState === 'hidden') video.pause(); })
+      .catch(() => { if (mounted.current) { setPlaying(false); setWaiting(false); } });
   };
 
   const toggleSound = () => {
@@ -82,33 +125,37 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
     else video?.requestFullscreen?.()?.catch(() => {});
   };
 
-  return <article className={'reel-video' + (active ? ' is-active' : '')} data-video-id={id} aria-label={title}>
-    <div className="reel-video-stage">
+  return <article className={'reel-video' + (active ? ' is-active' : '')} data-video-id={id} aria-label={title} aria-hidden={!active} inert={!active ? '' : undefined}>
+    <div className={'reel-video-stage' + (playing ? ' is-playing' : '')} aria-busy={active && (!ready || waiting || refreshing) && !failed}>
       {nearby ? <video key={retry} ref={videoRef} src={source} poster={poster || undefined}
         playsInline loop muted={muted} preload={active ? 'auto' : 'metadata'} aria-label={title}
         onPlaying={event => {
           if (!activeRef.current || document.visibilityState === 'hidden') { event.currentTarget.pause(); return; }
-          setPlaying(true); setWaiting(false);
+          setPlaying(true); setWaiting(false); setReady(true);
         }} onPause={() => { setPlaying(false); setWaiting(false); }}
-        onWaiting={() => setWaiting(true)} onCanPlay={() => setWaiting(false)}
+        onWaiting={() => { if (activeRef.current) setWaiting(true); }} onCanPlay={() => { setReady(true); setWaiting(false); }}
         onLoadedMetadata={event => {
           const video = event.currentTarget;
           setDuration(video.duration); setFailed(false);
           // Reveal a real first frame on mobile Safari without a poster.
           preparePreview(video);
         }}
-        onLoadedData={event => preparePreview(event.currentTarget)}
-        onTimeUpdate={event => setPosition(Math.floor(event.currentTarget.currentTime))}
-        onError={() => { setFailed(true); setWaiting(false); setPlaying(false); }} />
+        onLoadedData={event => { setReady(true); preparePreview(event.currentTarget); }}
+        onTimeUpdate={event => setPosition(Math.floor(event.currentTarget.currentTime * 4) / 4)}
+        onError={() => {
+          setFailed(true); setWaiting(false); setPlaying(false);
+          setFailureMessage('It may be unavailable or use a format this device cannot play.');
+          if (activeRef.current && onReload && !autoRenewed.current) { autoRenewed.current = true; reloadSource(); }
+        }} />
         : <div className="reel-video-placeholder" aria-hidden="true">{poster && <img src={poster} alt="" loading="lazy" />}<Play size={30} /></div>}
-      {!failed && <button type="button" className="reel-video-tap" onClick={play} tabIndex={active ? 0 : -1}
+      {!failed && !refreshing && <button type="button" className="reel-video-tap" onClick={play} tabIndex={active ? 0 : -1}
         aria-label={playing ? 'Pause video' : 'Play video'} aria-pressed={playing}>
-        {!playing && !waiting && <span><Play size={30} fill="currentColor" /><small>{muted ? 'Tap to play' : 'Play with sound'}</small></span>}
+        {!playing && !waiting && ready && <span><Play size={28} fill="currentColor" /><small>{muted ? 'Play video' : 'Play with sound'}</small></span>}
       </button>}
-      {waiting && active && !failed && <span className="reel-video-buffer" role="status"><span />Loading video…</span>}
-      {failed && <div className="reel-video-error" role="status"><Play size={26} /><strong>This video couldn’t play.</strong>
-        <p>It may be unavailable or use a format this device can’t play.</p>
-        <button type="button" onClick={() => { setFailed(false); setWaiting(false); setRetry(value => value + 1); }}><RefreshCw size={16} />Try again</button>
+      {active && (refreshing || ((!ready || waiting) && !failed)) && <span className="reel-video-buffer" role="status"><span />{refreshing ? 'Reconnecting video…' : waiting ? 'Buffering…' : 'Loading preview…'}</span>}
+      {failed && !refreshing && <div className="reel-video-error" role="status"><Play size={26} /><strong>This video couldn’t play.</strong>
+        <p>{failureMessage || 'Check your connection and try again.'}</p>
+        <button type="button" onClick={reloadSource}><RefreshCw size={16} />Reload video</button>
       </div>}
       <div className="reel-video-top"><span>{post.topic || 'Video'}</span><button type="button" onClick={toggleSound} aria-label={muted ? 'Turn sound on' : 'Mute video'}>{muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button></div>
       <div className="reel-video-bottom">

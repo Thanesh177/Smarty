@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const { transformSync } = require('esbuild');
 
 function renderPlayer(overrides = {}) {
-  const effects = [], writes = [], refs = [], listeners = new Map();
+  const effects = [], writes = [], refs = [], listeners = new Map(), timers = new Map();
   let index = 0;
   const fakeVideo = {
     isConnected: true, paused: true, muted: true, playCalls: 0, released: 0, loaded: 0,
@@ -27,15 +27,16 @@ function renderPlayer(overrides = {}) {
   vm.runInNewContext(compiled, {
     module: scope, exports: scope.exports, queueMicrotask, URL,
     document: { visibilityState: 'visible', addEventListener: (name, handler) => listeners.set(name, handler), removeEventListener: name => listeners.delete(name) },
-    window: { addEventListener: (name, handler) => listeners.set(name, handler), removeEventListener: name => listeners.delete(name) },
-    require: name => name === 'react' ? hookReact : ['./PostAuthor', './NativeDownloadButton'].includes(name) ? { default: () => null } : name === '../lib/videoFeed' ? require('../lib/videoFeed.js') : require(name),
+    window: { addEventListener: (name, handler) => listeners.set(name, handler), removeEventListener: name => listeners.delete(name),
+      setTimeout: callback => { const id = timers.size + 1; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id) },
+    require: name => name === 'react' ? hookReact : ['./PostAuthor', './NativeDownloadButton'].includes(name) ? () => null : name === '../lib/videoFeed' ? require('../lib/videoFeed.js') : require(name),
   });
   const tree = scope.exports.default({
     post: { id: 'video-one', videoUrl: 'https://media.example/one.mp4', title: 'One specific idea' },
     active: true, nearby: true, muted: false, reducedMotion: false,
     onMute() {}, onSave() {}, onSafety() {}, ...overrides,
   });
-  return { tree, fakeVideo, effects, writes, refs, listeners };
+  return { tree, fakeVideo, effects, writes, refs, listeners, timers };
 }
 
 test('clips stay on a sound-enabled preview until the active player is tapped', async () => {
@@ -120,4 +121,37 @@ test('a clip without a poster seeks a real preview frame without starting playba
   assert.equal(player.fakeVideo.currentTime, .01);
   assert.equal(player.fakeVideo.playCalls, 0);
   assert.equal(player.fakeVideo.paused, true);
+});
+
+test('a failed media request renews its link once, without retrying on a loop', async () => {
+  let requests = 0;
+  const player = renderPlayer({ onReload: async () => { requests++; return { videoUrl: 'https://media.example/refreshed.mp4' }; } });
+  player.effects.forEach(effect => effect());
+  const video = player.tree.props.children.props.children.find(element => element?.type === 'video');
+  video.props.onError();
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  video.props.onError();
+  assert.equal(requests, 1);
+  assert(player.writes.some(write => write.slot === 5 && typeof write.value === 'function'));
+});
+
+test('a failed renewal stays retryable and never starts the video unexpectedly', async () => {
+  const player = renderPlayer({ onReload: async () => { throw new Error('Offline'); } });
+  player.effects.forEach(effect => effect());
+  player.tree.props.children.props.children.find(element => element?.type === 'video').props.onError();
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  assert.equal(player.fakeVideo.playCalls, 0);
+  assert(player.writes.some(write => write.value === 'The video could not be refreshed. Check your connection and try again.'));
+});
+
+test('a stalled active preview has a bounded wait instead of an endless blank player', () => {
+  const player = renderPlayer();
+  player.effects.forEach(effect => effect());
+  assert.equal(player.timers.size, 1);
+  [...player.timers.values()][0]();
+  assert(player.writes.some(write => write.slot === 2 && write.value === true));
+  assert(player.writes.some(write => typeof write.value === 'string' && write.value.includes('taking too long')));
+  const offscreen = renderPlayer({ active: false });
+  offscreen.effects.forEach(effect => effect());
+  assert.equal(offscreen.timers.size, 0);
 });

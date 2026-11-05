@@ -144,6 +144,7 @@ export function saveWrongQuestion(topicId, question, userOrId) {
         isCorrect: Boolean(question.isCorrect),
         topicTitle: question.topicTitle,
         kind: question.kind,
+        concepts: Array.isArray(question.concepts) ? question.concepts.slice(0, 8) : undefined,
         baseTopicId: question.baseTopicId,
         lessonId: question.lessonId,
         conceptId: question.conceptId,

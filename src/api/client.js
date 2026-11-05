@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { createRequestCache } from '../lib/requestCache';
+import { normalizeChatDeletion } from '../lib/chatDeletion';
 import { normalizeSavedCollection } from '../lib/savedCollection';
 import { createNewsRequestCache } from '../lib/newsRequestCache';
 import { hasEditorialBriefing } from '../lib/newsAvailability';
@@ -2516,8 +2517,20 @@ export const chatApi = {
   },
 
   async deleteChat(chatId) {
-    const { data } = await api.delete(`/chats/${encodeURIComponent(chatId)}`);
-    return data;
+    const id = String(chatId || '').trim();
+    if (!id) throw new Error('Choose a conversation first.');
+    let result;
+    try {
+      const { data } = await api.delete(`/chats/${encodeURIComponent(id)}`);
+      result = normalizeChatDeletion(data, id);
+    } catch (error) {
+      if (error?.response?.status !== 404) throw error;
+      // An already-removed membership is safe to clear locally. A missing
+      // route or a different server error must not masquerade as success.
+      result = normalizeChatDeletion(error.response.data, id, 404);
+    }
+    readCache.delete('chats:pending');
+    return result;
   },
 
   async getMediaViewUrl({ mediaKey }) {

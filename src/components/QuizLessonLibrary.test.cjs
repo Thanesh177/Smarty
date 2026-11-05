@@ -7,9 +7,9 @@ const path = require('node:path');
 const code = buildSync({ entryPoints: [path.join(__dirname, 'QuizLessonLibrary.jsx')], bundle: true,
   write: false, format: 'cjs', platform: 'node', jsx: 'automatic', external: ['react', 'react/jsx-runtime', 'lucide-react'] }).outputFiles[0].text;
 
-function harness() {
+function harness(initialView) {
   let slot = 0;
-  const state = [], starts = [], scope = { exports: {} };
+  const state = [], starts = [], views = [], scope = { exports: {} };
   const jsx = (type, props) => ({ type, props: props || {} });
   vm.runInNewContext(code, { module: scope, exports: scope.exports,
     require(name) {
@@ -20,40 +20,73 @@ function harness() {
       throw new Error(name);
     } });
   const subject = { id: 'science-mathematics', title: 'Science & Mathematics' };
-  function render() { slot = 0; return scope.exports.default({ subject, progress: {}, onStart: item => starts.push(item), onBack() {} }); }
+  function render() { slot = 0; return scope.exports.default({ subject, progress: {}, initialView, onStart: (item, view) => { starts.push(item); views.push(view); }, onBack() {} }); }
   function find(node, predicate) {
     if (!node || typeof node !== 'object') return [];
     if (Array.isArray(node)) return node.flatMap(item => find(item, predicate));
     return [...(predicate(node) ? [node] : []), ...find(node.props?.children, predicate)];
   }
   const text = node => typeof node === 'string' ? node : typeof node === 'number' ? String(node) : Array.isArray(node) ? node.map(text).join('') : node?.props ? text(node.props.children) : '';
-  return { starts, render, find, text };
+  return { starts, views, render, find, text };
 }
 
-test('opening a lesson reveals its topics without starting a quiz; choosing a topic starts a narrow quiz', () => {
+test('a lesson has one quiz action that includes all its ideas and no topic picker', () => {
   const app = harness(); let tree = app.render();
-  const circuit = app.find(tree, node => node.props.className === 'quiz-lesson-card' && app.text(node).includes('Inside an electric circuit'))[0];
-  const open = app.find(circuit, node => node.type === 'button' && app.text(node).startsWith('Open lesson'))[0];
-  assert.equal(open.props['aria-expanded'], false); open.props.onClick();
-  assert.equal(app.starts.length, 0);
+  app.find(tree, node => node.type === 'input')[0].props.onChange({ target: { value: 'electric circuit' } });
   tree = app.render();
-  const ohm = app.find(tree, node => node.type === 'button' && app.text(node).startsWith('Ohm’s law'))[0];
-  assert.ok(ohm); ohm.props.onClick();
+  const circuit = app.find(tree, node => node.props.className === 'quiz-lesson-card' && app.text(node).includes('Inside an electric circuit'))[0];
+  assert.match(app.text(circuit), /Ohm’s law/);
+  const actions = app.find(circuit, node => node.type === 'button');
+  assert.equal(actions.length, 1);
+  assert.match(actions[0].props['aria-label'], /Start quiz: Inside an electric circuit/);
+  actions[0].props.onClick();
   assert.equal(app.starts.length, 1);
-  assert.equal(app.starts[0].conceptId, 'ohm-s-law');
+  assert.equal(app.starts[0].conceptId, '');
   assert.equal(app.starts[0].lessonId, 'circuits');
-  assert.equal(app.starts[0].subjects.length, 1);
+  assert.deepEqual(Array.from(app.starts[0].subjects), ['Ohm’s law', 'Series circuits', 'Parallel circuits']);
 });
 
 test('branch and lesson search filters compose; clearing an empty state restores the book', () => {
   const app = harness(); let tree = app.render();
   app.find(tree, node => node.type === 'button' && app.text(node) === 'Physics')[0].props.onClick();
   tree = app.render();
-  assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 4);
+  assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 5);
   app.find(tree, node => node.type === 'input')[0].props.onChange({ target: { value: 'nonexistent' } });
   tree = app.render();
   assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 0);
   app.find(tree, node => node.type === 'button' && app.text(node) === 'Show all lessons')[0].props.onClick();
   tree = app.render();
-  assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 14);
+  assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 6);
+});
+
+test('load more appends unique lessons in batches and hides itself at the end', () => {
+  const app = harness();
+  const cards = tree => app.find(tree, node => node.props.className === 'quiz-lesson-card').map(app.text);
+  const more = tree => app.find(tree, node => node.type === 'button' && app.text(node).startsWith('Load more lessons'))[0];
+  const first = app.render();
+  assert.equal(cards(first).length, 6);
+  more(first).props.onClick();
+  const second = app.render();
+  assert.equal(cards(second).length, 12);
+  assert.deepEqual(cards(second).slice(0, 6), cards(first));
+  more(second).props.onClick();
+  const last = app.render();
+  assert.equal(cards(last).length, 17);
+  assert.equal(new Set(cards(last)).size, 17);
+  assert.equal(more(last), undefined);
+});
+
+test('returning from a quiz restores the expanded lesson list and filters', () => {
+  const app = harness(); let tree = app.render();
+  app.find(tree, node => node.type === 'button' && app.text(node).startsWith('Load more lessons'))[0].props.onClick();
+  tree = app.render();
+  app.find(tree, node => node.type === 'button' && node.props['aria-label'] === 'Start quiz: Inside an electric circuit')[0].props.onClick();
+  assert.equal(app.views[0].limit, 12);
+  assert.equal(app.views[0].lessonId, 'circuits');
+  const restored = harness(app.views[0]);
+  assert.equal(restored.find(restored.render(), node => node.props.className === 'quiz-lesson-card').length, 12);
+  const filtered = harness({ branch: 'Physics', query: 'circuit', limit: 6 });
+  const lessons = filtered.find(filtered.render(), node => node.props.className === 'quiz-lesson-card');
+  assert.equal(lessons.length, 1);
+  assert.match(filtered.text(lessons[0]), /Inside an electric circuit/);
 });

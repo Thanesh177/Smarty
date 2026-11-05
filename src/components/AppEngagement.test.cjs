@@ -5,7 +5,7 @@ const path = require('node:path');
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
 test('Settings includes review/share actions without collecting star ratings or exposing account URLs', () => {
   const settings = read('components/AppSettingsEngagement.jsx');
-  assert.match(read('components/NavbarMenu.jsx'), /<AppSettingsEngagement user=\{user\}/);
+  assert.match(read('pages/SettingsPage.jsx'), /<AppSettingsEngagement user=\{user\}/);
   assert.match(settings, /Rate your app/); assert.match(settings, /Share app/);
   assert.match(settings, /Don’t|clipboard/);
   assert.match(settings, /if \(pending.current\) return/);

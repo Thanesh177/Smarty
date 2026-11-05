@@ -51,7 +51,7 @@ const dedupePosts = (items) => {
   return Array.from(seen.values()).sort((a, b) => getPostTime(b) - getPostTime(a));
 };
 
-export default function useFeed() {
+export default function useFeed({ pageSize = 10 } = {}) {
   const { user } = useAuth();
   const userId = user?.userId || user?.sub || user?.id || '';
   const feedCacheKey = useMemo(
@@ -67,9 +67,12 @@ export default function useFeed() {
     [userId]
   );
   const blockedCreatorIdsRef = useRef(new Set());
+  const hiddenPostIdsRef = useRef(new Set());
   const hasFetched = useRef(false);
   const lastFetchedScopeRef = useRef('');
-  const preloadingRef = useRef(false);
+  const preloadedPageRef = useRef(null);
+  const generationRef = useRef(0);
+  const loadRequestRef = useRef(null);
   const activeCacheScopeRef = useRef(userId);
 
   const [posts, setPosts] = useState(() => {
@@ -86,8 +89,8 @@ export default function useFeed() {
     catch { return null; }
   });
 
-  const [preloadedPage, setPreloadedPage] = useState(null);
   const [loading, setLoading] = useState(posts.length === 0);
+  const [refreshing, setRefreshing] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
 
@@ -107,10 +110,11 @@ export default function useFeed() {
   const removeBlockedPosts = useCallback(
     (items) => {
       const blockedIds = blockedCreatorIdsRef.current;
-      if (!blockedIds.size) return items || [];
+      const hiddenIds = hiddenPostIdsRef.current;
+      if (!blockedIds.size && !hiddenIds.size) return items || [];
 
       return (items || []).filter(
-        (post) => !blockedIds.has(getPostCreatorId(post))
+        (post) => !blockedIds.has(getPostCreatorId(post)) && !hiddenIds.has(getPostId(post))
       );
     },
     []
@@ -135,8 +139,11 @@ export default function useFeed() {
 
     activeCacheScopeRef.current = userId;
     blockedCreatorIdsRef.current = readBlockedCreatorIds();
+    hiddenPostIdsRef.current = new Set();
     hasFetched.current = false;
-    preloadingRef.current = false;
+    generationRef.current += 1;
+    preloadedPageRef.current = null;
+    loadRequestRef.current = null;
 
     try {
       const cached = localStorage.getItem(feedCacheKey);
@@ -153,7 +160,8 @@ export default function useFeed() {
       setLoading(true);
     }
 
-    setPreloadedPage(null);
+    setLoadingMore(false);
+    setRefreshing(true);
     setError('');
   }, [
     feedCacheKey,
@@ -170,53 +178,52 @@ export default function useFeed() {
 
   const fetchPage = useCallback(async (cursor = null) => {
     return postApi.getFeed({
-      limit: 10,
+      limit: pageSize,
       cursor,
     });
-  }, []);
+  }, [pageSize]);
 
   const preloadNextPage = useCallback(
-    async (cursor) => {
-      if (!cursor || preloadingRef.current) return;
-
-      try {
-        preloadingRef.current = true;
-
-        const data = await fetchPage(cursor);
-
-        setPreloadedPage({
-          items: data.items || [],
-          nextCursor: data.nextCursor || null,
-        });
-      } catch (err) {
-        console.error('Preload failed:', err);
-      } finally {
-        preloadingRef.current = false;
-      }
+    (cursor) => {
+      if (!cursor) return;
+      const key = JSON.stringify(cursor);
+      const current = preloadedPageRef.current;
+      if (current?.key === key && current.generation === generationRef.current) return;
+      // Retain the in-flight promise, not just its eventual value. Scrolling
+      // before prefetch completes must await this exact cursor, not fetch twice.
+      const entry = { key, generation: generationRef.current, promise: fetchPage(cursor) };
+      preloadedPageRef.current = entry;
+      entry.promise.catch(() => {
+        if (preloadedPageRef.current === entry) preloadedPageRef.current = null;
+      });
     },
     [fetchPage]
   );
 
   const refreshFeed = useCallback(async () => {
+    const generation = ++generationRef.current;
+    preloadedPageRef.current = null;
+    loadRequestRef.current = null;
+    setLoadingMore(false);
+    setRefreshing(true);
     try {
       setError('');
       setLoading(posts.length === 0);
 
       const data = await fetchPage(null);
+      if (generation !== generationRef.current || activeCacheScopeRef.current !== userId) return;
       const freshItems = removeBlockedPosts(dedupePosts(data.items || []));
       const cursor = data.nextCursor || null;
 
       setPosts(freshItems);
       setNextCursor(cursor);
-      setPreloadedPage(null);
       saveCache(freshItems, cursor);
 
       preloadNextPage(cursor);
     } catch (err) {
-      console.error('Feed load failed:', err);
-      setError('Failed to load feed.');
+      if (generation === generationRef.current) setError('Failed to load feed.');
     } finally {
-      setLoading(false);
+      if (generation === generationRef.current) { setLoading(false); setRefreshing(false); }
     }
   }, [
     fetchPage,
@@ -224,24 +231,22 @@ export default function useFeed() {
     preloadNextPage,
     removeBlockedPosts,
     saveCache,
+    userId,
   ]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !nextCursor) return;
+    if (refreshing || loadingMore || !nextCursor || loadRequestRef.current) return;
+    const request = { generation: generationRef.current };
+    loadRequestRef.current = request;
 
     try {
       setError('');
       setLoadingMore(true);
 
-      let page = preloadedPage;
-
-      if (!page) {
-        const data = await fetchPage(nextCursor);
-        page = {
-          items: data.items || [],
-          nextCursor: data.nextCursor || null,
-        };
-      }
+      const prefetched = preloadedPageRef.current;
+      const page = await (prefetched?.key === JSON.stringify(nextCursor) && prefetched.generation === request.generation
+        ? prefetched.promise : fetchPage(nextCursor));
+      if (request.generation !== generationRef.current || activeCacheScopeRef.current !== userId) return;
 
       const mergedCursor = page.nextCursor || null;
 
@@ -254,23 +259,23 @@ export default function useFeed() {
       });
 
       setNextCursor(mergedCursor);
-      setPreloadedPage(null);
+      preloadedPageRef.current = null;
 
       preloadNextPage(mergedCursor);
     } catch (err) {
-      console.error('Load more failed:', err);
-      setError('Failed to load more posts.');
+      if (request.generation === generationRef.current) setError('Failed to load more posts.');
     } finally {
-      setLoadingMore(false);
+      if (loadRequestRef.current === request) { loadRequestRef.current = null; setLoadingMore(false); }
     }
   }, [
     fetchPage,
     loadingMore,
+    refreshing,
     nextCursor,
-    preloadedPage,
     preloadNextPage,
     removeBlockedPosts,
     saveCache,
+    userId,
   ]);
 
   useEffect(() => {
@@ -370,17 +375,10 @@ export default function useFeed() {
     (postId) => {
       const normalizedId = String(postId || '').trim();
       if (!normalizedId) return;
+      hiddenPostIdsRef.current.add(normalizedId);
 
-      setPreloadedPage((current) => (
-        current
-          ? {
-              ...current,
-              items: (current.items || []).filter(
-                (post) => getPostId(post) !== normalizedId
-              ),
-            }
-          : current
-      ));
+      // Invalidate prefetched content so a hidden post cannot reappear.
+      preloadedPageRef.current = null;
 
       setPosts((current) => {
         const updated = current.filter(
@@ -392,6 +390,20 @@ export default function useFeed() {
     },
     [nextCursor, saveCache]
   );
+
+  const refreshPost = useCallback(async postId => {
+    const id = String(postId || '').trim();
+    const generation = generationRef.current;
+    const post = await postApi.getSingleReel(id);
+    if (generation !== generationRef.current || activeCacheScopeRef.current !== userId
+      || getPostId(post) !== id || !removeBlockedPosts([post]).length) throw new Error('Video unavailable.');
+    setPosts(current => {
+      const updated = current.map(item => getPostId(item) === id ? { ...item, ...post } : item);
+      saveCache(updated, nextCursor);
+      return updated;
+    });
+    return post;
+  }, [nextCursor, removeBlockedPosts, saveCache, userId]);
 
   const blockCreator = useCallback(
     (creatorId) => {
@@ -409,14 +421,7 @@ export default function useFeed() {
         // The in-memory removal still takes effect when storage is unavailable.
       }
 
-      setPreloadedPage((current) =>
-        current
-          ? {
-              ...current,
-              items: removeBlockedPosts(current.items),
-            }
-          : current
-      );
+      preloadedPageRef.current = null;
 
       setPosts((current) => {
         const updated = removeBlockedPosts(current);
@@ -430,11 +435,13 @@ export default function useFeed() {
   return {
     posts,
     loading,
+    refreshing,
     loadingMore,
     error,
     nextCursor,
     loadMore,
     refreshFeed,
+    refreshPost,
     likePost,
     savePost,
     hidePost,

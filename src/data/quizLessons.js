@@ -1,8 +1,10 @@
-// A lesson is a narrow practice boundary, not a promise of an exam syllabus.
+import { EXPANDED_QUIZ_LESSONS } from './quizLessonExpansion.js';
+
+// A lesson connects ideas within one meaningful scope, not an exam syllabus.
 // Keep IDs stable: they scope cached questions, attempts and mistake review.
 const lesson = (id, title, branch, outcome, concepts) => ({ id, title, branch, outcome, concepts });
 
-export const QUIZ_LESSONS = {
+const EXISTING_QUIZ_LESSONS = {
   'science-mathematics': [
     lesson('measurement', 'Measure without fooling yourself', 'Scientific thinking', 'Separate accuracy, precision and uncertainty when interpreting a measurement.', ['SI units', 'Significant figures', 'Measurement error']),
     lesson('experiments', 'Design a fair experiment', 'Scientific thinking', 'Identify variables, controls and the conclusions an experiment can actually support.', ['Controls', 'Confounding', 'Replication']),
@@ -131,7 +133,11 @@ export const QUIZ_LESSONS = {
   ],
 };
 
-export const getQuizLessons = subjectId => QUIZ_LESSONS[subjectId] || [];
+export const QUIZ_LESSONS = Object.fromEntries(Object.entries(EXISTING_QUIZ_LESSONS).map(([id, existing]) => [id,
+  [...(EXPANDED_QUIZ_LESSONS[id] || []), ...existing],
+]));
+
+export const getQuizLessons = subjectId => Object.hasOwn(QUIZ_LESSONS, subjectId) ? QUIZ_LESSONS[subjectId] : [];
 export const getQuizLesson = (subjectId, lessonId) => getQuizLessons(subjectId).find(item => item.id === lessonId) || null;
 export const getQuizConceptId = value => String(value).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 export const getLessonQuizId = (subjectId, lessonId, concept = '') => `${subjectId}--${lessonId}${concept ? '--' + getQuizConceptId(concept) : ''}`;
@@ -139,11 +145,19 @@ export const getLessonQuizId = (subjectId, lessonId, concept = '') => `${subject
 export function makeLessonQuizTopic(subject, selected, concept = '') {
   if (concept && !selected.concepts.includes(concept)) throw new RangeError('Unknown topic in this lesson');
   return { ...subject, id: getLessonQuizId(subject.id, selected.id, concept), baseTopicId: subject.id,
-    lessonId: selected.id, lessonVersion: 1, lessonTitle: selected.title,
+    lessonId: selected.id, lessonVersion: concept ? 1 : 2, lessonTitle: selected.title,
     conceptId: concept ? getQuizConceptId(concept) : '', focusTitle: concept,
     title: concept || selected.title, focus: concept ? `${selected.title}: ${concept}` : selected.title,
     topic: subject.title, desc: selected.outcome, subjects: concept ? [concept] : selected.concepts,
-    objectives: [selected.outcome], branch: selected.branch };
+    objectives: [selected.outcome], branch: selected.branch, studyNote: selected.studyNote || '' };
+}
+
+export function getLessonStudyReference(topic) {
+  if (!topic?.lessonId || topic.conceptId) return {};
+  return {
+    sourceTitle: topic.lessonTitle,
+    sourceBody: [topic.studyNote, `Learning goal: ${topic.desc}`, `Ideas covered by this lesson: ${topic.subjects.join('; ')}.`].filter(Boolean).join('\n'),
+  };
 }
 
 export function getRelatedQuizLessons(subjectId, lessonId) {

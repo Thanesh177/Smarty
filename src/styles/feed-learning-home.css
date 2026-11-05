@@ -18,34 +18,35 @@
 .feed-discovery-heading > span { color: var(--ui-faint); font-size: 10px; }
 .app-shell .content .is-learning-home .snap-feed .snap-post { width: 100% !important; max-width: 1240px !important; min-height: 0 !important; margin-bottom: 12px; scroll-snap-align: none; border-bottom: 1px solid var(--ui-line) !important; border-radius: 0; }
 .app-shell .content .is-learning-home .snap-feed .snap-post .post-content { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 0 12px; padding: 24px 0 28px !important; min-height: 0; justify-content: start; }
-.app-shell .content .is-learning-home .snap-post .post-content > * { grid-column: 1 / -1; }
-.app-shell .content .is-learning-home .snap-post .post-content > .post-topic { grid-column: 1; grid-row: 1; align-self: center; max-width: min(200px, 35vw); margin: 0 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-shell .content .is-learning-home .snap-post .post-content > .post-author-row { grid-column: 2; grid-row: 1; align-self: center; min-width: 0; margin: 0 !important; }
+.post-story-heading, .post-story-meta, .post-story-body { display: contents; }
+.app-shell .content .is-learning-home .snap-post .post-content :is(.post-story-heading, .post-story-body) > * { grid-column: 1 / -1; }
+.app-shell .content .is-learning-home .snap-post .post-story-meta > .post-topic { grid-column: 1; grid-row: 1; align-self: center; max-width: min(200px, 35vw); margin: 0 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .content .is-learning-home .snap-post .post-story-meta > .post-author-row { grid-column: 2; grid-row: 1; align-self: center; min-width: 0; margin: 0 !important; }
 .app-shell .content .is-learning-home .post-author-row .post-author { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-shell .content .is-learning-home .post-author-row .creator-link { font-size: 11px; }
 .app-shell .content .is-learning-home .snap-post .post-actions { max-width: 100%; overflow-x: auto; scrollbar-width: thin; padding-bottom: 6px; }
 .app-shell .content .is-learning-home .snap-post .post-content h1 { max-width: 38ch; font-size: clamp(24px, 2.6vw, 34px) !important; line-height: 1.3; letter-spacing: -.035em; margin: 14px 0 !important; }
-.app-shell .content .is-learning-home .snap-post .post-content > p { max-width: 80ch; font-size: 16px; line-height: 1.8; margin: 0 0 20px !important; }
+.app-shell .content .is-learning-home .snap-post .post-story-body > p { max-width: 80ch; font-size: 16px; line-height: 1.8; margin: 0 0 20px !important; }
 .app-shell .content .is-learning-home .snap-post:not(.no-media) { gap: 28px; }
 .app-shell .content .is-learning-home .snap-post:not(.no-media) .mini-media { min-height: 260px; margin-top: 24px; border-radius: 10px; }
 /* Images support the reading flow rather than taking up most of the screen.
    Video posts and the full-screen video viewer retain their own sizing. */
 .app-shell .content .has-inner-feed .snap-post.has-feed-image {
-  grid-template-columns: minmax(0, clamp(220px, 30vw, 380px)) minmax(0, 1fr);
-  gap: clamp(18px, 3vw, 32px); align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0; align-items: start;
 }
 .app-shell .content .has-inner-feed .snap-post.has-feed-image .mini-media {
-  width: min(100%, 380px); height: clamp(220px, 32vh, 320px);
-  min-height: 0; max-height: 320px; margin: 16px 0;
+  width: 100%; height: clamp(160px, 24vh, 240px);
+  min-height: 0; max-height: 240px; margin: 16px 0 0;
   justify-self: center; border-radius: 10px;
 }
 .app-shell .content .has-inner-feed .snap-post.has-feed-image .mini-media img {
-  object-fit: contain; max-width: 100%; max-height: 100%;
+  width: 100%; height: 100%; object-fit: cover; object-position: center; max-width: 100%; max-height: 100%;
 }
 @media (max-width: 900px) {
   .app-shell .content .has-inner-feed .snap-post.has-feed-image { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .app-shell .content .has-inner-feed .snap-post.has-feed-image .mini-media {
-    width: min(100%, 360px); height: clamp(180px, 28vh, 240px); max-height: 240px;
+    width: 100%; height: clamp(160px, 24vh, 210px); max-height: 210px;
     margin: 12px 0 4px;
   }
 }
@@ -76,7 +77,7 @@
   .feed-home-tabs { gap: 20px; }
   .feed-home-tabs > :is(a,span) { font-size: 11px; }
   .feed-discovery-heading > span { display: none; }
-  .app-shell .content .is-learning-home .snap-post .post-content > p { font-size: 15px; }
+  .app-shell .content .is-learning-home .snap-post .post-story-body > p { font-size: 15px; }
   .universal-search-layer .universal-search-input-row { gap: 6px; padding-left: 14px; grid-template-columns: auto minmax(0, 1fr) auto auto; }
   .universal-search-layer .universal-search-input-row > kbd { display: none; }
   .universal-search-layer .universal-search-panel { max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
@@ -84,3 +85,73 @@
   .universal-search-layer .universal-search-quick-grid button { min-height: 58px; }
 }
 @media (prefers-reduced-motion: reduce) { .feed-learning-home *, .feed-header-search { animation: none !important; transition: none !important; } }
+
+/* Desktop reading desk: one post, with context beside its explanation.
+   Keep the small-screen reading order and every paragraph intact. */
+@media (min-width: 1100px) {
+  .app-shell .content .is-learning-home .snap-feed {
+    padding-inline: clamp(32px, 4vw, 72px) !important;
+  }
+  .feed-discovery-heading { margin-block: 24px 16px; }
+  .feed-discovery-heading h2 { font-size: 14px; color: var(--ui-secondary); }
+  .feed-discovery-heading > span { font-size: 12px; }
+  .app-shell .content .has-inner-feed .snap-feed .snap-post {
+    width: 100% !important; max-width: 1240px !important;
+    min-height: 0 !important; margin: 0 auto 36px;
+    border-radius: 0; border-bottom: 1px solid var(--ui-line) !important;
+    background: transparent !important; overflow: visible;
+  }
+  .app-shell .content .has-inner-feed .snap-feed .snap-post .post-content {
+    display: grid; grid-template-columns: minmax(250px, .78fr) minmax(0, 1.5fr);
+    align-items: start; gap: clamp(32px, 4vw, 64px);
+    width: 100%; max-width: none; min-height: 0;
+    padding: 28px 0 36px !important;
+  }
+  .app-shell .content .has-inner-feed .snap-post .post-story-heading {
+    display: block; grid-column: 1; min-width: 0;
+  }
+  .app-shell .content .has-inner-feed .snap-post .post-story-body {
+    display: block; grid-column: 2; min-width: 0;
+  }
+  .app-shell .content .has-inner-feed .post-story-meta {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+    margin-bottom: 16px;
+  }
+  .app-shell .content .has-inner-feed .post-story-meta .post-topic {
+    max-width: 100%; min-height: 30px; padding: 5px 9px; border-radius: 5px;
+    background: var(--ui-accent-soft); color: var(--ui-accent-strong);
+    border: 0; font-size: 11px; font-weight: 500; letter-spacing: 0;
+    text-transform: none;
+  }
+  .app-shell .content .has-inner-feed .post-story-meta .post-author-row { flex: 1; min-width: 100px; }
+  .app-shell .content .has-inner-feed .post-story-meta .post-author { margin: 0; }
+  .app-shell .content .has-inner-feed .post-story-meta .creator-link { font-size: 12px; font-weight: 450; }
+  .app-shell .content .has-inner-feed .snap-post .post-content h1 {
+    max-width: 24ch; margin: 0 !important; font-size: clamp(26px, 2.25vw, 32px) !important;
+    line-height: 1.22; font-weight: 550; letter-spacing: -.035em;
+    text-wrap: balance;
+  }
+  .app-shell .content .has-inner-feed .post-learning-stage { display: block; margin: 0 0 10px; }
+  .app-shell .content .has-inner-feed .snap-post .post-story-body > p {
+    max-width: none; margin: 0 !important; color: var(--ui-secondary);
+    font-size: 16px; line-height: 1.85; overflow-wrap: anywhere;
+  }
+  .app-shell .content .has-inner-feed .snap-post.has-feed-image .mini-media {
+    height: clamp(160px, 19vh, 200px); max-height: 200px;
+    margin: 0; border-radius: 9px;
+  }
+  .app-shell .content .has-inner-feed .snap-post.has-feed-image .mini-media img { transform: none; }
+  .app-shell .content .has-inner-feed .snap-post .post-actions {
+    justify-content: flex-start; width: 100%; gap: 8px !important;
+    margin: 22px 0 0; padding: 14px 0 0; border-top: 1px solid var(--ui-line);
+    overflow: visible;
+  }
+  .app-shell .content .has-inner-feed .snap-post :is(.post-quick-actions, .post-reading-actions) { flex: none; }
+  .app-shell .content .has-inner-feed .snap-post .post-reading-actions { margin-left: auto; }
+  .app-shell .content .has-inner-feed .snap-post .post-actions .icon-action-btn {
+    border-color: transparent !important; border-radius: 6px !important;
+  }
+  .app-shell .content .has-inner-feed .snap-post .post-actions .icon-action-btn:focus-visible {
+    outline: 2px solid var(--ui-accent); outline-offset: 2px;
+  }
+}

@@ -65,6 +65,7 @@ import {
 import JoinRoomPage from './pages/JoinRoomPage';
 const Booksinfo = lazy(() => import('./pages/Booksinfo'));
 const QuizPage = lazy(() => import('./pages/QuizPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ProgressPage = lazy(() => import('./pages/progress/ProgressPage'));
 const GameProfile = lazy(() => import('./pages/profile/GameProfile'));
 import CommentsPage from './pages/CommentsPage';
@@ -1203,6 +1204,7 @@ useEffect(() => {
                 <Route path="/read-book/:bookId" element={<BookReaderPage />} />
                 <Route path="/support" element={<SupportPage/>} />
                 <Route path="/terms" element={<TermsPage/>} />
+                <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/privacy" element={<PrivacyPage/>} />
                 <Route
                   path="/notifications"

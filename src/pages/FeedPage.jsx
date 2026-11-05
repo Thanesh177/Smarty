@@ -607,6 +607,8 @@ const FeedPostCard = memo(function FeedPostCard({
       )}
 
       <div className="post-content">
+        <div className="post-story-heading">
+        <div className="post-story-meta">
 <button
   type="button"
   className="post-topic clickable-topic"
@@ -676,9 +678,12 @@ const FeedPostCard = memo(function FeedPostCard({
             </div>
           )}
         </div>
+        </div>
 
         {getLearningLevelLabel(post) && <span className="post-learning-stage">{getLearningLevelLabel(post)}{Number.isInteger(Number(post.learningOrder)) && Number(post.learningOrder) > 0 ? ` · Lesson ${post.learningOrder}` : ''}</span>}
         <h1>{post.title}</h1>
+        </div>
+        <div className="post-story-body">
         <p>{isTranslated && translatedText ? translatedText : post.body}</p>
 
         <div className="post-actions">
@@ -806,6 +811,7 @@ const FeedPostCard = memo(function FeedPostCard({
         <div className="post-learn-more-hint">
           <span>Open to learn how it works</span>
           <Link to={`/learn?topic=${encodeURIComponent(post.topic || 'General Knowledge')}`} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} style={{ color: '#9acfd8', marginLeft: 12 }}>More like this →</Link>
+        </div>
         </div>
       </div>
     </article>

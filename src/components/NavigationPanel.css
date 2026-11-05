@@ -45,7 +45,7 @@
 .navigation-dialog .menu-search-launch > svg { flex: none; stroke-width: 1.65; }
 .navigation-dialog .menu-section { display: grid; flex: none; gap: 4px; padding: 0; border: 0; }
 .navigation-dialog .menu-section::before { display: none; content: none; }
-.navigation-dialog .compact-menu-section { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.navigation-dialog .compact-menu-section { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .navigation-dialog .menu-personal-section { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding-top: 8px; border-top: 1px solid #ffffff0b; }
 .navigation-dialog .menu-section .menu-icon-link {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -62,11 +62,14 @@
 .navigation-dialog .menu-link-copy small { font-size: 12px; line-height: 1.45; color: var(--ui-muted); white-space: normal; }
 .navigation-dialog .menu-link-arrow { flex: none; color: var(--ui-muted); opacity: .55; }
 .navigation-dialog .compact-menu-section .menu-icon-link {
-  position: relative; min-height: 84px; padding: 14px;
-  border: 1px solid var(--ui-line) !important; border-radius: 10px;
-  background: var(--ui-surface-soft) !important; align-items: flex-start;
+  position: relative; min-height: 50px; padding: 12px;
+  border: 0 !important; border-radius: 9px;
+  background: transparent !important; align-items: center;
 }
-.navigation-dialog .compact-menu-section .menu-link-left { flex-direction: column; align-items: flex-start; gap: 12px; }
+.navigation-dialog .compact-menu-section .menu-link-left { flex-direction: row; align-items: center; gap: 12px; }
+.navigation-dialog .menu-quiz-row { display: flex; align-items: center; gap: 8px; }
+.navigation-dialog .menu-quiz-row > .menu-icon-link { flex: 1; min-width: 0; }
+.navigation-dialog .menu-quiz-row .appearance-quick-toggle { flex: none; border-color: var(--ui-line); background: var(--ui-control-bg); }
 .navigation-dialog .compact-menu-section .menu-link-left > svg { width: 20px; height: 20px; color: var(--ui-secondary); }
 .navigation-dialog .compact-menu-section .menu-link-arrow { position: absolute; right: 13px; top: 15px; }
 .navigation-dialog .compact-menu-section .menu-link-copy { gap: 5px; width: 100%; }
@@ -107,6 +110,7 @@
 }
 .navigation-dialog .menu-settings-title { color: var(--ui-text); font-size: 20px; font-weight: 550; letter-spacing: -.035em; }
 .navigation-dialog :is(.menu-settings-launch, .menu-settings-offline, .menu-settings-back) { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 12px; border: 1px solid var(--ui-line); border-radius: 10px; background: var(--ui-surface-soft); color: var(--ui-secondary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.navigation-dialog .menu-settings-launch { text-decoration: none; }
 .navigation-dialog :is(.menu-settings-launch, .menu-settings-offline) > span { flex: 1; }
 .navigation-dialog :is(.menu-settings-launch, .menu-settings-offline) small { display: block; margin-top: 5px; font-size: 12px; color: var(--ui-muted); line-height: 1.5; }
 .navigation-dialog .menu-settings-back { border: 0; background: transparent; color: var(--ui-muted); }

@@ -1,0 +1,25 @@
+.app-shell .content .settings-page { width: 100%; max-width: 1280px; min-height: 100%; margin: 0 auto; padding: clamp(28px, 5vw, 64px) var(--ui-gutter) calc(140px + env(safe-area-inset-bottom)); color: var(--ui-text); background: var(--ui-bg); }
+.settings-page-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; padding-bottom: 32px; border-bottom: 1px solid var(--ui-line); }
+.settings-page-heading h1 { margin: 0 0 10px; font-size: clamp(30px, 4vw, 44px); font-weight: 550; letter-spacing: -.045em; line-height: 1.15; }
+.settings-page-heading p { margin: 0; color: var(--ui-muted); font-size: 14px; line-height: 1.7; }
+.settings-page-heading > a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--ui-secondary); font-size: 13px; text-decoration: none; }
+.settings-page-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 36px clamp(28px, 5vw, 64px); padding-top: 36px; }
+.settings-page-grid > section { min-width: 0; }
+.settings-page-grid h2 { margin: 0 0 14px; color: var(--ui-muted); font-size: 13px; font-weight: 500; }
+.settings-page-group { border-block: 1px solid var(--ui-line); }
+.settings-page-row { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 78px; padding: 16px 4px; border: 0; border-radius: 0; color: var(--ui-text); background: transparent; font: inherit; text-decoration: none; text-align: left; cursor: pointer; transition: background-color 160ms ease; }
+.settings-page-row + .settings-page-row { border-top: 1px solid var(--ui-line); }
+.settings-page-row > svg { flex: none; color: var(--ui-muted); stroke-width: 1.65; }
+.settings-page-row > span { flex: 1; min-width: 0; }
+.settings-page-row strong { display: block; font-size: 14px; line-height: 1.4; font-weight: 500; }
+.settings-page-row small { display: block; margin-top: 5px; color: var(--ui-muted); font-size: 12px; line-height: 1.6; }
+.settings-page .settings-engagement { border-inline: 0; border-radius: 0; }
+.settings-page .settings-engagement .settings-action-row { min-height: 78px; padding: 16px 4px; font-size: 14px; }
+.settings-page .settings-share-body { padding: 0 4px 18px; }
+.settings-page-footer { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px; border-top: 1px solid var(--ui-line); margin-top: 40px; padding-top: 20px; }
+.settings-page-footer button { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0; border: 0; background: none; color: var(--ui-danger); font: inherit; font-size: 13px; cursor: pointer; }
+.settings-page-footer p { margin: 0; max-width: 64ch; color: var(--ui-muted); font-size: 12px; line-height: 1.7; }
+.settings-page :is(a,button,select,input,summary):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+@media (hover:hover) { .settings-page-row:hover { background: var(--ui-surface-hover); } }
+@media (max-width:760px) { .settings-page-grid { grid-template-columns: minmax(0,1fr); gap: 28px; padding-top: 28px; } .settings-page-heading { align-items: flex-start; padding-bottom: 24px; } }
+@media (prefers-reduced-motion:reduce) { .settings-page-row { transition: none; } }

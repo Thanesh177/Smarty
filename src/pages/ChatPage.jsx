@@ -761,7 +761,7 @@ export default function ChatPage() {
   const recordingStreamRef = useRef(null);
   const { user } = useAuth();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isBlocked, setIsBlocked] = useState(false);
   const [query, setQuery] = useState('');
   const [users, setUsers] = useState([]);
@@ -778,8 +778,9 @@ export default function ChatPage() {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
   const [blockSubmitting, setBlockSubmitting] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const deleteLockRef = useRef(false);
+  const deletedChatIdsRef = useRef(new Set());
   const [openReactionMenuId, setOpenReactionMenuId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingText, setEditingText] = useState('');
@@ -856,9 +857,14 @@ export default function ChatPage() {
     () => getUserScopedStorageKey('activeChatId', userId),
     [userId]
   );
+  const accountRef = useRef(userId);
+  accountRef.current = userId;
 
   useEffect(() => {
     messageCacheRef.current.clear();
+    deletedChatIdsRef.current.clear();
+    deleteLockRef.current = false;
+    setDeleteSubmitting(false);
     seenSocketMessageIdsRef.current.clear();
     activeChatIdRef.current = null;
     openedChatIdsRef.current.clear();
@@ -1007,9 +1013,9 @@ try {
   const loadChats = async () => {
     try {
       const data = await withTimeout(chatApi.getChats(), 10000, 'Chats took too long to load.');
-      if (!mountedRef.current) return;
+      if (!mountedRef.current || accountRef.current !== userId) return;
       const nextChats = Array.isArray(data) ? data : Array.isArray(data?.chats) ? data.chats : [];
-      const normalizedChats = nextChats.map(normalizeChatRecord);
+      const normalizedChats = nextChats.map(normalizeChatRecord).filter(chat => !deletedChatIdsRef.current.has(chat.chatId));
       writeChatListCache(userId, normalizedChats);
       setChats((prev) => {
         const prevSignature = prev.map((chat) => `${chat.chatId}:${chat.unreadCount || 0}:${chat.lastMessage || ''}`).join('|');
@@ -1504,7 +1510,7 @@ useEffect(() => {
   }, [query, runUserSearch]);
 
 const openChat = useCallback(async (chat) => {
-  if (!chat?.chatId) return;
+  if (!chat?.chatId || deletedChatIdsRef.current.has(chat.chatId)) return;
 
   const requestId = chatRequestSeqRef.current + 1;
   chatRequestSeqRef.current = requestId;
@@ -1658,6 +1664,7 @@ useEffect(() => {
     try {
       const chat = await withTimeout(chatApi.startChat(selectedUser), 10000, 'Starting chat took too long.');
       if (!mountedRef.current) return;
+      deletedChatIdsRef.current.delete(chat.chatId);
       activeChatIdRef.current = chat.chatId;
 
       const fixedChat = normalizeChatRecord({
@@ -2526,51 +2533,50 @@ const confirmBlockUser = async () => {
     }
   };
 
-  const handleDeleteChat = () => {
-    if (!activeChat?.chatId) return;
-    setDeleteConfirmOpen(true);
-  };
-
-  const confirmDeleteChat = async () => {
-    if (!activeChat?.chatId || deleteSubmitting) return;
-
+  const handleDeleteChat = async () => {
+    if (!activeChat?.chatId || deleteLockRef.current) return;
+    const target = activeChat;
+    const account = userId;
+    deleteLockRef.current = true;
     try {
+      const approved = await confirmAction({ title: `Delete chat with ${getUserDisplayName(target)}?`,
+        description: 'Remove this conversation from your chat list. This does not delete the other person’s copy.', confirmLabel: 'Delete chat' });
+      if (!approved || !mountedRef.current || accountRef.current !== account) return;
       setDeleteSubmitting(true);
       setActionsOpen(false);
-      setStatus('Deleting chat...');
-
-      const deleteChatRequest =
-        chatApi.deleteChat ||
-        chatApi.deleteConversation ||
-        chatApi.removeChat;
-
-      if (!deleteChatRequest) {
-        setStatus('Delete chat API is not connected yet. Add deleteChat to chatApi.');
-        return;
-      }
-
-      await withTimeout(
-        deleteChatRequest(activeChat.chatId),
+      setStatus('Deleting chat…');
+      assertActionAccepted(await withTimeout(
+        chatApi.deleteChat(target.chatId),
         9000,
         'Delete chat took too long.'
-      );
-
-      if (!mountedRef.current) return;
-
-      messageCacheRef.current.delete(activeChat.chatId);
-      setChats((prev) => prev.filter((chat) => chat.chatId !== activeChat.chatId));
-      setMessages([]);
-      setActiveChat(null);
-      activeChatIdRef.current = null;
-      setMobileChatOpen(false);
-      setOpenReactionMenuId(null);
-      setEditingMessageId(null);
-      setEditingText('');
-      setDeleteConfirmOpen(false);
-      localStorage.removeItem(activeChatStorageKey);
+      ));
+      if (!mountedRef.current || accountRef.current !== account) return;
+      deletedChatIdsRef.current.add(target.chatId);
+      messageCacheRef.current.delete(target.chatId);
+      openedChatIdsRef.current.delete(target.chatId);
+      setChats(prev => {
+        const next = prev.filter(chat => chat.chatId !== target.chatId);
+        writeChatListCache(account, next);
+        return next;
+      });
+      if (activeChatIdRef.current === target.chatId) {
+        chatRequestSeqRef.current += 1;
+        setMessages([]);
+        setActiveChat(null);
+        activeChatIdRef.current = null;
+        setMobileChatOpen(false);
+        setOpenReactionMenuId(null);
+        setEditingMessageId(null);
+        setEditingText('');
+        try { localStorage.removeItem(activeChatStorageKey); } catch { /* Storage may be unavailable. */ }
+        if (searchParams.get('chatId') === target.chatId) {
+          const next = new URLSearchParams(searchParams); next.delete('chatId');
+          setSearchParams(next, { replace: true });
+        }
+        try { setActiveChatOnSocket?.(''); } catch { /* The list remains usable while disconnected. */ }
+      }
       setStatus('Chat deleted.');
-
-      if (messagePollTimerRef.current) {
+      if (!activeChatIdRef.current && messagePollTimerRef.current) {
         window.clearTimeout(messagePollTimerRef.current);
         messagePollTimerRef.current = null;
       }
@@ -2578,12 +2584,11 @@ const confirmBlockUser = async () => {
       window.dispatchEvent(new Event('chat-unread-refresh'));
       refreshChatsSoon();
     } catch (err) {
-      console.error('Delete chat failed:', err);
-      if (mountedRef.current) {
+      if (mountedRef.current && accountRef.current === account) {
         setStatus(err?.message || 'Could not delete chat.');
       }
     } finally {
-      if (mountedRef.current) setDeleteSubmitting(false);
+      if (accountRef.current === account) { deleteLockRef.current = false; if (mountedRef.current) setDeleteSubmitting(false); }
     }
   };
 
@@ -2807,14 +2812,15 @@ const runDeleteChat = useCallback(() => {
       <button className="btn-block" type="button" onClick={runBlockUser}>
         <ShieldBan size={16} aria-hidden="true" /> {isBlocked ? 'Unblock' : 'Block'}
       </button>
-      <button className="btn-delete-chat" type="button" onClick={runDeleteChat}>
-        <Trash2 size={16} aria-hidden="true" /> Delete Chat
+      <button className="btn-delete-chat" type="button" disabled={deleteSubmitting} onClick={runDeleteChat}>
+        <Trash2 size={16} aria-hidden="true" />{deleteSubmitting ? 'Deleting…' : 'Delete chat'}
       </button>
     </div>
   )}
 </div>
             </div>
 
+            {status && <p className="chat-conversation-status" role="status">{status}</p>}
             <div
               className="messages"
               ref={scrollRef}
@@ -3164,50 +3170,6 @@ const runDeleteChat = useCallback(() => {
                 onClick={confirmBlockUser}
               >
                 {blockSubmitting ? 'Blocking...' : 'Block user'}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-      {deleteConfirmOpen && activeChat && (
-        <div
-          className="chat-block-dialog-backdrop"
-          role="presentation"
-          onClick={() => {
-            if (!deleteSubmitting) setDeleteConfirmOpen(false);
-          }}
-        >
-          <section
-            className="chat-block-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="chat-delete-dialog-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <span className="chat-block-dialog-kicker">Conversation</span>
-            <h2 id="chat-delete-dialog-title">
-              Delete chat with {getUserDisplayName(activeChat)}?
-            </h2>
-            <p>
-              This conversation will be removed from your chat list. This
-              action cannot be undone.
-            </p>
-            <div className="chat-block-dialog-actions">
-              <button
-                type="button"
-                className="secondary"
-                disabled={deleteSubmitting}
-                onClick={() => setDeleteConfirmOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger"
-                disabled={deleteSubmitting}
-                onClick={confirmDeleteChat}
-              >
-                {deleteSubmitting ? 'Deleting...' : 'Delete chat'}
               </button>
             </div>
           </section>

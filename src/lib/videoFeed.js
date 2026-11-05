@@ -9,7 +9,7 @@ export function getPostVideoUrl(post) {
   if (value.startsWith('/') && !value.startsWith('//')) return value;
   try {
     const url = new URL(value);
-    return ['https:', 'http:'].includes(url.protocol) ? value : '';
+    return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? value : '';
   } catch { return ''; }
 }
 

@@ -37,13 +37,14 @@ export default function VideoTopicPage(props) {
 
 function VideoFeed({ onOpenSearch, account, user }) {
   const navigate = useNavigate();
-  const { posts, loading, loadingMore, error, nextCursor, loadMore, refreshFeed, savePost, hidePost, blockCreator } = useFeed();
+  const { posts, loading, refreshing, loadingMore, error, nextCursor, loadMore, refreshFeed, refreshPost, savePost, hidePost, blockCreator } = useFeed({ pageSize: 20 });
   const videos = useMemo(() => getVideoPosts(posts), [posts]);
   const rootRef = useRef(null);
   const sentinelRef = useRef(null);
   const loadLock = useRef(false);
   const scans = useRef(0);
   const previousVideoCount = useRef(0);
+  const pendingAdvance = useRef(null);
   const visitedCursors = useRef(new Set());
   const mounted = useRef(true);
   const [activeId, setActiveId] = useState('');
@@ -56,7 +57,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
   const [safetyBusy, setSafetyBusy] = useState(false);
   const [safetyError, setSafetyError] = useState('');
   const activeIndex = Math.max(0, videos.findIndex(post => getVideoPostId(post) === activeId));
-  const canLoad = Boolean(nextCursor) && !loading && !loadingMore && !error;
+  const canLoad = Boolean(nextCursor) && !loading && !refreshing && !loadingMore && !error;
 
   useEffect(() => {
     mounted.current = true;
@@ -77,6 +78,14 @@ function VideoFeed({ onOpenSearch, account, user }) {
     const root = rootRef.current;
     if (!root || !videos.length) { setActiveId(''); return undefined; }
     const ratios = new Map();
+    // Pick the initial visible clip immediately, including restored scroll
+    // positions. A tap must not depend on an observer's first delivery.
+    const bounds = root.getBoundingClientRect();
+    root.querySelectorAll('[data-video-id]').forEach(element => {
+      const rect = element.getBoundingClientRect();
+      ratios.set(element.dataset.videoId, Math.max(0, Math.min(rect.bottom, bounds.bottom) - Math.max(rect.top, bounds.top)) / Math.max(1, rect.height));
+    });
+    setActiveId(getMostVisibleVideo(ratios));
     const observer = new IntersectionObserver(entries => {
       entries.forEach(entry => {
         const ratio = entry.isIntersecting ? entry.intersectionRatio : 0;
@@ -93,10 +102,17 @@ function VideoFeed({ onOpenSearch, account, user }) {
   useEffect(() => {
     if (videos.length > previousVideoCount.current) scans.current = 0;
     previousVideoCount.current = videos.length;
-  }, [videos.length]);
+    if (pendingAdvance.current !== null && videos.length > pendingAdvance.current) {
+      const root = rootRef.current;
+      const target = root?.querySelectorAll('[data-video-id]')[pendingAdvance.current];
+      pendingAdvance.current = null;
+      if (target) root.scrollTo({ top: root.scrollTop + target.getBoundingClientRect().top - root.getBoundingClientRect().top, behavior: reducedMotion ? 'auto' : 'smooth' });
+    }
+  }, [videos.length, reducedMotion]);
+  useEffect(() => { if (error) pendingAdvance.current = null; }, [error]);
 
   const fetchMore = useCallback(async (manual = false) => {
-    if (!nextCursor || loading || loadingMore || (!manual && error) || loadLock.current) return;
+    if (!nextCursor || loading || refreshing || loadingMore || (!manual && error) || loadLock.current) return;
     const cursor = typeof nextCursor === 'string' ? nextCursor : JSON.stringify(nextCursor);
     if (manual) { scans.current = 0; if (error) visitedCursors.current.delete(cursor); }
     if (visitedCursors.current.has(cursor)) return;
@@ -104,7 +120,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
     visitedCursors.current.add(cursor);
     scans.current += 1;
     try { await loadMore(); } finally { loadLock.current = false; }
-  }, [loading, loadingMore, error, loadMore, nextCursor]);
+  }, [loading, refreshing, loadingMore, error, loadMore, nextCursor]);
 
   // Existing servers page through mixed posts. Bound empty searches rather
   // than fetching an entire archive invisibly when no video exists yet.
@@ -119,7 +135,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
   const retryFeed = () => { scans.current = 0; visitedCursors.current.clear(); refreshFeed(); };
   const move = direction => {
     const root = rootRef.current;
-    if (direction > 0 && activeIndex === videos.length - 1 && nextCursor) { fetchMore(true); return; }
+    if (direction > 0 && activeIndex === videos.length - 1 && nextCursor) { pendingAdvance.current = videos.length; fetchMore(true); return; }
     const index = Math.min(videos.length - 1, Math.max(0, activeIndex + direction));
     const target = root?.querySelectorAll('[data-video-id]')[index];
     if (target) root.scrollTo({ top: root.scrollTop + target.getBoundingClientRect().top - root.getBoundingClientRect().top, behavior: reducedMotion ? 'auto' : 'smooth' });
@@ -152,19 +168,19 @@ function VideoFeed({ onOpenSearch, account, user }) {
   return <main className="video-topic-page has-inner-feed">
     <FeedHeader topic="Video" onBack={() => navigate('/topics')} onOpenSearch={onOpenSearch}
       onSelect={topic => navigate('/feed?topic=' + encodeURIComponent(topic))} status={loading ? 'Loading videos' : `${videos.length} videos loaded`} />
-    <div className="video-topic-tools"><span><Video size={15} />Ideas in motion</span><Link to="/create?topic=Video&type=video"><Plus size={16} />Upload video</Link></div>
+    <div className="video-topic-tools"><span><Video size={15} />{videos.length ? `${activeIndex + 1} of ${videos.length}${nextCursor ? '+' : ''}` : 'Videos'}</span><Link to="/create?topic=Video&type=video"><Plus size={16} />Upload video</Link></div>
     <section ref={rootRef} className="video-topic-scroll" aria-label="Video feed" tabIndex={0} onKeyDown={event => {
       if (event.target !== event.currentTarget || !['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].includes(event.key)) return;
       event.preventDefault(); move(['ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1);
     }}>
       {videos.map((post, index) => <ReelVideo key={getVideoPostId(post)} post={post}
         active={getVideoPostId(post) === activeId && visible && !safety} nearby={Math.abs(index - activeIndex) <= 1}
-        muted={muted} onMute={setMuted} onSave={save} onSafety={openSafety} busy={saving === getVideoPostId(post)}
+        muted={muted} onMute={setMuted} onSave={save} onSafety={openSafety} onReload={refreshPost} busy={saving === getVideoPostId(post)}
         saved={Boolean(post.saved || post.isSaved || post.bookmarked || post.isBookmarked || post.savedByCurrentUser)} reducedMotion={reducedMotion} />)}
       {!videos.length && <div className="video-topic-state">
-        <Video size={28} /><h2>{loading || loadingMore ? 'Finding videos…' : error ? 'Videos couldn’t load.' : nextCursor ? 'Keep exploring.' : 'A new way to share what you know.'}</h2>
-        <p>{error ? 'Check your connection and try again.' : loading || loadingMore ? 'Bringing community ideas into view.' : nextCursor ? 'No videos in the newest posts. Look through older posts or share one of your own.' : 'Upload a video about something you learned. Community videos from every topic appear here.'}</p>
-        {loading || loadingMore ? <LoaderCircle className="video-loading-icon" size={23} /> : error ? <button type="button" onClick={retryFeed}><RefreshCw size={16} />Try again</button> : <><Link to="/create?topic=Video&type=video"><Plus size={17} />Upload a video</Link>{nextCursor && <button type="button" onClick={() => fetchMore(true)}>Look for older videos</button>}</>}
+        <Video size={28} /><h2>{loading || refreshing || loadingMore ? 'Finding videos…' : error ? 'Videos couldn’t load.' : nextCursor ? 'Keep exploring.' : 'A new way to share what you know.'}</h2>
+        <p>{error ? 'Check your connection and try again.' : loading || refreshing || loadingMore ? 'Bringing community ideas into view.' : nextCursor ? 'No videos in the newest posts. Look through older posts or share one of your own.' : 'Upload a video about something you learned. Community videos from every topic appear here.'}</p>
+        {loading || refreshing || loadingMore ? <LoaderCircle className="video-loading-icon" size={23} /> : error ? <button type="button" onClick={retryFeed}><RefreshCw size={16} />Try again</button> : <><Link to="/create?topic=Video&type=video"><Plus size={17} />Upload a video</Link>{nextCursor && <button type="button" onClick={() => fetchMore(true)}>Look for older videos</button>}</>}
       </div>}
       {videos.length > 0 && <div ref={sentinelRef} className="video-topic-end" role="status">
         {loadingMore ? <><LoaderCircle size={18} className="video-loading-icon" />Loading more videos…</> : error ? <><span>More videos couldn’t load.</span><button type="button" onClick={() => fetchMore(true)}>Try again</button></> : nextCursor ? <button type="button" onClick={() => fetchMore(true)}>Load more videos</button> : <><span>You’re all caught up.</span><Link to="/create?topic=Video&type=video">Share a video <Plus size={15} /></Link></>}

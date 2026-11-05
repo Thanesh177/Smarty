@@ -26,7 +26,7 @@ test('only public, unmoderated, unique playable videos enter the viewer', () => 
   assert.deepEqual(getVideoPosts(posts).map(post => post.id), ['one', 'approved']);
 });
 test('media URLs reject executable, credential-like, and invalid payloads', () => {
-  for (const value of ['javascript:alert(1)', 'data:video/mp4;base64,x', 'file:///private/x', '//external/x', 'not a URL', {}, 'https://media.example/\nvideo']) {
+  for (const value of ['javascript:alert(1)', 'data:video/mp4;base64,x', 'file:///private/x', '//external/x', 'not a URL', {}, 'https://media.example/\nvideo', 'https://name:password@media.example/movie.mp4']) {
     assert.equal(getPostVideoUrl({ videoUrl: value }), '');
   }
   assert.equal(getPostVideoUrl({ videoUrl: '/videos/one.mp4' }), '/videos/one.mp4');

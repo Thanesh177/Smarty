@@ -2,6 +2,7 @@
 // when a learner has chosen a narrow lesson. The online service supplies fresh
 // sets once these have been seen, and for lessons without a built-in set.
 import { getQuizConceptId, getQuizLesson } from './quizLessons.js';
+import { BROAD_LESSON_BANK } from './quizBroadLessonQuestions.js';
 
 const q = (kind, difficulty, prompt, answer, distractors, explanation) => ({
   kind, difficulty, q: prompt, answer, options: [answer, ...distractors], explanation, source: 'local',
@@ -158,11 +159,11 @@ const topicTags = {
   'technology--ai-learning': [[0], [2], [1], [2], [], [2], [2], []],
 };
 
-export const LESSON_QUESTIONS = Object.fromEntries(Object.entries(bank).map(([id, rows]) => {
+export const LESSON_QUESTIONS = Object.fromEntries(Object.entries({ ...bank, ...BROAD_LESSON_BANK }).map(([id, rows]) => {
   const [subjectId, lessonId] = id.split('--');
   const lesson = getQuizLesson(subjectId, lessonId);
-  return [id, rows.map((question, index) => ({ ...question, id: `lesson-${id}-${index + 1}`,
-    concepts: (topicTags[id]?.[index] || []).map(tag => getQuizConceptId(lesson.concepts[tag])) }))];
+  return [id, rows.map(({ area, ...question }, index) => ({ ...question, id: `lesson-${id}-${index + 1}`,
+    concepts: (Number.isInteger(area) ? [area] : topicTags[id]?.[index] || []).map(tag => getQuizConceptId(lesson.concepts[tag])) }))];
 }));
 
 export const getLessonQuestions = quizId => LESSON_QUESTIONS[quizId] || [];

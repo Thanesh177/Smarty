@@ -2,15 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { QUIZ_SUBJECTS } from './quizSubjects.js';
 import { QUIZ_LESSONS, getQuizLessons, getQuizLesson, getQuizConceptId, getLessonQuizId,
-  makeLessonQuizTopic, getRelatedQuizLessons, getQuizLessonLabel } from './quizLessons.js';
+  makeLessonQuizTopic, getRelatedQuizLessons, getQuizLessonLabel, getLessonStudyReference } from './quizLessons.js';
+import { EXPANDED_QUIZ_LESSONS } from './quizLessonExpansion.js';
 import { LESSON_QUESTIONS, getLessonTopicQuestions } from './quizLessonQuestions.js';
 import { getQuestionFingerprint } from '../lib/quizQuestionStore.js';
 
-test('every subject has a book-like lesson catalog with distinct inner topics', () => {
+test('all subjects have an expanded lesson catalog and historical review IDs remain valid', () => {
   const ids = new Set();
   for (const subject of QUIZ_SUBJECTS) {
     const lessons = getQuizLessons(subject.id);
-    assert.ok(lessons.length >= 3, subject.title);
+    assert.ok(lessons.length >= 6, subject.title);
+    assert.equal(EXPANDED_QUIZ_LESSONS[subject.id].length, 3);
+    assert.ok(EXPANDED_QUIZ_LESSONS[subject.id].every(lesson => lesson.concepts.length >= 4 && lesson.studyNote.length >= 100));
     for (const lesson of lessons) {
       assert.ok(lesson.title && lesson.branch && lesson.outcome.length > 35);
       assert.equal(new Set(lesson.concepts).size, lesson.concepts.length);
@@ -26,7 +29,7 @@ test('every subject has a book-like lesson catalog with distinct inner topics', 
       }
     }
   }
-  assert.equal(Object.values(QUIZ_LESSONS).flat().length, 92);
+  assert.equal(Object.values(QUIZ_LESSONS).flat().length, 143);
   assert.deepEqual(getQuizLessons('unknown'), []);
   assert.equal(getQuizLesson('unknown', 'unknown'), null);
   assert.equal(getQuizLessonLabel('old-quiz-id'), '');
@@ -34,7 +37,7 @@ test('every subject has a book-like lesson catalog with distinct inner topics', 
 
 test('science offers physics, chemistry, mathematics and experimental reasoning', () => {
   const science = getQuizLessons('science-mathematics');
-  assert.equal(science.length, 14);
+  assert.equal(science.length, 17);
   assert.deepEqual(new Set(science.map(item => item.branch)), new Set(['Physics', 'Chemistry', 'Mathematics', 'Scientific thinking']));
   const subject = QUIZ_SUBJECTS.find(item => item.id === 'science-mathematics');
   const circuits = getQuizLesson(subject.id, 'circuits');
@@ -53,9 +56,11 @@ test('built-in questions are original, well formed, diverse and explicitly mappe
     const lesson = getQuizLesson(subjectId, lessonId);
     assert.ok(lesson, id);
     const validConcepts = new Set(lesson.concepts.map(getQuizConceptId));
-    assert.equal(questions.length, 8);
-    assert.ok(new Set(questions.map(item => item.kind)).size >= 5);
-    for (const level of ['Easy', 'Medium', 'Hard']) assert.ok(questions.filter(item => item.difficulty === level).length >= 2);
+    const expanded = EXPANDED_QUIZ_LESSONS[subjectId].includes(lesson);
+    assert.equal(questions.length, expanded ? 5 : 8);
+    assert.ok(new Set(questions.map(item => item.kind)).size >= (expanded ? 4 : 5));
+    for (const level of expanded ? ['Easy', 'Medium'] : ['Easy', 'Medium', 'Hard']) assert.ok(questions.filter(item => item.difficulty === level).length >= 2);
+    if (expanded) assert.deepEqual(new Set(questions.flatMap(question => question.concepts)), validConcepts);
     for (const question of questions) {
       count += 1;
       assert.equal(new Set(question.options).size, 4);
@@ -68,7 +73,19 @@ test('built-in questions are original, well formed, diverse and explicitly mappe
       assert.equal(fingerprints.has(fingerprint), false, question.q); fingerprints.add(fingerprint);
     }
   }
-  assert.equal(count, 104);
+  assert.equal(count, 189);
+  for (const subject of QUIZ_SUBJECTS) assert.ok(EXPANDED_QUIZ_LESSONS[subject.id].some(lesson => LESSON_QUESTIONS[getLessonQuizId(subject.id, lesson.id)]?.length === 5));
+});
+
+test('online lesson references include the teaching note and every connected idea', () => {
+  const subject = QUIZ_SUBJECTS.find(item => item.id === 'technology');
+  const lesson = getQuizLesson(subject.id, 'web-request-journey');
+  const topic = makeLessonQuizTopic(subject, lesson);
+  const reference = getLessonStudyReference(topic);
+  assert.equal(reference.sourceTitle, lesson.title);
+  assert.ok(reference.sourceBody.includes(lesson.studyNote));
+  for (const idea of lesson.concepts) assert.ok(reference.sourceBody.includes(idea));
+  assert.deepEqual(getLessonStudyReference(makeLessonQuizTopic(subject, lesson, 'DNS')), {});
 });
 
 test('a topic quiz never falls back to its whole lesson or another subject', () => {

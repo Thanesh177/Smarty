@@ -130,6 +130,13 @@
 :root[data-app-theme='day'] body .news-card :is(.skeleton-image, .skeleton-line) { background: var(--ui-surface-raised); }
 
 /* The rail remains a light floating surface, with a pine active action. */
+/* Collection screens still had legacy white text on their light surfaces. */
+:root[data-app-theme='day'] body .app-shell .content .creator-dashboard-page :is(.dashboard-stats strong, .request-avatar, .dashboard-post-placeholder, .dashboard-post-card, .request-row h3) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .app-shell .content .creator-dashboard-page :is(.dashboard-hero p, .dashboard-stats span, .panel-head p, .dashboard-empty p, .profile-mini, .dashboard-post-card p, .request-row p, .dashboard-status) { color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .content .creator-dashboard-page :is(.dashboard-primary, .dashboard-secondary, .small-action, .request-actions button) { color: var(--ui-text) !important; background: var(--ui-surface) !important; border-color: var(--ui-line-strong) !important; }
+:root[data-app-theme='day'] body .app-shell .content .saved-page .saved-title-btn { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .app-shell .content .saved-page :is(.community-eyebrow, .community-page-heading p, .community-results-heading > span, .community-sort, .saved-card-body p, .saved-topic, .saved-topic > span, .saved-placeholder) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .app-shell .content .saved-page :is(.community-notice, .community-error, .saved-kind-switch, .community-skeleton-grid i) { background: var(--ui-surface-raised) !important; color: var(--ui-secondary) !important; }
 :root[data-app-theme='day'] body .app-shell > .topbar.glass-topbar { border-color: var(--ui-line-strong) !important; box-shadow: 0 8px 28px #243d3017 !important; }
 :root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .navbar-menu { border-color: var(--ui-line) !important; }
 :root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .hamburger-btn { color: var(--ui-secondary) !important; }

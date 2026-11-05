@@ -5,20 +5,20 @@
 }
 .action-confirm-panel {
   width: min(100%, 360px); max-height: 100%; overflow-y: auto; box-sizing: border-box;
-  padding: 22px; border: 1px solid #ffffff18; border-radius: 16px;
-  background: #111315; color: #edf0f4; box-shadow: 0 20px 60px #0008;
+  padding: 22px; border: 1px solid var(--ui-line-strong, #ffffff18); border-radius: 16px;
+  background: var(--ui-surface, #111315); color: var(--ui-text, #edf0f4); box-shadow: var(--ui-shadow-float, 0 20px 60px #0008);
   animation: actionConfirmIn 180ms cubic-bezier(.2,.7,.2,1) both;
 }
 .action-confirm-panel h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.3; font-weight: 550; letter-spacing: -.025em; }
-.action-confirm-panel p { margin: 0; color: #a9b0ba; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.action-confirm-panel p { margin: 0; color: var(--ui-muted, #a9b0ba); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 .action-confirm-buttons { display: flex; gap: 8px; margin-top: 22px; }
 .action-confirm-buttons button {
-  flex: 1; min-height: 44px; padding: 10px 12px; border: 1px solid #ffffff12;
-  border-radius: 9px; background: #ffffff04; color: #d8dde5; font: inherit; font-size: 13px; cursor: pointer;
+  flex: 1; min-height: 44px; padding: 10px 12px; border: 1px solid var(--ui-line, #ffffff12);
+  border-radius: 9px; background: var(--ui-control-bg, #ffffff04); color: var(--ui-secondary, #d8dde5); font: inherit; font-size: 13px; cursor: pointer;
 }
-.action-confirm-buttons .is-destructive { background: #de939314; color: #efb2b2; border-color: #efb2b226; }
-.action-confirm-buttons .is-primary { background: #bdd1e719; color: #bdd1e7; border-color: #bdd1e725; }
-.action-confirm-panel button:focus-visible { outline: 2px solid #bdd1e7; outline-offset: 3px; }
+.action-confirm-buttons .is-destructive { background: var(--ui-danger-soft, #de939314); color: var(--ui-danger, #efb2b2); border-color: var(--ui-danger, #efb2b226); }
+.action-confirm-buttons .is-primary { background: var(--ui-accent-soft, #bdd1e719); color: var(--ui-accent-strong, #bdd1e7); border-color: var(--ui-accent-line, #bdd1e725); }
+.action-confirm-panel button:focus-visible { outline: 2px solid var(--ui-accent, #bdd1e7); outline-offset: 3px; }
 .app-recovery-state { width: min(100%, 540px); box-sizing: border-box; margin: clamp(32px, 9vh, 96px) auto; padding: 28px 84px 28px 24px; color: #edf0f4; }
 .app-recovery-kicker { font-size: 12px; color: #93a7bd; }
 .app-recovery-state h1 { margin: 12px 0; font-size: clamp(24px, 4vw, 32px); font-weight: 550; letter-spacing: -.035em; line-height: 1.2; }

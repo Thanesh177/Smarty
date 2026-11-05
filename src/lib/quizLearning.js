@@ -44,7 +44,8 @@ export function normalizeGeneratedQuestions(payload, topicId, {
     if (requiredDifficulty && difficulty !== requiredDifficulty) return [];
     if (excluded.has(getQuestionPromptKey(q))) return [];
     const question = { id: row?.id || `generated-${topicId}-${index + 1}`, q, options, answer,
-      explanation, difficulty, source: 'generated' };
+      explanation, difficulty, source: 'generated',
+      ...(typeof row?.concept === 'string' && row.concept.trim() ? { concept: row.concept.trim().slice(0, 100) } : {}) };
     return [{ ...question, fingerprint: getQuestionFingerprint(question) }];
   });
   return filterUnseenQuestions(questions, excludedFingerprints).slice(0, limit);

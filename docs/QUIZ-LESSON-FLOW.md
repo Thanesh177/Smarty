@@ -2,20 +2,17 @@
 
 ## What changed
 
-- The subject catalog now opens a book-like contents view rather than immediately starting a generic quiz.
-- 17 subjects contain 92 lessons, each with three independently selectable topics. Example: Science & Mathematics → Inside an electric circuit → Ohm’s law.
-- Branch filters (such as Physics or Chemistry), concept-aware search, whole-lesson practice and a broad subject mix are available.
-- 104 original starter questions in 13 lesson banks span foundation, application and challenge levels. They include concepts, scenarios, comparisons, misconceptions, calculations and evidence interpretation.
-- Only explicitly tagged starter questions can enter a topic-specific quiz. Unsupported topics need the existing online question service; they never receive an unrelated general fallback.
-- Lessons with at least three unseen built-in questions at the requested level open immediately. Other sets use the existing online generation/cache endpoint. Failed online requests can offer the matching remaining built-in questions, including a shorter set when necessary.
-- Question history is checked at both the selected practice scope and its parent subject. Exact repeated prompts are rejected even if an answer changes. History is account-specific and bounded by the existing 500-question/one-year policy; this is not a promise of unlimited, permanent deduplication.
-- Question cache context now includes lesson version, objectives and selected inner topic. Existing broad quizzes, saved results and post-linked quizzes remain available.
-- Mistakes and uncertainty retain the subject/lesson/topic context. Explicit review awards no extra XP. Results suggest other topics inside the lesson, then connected lessons, and summarize the reasoning types practised.
-- Progress screens resolve lesson/topic names instead of exposing internal IDs. Practice scores are not certifications or proof of exam readiness.
+- The new flow is Subject → Lesson → Quiz. Related ideas are previews, not separate quiz choices. Historic topic-specific mistake reviews still work.
+- The 17 subjects contain 143 lessons, including 51 additions with short study notes. Examples include how a bicycle moves and stops, how a bridge carries a load, and how to investigate a headline.
+- Six lessons appear at a time. “Load more lessons” reveals the next six matching the current search and filter. Returning from a quiz restores the expanded list and the lesson position.
+- 189 original questions across 30 lesson banks include 85 new questions. Each subject has a new ready-to-play five-question set. Adaptive starter rounds introduce the ideas before adding application; explicit difficulty choices remain strict.
+- Built-in rounds prioritize coverage across the lesson, not repeated variants of one concept. Online rounds send the learning objective, study notes and connected ideas through the existing source and subject-area fields. The client prioritizes different concepts when choosing up to six returned questions. Unavailable online sets fall back only to relevant built-in questions, if any.
+- Question history is account-specific and checked at both the lesson and parent subject. The existing history limit is 500 questions per scope and one year. Cached unanswered questions can resume an unfinished round.
+- Results show the ideas actually practised, areas to revisit, worked explanations and related lessons. Mistake review awards no extra XP. Floating XP, achievement toasts and confetti are gone from quizzes; XP and achievements still save.
 
 ## Implementation boundaries
 
-No infrastructure, AI model, credentials, account settings or live deployment was changed. The existing quiz endpoint already accepts specific focus, subject areas, difficulty, excluded prompts and question-style instructions, and manages its shared online question cache.
+No infrastructure, AI model, credentials, account settings or live deployment was changed. The existing quiz endpoint uses the lesson reference, focus, subject areas, difficulty and excluded prompts and manages its shared online question cache.
 
 Online question quality still needs ongoing review; an AI-generated set is not an official syllabus or guaranteed factual assessment. Original science questions use established introductory concepts. Background checks included [OpenStax on passive transport](https://openstax.org/books/biology-2e/pages/5-2-passive-transport), [OpenStax on enzymes](https://openstax.org/books/biology-2e/pages/6-5-enzymes), and [NASA’s orbital-motion learning overview](https://science.nasa.gov/learn/heat/big-ideas/big-idea-1-1/). The questions are newly written, not copied textbook exercises.
 
@@ -23,8 +20,6 @@ Online question quality still needs ongoing review; an AI-generated set is not a
 
 Run `npm test`, build into a temporary output directory, then run `scripts/check-performance.mjs` against that output.
 
-Tests cover catalog completeness, stable scope IDs, valid distinct answer choices, topic relevance tags, three difficulty levels, non-mutating selection, history exclusion, explicit review, account isolation, cache invalidation, reasoning summaries and opening/filtering/selecting lessons and their topics.
+Tests cover catalog completeness, stable historic IDs, valid distinct answer choices, broad coverage, difficulty, history exclusion, review, account isolation, cache isolation, lesson selection, and pagination and its restoration.
 
-Browser checks should include a full built-in quiz, missed/uncertain review, topic-specific online generation, back navigation, a 390px phone layout, a tablet layout, and day/night contrast. Native-device and authenticated cross-device progress testing remain release checks; local browser tests do not replace them.
-
-Verified during implementation: completed a three-question built-in circuits set (including a missed/uncertain answer), saw the correct 2/3 result and saved practice record, generated a five-question Ohm’s law set through the existing service, then reopened it and received the four remaining unanswered cached questions. The 390px lesson view had no horizontal overflow and topic buttons were at least 46px high. Day-mode cards and controls use the existing oatmeal/pine palette; night mode inherits the app’s black/blue palette.
+The local browser check completed the five-question bicycle lesson, confirmed five coverage rows and saved score/XP, and found no reward overlays. Live online generation and cross-device progress remain release checks for this update.

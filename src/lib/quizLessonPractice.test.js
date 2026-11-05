@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectLessonQuestions, getLessonQuestionStyle, summarizeLessonSkills } from './quizLessonPractice.js';
+import { selectLessonQuestions, selectBalancedLessonSet, hasBroadLessonCoverage, getLessonQuestionStyle, summarizeLessonCoverage, summarizeLessonSkills } from './quizLessonPractice.js';
 import { getQuizLesson, makeLessonQuizTopic } from '../data/quizLessons.js';
 import { QUIZ_SUBJECTS } from '../data/quizSubjects.js';
 import { getLessonTopicQuestions } from '../data/quizLessonQuestions.js';
@@ -49,6 +49,31 @@ test('AI instructions name the selected topic and require varied worked explanat
   assert.match(style, /misconception/); assert.match(style, /calculation/);
   assert.match(style, /step by step/); assert.match(style, /unfamiliar terms/);
   assert.equal(getLessonQuestionStyle({}), '');
+  assert.match(getLessonQuestionStyle(topic), /Cover different ideas before repeating one/);
+});
+
+test('adaptive starter sets build from foundational questions into application without narrowing coverage', () => {
+  const bike = makeLessonQuizTopic(subject, getQuizLesson(subject.id, 'motion-and-energy'));
+  const questions = selectLessonQuestions(bike, { includeApplication: true, random: () => .4, limit: 6 });
+  assert.deepEqual(questions.map(question => question.difficulty), ['Easy', 'Easy', 'Easy', 'Medium', 'Medium']);
+  assert.equal(new Set(questions.flatMap(question => question.concepts)).size, 5);
+  assert.equal(hasBroadLessonCoverage(bike, questions), true);
+  assert.equal(hasBroadLessonCoverage(bike, questions.map(question => ({ ...question, concepts: ['net-force'] }))), false);
+});
+
+test('generated questions are selected for coverage before repeating an idea', () => {
+  const circuits = makeLessonQuizTopic(subject, getQuizLesson(subject.id, 'circuits'));
+  const rows = ['Ohm’s law', 'Ohm’s law', 'Series circuits', 'Parallel circuits'].map((concept, index) => ({
+    q: `Which is the answer to circuit example ${index}?`, options: ['A choice', 'Another choice', 'A third choice', 'A final choice'],
+    answer: 'A choice', explanation: 'A worked explanation for the circuit example.', concept,
+  }));
+  const normalized = normalizeGeneratedQuestions(rows, circuits.id);
+  const chosen = selectBalancedLessonSet(circuits, normalized, 3);
+  assert.equal(normalized[0].concept, 'Ohm’s law');
+  assert.deepEqual(chosen.map(question => question.concepts[0]), ['ohm-s-law', 'series-circuits', 'parallel-circuits']);
+  assert.equal(hasBroadLessonCoverage(circuits, chosen), true);
+  assert.deepEqual(summarizeLessonCoverage(circuits, [{ ...chosen[1], isCorrect: true, confidence: 'unsure' }]),
+    [{ id: 'series-circuits', label: 'Series circuits', total: 1, correct: 1, needsReview: true }]);
 });
 
 test('the same question with a changed answer cannot bypass seen-prompt or within-set deduplication', () => {

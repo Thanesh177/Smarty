@@ -44,11 +44,13 @@ test('the switch is accessible and available before and after sign-in', () => {
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
 });
 
-test('appearance stays out of the rail and remains available in Settings and video chrome', () => {
+test('appearance is beside Quiz, not inside Settings or video chrome', () => {
   assert.doesNotMatch(read('App.jsx'), /<AppearanceSwitch/);
   assert.match(read('components/AppearanceSwitch.jsx'), /quick-icon-link appearance-rail-toggle/);
   assert.match(read('components/AppearanceSwitch.jsx'), /className="nav-control-label" aria-hidden="true"/);
-  assert.match(read('components/FeedViewSwitch.jsx'), /active === 'video' && <AppearanceSwitch compact\s*\/>/);
+  assert.doesNotMatch(read('components/FeedViewSwitch.jsx'), /AppearanceSwitch/);
+  assert.doesNotMatch(read('pages/SettingsPage.jsx'), /AppearanceSwitch/);
+  assert.match(read('components/NavbarMenu.jsx'), /menu-quiz-row[\s\S]*?<AppearanceSwitch compact/);
   assert.match(css, /\.appearance-quick-toggle[^}]+width: 44px[^}]+height: 44px/);
   assert.match(read('components/FeedViewSwitch.css'), /grid-template-columns: auto minmax\(0, 1fr\) auto/);
 });
