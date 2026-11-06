@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { chatApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useActionConfirmation } from '../components/ActionConfirmation';
+import ConversationActionMenu, { ConversationReportDialog } from '../components/ConversationActionMenu';
 import { assertActionAccepted } from '../lib/actionConfirmation';
 import MemberProfileLink from '../components/MemberProfileLink';
 import { getConversationPartnerId, getMemberId, getPublicMemberName } from '../lib/memberProfile';
@@ -714,8 +715,8 @@ export default function ChatPage() {
   const [status, setStatus] = useState('');
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
-  const [blockSubmitting, setBlockSubmitting] = useState(false);
+  const [reportTarget, setReportTarget] = useState(null);
+  const blockLockRef = useRef(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const deleteLockRef = useRef(false);
   const deletedChatIdsRef = useRef(new Set());
@@ -724,26 +725,9 @@ export default function ChatPage() {
   const [editingText, setEditingText] = useState('');
   const scrollRef = useRef(null);
   const searchAreaRef = useRef(null);
-  const chatActionsRef = useRef(null);
   const chatActionsTriggerRef = useRef(null);
-  useEffect(() => {
-    if (!actionsOpen) return undefined;
-    chatActionsRef.current?.querySelector('.chat-actions-menu button')?.focus();
-    const dismissOutside = (event) => {
-      if (!chatActionsRef.current?.contains(event.target)) setActionsOpen(false);
-    };
-    const dismissWithEscape = (event) => {
-      if (event.key !== 'Escape') return;
-      setActionsOpen(false);
-      chatActionsTriggerRef.current?.focus();
-    };
-    document.addEventListener('pointerdown', dismissOutside);
-    document.addEventListener('keydown', dismissWithEscape);
-    return () => {
-      document.removeEventListener('pointerdown', dismissOutside);
-      document.removeEventListener('keydown', dismissWithEscape);
-    };
-  }, [actionsOpen]);
+  const chatActionsKeyboard = useRef(false);
+  const dismissChatActions = useCallback(() => setActionsOpen(false), []);
   const autoStartedRef = useRef(false);
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
@@ -1354,7 +1338,7 @@ useEffect(() => {
     };
   }, []);
 
-  // PACKET 3A: Add outside-click menu cleanup for floating menus
+  // The portaled conversation menu handles its own outside taps.
   useEffect(() => {
     const closeFloatingMenus = (event) => {
       const target = event.target;
@@ -1362,11 +1346,6 @@ useEffect(() => {
       if (!target.closest?.('.message-menu-wrap')) {
         setOpenReactionMenuId(null);
       }
-
-      if (!target.closest?.('.dropdown-actions')) {
-        setActionsOpen(false);
-      }
-
 
     };
 
@@ -1462,6 +1441,7 @@ const openChat = useCallback(async (chat) => {
   setMobileChatOpen(true);
   setMessages(cachedMessages);
   setActionsOpen(false);
+  setReportTarget(null);
   setStatus('');
   setOpenReactionMenuId(null);
   setEditingMessageId(null);
@@ -1631,6 +1611,7 @@ useEffect(() => {
       setMobileChatOpen(true);
       setMessages([]);
       setActionsOpen(false);
+      setReportTarget(null);
       setOpenReactionMenuId(null);
       setEditingMessageId(null);
       setEditingText('');
@@ -1939,6 +1920,7 @@ const closeMobileChat = useCallback(() => {
   }
   setMessages([]);
   setActionsOpen(false);
+  setReportTarget(null);
 
   if (messagePollTimerRef.current) {
     window.clearTimeout(messagePollTimerRef.current);
@@ -1946,7 +1928,8 @@ const closeMobileChat = useCallback(() => {
   }
 }, []);
 
-const toggleActionsMenu = useCallback(() => {
+const toggleActionsMenu = useCallback((event) => {
+  chatActionsKeyboard.current = event.detail === 0;
   setActionsOpen((prev) => !prev);
 }, []);
 
@@ -2363,83 +2346,48 @@ const deleteMessage = async (msg) => {
   }
 };
 const handleBlockUser = async () => {
-  if (!activeChat) return;
-
-  if (isBlocked) {
-    try {
-      await withTimeout(chatApi.unblockUser(activeChat.receiverId), 9000, 'Unblock took too long.');
-      if (!mountedRef.current) return;
-      setIsBlocked(false);
-      setStatus('User unblocked.');
-      refreshChatsSoon();
-    } catch (err) {
-      console.error('Unblock failed:', err);
-      if (mountedRef.current) setStatus(err?.message || 'Unblock failed.');
-    }
-    return;
-  }
-
-  setBlockConfirmOpen(true);
-};
-
-const confirmBlockUser = async () => {
-  if (!activeChat?.receiverId || blockSubmitting) return;
-
-  setBlockSubmitting(true);
-
+  const target = activeChat;
+  const account = userId;
+  if (!target?.receiverId || blockLockRef.current) return;
+  const isCurrent = () => mountedRef.current && accountRef.current === account && activeChatIdRef.current === target.chatId;
+  blockLockRef.current = true;
   try {
-    await withTimeout(
-      chatApi.blockUser(activeChat.receiverId, {
-        chatId: activeChat.chatId,
+    if (!isBlocked) {
+      const approved = await confirmAction({ title: `Block ${getUserDisplayName(target)}?`,
+        description: 'They won’t be able to message you. This conversation will be cleared for you and Smarty will receive the account context for safety review.', confirmLabel: 'Block user' });
+      if (!approved || !isCurrent()) return;
+    }
+    const result = await withTimeout(isBlocked ? chatApi.unblockUser(target.receiverId) :
+      chatApi.blockUser(target.receiverId, {
+        chatId: target.chatId,
         contentType: 'chat',
         source: 'chat-block-dialog',
         reason: 'Blocked from a private conversation',
-      }),
-      9000,
-      'Block took too long.'
-    );
-
-    if (!mountedRef.current) return;
-    setIsBlocked(true);
-    setStatus('User blocked.');
-    setMessages([]);
-    setCachedMessages(activeChat.chatId, []);
-    setBlockConfirmOpen(false);
+      }), 9000, 'The request took too long.');
+    assertActionAccepted(result);
+    if (!isCurrent()) return;
+    setIsBlocked(!isBlocked);
+    setStatus(isBlocked ? 'User unblocked.' : 'User blocked.');
+    if (!isBlocked) {
+      setMessages([]);
+      setCachedMessages(target.chatId, []);
+    }
     refreshChatsSoon();
-  } catch (err) {
-    console.error('Block failed:', err);
-    if (mountedRef.current) setStatus(err?.message || 'Block action failed.');
+  } catch {
+    if (isCurrent()) setStatus(isBlocked ? 'Couldn’t unblock the user. Please try again.' : 'Couldn’t block the user. Please try again.');
   } finally {
-    if (mountedRef.current) setBlockSubmitting(false);
+    blockLockRef.current = false;
   }
 };
 
-  const handleReportUser = async () => {
-    if (!activeChat) return;
-
-    const reason = window.prompt('Reason for reporting:');
-
-    if (!reason?.trim()) return;
-
-    try {
-      await withTimeout(
-        chatApi.reportUser({
-          reportedUserId: activeChat.receiverId,
-          chatId: activeChat.chatId,
-          contentId: activeChat.chatId,
-          contentType: 'chat',
-          source: 'chat-report-action',
-          reason: reason.trim(),
-        }),
-        9000,
-        'Report took too long.'
-      );
-      if (!mountedRef.current) return;
-      setStatus('Report submitted.');
-    } catch (err) {
-      console.error('Failed to submit report:', err);
-      if (mountedRef.current) setStatus(err?.message || 'Failed to submit report.');
-    }
+  const submitReport = async (reason) => {
+    const target = reportTarget;
+    if (!target?.receiverId || target.chatId !== activeChatIdRef.current || target.account !== accountRef.current) return;
+    assertActionAccepted(await withTimeout(chatApi.reportUser({
+      reportedUserId: target.receiverId, chatId: target.chatId, contentId: target.chatId,
+      contentType: 'chat', source: 'chat-report-action', reason,
+    }), 9000, 'Report took too long.'));
+    if (mountedRef.current && accountRef.current === target.account && activeChatIdRef.current === target.chatId) setStatus('Report submitted.');
   };
 
   const handleDeleteChat = async () => {
@@ -2502,16 +2450,19 @@ const confirmBlockUser = async () => {
   };
 
 const runReportUser = useCallback(() => {
+  chatActionsTriggerRef.current?.focus({ preventScroll: true });
   setActionsOpen(false);
-  handleReportUser();
-}, [handleReportUser]);
+  if (activeChat?.receiverId) setReportTarget({ ...activeChat, account: userId });
+}, [activeChat, userId]);
 
 const runBlockUser = useCallback(() => {
+  chatActionsTriggerRef.current?.focus({ preventScroll: true });
   setActionsOpen(false);
   handleBlockUser();
 }, [handleBlockUser]);
 
 const runDeleteChat = useCallback(() => {
+  chatActionsTriggerRef.current?.focus({ preventScroll: true });
   setActionsOpen(false);
   handleDeleteChat();
 }, [handleDeleteChat]);
@@ -2557,6 +2508,7 @@ const runDeleteChat = useCallback(() => {
       }
       setMessages([]);
       setActionsOpen(false);
+      setReportTarget(null);
       if (messagePollTimerRef.current) {
         window.clearTimeout(messagePollTimerRef.current);
         messagePollTimerRef.current = null;
@@ -2687,9 +2639,7 @@ const runDeleteChat = useCallback(() => {
                   <span className="chat-context-label">Private conversation</span>
                 )}
               </div>
-<div className="chat-actions dropdown-actions" ref={chatActionsRef} onBlur={(event) => {
-  if (!event.currentTarget.contains(event.relatedTarget)) setActionsOpen(false);
-}}>
+<div className="chat-actions dropdown-actions">
   <button
     type="button"
     className="chat-more-btn"
@@ -2704,19 +2654,20 @@ const runDeleteChat = useCallback(() => {
   </button>
 
   {actionsOpen && (
-    <div className="chat-actions-menu" id="chat-conversation-actions" role="group" aria-label="Conversation options">
+    <ConversationActionMenu anchorRef={chatActionsTriggerRef} id="chat-conversation-actions" label="Conversation options"
+      onDismiss={dismissChatActions} keyboard={chatActionsKeyboard.current}>
       <NativeDownloadButton label="Back up loaded messages" onStatus={setStatus}
         payload={()=>chatBackupPayload({id:'direct:'+activeChat.chatId,title:getUserDisplayName(activeChat),messages,userId})}/>
       <button className="btn-report" type="button" onClick={runReportUser}>
         <Flag size={16} aria-hidden="true" /> Report
       </button>
-      <button className="btn-block" type="button" onClick={runBlockUser}>
+      <button className={isBlocked ? 'btn-block' : 'btn-block is-destructive'} type="button" onClick={runBlockUser}>
         <ShieldBan size={16} aria-hidden="true" /> {isBlocked ? 'Unblock' : 'Block'}
       </button>
-      <button className="btn-delete-chat" type="button" disabled={deleteSubmitting} onClick={runDeleteChat}>
+      <button className="btn-delete-chat is-destructive" type="button" disabled={deleteSubmitting} onClick={runDeleteChat}>
         <Trash2 size={16} aria-hidden="true" />{deleteSubmitting ? 'Deleting…' : 'Delete chat'}
       </button>
-    </div>
+    </ConversationActionMenu>
   )}
 </div>
             </div>
@@ -3031,51 +2982,8 @@ const runDeleteChat = useCallback(() => {
           />
         </div>
       )}
-      {blockConfirmOpen && activeChat && (
-        <div
-          className="chat-block-dialog-backdrop"
-          role="presentation"
-          onClick={() => {
-            if (!blockSubmitting) setBlockConfirmOpen(false);
-          }}
-        >
-          <section
-            className="chat-block-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="chat-block-dialog-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <span className="chat-block-dialog-kicker">Safety action</span>
-            <h2 id="chat-block-dialog-title">
-              Block {getUserDisplayName(activeChat)}?
-            </h2>
-            <p>
-              They will no longer be able to message you. This conversation
-              will be cleared immediately, further messaging will be disabled,
-              and Smarty will receive the account context for safety review.
-            </p>
-            <div className="chat-block-dialog-actions">
-              <button
-                type="button"
-                className="secondary"
-                disabled={blockSubmitting}
-                onClick={() => setBlockConfirmOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger"
-                disabled={blockSubmitting}
-                onClick={confirmBlockUser}
-              >
-                {blockSubmitting ? 'Blocking...' : 'Block user'}
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
+      {reportTarget && reportTarget.chatId === activeChat?.chatId && reportTarget.account === userId &&
+        <ConversationReportDialog name={getUserDisplayName(reportTarget)} onClose={() => setReportTarget(null)} onReport={submitReport} />}
     </main>
   );
 }

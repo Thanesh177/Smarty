@@ -1,14 +1,18 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Bookmark, Maximize, MessageCircle, MoreHorizontal, Pause, Play, RefreshCw, Volume2, VolumeX } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PostAuthor from './PostAuthor';
 import { formatVideoTime, getPostVideoUrl, getVideoPostId } from '../lib/videoFeed';
+import { startReelPlayback } from '../lib/reelPlayback';
 import NativeDownloadButton from './NativeDownloadButton';
 
-export default memo(function ReelVideo({ post, active, nearby, muted = false, onMute, onSave, onSafety, onReload, saved, busy }) {
+export default memo(function ReelVideo({ post, active, nearby, preloadNext, muted = false, onMute, onSave, onSafety, onReload, saved, busy, reducedMotion, chromeHidden, onReveal, onPlayingChange }) {
   const videoRef = useRef(null);
   const activeRef = useRef(active);
   activeRef.current = active;
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const playRequest = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -18,6 +22,7 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
   const [ready, setReady] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [failureMessage, setFailureMessage] = useState('');
+  const [soundOff, setSoundOff] = useState(muted);
   const mounted = useRef(true);
   const autoRenewed = useRef(false);
   const reloadLock = useRef(false);
@@ -32,7 +37,7 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
     setDuration(0); setPosition(0); setFailureMessage('');
   }, [source, retry, nearby]);
 
-  const reloadSource = async () => {
+  const reloadSource = useCallback(async () => {
     if (reloadLock.current) return;
     reloadLock.current = true;
     setRefreshing(true);
@@ -51,7 +56,20 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
       reloadLock.current = false;
       if (mounted.current) setRefreshing(false);
     }
-  };
+  }, [id, onReload]);
+
+  const beginPlayback = useCallback((video, withMute, allowMutedFallback) => {
+    const request = ++playRequest.current;
+    const canPlayHere = () => activeRef.current && videoRef.current === video && document.visibilityState !== 'hidden';
+    const isCurrent = () => playRequest.current === request && canPlayHere();
+    setWaiting(video.readyState < 3);
+    void startReelPlayback(video, { muted: withMute, allowMutedFallback, isCurrent }).then(started => {
+      if (!canPlayHere()) video.pause();
+      if (!isCurrent()) return;
+      setSoundOff(video.muted);
+      if (!started) { setPlaying(false); setWaiting(false); }
+    });
+  }, []);
 
   useEffect(() => {
     if (!active || !nearby || failed || refreshing || (ready && !waiting)) return undefined;
@@ -71,23 +89,24 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return undefined;
-    video.muted = muted;
-    // Every clip starts on a preview. Sound-enabled playback needs a gesture.
-    if (!active) video.pause();
-    preparePreview(video);
-    const hidden = () => { if (document.visibilityState === 'hidden') video.pause(); };
-    const pause = () => video.pause();
+    if (!video || !active) return undefined;
+    if (failed && onReload && video.error && !autoRenewed.current) {
+      autoRenewed.current = true;
+      void reloadSource();
+    } else if (!reducedMotion && !failed && !refreshing) {
+      beginPlayback(video, mutedRef.current, true);
+    }
+    const pause = () => { playRequest.current += 1; video.pause(); };
+    const hidden = () => { if (document.visibilityState === 'hidden') pause(); };
     document.addEventListener('visibilitychange', hidden);
     window.addEventListener('pagehide', pause);
     return () => {
-      video.pause();
+      pause();
       document.removeEventListener('visibilitychange', hidden);
       window.removeEventListener('pagehide', pause);
     };
-  }, [active, nearby, retry, source, poster]);
-
-  useEffect(() => { if (videoRef.current) videoRef.current.muted = muted; }, [muted]);
+  }, [active, nearby, retry, source, failed, refreshing, reducedMotion, beginPlayback, onReload, reloadSource]);
+  useEffect(() => { if (active) onPlayingChange?.(id, playing && !waiting); }, [active, id, playing, waiting, onPlayingChange]);
 
   // Release the decoder and download when a distant video leaves the window.
   useEffect(() => {
@@ -102,21 +121,23 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
   }, [nearby, retry]);
 
   const play = () => {
+    onReveal?.();
+    if (chromeHidden) return;
     const video = videoRef.current;
     if (!video || !active || failed) return;
-    if (!video.paused) { video.pause(); return; }
-    setWaiting(true);
-    video.muted = muted;
-    video.play()?.then(() => { if (!activeRef.current || videoRef.current !== video || document.visibilityState === 'hidden') video.pause(); })
-      .catch(() => { if (mounted.current) { setPlaying(false); setWaiting(false); } });
+    if (!video.paused) { playRequest.current += 1; video.pause(); return; }
+    beginPlayback(video, video.muted, true);
   };
 
   const toggleSound = () => {
     const video = videoRef.current;
-    if (video) video.muted = !muted;
-    onMute(!muted);
-    // Keep this inside the gesture, including on iOS with sound enabled.
-    if (video && active && !video.paused) video.play()?.catch(() => setPlaying(false));
+    if (!video || !active) return;
+    const next = !video.muted;
+    video.muted = next;
+    setSoundOff(next);
+    onMute(next);
+    // Retry inside this exact tap if the browser required a gesture.
+    if (!next && !failed) beginPlayback(video, false, false);
   };
 
   const fullscreen = () => {
@@ -128,19 +149,20 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
   return <article className={'reel-video' + (active ? ' is-active' : '')} data-video-id={id} aria-label={title} aria-hidden={!active} inert={!active ? '' : undefined}>
     <div className={'reel-video-stage' + (playing ? ' is-playing' : '')} aria-busy={active && (!ready || waiting || refreshing) && !failed}>
       {nearby ? <video key={retry} ref={videoRef} src={source} poster={poster || undefined}
-        playsInline loop muted={muted} preload={active ? 'auto' : 'metadata'} aria-label={title}
+        playsInline loop muted={soundOff || !active} preload={active || preloadNext ? 'auto' : 'metadata'} aria-label={title}
         onPlaying={event => {
           if (!activeRef.current || document.visibilityState === 'hidden') { event.currentTarget.pause(); return; }
           setPlaying(true); setWaiting(false); setReady(true);
         }} onPause={() => { setPlaying(false); setWaiting(false); }}
+        onVolumeChange={event => { if (activeRef.current) setSoundOff(event.currentTarget.muted); }}
         onWaiting={() => { if (activeRef.current) setWaiting(true); }} onCanPlay={() => { setReady(true); setWaiting(false); }}
         onLoadedMetadata={event => {
           const video = event.currentTarget;
           setDuration(video.duration); setFailed(false);
           // Reveal a real first frame on mobile Safari without a poster.
-          preparePreview(video);
+          if (reducedMotion) preparePreview(video);
         }}
-        onLoadedData={event => { setReady(true); preparePreview(event.currentTarget); }}
+        onLoadedData={() => setReady(true)}
         onTimeUpdate={event => setPosition(Math.floor(event.currentTarget.currentTime * 4) / 4)}
         onError={() => {
           setFailed(true); setWaiting(false); setPlaying(false);
@@ -149,15 +171,15 @@ export default memo(function ReelVideo({ post, active, nearby, muted = false, on
         }} />
         : <div className="reel-video-placeholder" aria-hidden="true">{poster && <img src={poster} alt="" loading="lazy" />}<Play size={30} /></div>}
       {!failed && !refreshing && <button type="button" className="reel-video-tap" onClick={play} tabIndex={active ? 0 : -1}
-        aria-label={playing ? 'Pause video' : 'Play video'} aria-pressed={playing}>
-        {!playing && !waiting && ready && <span><Play size={28} fill="currentColor" /><small>{muted ? 'Play video' : 'Play with sound'}</small></span>}
+        aria-label={chromeHidden ? 'Show video controls' : playing ? 'Pause video' : 'Play video'} aria-pressed={chromeHidden ? undefined : playing}>
+        {!playing && !waiting && ready && <span><Play size={28} fill="currentColor" /><small>{soundOff ? 'Play video' : 'Play with sound'}</small></span>}
       </button>}
-      {active && (refreshing || ((!ready || waiting) && !failed)) && <span className="reel-video-buffer" role="status"><span />{refreshing ? 'Reconnecting video…' : waiting ? 'Buffering…' : 'Loading preview…'}</span>}
+      {active && (refreshing || ((!ready || waiting) && !failed)) && <span className="reel-video-buffer" role="status"><span />{refreshing ? 'Reconnecting video…' : 'Buffering video…'}</span>}
       {failed && !refreshing && <div className="reel-video-error" role="status"><Play size={26} /><strong>This video couldn’t play.</strong>
         <p>{failureMessage || 'Check your connection and try again.'}</p>
         <button type="button" onClick={reloadSource}><RefreshCw size={16} />Reload video</button>
       </div>}
-      <div className="reel-video-top"><span>{post.topic || 'Video'}</span><button type="button" onClick={toggleSound} aria-label={muted ? 'Turn sound on' : 'Mute video'}>{muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button></div>
+      <div className="reel-video-top"><span>{post.topic || 'Video'}</span><button type="button" onClick={toggleSound} aria-label={soundOff ? 'Turn sound on' : 'Mute video'}>{soundOff ? <VolumeX size={19} /> : <Volume2 size={19} />}</button></div>
       <div className="reel-video-bottom">
         <div className="reel-video-copy">
           <PostAuthor post={post} className="reel-video-author" resolve={nearby} />

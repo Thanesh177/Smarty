@@ -46,46 +46,54 @@ test('a lesson has one quiz action that includes all its ideas and no topic pick
   assert.deepEqual(Array.from(app.starts[0].subjects), ['Ohm’s law', 'Series circuits', 'Parallel circuits']);
 });
 
-test('branch and lesson search filters compose; clearing an empty state restores the book', () => {
+test('Science starts with four named lessons; Physics can launch as a whole lesson', () => {
   const app = harness(); let tree = app.render();
-  app.find(tree, node => node.type === 'button' && app.text(node) === 'Physics')[0].props.onClick();
-  tree = app.render();
-  assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 5);
+  const headings = app.find(tree, node => node.type === 'h2').map(app.text);
+  assert.deepEqual(headings, ['Physics', 'Chemistry', 'Mathematics', 'Experimental Methods']);
+  app.find(tree, node => node.props['aria-label'] === 'Start quiz: Physics')[0].props.onClick();
+  assert.equal(app.starts[0].title, 'Physics');
+  assert.equal(app.starts[0].id, 'science-mathematics--chapter-physics');
+  assert.equal(app.starts[0].subjects.length, 5);
+});
+
+test('clearing an empty search restores the named lessons', () => {
+  const app = harness(); let tree = app.render();
   app.find(tree, node => node.type === 'input')[0].props.onChange({ target: { value: 'nonexistent' } });
   tree = app.render();
   assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 0);
   app.find(tree, node => node.type === 'button' && app.text(node) === 'Show all lessons')[0].props.onClick();
   tree = app.render();
-  assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 6);
+  assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 4);
 });
 
-test('load more appends unique lessons in batches and hides itself at the end', () => {
+test('load more appends unique search matches and hides itself at the end', () => {
   const app = harness();
   const cards = tree => app.find(tree, node => node.props.className === 'quiz-lesson-card').map(app.text);
   const more = tree => app.find(tree, node => node.type === 'button' && app.text(node).startsWith('Load more lessons'))[0];
+  app.find(app.render(), node => node.type === 'input')[0].props.onChange({ target: { value: 'a' } });
   const first = app.render();
   assert.equal(cards(first).length, 6);
   more(first).props.onClick();
   const second = app.render();
-  assert.equal(cards(second).length, 12);
+  assert.ok(cards(second).length > 6);
   assert.deepEqual(cards(second).slice(0, 6), cards(first));
-  more(second).props.onClick();
-  const last = app.render();
-  assert.equal(cards(last).length, 17);
-  assert.equal(new Set(cards(last)).size, 17);
+  let last = second;
+  while (more(last)) { more(last).props.onClick(); last = app.render(); }
+  assert.equal(new Set(cards(last)).size, cards(last).length);
   assert.equal(more(last), undefined);
 });
 
-test('returning from a quiz restores the expanded lesson list and filters', () => {
+test('returning from focused practice restores the parent lesson', () => {
   const app = harness(); let tree = app.render();
-  app.find(tree, node => node.type === 'button' && app.text(node).startsWith('Load more lessons'))[0].props.onClick();
+  const physics = app.find(tree, node => node.props['data-lesson-id'] === 'chapter-physics')[0];
+  app.find(physics, node => node.type === 'button' && app.text(node) === 'Focused practice')[0].props.onClick();
   tree = app.render();
   app.find(tree, node => node.type === 'button' && node.props['aria-label'] === 'Start quiz: Inside an electric circuit')[0].props.onClick();
-  assert.equal(app.views[0].limit, 12);
+  assert.equal(app.views[0].expandedLesson, 'chapter-physics');
   assert.equal(app.views[0].lessonId, 'circuits');
   const restored = harness(app.views[0]);
-  assert.equal(restored.find(restored.render(), node => node.props.className === 'quiz-lesson-card').length, 12);
-  const filtered = harness({ branch: 'Physics', query: 'circuit', limit: 6 });
+  assert.equal(restored.find(restored.render(), node => node.props['aria-label'] === 'Start quiz: Inside an electric circuit').length, 1);
+  const filtered = harness({ query: 'circuit', limit: 6 });
   const lessons = filtered.find(filtered.render(), node => node.props.className === 'quiz-lesson-card');
   assert.equal(lessons.length, 1);
   assert.match(filtered.text(lessons[0]), /Inside an electric circuit/);

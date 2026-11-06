@@ -5,6 +5,7 @@ import FeedHeader from '../components/FeedHeader';
 import ReelVideo from '../components/ReelVideo';
 import { useAuth } from '../contexts/AuthContext';
 import useFeed from '../hooks/useFeed';
+import useVideoChrome from '../hooks/useVideoChrome';
 import { chatApi } from '../api/client';
 import { getMostVisibleVideo, getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts } from '../lib/videoFeed';
 import './VideoTopicPage.css';
@@ -40,6 +41,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
   const { posts, loading, refreshing, loadingMore, error, nextCursor, loadMore, refreshFeed, refreshPost, savePost, hidePost, blockCreator } = useFeed({ pageSize: 20 });
   const videos = useMemo(() => getVideoPosts(posts), [posts]);
   const rootRef = useRef(null);
+  const pageRef = useRef(null);
   const sentinelRef = useRef(null);
   const loadLock = useRef(false);
   const scans = useRef(0);
@@ -48,6 +50,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
   const visitedCursors = useRef(new Set());
   const mounted = useRef(true);
   const [activeId, setActiveId] = useState('');
+  const [playingId, setPlayingId] = useState('');
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -58,6 +61,11 @@ function VideoFeed({ onOpenSearch, account, user }) {
   const [safetyError, setSafetyError] = useState('');
   const activeIndex = Math.max(0, videos.findIndex(post => getVideoPostId(post) === activeId));
   const canLoad = Boolean(nextCursor) && !loading && !refreshing && !loadingMore && !error;
+  const activePlaying = Boolean(activeId && playingId === activeId && visible && !safety);
+  const { idle, reveal } = useVideoChrome(pageRef, activeId, activePlaying);
+  const updatePlaying = useCallback((id, playing) => {
+    setPlayingId(previous => playing ? id : previous === id ? '' : previous);
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -134,6 +142,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
 
   const retryFeed = () => { scans.current = 0; visitedCursors.current.clear(); refreshFeed(); };
   const move = direction => {
+    reveal();
     const root = rootRef.current;
     if (direction > 0 && activeIndex === videos.length - 1 && nextCursor) { pendingAdvance.current = videos.length; fetchMore(true); return; }
     const index = Math.min(videos.length - 1, Math.max(0, activeIndex + direction));
@@ -165,7 +174,9 @@ function VideoFeed({ onOpenSearch, account, user }) {
     finally { if (mounted.current) setSafetyBusy(false); }
   };
 
-  return <main className="video-topic-page has-inner-feed">
+  return <main ref={pageRef} className={'video-topic-page has-inner-feed' + (idle ? ' is-video-idle' : '')}
+    onPointerMove={event => { if (!idle && event.pointerType === 'mouse') reveal(); }}
+    onFocusCapture={event => { if (event.target.matches(':focus-visible')) reveal(); }}>
     <FeedHeader topic="Video" onBack={() => navigate('/topics')} onOpenSearch={onOpenSearch}
       onSelect={topic => navigate('/feed?topic=' + encodeURIComponent(topic))} status={loading ? 'Loading videos' : `${videos.length} videos loaded`} />
     <div className="video-topic-tools"><span><Video size={15} />{videos.length ? `${activeIndex + 1} of ${videos.length}${nextCursor ? '+' : ''}` : 'Videos'}</span><Link to="/create?topic=Video&type=video"><Plus size={16} />Upload video</Link></div>
@@ -175,6 +186,8 @@ function VideoFeed({ onOpenSearch, account, user }) {
     }}>
       {videos.map((post, index) => <ReelVideo key={getVideoPostId(post)} post={post}
         active={getVideoPostId(post) === activeId && visible && !safety} nearby={Math.abs(index - activeIndex) <= 1}
+        preloadNext={activePlaying && index === activeIndex + 1 && !navigator.connection?.saveData}
+        chromeHidden={idle && index === activeIndex} onReveal={reveal} onPlayingChange={updatePlaying}
         muted={muted} onMute={setMuted} onSave={save} onSafety={openSafety} onReload={refreshPost} busy={saving === getVideoPostId(post)}
         saved={Boolean(post.saved || post.isSaved || post.bookmarked || post.isBookmarked || post.savedByCurrentUser)} reducedMotion={reducedMotion} />)}
       {!videos.length && <div className="video-topic-state">

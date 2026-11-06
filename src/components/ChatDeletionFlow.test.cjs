@@ -60,3 +60,18 @@ test('chat deletion uses the shared portaled, focus-managed confirmation',()=>{
   assert.match(source,/chat-conversation-status" role="status"/);
   assert.match(source,/filter\(chat => !deletedChatIdsRef\.current\.has\(chat\.chatId\)\)/);
 });
+
+test('portaled chat actions are not dismissed before a mobile click and use both app palettes', () => {
+  const menu = fs.readFileSync(__dirname + '/ConversationActionMenu.jsx', 'utf8');
+  const styles = fs.readFileSync(__dirname + '/ConversationActionMenu.css', 'utf8');
+  const rooms = fs.readFileSync(__dirname + '/../pages/TopicRoomsPage.jsx', 'utf8');
+  assert.match(source, /<ConversationActionMenu anchorRef=\{chatActionsTriggerRef\}/);
+  assert.match(rooms, /<ConversationActionMenu anchorRef=\{activeRoomMenuTrigger\}/);
+  assert.doesNotMatch(source, /closest\?\.\('\.dropdown-actions'\)|dropdown-actions[^>]*onBlur/);
+  assert.match(menu, /!anchor\.contains\(event\.target\) && !panel\.contains\(event\.target\)/);
+  assert.match(menu, /<dialog[\s\S]+Reason/);
+  assert.doesNotMatch(source, /window\.prompt\('Reason for reporting/);
+  assert.match(styles, /background: var\(--ui-surface\)/);
+  assert.match(styles, /min-height: 44px/);
+  assert.match(styles, /\.is-destructive \{ color: var\(--ui-danger\)/);
+});

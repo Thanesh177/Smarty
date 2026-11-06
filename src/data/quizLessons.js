@@ -1,4 +1,5 @@
 import { EXPANDED_QUIZ_LESSONS } from './quizLessonExpansion.js';
+import { QUIZ_CHAPTER_MAP } from './quizChapters.js';
 
 // A lesson connects ideas within one meaningful scope, not an exam syllabus.
 // Keep IDs stable: they scope cached questions, attempts and mistake review.
@@ -138,9 +139,29 @@ export const QUIZ_LESSONS = Object.fromEntries(Object.entries(EXISTING_QUIZ_LESS
 ]));
 
 export const getQuizLessons = subjectId => Object.hasOwn(QUIZ_LESSONS, subjectId) ? QUIZ_LESSONS[subjectId] : [];
-export const getQuizLesson = (subjectId, lessonId) => getQuizLessons(subjectId).find(item => item.id === lessonId) || null;
 export const getQuizConceptId = value => String(value).normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 export const getLessonQuizId = (subjectId, lessonId, concept = '') => `${subjectId}--${lessonId}${concept ? '--' + getQuizConceptId(concept) : ''}`;
+const SCIENCE_LESSON_OUTCOMES = {
+  Physics: 'Predict motion, track energy, and work through electric circuits and wave behavior.',
+  Chemistry: 'Connect atomic structure and bonding to reaction quantities, acidity, and neutralization.',
+  Mathematics: 'Set up equations, reason about chance, interpret data, and model change.',
+  'Experimental Methods': 'Design a fair test, judge the uncertainty in measurements, and defend a conclusion.',
+};
+const QUIZ_CHAPTERS = Object.fromEntries(Object.entries(QUIZ_CHAPTER_MAP).map(([subjectId, chapters]) => {
+  const lessons = new Map(getQuizLessons(subjectId).map(item => [item.id, item]));
+  return [subjectId, Object.entries(chapters).map(([title, members]) => {
+    const practiceSets = members.map(id => lessons.get(id)).filter(Boolean);
+    return {
+      id: 'chapter-' + getQuizConceptId(title), title, branch: title, practiceSets,
+      outcome: SCIENCE_LESSON_OUTCOMES[title] ?? (practiceSets.length === 1 ? practiceSets[0].outcome : `Practice ${title.toLowerCase()} across ${practiceSets.length} connected areas.`),
+      concepts: practiceSets.map(item => item.title),
+      studyNote: practiceSets.map(item => `${item.title}: ${item.outcome} Concepts: ${item.concepts.join(', ')}.`).join('\n'),
+    };
+  })];
+}));
+export const getQuizChapters = subjectId => Object.hasOwn(QUIZ_CHAPTERS, subjectId) ? QUIZ_CHAPTERS[subjectId] : [];
+export const getQuizChapter = (subjectId, lessonId) => getQuizChapters(subjectId).find(item => item.id === lessonId) || null;
+export const getQuizLesson = (subjectId, lessonId) => getQuizLessons(subjectId).find(item => item.id === lessonId) || getQuizChapter(subjectId, lessonId);
 
 export function makeLessonQuizTopic(subject, selected, concept = '') {
   if (concept && !selected.concepts.includes(concept)) throw new RangeError('Unknown topic in this lesson');
@@ -163,8 +184,11 @@ export function getLessonStudyReference(topic) {
 export function getRelatedQuizLessons(subjectId, lessonId) {
   const current = getQuizLesson(subjectId, lessonId);
   if (!current) return [];
-  const others = getQuizLessons(subjectId).filter(item => item.id !== lessonId);
-  return [...others.filter(item => item.branch === current.branch), ...others.filter(item => item.branch !== current.branch)].slice(0, 3);
+  const chapters = getQuizChapters(subjectId);
+  if (current.practiceSets) return chapters.filter(item => item.id !== lessonId).slice(0, 3);
+  const chapter = chapters.find(item => item.practiceSets.includes(current));
+  const siblings = chapter?.practiceSets.filter(item => item.id !== lessonId) || [];
+  return [...siblings, ...chapters.filter(item => item !== chapter)].slice(0, 3);
 }
 
 export function getQuizLessonLabel(quizId) {

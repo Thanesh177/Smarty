@@ -1,7 +1,7 @@
 // Original, lesson-specific practice. Never substitute a general subject bank
 // when a learner has chosen a narrow lesson. The online service supplies fresh
 // sets once these have been seen, and for lessons without a built-in set.
-import { getQuizConceptId, getQuizLesson } from './quizLessons.js';
+import { getQuizChapter, getQuizConceptId, getQuizLesson, getLessonQuizId } from './quizLessons.js';
 import { BROAD_LESSON_BANK } from './quizBroadLessonQuestions.js';
 
 const q = (kind, difficulty, prompt, answer, distractors, explanation) => ({
@@ -143,6 +143,24 @@ const bank = {
 
 // Explicit editorial tags, rather than guessing topic relevance from keywords.
 // Untagged general introductions remain available only in the whole-lesson set.
+const chemistryPractice = {
+  'science-mathematics--bonds': [
+    { ...q('Concept', E, 'What distinguishes a covalent bond from an ionic bond?', 'A covalent bond involves shared electron density', ['A covalent bond only attracts neutral atoms without sharing electrons', 'An ionic bond involves equal sharing of electrons', 'Ionic bonding requires two nuclei to merge'], 'Covalent bonding involves electron density shared between atoms. Ionic bonding is predominantly the electrostatic attraction between oppositely charged ions.'), area: 0 },
+    { ...q('Comparison', M, 'Why can solid sodium chloride fail to conduct electricity while molten sodium chloride conducts?', 'Its ions can move through the liquid but are held in place in the solid', ['The liquid makes new electrons that carry all the charge', 'The solid contains no ions', 'Melting destroys the charge on the ions'], 'Both forms contain ions. In the solid their positions in the crystal are constrained. In the melt, charged ions can move under an electric field and carry current.'), area: 1 },
+    { ...q('Transfer', H, 'Carbon dioxide has two polar C=O bonds but no net dipole. What accounts for this?', 'The molecule is linear and its equal bond dipoles point in opposite directions', ['The carbon atom prevents oxygen from attracting electrons', 'Having two polar bonds guarantees zero dipole in any shape', 'The two oxygen atoms make the individual bonds nonpolar'], 'Each C=O bond has a dipole, but a molecule’s net dipole is the vector sum. The two equal and opposite bond dipoles cancel in linear carbon dioxide.'), area: 2 },
+  ],
+  'science-mathematics--reactions': [
+    { ...q('Concept', E, 'When balancing a chemical equation, what can you change without changing the substances?', 'The coefficients in front of their formulas', ['The subscripts in every chemical formula', 'The number of protons in each element', 'The element symbols until both sides match'], 'Coefficients change how many units take part. Subscripts describe the composition of each substance. Changing H₂O to H₂O₂ would substitute a different compound.'), area: 0 },
+    { ...q('Calculation', M, 'For N₂ + 3H₂ → 2NH₃, how much ammonia can form from 2 mol of nitrogen with excess hydrogen?', '4 mol of ammonia', ['2 mol of ammonia', '3 mol of ammonia', '6 mol of ammonia'], 'The coefficients give a 1:2 mole ratio of nitrogen to ammonia. With hydrogen in excess, twice as many moles of ammonia can form as moles of nitrogen used.'), area: 1 },
+    { ...q('Multi-step', H, 'For 2H₂ + O₂ → 2H₂O, start with 5 mol of hydrogen and 2 mol of oxygen. What remains after a complete reaction?', '1 mol of hydrogen; oxygen is used up', ['1 mol of oxygen; hydrogen is used up', '3 mol of hydrogen; oxygen is used up', 'Neither reactant remains'], 'Every mole of oxygen consumes two moles of hydrogen. Two moles of oxygen therefore consume four of the five moles of hydrogen, leaving one mole of hydrogen.'), area: 2 },
+  ],
+  'science-mathematics--acids': [
+    { ...q('Concept', E, 'What happens to pH as hydrogen ion activity increases?', 'pH decreases', ['pH increases by the same amount', 'pH always stays at seven', 'pH changes only if the solution boils'], 'pH is the negative base-10 logarithm of hydrogen ion activity. Higher activity therefore produces a lower pH. Dilute solutions are often described using concentration as an approximation.'), area: 0 },
+    { ...q('Calculation', M, 'One solution has pH 3 and another pH 5. How do their hydrogen ion activities compare?', 'The pH 3 solution has 100 times the activity', ['The pH 3 solution has 2 times the activity', 'The pH 5 solution has 100 times the activity', 'Both have the same activity'], 'Each pH unit corresponds to a factor of ten. A decrease of two units represents an increase in activity by ten squared, or one hundred.'), area: 1 },
+    { ...q('Multi-step', H, 'Mix 20 mL of 0.20 M HCl with 20 mL of 0.10 M NaOH. Which is left in excess?', 'HCl, with 0.002 mol left after neutralization', ['NaOH, with 0.002 mol left', 'Neither, because the volumes are equal', 'HCl, with 0.004 mol left'], 'HCl supplies 0.020 × 0.20 = 0.004 mol; NaOH supplies 0.020 × 0.10 = 0.002 mol. They react one to one, so 0.002 mol of the acid remains.'), area: 2 },
+  ],
+};
+
 const topicTags = {
   'science-mathematics--forces': [[0, 1], [0], [0, 2], [0], [0], [0, 1], [0, 1, 2], [0, 1]],
   'science-mathematics--energy': [[2], [1], [2], [1], [0], [2], [1], [2]],
@@ -159,7 +177,7 @@ const topicTags = {
   'technology--ai-learning': [[0], [2], [1], [2], [], [2], [2], []],
 };
 
-export const LESSON_QUESTIONS = Object.fromEntries(Object.entries({ ...bank, ...BROAD_LESSON_BANK }).map(([id, rows]) => {
+export const LESSON_QUESTIONS = Object.fromEntries(Object.entries({ ...bank, ...BROAD_LESSON_BANK, ...chemistryPractice }).map(([id, rows]) => {
   const [subjectId, lessonId] = id.split('--');
   const lesson = getQuizLesson(subjectId, lessonId);
   return [id, rows.map(({ area, ...question }, index) => ({ ...question, id: `lesson-${id}-${index + 1}`,
@@ -170,6 +188,10 @@ export const getLessonQuestions = quizId => LESSON_QUESTIONS[quizId] || [];
 
 export function getLessonTopicQuestions(topic) {
   if (!topic?.lessonId) return [];
-  const questions = getLessonQuestions(`${topic.baseTopicId}--${topic.lessonId}`);
+  const chapter = getQuizChapter(topic.baseTopicId, topic.lessonId);
+  const questions = chapter
+    ? chapter.practiceSets.flatMap(item => getLessonQuestions(getLessonQuizId(topic.baseTopicId, item.id))
+      .map(question => ({ ...question, concepts: [getQuizConceptId(item.title)] })))
+    : getLessonQuestions(getLessonQuizId(topic.baseTopicId, topic.lessonId));
   return topic.conceptId ? questions.filter(question => question.concepts.includes(topic.conceptId)) : questions;
 }

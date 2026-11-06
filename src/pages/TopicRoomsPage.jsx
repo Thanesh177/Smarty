@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useActionConfirmation } from '../components/ActionConfirmation';
+import ConversationActionMenu from '../components/ConversationActionMenu';
 import { assertActionAccepted } from '../lib/actionConfirmation';
 import MemberProfileLink from '../components/MemberProfileLink';
 import { getMessageAuthorId, getPublicMemberName } from '../lib/memberProfile';
@@ -784,22 +785,22 @@ export default function TopicRoomsPage() {
 
   const olderScrollTriggerRafRef = useRef(0);
   const roomActionMenuRef = useRef(null);
-  const activeRoomMenuRef = useRef(null);
+  const activeRoomMenuTrigger = useRef(null);
+  const activeRoomMenuKeyboard = useRef(false);
+  const dismissActiveRoomMenu = useCallback(() => setShowActiveRoomMenu(false), []);
 
   useEffect(() => {
-    if (!showRoomMenu && !showActiveRoomMenu && !openRoomActionMenuId) return undefined;
+    if (!showRoomMenu && !openRoomActionMenuId) return undefined;
     const dismiss = (event) => {
       if (event.key !== 'Escape') return;
-      const opener = showActiveRoomMenu ? activeRoomMenuRef.current?.querySelector('button')
-        : openRoomActionMenuId ? roomActionMenuRef.current?.querySelector('button') : roomMenuRef.current?.querySelector('.rooms-menu-btn');
+      const opener = openRoomActionMenuId ? roomActionMenuRef.current?.querySelector('button') : roomMenuRef.current?.querySelector('.rooms-menu-btn');
       setShowRoomMenu(false);
-      setShowActiveRoomMenu(false);
       setOpenRoomActionMenuId('');
       opener?.focus();
     };
     document.addEventListener('keydown', dismiss);
     return () => document.removeEventListener('keydown', dismiss);
-  }, [showRoomMenu, showActiveRoomMenu, openRoomActionMenuId]);
+  }, [showRoomMenu, openRoomActionMenuId]);
 
 
 
@@ -1226,9 +1227,6 @@ const setMessagesContainerRef = useCallback((node) => {
         setOpenRoomActionMenuId('');
       }
 
-      if (activeRoomMenuRef.current && !activeRoomMenuRef.current.contains(target)) {
-        setShowActiveRoomMenu(false);
-      }
     };
 
     document.addEventListener('pointerdown', handleOutsidePointerDown);
@@ -4427,7 +4425,6 @@ return (
 
             <div
               className="active-room-menu-wrap"
-              ref={activeRoomMenuRef}
               style={{ position: 'relative', zIndex: 30 }}
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
@@ -4437,8 +4434,10 @@ return (
               <button
                 type="button"
                 className="active-room-menu-btn"
+                ref={activeRoomMenuTrigger}
                 aria-label="Active room actions"
                 aria-expanded={showActiveRoomMenu}
+                aria-controls={showActiveRoomMenu ? 'active-room-actions' : undefined}
                 onPointerDown={(e) => {
                   e.stopPropagation();
                 }}
@@ -4447,6 +4446,7 @@ return (
                   e.stopPropagation();
                   setShowRoomMenu(false);
                   setOpenRoomActionMenuId('');
+                  activeRoomMenuKeyboard.current = e.detail === 0;
                   setShowActiveRoomMenu((prev) => !prev);
                 }}
               >
@@ -4454,10 +4454,8 @@ return (
               </button>
 
           {showActiveRoomMenu && (
-  <div
-    className="active-room-menu-popover"
-    onClick={(event) => event.stopPropagation()}
-  >
+  <ConversationActionMenu anchorRef={activeRoomMenuTrigger} id="active-room-actions" label="Room conversation options"
+    onDismiss={dismissActiveRoomMenu} keyboard={activeRoomMenuKeyboard.current}>
 <button type="button" onClick={openActiveRoomInfo}>
   Group Info
 </button>
@@ -4467,7 +4465,7 @@ return (
 </button>
 <NativeDownloadButton label="Back up loaded messages" onStatus={setStatus}
   payload={()=>chatBackupPayload({id:'room:'+activeRoom.roomId,title:activeRoom.name||activeRoom.title||'Room conversation',messages,userId})}/>
-  </div>
+  </ConversationActionMenu>
 )}
             </div>
           </div>

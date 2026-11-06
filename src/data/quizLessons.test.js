@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { QUIZ_SUBJECTS } from './quizSubjects.js';
-import { QUIZ_LESSONS, getQuizLessons, getQuizLesson, getQuizConceptId, getLessonQuizId,
+import { QUIZ_LESSONS, getQuizChapters, getQuizLessons, getQuizLesson, getQuizConceptId, getLessonQuizId,
   makeLessonQuizTopic, getRelatedQuizLessons, getQuizLessonLabel, getLessonStudyReference } from './quizLessons.js';
 import { EXPANDED_QUIZ_LESSONS } from './quizLessonExpansion.js';
 import { LESSON_QUESTIONS, getLessonTopicQuestions } from './quizLessonQuestions.js';
@@ -48,6 +48,32 @@ test('science offers physics, chemistry, mathematics and experimental reasoning'
   assert.throws(() => makeLessonQuizTopic(subject, circuits, 'Photosynthesis'), RangeError);
 });
 
+test('every subject exposes real named lessons and preserves all existing practice IDs', () => {
+  for (const subject of QUIZ_SUBJECTS) {
+    const chapters = getQuizChapters(subject.id);
+    assert.ok(chapters.length >= 2, subject.id);
+    assert.deepEqual(chapters.flatMap(chapter => chapter.practiceSets.map(set => set.id)).sort(),
+      getQuizLessons(subject.id).map(set => set.id).sort());
+    for (const chapter of chapters) {
+      const topic = makeLessonQuizTopic(subject, chapter);
+      assert.equal(getQuizLessonLabel(topic.id), chapter.title);
+      assert.equal(getLessonStudyReference(topic).sourceTitle, chapter.title);
+      for (const set of chapter.practiceSets) assert.ok(getLessonStudyReference(topic).sourceBody.includes(set.title));
+    }
+  }
+});
+
+test('the Physics quiz uses only physics questions and balances across its practice sets', () => {
+  const subject = QUIZ_SUBJECTS.find(item => item.id === 'science-mathematics');
+  const physics = getQuizChapters(subject.id).find(item => item.title === 'Physics');
+  const questions = getLessonTopicQuestions(makeLessonQuizTopic(subject, physics));
+  const pool = new Set(physics.practiceSets.flatMap(set => (LESSON_QUESTIONS[getLessonQuizId(subject.id, set.id)] || []).map(question => question.id)));
+  assert.ok(questions.length >= 8);
+  assert.equal(questions.length, pool.size);
+  assert.ok(questions.every(question => pool.has(question.id)));
+  assert.ok(new Set(questions.flatMap(question => question.concepts)).size >= 3);
+});
+
 test('built-in questions are original, well formed, diverse and explicitly mapped to their lesson', () => {
   const fingerprints = new Set();
   let count = 0;
@@ -57,9 +83,10 @@ test('built-in questions are original, well formed, diverse and explicitly mappe
     assert.ok(lesson, id);
     const validConcepts = new Set(lesson.concepts.map(getQuizConceptId));
     const expanded = EXPANDED_QUIZ_LESSONS[subjectId].includes(lesson);
-    assert.equal(questions.length, expanded ? 5 : 8);
-    assert.ok(new Set(questions.map(item => item.kind)).size >= (expanded ? 4 : 5));
-    for (const level of expanded ? ['Easy', 'Medium'] : ['Easy', 'Medium', 'Hard']) assert.ok(questions.filter(item => item.difficulty === level).length >= 2);
+    const chemistry = subjectId === 'science-mathematics' && ['bonds', 'reactions', 'acids'].includes(lessonId);
+    assert.equal(questions.length, chemistry ? 3 : expanded ? 5 : 8);
+    assert.ok(new Set(questions.map(item => item.kind)).size >= (chemistry ? 3 : expanded ? 4 : 5));
+    for (const level of expanded ? ['Easy', 'Medium'] : ['Easy', 'Medium', 'Hard']) assert.ok(questions.filter(item => item.difficulty === level).length >= (chemistry ? 1 : 2));
     if (expanded) assert.deepEqual(new Set(questions.flatMap(question => question.concepts)), validConcepts);
     for (const question of questions) {
       count += 1;
@@ -73,7 +100,7 @@ test('built-in questions are original, well formed, diverse and explicitly mappe
       assert.equal(fingerprints.has(fingerprint), false, question.q); fingerprints.add(fingerprint);
     }
   }
-  assert.equal(count, 189);
+  assert.equal(count, 198);
   for (const subject of QUIZ_SUBJECTS) assert.ok(EXPANDED_QUIZ_LESSONS[subject.id].some(lesson => LESSON_QUESTIONS[getLessonQuizId(subject.id, lesson.id)]?.length === 5));
 });
 

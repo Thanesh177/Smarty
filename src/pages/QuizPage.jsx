@@ -30,7 +30,7 @@ import "./QuizLearning.css";
 import "./QuizWorkspace.css";
 import { normalizeGeneratedQuestions, needsQuizReview, getQuizResult, getSavedReviewDeck, readQuizFlag, clearQuizFlag } from '../lib/quizLearning.js';
 import { QUIZ_SUBJECTS, SUBJECT_QUESTIONS } from '../data/quizSubjects.js';
-import { getQuizLessons, getQuizLesson, getRelatedQuizLessons, makeLessonQuizTopic, getLessonStudyReference } from '../data/quizLessons.js';
+import { getQuizChapters, getQuizLessons, getQuizLesson, getRelatedQuizLessons, makeLessonQuizTopic, getLessonStudyReference } from '../data/quizLessons.js';
 import { getLessonTopicQuestions } from '../data/quizLessonQuestions.js';
 import { selectLessonQuestions, selectBalancedLessonSet, hasBroadLessonCoverage, getLessonQuestionStyle, summarizeLessonCoverage, summarizeLessonSkills } from '../lib/quizLessonPractice.js';
 import QuizLessonLibrary from '../components/QuizLessonLibrary';
@@ -948,7 +948,7 @@ const renderedTopics = useMemo(
     const groups = { stem: ['technology', 'engineering', 'science-mathematics', 'life-sciences', 'earth-space'],
       people: ['history', 'society-ideas', 'arts-design', 'community'], everyday: ['news', 'mind-health', 'money-business', 'food-agriculture'] };
     return (libraryFilter === 'all' || item.group === libraryFilter || groups[libraryFilter]?.includes(item.id))
-      && `${item.title} ${item.desc} ${(item.subjects || []).join(' ')} ${getQuizLessons(item.id).map(lesson => `${lesson.title} ${lesson.concepts.join(' ')}`).join(' ')}`.toLocaleLowerCase().includes(subjectQuery.trim().toLocaleLowerCase());
+      && `${item.title} ${item.desc} ${getQuizChapters(item.id).map(lesson => lesson.title).join(' ')} ${(item.subjects || []).join(' ')} ${getQuizLessons(item.id).map(lesson => `${lesson.title} ${lesson.concepts.join(' ')}`).join(' ')}`.toLocaleLowerCase().includes(subjectQuery.trim().toLocaleLowerCase());
   }).map((item) => (
     <TopicCard
       key={item.id}
@@ -1561,7 +1561,7 @@ if (topic && bossMode && !finished) {
     <div><span className="quiz-eyebrow">A little curiosity. A clearer mind.</span><h1>One idea.<br />A deeper understanding.</h1><p>Choose a subject, find a lesson, and learn by working through it.</p></div>
     <div className="quiz-library-stats" aria-label="Quiz progress summary">
       <span><strong>{TOPICS.length}</strong> subjects to explore</span>
-      <span><strong>{TOPICS.reduce((total, item) => total + getQuizLessons(item.id).length, 0)}</strong> focused lessons</span>
+      <span><strong>{TOPICS.reduce((total, item) => total + getQuizChapters(item.id).length, 0)}</strong> lessons</span>
       <span><strong>{visitProgress.streak}</strong> day{visitProgress.streak === 1 ? '' : 's'} of practice</span>
     </div>
   </header>}
