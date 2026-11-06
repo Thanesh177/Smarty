@@ -54,6 +54,7 @@ test('last reading/list items can scroll clear of the floating rail', () => {
   assert.ok(clearance.selector.includes('.saved-page.community-workspace'));
   assert.ok(clearance.selector.includes('.chat-page .chat-list'));
   assert.ok(clearance.selector.includes('.post-composer,'), 'Add post and Edit post both clear the rail');
+  assert.ok(clearance.selector.includes('.quiz-workspace'), 'The last quiz answer and action clear the rail');
   assert.equal(declaration(clearance, 'padding-bottom').important, true);
   assert.match(declaration(rule('body .app-shell.has-overlay-navigation'), '--app-rail-scroll-room').value, /280px/);
 });

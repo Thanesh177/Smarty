@@ -4,6 +4,8 @@ import { chatApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useActionConfirmation } from '../components/ActionConfirmation';
 import { assertActionAccepted } from '../lib/actionConfirmation';
+import MemberProfileLink from '../components/MemberProfileLink';
+import { getConversationPartnerId, getMemberId, getPublicMemberName } from '../lib/memberProfile';
 import {
   connectChatSocket,
   sendChatMessage,
@@ -44,80 +46,16 @@ import './ConversationPolish.css';
 
 
 function getUserDisplayName(person) {
-  const candidates = [
+  return getPublicMemberName(
+    person?.receiverUsername,
     person?.username,
     person?.userName,
+    person?.receiverName,
     person?.displayName,
     person?.name,
-    person?.receiverUsername,
-    person?.receiverName,
-  ];
-
-  const realName = candidates
-    .map((value) => String(value || '').trim())
-    .find((value) => value && !value.includes('@') && !(value.includes('-') && value.length > 20));
-
-  if (realName) return realName;
-
-  const email = String(person?.email || person?.receiverEmail || '').trim();
-  if (email.includes('@')) return email.split('@')[0];
-
-  return 'User';
-}
-
-function getProfileUserId(person, currentUserId = '') {
-  if (!person || typeof person !== 'object') return '';
-
-  const selfId = String(currentUserId || '').trim();
-  const candidates = [
-    person.otherUserId,
-    person.partnerId,
-    person.participantId,
-    person.receiverUserId,
-    person.receiverId,
-    person.senderId,
-    person.userId,
-    person.sub,
-    person.receiver?.userId,
-    person.receiver?.id,
-    person.receiver?.sub,
-    person.otherUser?.userId,
-    person.otherUser?.id,
-    person.otherUser?.sub,
-    person.participant?.userId,
-    person.participant?.id,
-    person.participant?.sub,
-    person.user?.userId,
-    person.user?.id,
-    person.user?.sub,
-  ];
-
-  if (!person.chatId) candidates.push(person.id);
-
-  [person.participants, person.members, person.users, person.userIds]
-    .filter(Array.isArray)
-    .forEach((items) => {
-      items.forEach((item) => {
-        if (item && typeof item === 'object') {
-          candidates.push(item.userId, item.id, item.sub);
-        } else {
-          candidates.push(item);
-        }
-      });
-    });
-
-  const normalizedCandidates = candidates
-    .map((value) => String(value || '').trim())
-    .filter(Boolean);
-
-  const otherUserId = normalizedCandidates.find(
-    (candidate) => !selfId || candidate !== selfId
-  );
-
-  if (otherUserId) return otherUserId;
-
-  // A standalone user search result may intentionally be the signed-in user.
-  return person.chatId ? '' : normalizedCandidates[0] || '';
+    person?.receiver?.username,
+    person?.otherUser?.username,
+  ) || 'Smarty member';
 }
 
 function getUserAvatarUrl(person) {
@@ -2012,29 +1950,11 @@ const toggleActionsMenu = useCallback(() => {
   setActionsOpen((prev) => !prev);
 }, []);
 
-const openUserProfile = useCallback((person, event) => {
-  event?.preventDefault?.();
-  event?.stopPropagation?.();
-
-  const profileUserId = getProfileUserId(person, userId);
-
-  if (profileUserId && String(profileUserId) === String(userId)) {
-    navigate('/profile');
-    return;
-  }
-
-  if (profileUserId) {
-    navigate(`/creator/${encodeURIComponent(profileUserId)}`);
-    return;
-  }
-
-  setStatus('This profile is unavailable.');
-}, [navigate, userId]);
-
-
 // Batch 4C: Memoized renderedChatList
 const renderedChatList = useMemo(
   () => chats.map((chat) => {
+    const partnerId = getConversationPartnerId(chat, user);
+    const partnerName = getUserDisplayName(chat);
     const active = activeChat?.chatId === chat.chatId;
     const unreadCount = Number(chat.unreadCount || 0);
     const avatarCacheKey = String(chat.receiverId || chat.userId || chat.id || chat.receiverEmail || chat.chatId || '').trim();
@@ -2057,11 +1977,10 @@ const renderedChatList = useMemo(
         className={active ? 'chat-list-item active' : 'chat-list-item'}
       >
         <div className="chat-item">
-          <button
-            type="button"
+          <MemberProfileLink
+            userId={partnerId}
             className="chat-avatar-wrap chat-profile-avatar-btn"
-            aria-label={`Open ${getUserDisplayName(chat)}'s profile`}
-            onClick={(event) => openUserProfile(chat, event)}
+            label={`Open ${partnerName}'s profile`}
           >
             <div className="chat-avatar-stack">
               {(!realAvatar || !profileAvatarLoaded || profileAvatarFailed) && (
@@ -2124,29 +2043,19 @@ const renderedChatList = useMemo(
                 />
               )}
             </div>
-          </button>
+          </MemberProfileLink>
 
-          <button
-            type="button"
-            className="chat-content chat-open-chat-btn"
-            aria-current={active ? 'true' : undefined}
-            onClick={() => openChat(chat)}
-          >
-            <strong>
-              {getUserDisplayName({
-                username: chat.receiverUsername,
-                name: chat.receiverName,
-                email: chat.receiverEmail,
-              })}
-            </strong>
-
-            <div className="chat-preview">
+          <div className="chat-content">
+            <strong><MemberProfileLink userId={partnerId}>{partnerName}</MemberProfileLink></strong>
+            <button type="button" className="chat-preview chat-open-chat-btn"
+              aria-label={`Open conversation with ${partnerName}`}
+              aria-current={active ? 'true' : undefined} onClick={() => openChat(chat)}>
               <span>{chat.lastMessage || 'Open conversation'}</span>
               {!active && unreadCount > 0 && (
                 <span className="unread-badge">{unreadCount}</span>
               )}
-            </div>
-          </button>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -2158,7 +2067,7 @@ const renderedChatList = useMemo(
     failedProfileAvatarIds,
     loadedProfileAvatarIds,
     openChat,
-    openUserProfile,
+    user,
   ]
 );
 
@@ -2694,30 +2603,27 @@ const runDeleteChat = useCallback(() => {
             className="user-result-row"
             key={selectedUser.userId || selectedUser.id || selectedUser.email}
           >
-            <button
-              type="button"
+            <MemberProfileLink
+              userId={getMemberId(selectedUser)}
               className="user-result-avatar"
-              aria-label={`Open ${resultName}'s profile`}
-              onClick={(event) => openUserProfile(selectedUser, event)}
+              label={`Open ${resultName}'s profile`}
             >
               {resultAvatar ? (
                 <img src={resultAvatar} alt="" loading="lazy" decoding="async" />
               ) : (
                 <span>{resultName.slice(0, 2).toUpperCase()}</span>
               )}
-            </button>
+            </MemberProfileLink>
 
-            <button
-              type="button"
-              className="user-result-chat"
-              onClick={() => startChat(selectedUser)}
-            >
+            <div className="user-result-details">
               <span className="user-result-copy">
-                <strong>{resultName}</strong>
-                <span>{selectedUser.email || selectedUser.username || ''}</span>
+                <strong><MemberProfileLink userId={getMemberId(selectedUser)}>{resultName}</MemberProfileLink></strong>
               </span>
-              <span className="user-result-start" aria-hidden="true">+</span>
-            </button>
+              <button type="button" className="user-result-chat"
+                aria-label={`Message ${resultName}`} onClick={() => startChat(selectedUser)}>
+                <MessagesSquare size={17} aria-hidden="true" />
+              </button>
+            </div>
           </div>
         );
       })}
@@ -2759,26 +2665,21 @@ const runDeleteChat = useCallback(() => {
               >
                 <ArrowLeft size={19} aria-hidden="true" />
               </button>
-              <button
-                type="button"
+              <MemberProfileLink
+                userId={getConversationPartnerId(activeChat, user)}
                 className="chat-header-avatar chat-profile-avatar-btn"
-                aria-label={`Open ${getUserDisplayName(activeChat)}'s profile`}
-                onClick={(event) => openUserProfile(activeChat, event)}
+                label={`Open ${getUserDisplayName(activeChat)}'s profile`}
               >
                 {getUserAvatarUrl(activeChat) ? (
                   <img src={getUserAvatarUrl(activeChat)} alt="" />
                 ) : (
                   <span>{getUserDisplayName(activeChat).slice(0, 2).toUpperCase()}</span>
                 )}
-              </button>
+              </MemberProfileLink>
               <div className="chat-info">
-               <h2>
-  {getUserDisplayName({
-    username: activeChat.receiverUsername,
-    name: activeChat.receiverName,
-    email: activeChat.receiverEmail,
-  })}
-</h2>
+                <h2><MemberProfileLink userId={getConversationPartnerId(activeChat, user)}>
+                  {getUserDisplayName(activeChat)}
+                </MemberProfileLink></h2>
 
                 {status ? (
                   <span className="status-msg">{status}</span>

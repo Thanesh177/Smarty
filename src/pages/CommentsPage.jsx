@@ -5,20 +5,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useActionConfirmation } from '../components/ActionConfirmation';
 import { assertActionAccepted } from '../lib/actionConfirmation';
 import { getUserScopedStorageKey } from '../lib/userScopedStorage';
+import MemberProfileLink from '../components/MemberProfileLink';
+import { getMessageAuthorId, getPublicMemberName } from '../lib/memberProfile';
 import './CommentsPage.css';
 
-const displayName = (item) => {
-  const raw =
-    item.username ||
-    item.email ||
-    item.author ||
-    item.user ||
-    item.name ||
-    'User';
-
-  const value = String(raw).trim();
-  return value.includes('@') ? value.split('@')[0] : value || 'User';
-};
+const displayName = item => getPublicMemberName(item.username, item.authorUsername, item.author?.username,
+  item.user?.username, item.displayName, item.name, item.author, item.user) || 'Smarty member';
 
 const initials = (name) =>
   String(name || 'U').trim().slice(0, 1).toUpperCase();
@@ -56,7 +48,6 @@ const CommentRow = memo(function CommentRow({
   editing,
   editingText,
   processingCommentId,
-  onCreatorOpen,
   onEditingTextChange,
   onSaveEdit,
   onCancelEdit,
@@ -66,35 +57,25 @@ const CommentRow = memo(function CommentRow({
   onReport,
   onBlock,
 }) {
-  const ownerId = item.userId || item.authorId || item.senderId;
-  const disabledCreator = mine || !ownerId;
+  const ownerId = getMessageAuthorId(item);
   const commentDate = getCommentDate(item.updatedAt || item.createdAt);
   const commentTime = formatCommentTime(item.updatedAt || item.createdAt);
 
   return (
     <article className={mine ? 'comment-row mine' : 'comment-row'}>
       {!mine && (
-        <button
-          type="button"
+        <MemberProfileLink
+          userId={ownerId}
           className="avatar avatar-button"
-          aria-label={`Open ${name}'s profile`}
-          disabled={!ownerId}
-          onClick={() => onCreatorOpen(ownerId, false)}
+          label={`Open ${name}'s profile`}
         >
           {initials(name)}
-        </button>
+        </MemberProfileLink>
       )}
 
       <div className={mine ? 'comment-bubble mine' : 'comment-bubble'}>
         <div className="comment-head">
-          <button
-            type="button"
-            className="comment-username"
-            disabled={disabledCreator}
-            onClick={() => onCreatorOpen(ownerId, mine)}
-          >
-            {mine ? 'You' : `@${name}`}
-          </button>
+          <MemberProfileLink userId={ownerId} className="comment-username">{mine ? 'You' : name}</MemberProfileLink>
 
           {commentTime && (
             <time dateTime={commentDate?.toISOString()}>
@@ -260,7 +241,7 @@ export default function CommentsPage() {
   );
 
   const isMine = useCallback((item) => {
-    const ownerId = item.userId || item.authorId || item.senderId;
+    const ownerId = getMessageAuthorId(item);
     return Boolean(ownerId && currentUserId && ownerId === currentUserId);
   }, [currentUserId]);
 
@@ -577,18 +558,6 @@ export default function CommentsPage() {
     [submit]
   );
 
-  const openCreator = useCallback(
-    (ownerId, mine) => {
-      if (mine) {
-        navigate('/profile');
-        return;
-      }
-
-      if (ownerId) navigate(`/creator/${ownerId}`);
-    },
-    [navigate]
-  );
-
   const cancelEdit = useCallback(() => {
     setEditingCommentId(null);
     setEditingText('');
@@ -618,7 +587,6 @@ export default function CommentsPage() {
           editing={editingCommentId === commentId}
           editingText={editingText}
           processingCommentId={processingCommentId}
-          onCreatorOpen={openCreator}
           onEditingTextChange={handleEditingTextChange}
           onSaveEdit={editComment}
           onCancelEdit={cancelEdit}
@@ -645,7 +613,6 @@ export default function CommentsPage() {
       handleEditingTextChange,
       isMine,
       openModerationDialog,
-      openCreator,
       processingCommentId,
       startEdit,
       startReply,

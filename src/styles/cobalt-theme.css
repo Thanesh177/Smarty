@@ -76,7 +76,6 @@ body .app-shell .content .smarty-landing .sl-hero { gap: clamp(28px, 5vw, 80px);
 body .app-shell .content .smarty-landing .sl-action-primary { color: var(--ui-primary-ink); background: var(--ui-primary); }
 
 /* Consistent breathing room, without adding a sidebar lane for the rail. */
-body .app-shell .content .quiz-workspace { padding-inline: var(--ui-gutter) !important; }
 body .app-shell .content .quiz-workspace .quiz-library-intro { padding-block: clamp(28px, 4vw, 48px); gap: 24px; }
 body .app-shell .content .quiz-workspace .quiz-library-intro h1 { font-size: clamp(34px, 4vw, 56px); line-height: 1.12; }
 body .app-shell .content .quiz-workspace .quiz-library-intro p { color: var(--ui-muted); line-height: 1.75; }
@@ -84,11 +83,8 @@ body .app-shell .content .quiz-workspace .quiz-library-stats { min-width: 180px;
 body .app-shell .content .quiz-workspace .topic-grid { gap: clamp(16px, 1.8vw, 24px) !important; }
 body .app-shell .content .quiz-workspace .quiz-subject-card { min-height: 264px; padding: 24px !important; }
 body .app-shell .content .is-learning-home .snap-post .post-author-row .creator-link { font-size: 12px; }
-body .app-shell .content .is-learning-home .snap-post .post-content > p { font-size: clamp(16px, 1.2vw, 17px); line-height: 1.85; }
 body .app-shell .content :is(.profile-content, .saved-grid, .dashboard-grid) { gap: clamp(16px, 2vw, 24px); }
 body .app-shell .content :is(.profile-card, .dashboard-panel, .saved-card) { overflow-wrap: anywhere; }
-body .app-shell .content .post-ai-explanation-paragraphs { line-height: 1.85; }
-body .app-shell .content .post-ai-explanation-paragraphs :is(p, li) { font-size: clamp(16px, 1.1vw, 18px); }
 body .menu-panel :is(.menu-search-launch, .menu-section a, .menu-link-btn) { min-height: 48px; }
 body .menu-panel .menu-body { padding-block: 12px; }
 body .universal-search-layer .universal-search-suggestions { gap: 8px; }
@@ -104,7 +100,6 @@ body .universal-search-layer .universal-search-suggestions { gap: 8px; }
 @media (max-width: 700px) {
   body .app-shell .content .quiz-workspace .quiz-subject-card { padding: 18px !important; min-height: 238px; }
   body .app-shell .content .quiz-workspace .quiz-library-stats { min-width: 0; padding-left: 0; }
-  body .app-shell .content .is-learning-home .snap-post .post-content > p { line-height: 1.8; }
   body .app-shell .content :is(.learn-hero, .library-hero, .quiz-progress-intro) { padding-block: 24px; }
   body .app-shell .content .smarty-landing .sl-hero { gap: 32px; }
 }

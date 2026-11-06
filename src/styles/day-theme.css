@@ -77,7 +77,7 @@
 :root[data-app-theme='day'] body :is(.snap-post, .post-content) { background: transparent !important; }
 :root[data-app-theme='day'] body .app-shell .content :is(h1, h2, h3, h4, h5) { color: var(--ui-text) !important; text-shadow: none !important; }
 :root[data-app-theme='day'] body .app-shell .content :is(.post-content > p, .post-body, .reel-body,
-  .post-ai-explanation-paragraphs, .post-ai-explanation-paragraphs p, .learning-article p,
+  .learning-article p,
   .news-daily-brief p, .news-brief-summary, .news-section-digest-card p,
   .news-card p, .profile-bio, .public-profile-identity p, .library-card p) { color: var(--ui-secondary) !important; }
 :root[data-app-theme='day'] body .app-shell .content :is(.quiz-masthead, .quiz-library-stats,
@@ -95,8 +95,8 @@
   .news-card h3 button, .library-card h3 button, .auth-mode-option.active,
   .quiz-library-stats strong, .quiz-library-filters button[aria-pressed='true']) { color: var(--ui-text) !important; }
 :root[data-app-theme='day'] body .app-shell .content .post-topic { background: var(--ui-accent-soft) !important; border-color: var(--ui-accent-line) !important; color: var(--ui-accent-strong) !important; }
-:root[data-app-theme='day'] body .app-shell .content :is(.post-actions button, .post-translation select,
-  .learning-journey a, .feed-home-status button, .library-card-actions button,
+:root[data-app-theme='day'] body .app-shell .content :is(.post-translation select,
+  .feed-home-status button, .library-card-actions button,
   .news-refresh-btn, .quiz-workspace .profile-mini-btn) {
   color: var(--ui-secondary) !important; background: var(--ui-control-bg) !important; border-color: var(--ui-line-strong) !important;
 }
@@ -204,21 +204,8 @@
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace .msg:not(:has(.room-message-media-tap)) { color: var(--ui-text) !important; }
 :root[data-app-theme='day'] body .rooms-dialog-portal :is(.room-create-field, .room-privacy-help, .create-room-image-picker small, .close-members) { color: var(--ui-muted) !important; }
 :root[data-app-theme='day'] body .rooms-dialog-portal select { color-scheme: light; }
-:root[data-app-theme='day'] body .app-shell .content .post-ai-page { --post-ai-ink: var(--ui-text); --post-ai-accent: var(--ui-accent); --post-ai-accent-rgb: var(--ui-accent-rgb); }
-:root[data-app-theme='day'] body .post-ai-page::before { background: none; }
-:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-topline, .post-ai-card, .post-ai-deeper, .post-ai-deeper-preview, .post-ai-premium-gate, .post-ai-msg, .post-ai-form, .post-ai-journey-wrap .learning-journey) { background: var(--ui-surface) !important; color: var(--ui-text) !important; border-color: var(--ui-line) !important; box-shadow: none; }
-:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-explanation-paragraphs, .post-ai-text-section-body, .post-ai-text-section-body li, .post-ai-lesson-opening, .post-study-objective p, .post-ai-deeper-intro p, .post-ai-depth-list p, .post-ai-msg) { color: var(--ui-secondary) !important; }
-:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-meta, .post-ai-progress-label, .post-ai-eyebrow, .post-ai-context-label, .post-ai-section-head small, .post-ai-empty, .post-ai-input-hint, .post-ai-chat-head > p, .post-ai-section-kicker) { color: var(--ui-muted) !important; }
-:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-back, .post-ai-comments, .post-ai-reading-nav a, .post-ai-deeper-toggle, .post-ai-prompts button, .post-study-objective a, .post-study-sources a) { color: var(--ui-accent-strong) !important; background: var(--ui-accent-soft) !important; border-color: var(--ui-accent-line) !important; }
-:root[data-app-theme='day'] body .post-ai-premium-dialog { background: var(--ui-surface) !important; color: var(--ui-text) !important; }
-:root[data-app-theme='day'] body .post-ai-premium-dialog :is(p, small, button) { color: var(--ui-secondary) !important; }
-:root[data-app-theme='day'] body .app-shell .content .post-ai-page .post-ai-text-section-body ol li::marker { color: var(--ui-accent); }
-
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace .room-privacy-toggle button { color: var(--ui-muted) !important; }
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace .room-privacy-toggle button.active { color: var(--ui-accent-strong) !important; border-color: var(--ui-accent) !important; }
-:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-study-objective > span, .post-study-sources > span, .post-ai-premium-label, .post-ai-depth-list article > span, .post-ai-depth-list article > small) { color: var(--ui-accent-strong) !important; }
-:root[data-app-theme='day'] body .app-shell .content .post-ai-page :is(.post-ai-premium-gate p, .post-ai-status, .post-ai-empty-guide, .post-ai-depth-list article p) { color: var(--ui-secondary) !important; }
-:root[data-app-theme='day'] body .app-shell .content .post-ai-page .post-ai-form textarea { color: var(--ui-text) !important; }
 /* Keep deliberate dark reading/video experiences independent of app chrome. */
 :root[data-app-theme='day'] :is(.reader-theme-dark, .reader-theme-sepia, .video-topic-page) {
   color-scheme: dark; --ui-bg: #06070a; --ui-bg-deep: #06070a; --ui-surface: #0e1118;

@@ -1229,7 +1229,7 @@ useEffect(() => {
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/confirm" element={<ConfirmPage />} />
 
-                <Route path="/creator/:userId" element={<CreatorProfilePage />} />
+                <Route path="/creator/:userId" element={<ProtectedRoute><CreatorProfilePage /></ProtectedRoute>} />
                 <Route path="/reel/:reelId" element={<ReelDetailPage />} />
                 <Route path="/quiz" element={<QuizPage />} />
                 <Route path="/learn" element={<LearningPage />} />

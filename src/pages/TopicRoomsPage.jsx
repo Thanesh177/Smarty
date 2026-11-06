@@ -3,6 +3,8 @@ import { roomApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useActionConfirmation } from '../components/ActionConfirmation';
 import { assertActionAccepted } from '../lib/actionConfirmation';
+import MemberProfileLink from '../components/MemberProfileLink';
+import { getMessageAuthorId, getPublicMemberName } from '../lib/memberProfile';
 import { connectChatSocket, sendRoomMessage } from '../api/chatSocket';
 import {
   ArrowDown,
@@ -33,6 +35,12 @@ import { scrollConversationToEnd, shouldPrefetchChatHistory } from '../lib/chatS
 import './ConversationPolish.css';
 
 const ROOM_IMAGE_CACHE_KEY = 'smarty_room_images_v1';
+
+function RoomSenderLink({ message }) {
+  const name = getPublicMemberName(message.senderUsername, message.username, message.sender?.username,
+    message.senderName, message.name, message.sender?.name) || 'Smarty member';
+  return <b><MemberProfileLink userId={getMessageAuthorId(message)}>{name}</MemberProfileLink></b>;
+}
 const API_ORIGIN = 'https://po2hwyb2c6.execute-api.us-east-1.amazonaws.com';
 const APP_ORIGIN = import.meta.env.PROD
   ? 'https://main.d3qiuefonbp8n9.amplifyapp.com'
@@ -905,7 +913,7 @@ const MessageRow = useCallback((msg) => {
         </button>
       )}
 
-      <b>{msg.senderName || msg.name || 'User'}</b>
+      <RoomSenderLink message={msg} />
 
       <div className="room-message-content">
         {(msg.text || msg.message) && (
@@ -3954,7 +3962,7 @@ async function sendMessage(e) {
         clientId,
         roomId: room.roomId,
         senderId: userId,
-        senderName: user?.name || user?.email || 'You',
+        senderName: getPublicMemberName(user?.username, user?.name) || 'You',
         text: cleanText,
         message: cleanText,
         createdAt: String(Date.now()),
@@ -4013,7 +4021,7 @@ async function sendMessage(e) {
         clientId,
         roomId: room.roomId,
         senderId: userId,
-        senderName: user?.name || user?.email || 'You',
+        senderName: getPublicMemberName(user?.username, user?.name) || 'You',
         text: messageText,
         message: messageText,
         createdAt: String(Date.now() + index),
@@ -4537,7 +4545,7 @@ if (shouldPrefetchChatHistory(element, olderMessagesLoadingRef.current, hasOlder
             </button>
           )}
 
-          <b>{msg.senderName || msg.name || 'User'}</b>
+          <RoomSenderLink message={msg} />
 
           <div
             className="room-message-content"
@@ -5029,8 +5037,7 @@ onClick={() => {
                       <div key={targetUserId || u.email} className="member-row invite-result-row">
                         <div className="invite-inline-row">
                           <div className="invite-user-info">
-                            <strong>{u.name || u.email || 'User'}</strong>
-                            {u.email && <small>{u.email}</small>}
+                            <strong><MemberProfileLink userId={targetUserId}>{getPublicMemberName(u.username, u.userName, u.name) || 'Smarty member'}</MemberProfileLink></strong>
                           </div>
 
                           <div className="invite-result-action">
@@ -5066,8 +5073,7 @@ onClick={() => {
             members.map((member) => (
               <div key={member.userId || member.email} className="member-row">
                 <div>
-                  <strong>{member.name || member.userName || 'User'}</strong>
-                  {(member.email || member.userEmail) && <small>{member.email || member.userEmail}</small>}
+                  <strong><MemberProfileLink userId={getInviteUserId(member)}>{getPublicMemberName(member.username, member.userName, member.name) || 'Smarty member'}</MemberProfileLink></strong>
                 </div>
 
                 {modalMode === 'requests' ? (

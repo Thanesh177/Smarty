@@ -41,11 +41,10 @@ body .app-shell.has-overlay-navigation > .content :is(
 body .app-shell.has-overlay-navigation > .content .single-post-page .learning-journey { margin-right: 0; }
 body .app-shell.has-overlay-navigation > .content .profile-page :is(.friend-results-list, .friend-search-row) { margin-right: 0 !important; }
 body .app-shell.has-overlay-navigation > .content .post-ai-page:not(.is-reading-layout) { padding-right: var(--ui-gutter) !important; }
-body .app-shell.has-overlay-navigation > .content .quiz-workspace > :is(.question-card, .result-card) { padding-right: clamp(20px, 4vw, 44px) !important; }
 /* Scroll the last item past the rail rather than reserving a permanent lane. */
 body .app-shell.has-overlay-navigation > .content :is(
   .single-post-page, .public-profile-page, .saved-page.community-workspace,
-  .post-composer, .post-ai-page.is-reading-layout, .learn-page,
+  .post-composer, .post-ai-page.is-reading-layout, .learn-page, .quiz-workspace,
   .chat-page .chat-list
 ) { padding-bottom: var(--app-rail-scroll-room) !important; }
 body .app-shell .topbar.glass-topbar .topbar-row { display: flex !important; flex-direction: column !important; gap: 0; }

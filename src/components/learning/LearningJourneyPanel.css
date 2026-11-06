@@ -370,6 +370,16 @@
 .learning-alternatives[aria-expanded='true'] svg { transform: rotate(-90deg); }
 .learning-path-meta { color: var(--ui-muted, #93a1b4); font-size: .8125rem; line-height: 1.6; }
 .learning-prerequisite-link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-bottom: 12px; color: var(--ui-accent, #9dc7ee); font-size: .875rem; }
+/* Explanations, next connections and lesson steps inherit either app palette. */
+.app-shell .content .learning-journey :is(.learning-journey-head p, .learning-next-intro, .learning-score-note, .learning-save-notice, .learning-next-detail, .learning-next-question) { color: var(--ui-secondary); }
+.app-shell .content .learning-journey :is(.learning-journey-steps li, .learning-journey-steps small, .learning-related > span, .learning-next-route b) { color: var(--ui-muted); }
+.app-shell .content .learning-journey .learning-journey-steps li:is(.is-current, .is-complete) { color: var(--ui-text); }
+.app-shell .content .learning-journey .learning-journey-steps li.is-current { background: var(--ui-accent-soft); }
+.app-shell .content .learning-journey :is(.learning-next-detail > b, .learning-next-card-copy > strong) { color: var(--ui-text); }
+.app-shell .content .learning-journey :is(.learning-next-lessons, .learning-next-question, .learning-related) { border-color: var(--ui-line); }
+.app-shell .content .learning-journey .learning-next-card { color: var(--ui-text); background: var(--ui-bg); border-color: var(--ui-line) !important; }
+.app-shell .content .learning-journey :is(.learning-secondary-action, .learning-next-route > span) { color: var(--ui-secondary); background: var(--ui-control-bg); border-color: var(--ui-line); }
+.app-shell .content .learning-journey :is(.learning-next-route > svg, .learning-next-question svg, .learning-next-lessons > a:last-child) { color: var(--ui-accent-strong); }
 @media (max-width: 600px) {
   .app-shell .content .learning-journey .learning-next-detail { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .app-shell .content .learning-journey .learning-journey-head { flex-direction: column; gap: 16px; }

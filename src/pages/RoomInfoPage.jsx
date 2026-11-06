@@ -1,3 +1,6 @@
+import MemberProfileLink from '../components/MemberProfileLink';
+import { getPublicMemberName } from '../lib/memberProfile';
+
 export default function RoomInfoPage({
   activeRoom,
   activeRoomImageUrl,
@@ -119,27 +122,26 @@ export default function RoomInfoPage({
               ) : (
                 activeInfoMembers.map((member) => {
                   const memberId = getInviteUserId?.(member) || '';
+                  const name = getPublicMemberName(member.username, member.userName, member.name) || 'Smarty member';
                   const memberIsCreator =
                     memberId &&
                     (memberId === activeRoom.ownerId || memberId === activeRoom.createdBy);
 
                   return (
                     <div className="active-room-info-person" key={memberId || member.email || member.userEmail}>
-                      <div className="active-room-info-avatar">
+                      <MemberProfileLink userId={memberId} className="active-room-info-avatar" label={`Open ${name}'s profile`}>
                         {member.avatarUrl || member.photoUrl || member.profilePic ? (
                           <img src={member.avatarUrl || member.photoUrl || member.profilePic} alt="" />
                         ) : (
                           <span>
-                            {(member.name || member.userName || member.email || 'U')
-                              .slice(0, 1)
-                              .toUpperCase()}
+                            {name.slice(0, 1).toUpperCase()}
                           </span>
                         )}
-                      </div>
+                      </MemberProfileLink>
 
                       <div>
-                        <strong>{member.name || member.userName || member.email || 'User'}</strong>
-                        <p>{member.email || member.userEmail || member.role || 'Member'}</p>
+                        <strong><MemberProfileLink userId={memberId}>{name}</MemberProfileLink></strong>
+                        <p>{member.role || 'Member'}</p>
                       </div>
 
                       <span className="member-role-pill">
@@ -161,6 +163,7 @@ export default function RoomInfoPage({
               ) : (
                 activeInfoRequests.map((request) => {
                   const requestUserId = getInviteUserId?.(request) || '';
+                  const name = getPublicMemberName(request.username, request.userName, request.name) || 'Smarty member';
 
                   return (
                     <div
@@ -180,11 +183,11 @@ export default function RoomInfoPage({
                       </div>
 
                       <div>
-                        <strong>{request.name || request.userName || request.email || 'User'}</strong>
+                        <strong><MemberProfileLink userId={requestUserId}>{name}</MemberProfileLink></strong>
                         <p>
                           {request.source === 'inviteLink'
                             ? 'Requested through invite link'
-                            : request.email || request.userEmail || 'Requested to join'}
+                            : 'Requested to join'}
                         </p>
                       </div>
 

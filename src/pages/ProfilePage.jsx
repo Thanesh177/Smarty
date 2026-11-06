@@ -4,6 +4,8 @@ import { userApi, postApi, creatorApi, roomApi } from '../api/client';
 import { flushNativeSessionStorage } from '../lib/nativeSessionStorage';
 import './ProfilePage.css';
 import ProfileEditor from '../components/ProfileEditor';
+import MemberProfileLink from '../components/MemberProfileLink';
+import { getMemberId, getPublicMemberName, normalizeMemberId } from '../lib/memberProfile';
 import DeleteAccountDialog from '../components/DeleteAccountDialog';
 import { Search, X, Users, ArrowUpRight } from 'lucide-react';
 import './CommunityWorkspace.css';
@@ -110,19 +112,19 @@ const ProfilePostCard = memo(function ProfilePostCard({ post, label, onOpen, onE
   );
 });
 
-const FriendResultCard = memo(function FriendResultCard({ item, loadingId, onInvite, onOpen }) {
+const FriendResultCard = memo(function FriendResultCard({ item, loadingId, onInvite }) {
   const [imageFailed,setImageFailed]=useState(false);
-  const itemId = item.userId || item.id || item.sub;
-  const itemName = getCleanProfileName(item);
+  const itemId = getMemberId(item);
+  const itemName = getPublicMemberName(item.username, item.userName, item.name) || 'Smarty member';
   const itemInitial = String(itemName).charAt(0).toUpperCase();
 
   return (
     <div className="friend-result-card">
-      <button type="button" className="friend-result-person" disabled={!itemId} onClick={()=>onOpen(itemId)} aria-label={`View ${itemName} profile`}>
+      <MemberProfileLink userId={itemId} className="friend-result-person" label={`View ${itemName} profile`}>
       <div className="friend-result-avatar">{(item.photoUrl||item.profilePic)&&!imageFailed?<img src={item.photoUrl||item.profilePic} alt="" loading="lazy" onError={()=>setImageFailed(true)}/>:itemInitial}</div><div>
         <strong>{itemName}</strong>
-        <span>{item.username ? `@${item.username}` : 'Smarty member'}</span>
-      </div><ArrowUpRight size={14}/></button>
+        <span>View profile</span>
+      </div><ArrowUpRight size={14}/></MemberProfileLink>
 
       <button
         type="button"
@@ -136,25 +138,20 @@ const FriendResultCard = memo(function FriendResultCard({ item, loadingId, onInv
 });
 
 const ApprovedCreatorCard = memo(function ApprovedCreatorCard({ creator, onOpen }) {
-  const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
-  const name = creator.username || creator.name || creator.email?.split('@')[0] || 'Creator';
+  const creatorId = normalizeMemberId(creator.followingId) || getMemberId(creator);
+  const name = getPublicMemberName(creator.username, creator.name) || 'Smarty member';
 
   return (
-    <button
-      key={creatorId || name}
-      type="button"
-      className="approved-creator-card"
-      onClick={() => onOpen(creator)}
-    >
-      <div className="approved-avatar">{name[0].toUpperCase()}</div>
+    <div className="approved-creator-card">
+      <MemberProfileLink userId={creatorId} className="approved-avatar" label={`Open ${name}'s profile`}>{name[0].toUpperCase()}</MemberProfileLink>
 
       <div>
-        <h4>{name}</h4>
+        <h4><MemberProfileLink userId={creatorId}>{name}</MemberProfileLink></h4>
         <p>Following</p>
       </div>
 
-      <span>Open private posts</span>
-    </button>
+      <button type="button" className="approved-creator-posts" onClick={() => onOpen(creator)}>Private posts</button>
+    </div>
   );
 });
 export default function ProfilePage() {
@@ -779,7 +776,7 @@ const handleDeleteAccount = useCallback(async () => {
 }, [deleteConfirmationText, withTimeout]);
 
   async function openApprovedCreator(creator) {
-    const creatorId = creator.userId || creator.followingId || creator.id || creator.sub;
+    const creatorId = normalizeMemberId(creator.followingId) || getMemberId(creator);
 
     if (!creatorId) {
       setStatus('Could not find this creator id.');
@@ -1111,7 +1108,6 @@ const handleDeleteAccount = useCallback(async () => {
                       item={item}
                       loadingId={friendActionLoading}
                       onInvite={inviteFriend}
-                      onOpen={id=>navigate(`/creator/${encodeURIComponent(id)}`)}
                     />
                   );
                 })}

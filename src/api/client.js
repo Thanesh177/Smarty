@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { createRequestCache } from '../lib/requestCache';
 import { normalizeChatDeletion } from '../lib/chatDeletion';
+import { normalizeMemberId, requireMatchingProfile } from '../lib/memberProfile';
 import { normalizeSavedCollection } from '../lib/savedCollection';
 import { createNewsRequestCache } from '../lib/newsRequestCache';
 import { hasEditorialBriefing } from '../lib/newsAvailability';
@@ -1581,12 +1582,14 @@ async deleteRoom(roomId, params = {}) {
 };
 
 export const creatorApi = {
-  async getProfile(userId) {
-    const { data } = await api.get(endpoints.creator.profile, {
-      params: { userId },
-    });
-
-    return normalizeUserProfile(parseApiBody(data)?.profile || parseApiBody(data));
+  async getProfile(userId, { fresh = false } = {}) {
+    const id = normalizeMemberId(userId);
+    if (!id) throw new Error('A member ID is required.');
+    return readCache.get(`profile:member:${id}`, async () => {
+      const { data } = await api.get(endpoints.creator.profile, { params: { userId: id } });
+      const result = parseApiBody(data);
+      return normalizeUserProfile(requireMatchingProfile(result?.profile || result, id));
+    }, 30000, { forceRefresh: fresh });
   },
 
 async getFollowRequests() {
@@ -1628,6 +1631,7 @@ async rejectFollowRequest(followerId) {
       followingId: userId,
     });
 
+    readCache.delete(`profile:member:${userId}`);
     return data;
   },
 
@@ -1638,6 +1642,7 @@ async rejectFollowRequest(followerId) {
       followingId: userId,
     });
 
+    readCache.delete(`profile:member:${userId}`);
     return data;
   },
 
@@ -2559,6 +2564,7 @@ blockUser: async (blockedId, context = {}) => {
     reason: context.reason || 'User blocked',
     contentSnapshot: context.contentSnapshot || {},
   });
+  readCache.delete(`profile:member:${blockedId}`);
   return parseApiBody(res.data);
 },
 

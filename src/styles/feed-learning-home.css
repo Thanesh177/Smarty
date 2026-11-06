@@ -52,6 +52,38 @@
 }
 .feed-home-loading, .feed-home-status { max-width: 1240px; margin: 20px auto; padding: 24px 0; color: var(--ui-muted); font-size: 14px; line-height: 1.7; }
 .feed-home-status :is(button, a) { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; margin: 4px 8px 4px 0; border: 1px solid var(--ui-line); border-radius: 7px; color: var(--ui-text); background: var(--ui-surface); font: inherit; text-decoration: none; cursor: pointer; }
+
+/* Feed copy, metadata and actions use the same contrast in either palette. */
+.app-shell .content .snap-feed-page.has-inner-feed { color: var(--ui-text); background: var(--ui-bg) !important; }
+.app-shell .content .has-inner-feed .snap-post .post-content { background: transparent !important; }
+.app-shell .content .has-inner-feed .snap-post .post-content h1 { color: var(--ui-text); text-shadow: none; }
+.app-shell .content .has-inner-feed .snap-post .post-story-body > p { color: var(--ui-secondary); }
+.app-shell .content .has-inner-feed .snap-post :is(.post-author, .creator-link, .post-learning-stage) { color: var(--ui-muted); }
+.app-shell .content .has-inner-feed .snap-post .post-topic {
+  color: var(--ui-accent-strong) !important; background: var(--ui-accent-soft) !important;
+  border-color: var(--ui-accent-line) !important;
+}
+.app-shell .content .has-inner-feed .snap-post .mini-media { background-color: var(--ui-surface); }
+.app-shell .content .has-inner-feed .snap-post .post-learning-link {
+  color: var(--ui-accent-strong); background: var(--ui-control-bg); border-color: var(--ui-line);
+}
+.app-shell .content .has-inner-feed .snap-post .post-more-button { color: var(--ui-muted); background: var(--ui-control-bg); }
+.app-shell .content .has-inner-feed .snap-post .post-safety-menu { color: var(--ui-text); background: var(--ui-surface); border-color: var(--ui-line-strong); }
+.app-shell .content .has-inner-feed .snap-post .post-safety-menu button { color: var(--ui-secondary); }
+.app-shell .content .has-inner-feed .snap-post .post-safety-menu button.danger { color: var(--ui-danger); }
+.app-shell .content .has-inner-feed .snap-post :is(.translated-box, .simple-explanation, .ai-loading-box) p,
+.app-shell .content .has-inner-feed .feed-inner-state > p { color: var(--ui-secondary); }
+.app-shell .content .has-inner-feed .snap-post :is(.translated-box, .simple-explanation) strong,
+.app-shell .content .has-inner-feed .feed-inner-state :is(.feed-inner-state-icon, .feed-inner-state-kicker) { color: var(--ui-accent-strong); }
+@media (min-width: 601px) {
+  .app-shell .content .has-inner-feed .snap-post .post-reading-actions .translate-dropdown { color: var(--ui-secondary); }
+}
+@media (hover: hover) {
+  .app-shell .content .has-inner-feed .snap-post .post-actions .icon-action-btn:hover:not(:disabled) { background: var(--ui-surface-hover) !important; }
+  .app-shell .content .has-inner-feed .snap-post .post-actions .icon-action-btn.saved:hover:not(:disabled) { background: var(--ui-accent-soft) !important; }
+  .app-shell .content .has-inner-feed .snap-post .post-safety-menu button:hover { background: var(--ui-surface-hover); }
+}
+
 .feed-learning-home :is(button, a), .feed-header-search { transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease; }
 .feed-learning-home :is(button, a):focus-visible, .feed-header-search:focus-visible, .feed-header-brand:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
 /* Search stays one calm surface, with useful starting points rather than a banner. */

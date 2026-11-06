@@ -14,8 +14,8 @@ test('Settings is a routed page for library and account destinations, preserving
   assert.match(menu, /className="menu-quiz-row"[\s\S]+?<AppearanceSwitch compact \/>/);
   assert.doesNotMatch(read('App.jsx'), /<AppearanceSwitch/);
 });
-test('day-mode legacy conversation and lesson palettes follow readable app tokens', () => {
+test('day-mode legacy conversation palettes follow readable app tokens', () => {
   const css = read('styles/day-theme.css');
-  for (const value of ['--chat-ink: var(--ui-text)', '--chat-muted: var(--ui-muted)', '--post-ai-ink: var(--ui-text)', '.message.mine', '.msg p', '.room-privacy-toggle button.active', '.post-ai-lesson-opening', '.post-ai-form textarea']) assert.ok(css.includes(value), value);
+  for (const value of ['--chat-ink: var(--ui-text)', '--chat-muted: var(--ui-muted)', '.message.mine', '.msg p', '.room-privacy-toggle button.active']) assert.ok(css.includes(value), value);
   assert.match(css, /\.message:has\(\.message-media-preview, \.audio-mini-card\) \{ background: transparent !important/);
 });

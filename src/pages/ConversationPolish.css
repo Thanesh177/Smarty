@@ -73,3 +73,10 @@
   .rooms-workspace.has-active-room .input input { font-size: 16px !important; }
 }
 .chat-page .chat-conversation-status { flex: none; margin: 0; padding: 10px 18px; border-bottom: 1px solid var(--ui-line); color: var(--ui-secondary); background: var(--ui-surface); font-size: 13px; line-height: 1.6; }
+.chat-page .chat-content .chat-open-chat-btn { min-height: 28px; margin: 0; padding: 2px 0; }
+.chat-page .user-result-details { display: flex; align-items: center; gap: 8px; justify-content: space-between; min-width: 0; }
+.chat-page .chat-search-wrap .user-results .user-result-details .user-result-chat {
+  flex: 0 0 44px; width: 44px; min-height: 44px; padding: 0; justify-content: center;
+  color: var(--ui-secondary); border: 1px solid var(--ui-line);
+}
+.chat-page .user-result-copy { flex: 1; min-width: 0; }

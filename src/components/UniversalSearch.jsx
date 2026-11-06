@@ -19,6 +19,7 @@ import {
 import { chatApi, newsApi, postApi, readBooksApi, roomApi } from '../api/client';
 import { getDefaultNewsCountry } from '../data/newsLocations';
 import { getUserScopedStorageKey } from '../lib/userScopedStorage';
+import { getMemberId, getPublicMemberName, memberProfilePath } from '../lib/memberProfile';
 import './UniversalSearch.css';
 
 const SEARCH_DELAY_MS = 240;
@@ -289,7 +290,7 @@ function getPostId(post) {
 }
 
 function getPersonId(person) {
-  return String(person?.userId || person?.sub || person?.id || '').trim();
+  return getMemberId(person);
 }
 
 function getRoomId(room) {
@@ -418,16 +419,17 @@ function makePeopleResults(people, query) {
     (person) => [person?.name, person?.displayName, person?.username, person?.email].filter(Boolean).join(' ')
   ).map((person) => {
     const personId = getPersonId(person);
-    const username = person?.username ? `@${String(person.username).replace(/^@/, '')}` : '';
+    const username = getPublicMemberName(person?.username, person?.userName);
+    const name = getPublicMemberName(username, person?.displayName, person?.name) || 'Smarty member';
 
     return {
       key: `person-${personId}`,
       type: 'person',
-      label: person?.name || person?.displayName || person?.username || person?.email || 'Smarty user',
-      description: [username, person?.bio || person?.headline].filter(Boolean).join(' · ') || 'View profile',
+      label: name,
+      description: person?.bio || person?.headline || 'View profile',
       meta: 'Person',
       image: person?.photoUrl || person?.avatarUrl || person?.profilePic || person?.profilePictureUrl || '',
-      path: `/creator/${encodeURIComponent(personId)}`,
+      path: memberProfilePath(personId),
     };
   });
 }

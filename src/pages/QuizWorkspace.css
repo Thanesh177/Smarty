@@ -1,8 +1,8 @@
 /* A quiet study library. Scoped so other learning pages keep their own layout. */
 .app-shell .content .quiz-workspace {
-  width: 100%; max-width: 1560px; min-height: 100%; margin: 0 auto;
-  padding: clamp(20px, 3.5vw, 54px) clamp(18px, 4vw, 64px) 130px !important;
-  box-sizing: border-box; color: #e8e9eb; background: #08090b !important;
+  width: 100%; max-width: none !important; min-height: 100%; margin: 0 auto;
+  padding: clamp(16px, 3vw, 40px) max(var(--ui-gutter), env(safe-area-inset-right)) 130px max(var(--ui-gutter), env(safe-area-inset-left)) !important;
+  box-sizing: border-box; color: var(--ui-text); background: var(--ui-bg) !important;
 }
 .quiz-workspace .quiz-masthead { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 24px; border-bottom: 1px solid #232529; }
 .quiz-workspace .quiz-masthead > span { font-size: .8rem; color: #aaadb4; }
@@ -66,7 +66,7 @@
 .app-shell .content .quiz-workspace .quiz-saved-review { padding: 18px; background: #12171e; border-color: #2a3646; border-radius: 10px; margin-bottom: 28px; }
 .quiz-workspace .quiz-saved-review h2 { font-size: .95rem; }
 .quiz-workspace .quiz-saved-review > p { font-size: .78rem; }
-.app-shell .content .quiz-workspace :is(.question-card, .result-card, .quiz-loading-card) { width: 100%; max-width: 880px; margin: 24px auto; padding: clamp(20px, 4vw, 44px); border: 1px solid #272c34; border-radius: 14px; background: #111317 !important; box-shadow: none !important; }
+.app-shell .content .quiz-workspace :is(.question-card, .result-card, .quiz-loading-card) { width: 100%; max-width: none; margin: 0; padding: clamp(16px, 3vw, 36px); border: 1px solid var(--ui-line); border-radius: 14px; background: var(--ui-surface) !important; box-shadow: none !important; }
 .app-shell .content .quiz-workspace :is(.question-card, .result-card)::before,
 .app-shell .content .quiz-workspace :is(.question-card, .result-card)::after { display: none; }
 .quiz-workspace .quiz-top-row { gap: 12px; }
@@ -104,7 +104,6 @@
   .quiz-workspace .quiz-prep-note { padding-bottom: 14px; }
 }
 @media (max-width: 600px) {
-  .app-shell .content .quiz-workspace { padding: 16px 18px 120px !important; }
   .quiz-workspace .quiz-masthead { padding-bottom: 14px; }
   .quiz-workspace .quiz-masthead > span { display: none; }
   .quiz-workspace .quiz-library-intro { display: block; padding: 26px 0 22px; }
@@ -142,7 +141,7 @@
 .app-shell .content .quiz-workspace .quiz-subject-card p { color: #8b94a1 !important; }
 .app-shell .content .quiz-workspace .quiz-subject-toolbar input { background: none !important; border: 0 !important; border-bottom: 1px solid #343944 !important; border-radius: 0 !important; }
 .app-shell .content .quiz-workspace :is(.quiz-mode-picker button, .quiz-sound-control) { min-height: 44px !important; }
-.app-shell .content .quiz-workspace :is(.question-card, .result-card, .ai-loading-card) { border-radius: 14px !important; padding: clamp(20px, 4vw, 44px) !important; }
+.app-shell .content .quiz-workspace :is(.question-card, .result-card, .ai-loading-card) { border-radius: 12px !important; padding: clamp(16px, 3vw, 36px) !important; }
 .app-shell .content .quiz-workspace .quiz-session-stats > span { padding: 0; border: 0; background: none !important; }
 .app-shell .content .quiz-workspace .ai-loading-card { max-width: 880px; background: none !important; border: 0 !important; box-shadow: none !important; }
 .quiz-workspace .ai-loading-card h2 { font-size: 1.3rem; font-weight: 500; }
@@ -157,5 +156,18 @@
   .app-shell .content .quiz-workspace .topic-grid { gap: 12px !important; }
   .app-shell .content .quiz-workspace .quiz-subject-card { padding: 20px !important; }
   .app-shell .content .quiz-workspace .quiz-subject-card h3 { margin-top: 32px !important; font-size: 1.25rem !important; }
-  .app-shell .content .quiz-workspace :is(.question-card, .result-card, .ai-loading-card) { padding: 20px 16px !important; }
+  .app-shell .content .quiz-workspace :is(.question-card, .result-card, .ai-loading-card) { padding: 16px 12px !important; }
+}
+/* Use the width for answer choices, while keeping long explanations readable. */
+.quiz-workspace .quiz-question-stage h2 { max-width: 76ch; }
+.quiz-workspace .quiz-choice-text { min-width: 0; overflow-wrap: anywhere; }
+.quiz-workspace .answer-explanation p { max-width: 80ch; }
+.app-shell .content .quiz-workspace :is(.quiz-top-row .back-btn, .quiz-source-notice, .quiz-confidence small, .ai-loading-card p) { color: var(--ui-muted); }
+@media (min-width: 960px) {
+  .app-shell .content .quiz-workspace .quiz-question-stage .option-list {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+  }
+}
+@media (min-width: 1560px) {
+  .app-shell .content .quiz-workspace .topic-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
 }

@@ -5,6 +5,8 @@ import { ArrowUpRight, BookOpen, Check, Layers, MessageCircle, Play, RefreshCw, 
 import { creatorApi, postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { getPostAuthorUsername } from '../lib/postAuthor';
+import { getMemberId, memberProfilePath, normalizeMemberId, requireMatchingProfile } from '../lib/memberProfile';
+import MemberProfileLink from '../components/MemberProfileLink';
 import { normalizePostResponse } from '../lib/postResponse';
 import { getPostVideoUrl } from '../lib/videoFeed';
 import { contentId, contentList, contentTopics, filterContent } from '../lib/communityContent';
@@ -21,12 +23,12 @@ function PublicProfile({ userId, account, user }) {
   const [tab, setTab] = useState('posts'), [search, setSearch] = useState(''), [kind, setKind] = useState('all');
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const profileKey = ['public-profile', account, userId, 'identity'];
-  const profileQuery = useQuery({ queryKey: profileKey, queryFn: async () => {
-    const result = normalizePostResponse(await creatorApi.getProfile(userId));
-    if (!(result.userId || result.id || result.sub || result.username || result.name)) throw new Error('Profile unavailable');
-    return result;
-  }, enabled: Boolean(userId), staleTime: 60000, retry: 1 });
-  const profile = profileQuery.data;
+  const profileQuery = useQuery({ queryKey: profileKey, queryFn: async () =>
+    requireMatchingProfile(await creatorApi.getProfile(userId, { fresh: true }), userId),
+  enabled: Boolean(normalizeMemberId(userId)), refetchOnWindowFocus: false,
+  retry: (count, error) => count < 1 && ![400, 401, 403, 404].includes(error?.response?.status) && error?.code !== 'PROFILE_IDENTITY_MISMATCH' });
+  const profile = profileQuery.isFetching || profileQuery.isError ? undefined : profileQuery.data;
+  const profileUnavailable = !normalizeMemberId(userId) || [403, 404].includes(profileQuery.error?.response?.status);
   const postsQuery = useQuery({ queryKey: ['public-profile', account, userId, 'posts'], queryFn: () => postApi.getPostsByCreator(userId), enabled: Boolean(profile), staleTime: 60000, retry: 1 });
   const peopleQuery = useQuery({ queryKey: ['public-profile', account, userId, 'people', tab], queryFn: () => tab === 'followers' ? creatorApi.getFollowers(userId) : creatorApi.getFollowing(userId), enabled: Boolean(profile && tab !== 'posts'), staleTime: 60000, retry: 1 });
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -40,7 +42,7 @@ function PublicProfile({ userId, account, user }) {
   const stats = { posts: profile?.postsCount ?? profile?.reelsCount ?? posts.length, followers: profile?.followersCount ?? (tab === 'followers' ? people.length : 0), following: profile?.followingCount ?? (tab === 'following' ? people.length : 0) };
   const requireUser = () => {
     if (user) return true;
-    navigate('/login', { state: { from: { pathname: '/creator/' + encodeURIComponent(userId) } } }); return false;
+    navigate('/login', { state: { from: { pathname: memberProfilePath(userId) } } }); return false;
   };
   const follow = async () => {
     if (!requireUser() || own || !profile || lock.current || profile.requestPending) return;
@@ -69,9 +71,10 @@ function PublicProfile({ userId, account, user }) {
     } catch (error) { if (error?.name !== 'AbortError' && mounted.current) setNotice('The profile link could not be shared.'); }
   };
   const failure = (query, label) => <div className="public-profile-empty" role="alert"><h2>{label}</h2><p>Check your connection and try again.</p><button type="button" onClick={() => query.refetch()} disabled={query.isFetching}><RefreshCw size={16}/>Try again</button></div>;
-  return <main className="creator-profile-container public-profile-page" aria-labelledby="public-profile-name">
+  return <main className="creator-profile-container public-profile-page" aria-label="Member profile">
     <nav className="public-profile-nav" aria-label="Profile navigation"><Link to="/feed?topic=All"><Layers size={16}/>Feed</Link><Link to="/feed?topic=All" className="public-profile-brand">Smarty</Link><button type="button" onClick={share} aria-label="Share profile"><Share2 size={17}/></button></nav>
-    {profileQuery.isPending ? <div className="public-profile-skeleton" role="status" aria-label="Loading profile"><i/><i/><i/></div> : profileQuery.isError || !profile ? failure(profileQuery,'This profile could not load.') : <>
+    {profileUnavailable ? <div className="public-profile-empty"><h1>Profile unavailable</h1><p>This member’s profile isn’t available to view.</p><Link to="/feed?topic=All">Back to feed</Link></div>
+    : profileQuery.isPending || profileQuery.isFetching ? <div className="public-profile-skeleton" role="status" aria-label="Loading profile"><i/><i/><i/></div> : profileQuery.isError || !profile ? failure(profileQuery,'This profile could not load.') : <>
       <header className="public-profile-header"><div className="public-profile-avatar">{avatar && !avatarFailed ? <img src={avatar} alt="" decoding="async" onError={() => setAvatarFailed(true)}/> : name.slice(0,1).toUpperCase()}</div><div className="public-profile-identity"><small>MEMBER PROFILE</small><h1 id="public-profile-name">{name}</h1><p>{profile.bio || 'Sharing ideas and learning along the way.'}</p></div><div className="public-profile-actions">{own ? <Link to="/profile">Edit profile<ArrowUpRight size={15}/></Link> : <><button type="button" className="public-profile-follow" aria-pressed={Boolean(profile.isFollowing)} disabled={busy || profile.requestPending} onClick={follow}>{profile.isFollowing || profile.requestPending ? <Check size={16}/> : <UserPlus size={16}/>} {busy ? 'Updating…' : profile.requestPending ? 'Requested' : profile.isFollowing ? 'Following' : 'Follow'}</button><button type="button" onClick={message}><MessageCircle size={16}/>Message</button></>}</div></header>
       {notice && <p className="public-profile-notice" role="status">{notice}</p>}
       <nav className="public-profile-tabs" aria-label="Profile sections">{[['posts','Posts'],['followers','Followers'],['following','Following']].map(([value,label]) => <button type="button" key={value} aria-pressed={tab === value} onClick={() => { setTab(value); setSearch(''); }}><strong>{count(stats[value])}</strong>{label}</button>)}</nav>
@@ -83,8 +86,9 @@ function PublicProfile({ userId, account, user }) {
           return <Link className="public-profile-post" key={id} to={'/reel/' + encodeURIComponent(id)}><div className="public-profile-thumbnail">{thumbnail ? <img src={thumbnail} alt="" loading="lazy" decoding="async" onError={event => { event.currentTarget.hidden = true; }}/> : video ? <Play size={22}/> : <BookOpen size={22}/>}</div><div><small>{topic} · {video ? 'Video' : postReadingStats(post.body || '').minutes + ' min read'}</small><h3>{post.title || 'An idea to explore'}</h3><p>{post.body || post.description}</p></div><ArrowUpRight size={16}/></Link>;
         })}</div> : <div className="public-profile-empty"><h2>{posts.length ? 'No matching ideas.' : 'A collection waiting to grow.'}</h2><p>{posts.length ? 'Try another search or content type.' : 'New contributions will appear here.'}</p>{posts.length > 0 && <button type="button" onClick={() => { setSearch(''); setKind('all'); }}>Clear filters</button>}</div>
         : peopleQuery.isPending ? <p role="status">Loading members…</p> : peopleQuery.isError ? failure(peopleQuery,'These members could not load.') : people.length ? <div className="public-profile-people">{people.map((person,index) => {
-          const id = String(person.userId || person.followerId || person.followingId || person.id || ''), label = getPostAuthorUsername(null,person);
-          return <Link key={id || index} to={id ? '/creator/' + encodeURIComponent(id) : '#'} onClick={event => { if (!id) event.preventDefault(); }} aria-disabled={!id}><span>{label.slice(0,1).toUpperCase()}</span><div><strong>{label}</strong><small>Smarty member</small></div><ArrowUpRight size={16}/></Link>;
+          const id = normalizeMemberId(tab === 'followers' ? person.followerId : person.followingId) || getMemberId(person);
+          const label = getPostAuthorUsername(null, person);
+          return <MemberProfileLink key={id || index} userId={id}><span>{label.slice(0,1).toUpperCase()}</span><div><strong>{label}</strong><small>Smarty member</small></div><ArrowUpRight size={16}/></MemberProfileLink>;
         })}</div> : <div className="public-profile-empty"><h2>{tab === 'followers' ? 'No followers yet.' : 'No members followed yet.'}</h2><p>Connections grow one good conversation at a time.</p></div>}
       </section>
     </>}
