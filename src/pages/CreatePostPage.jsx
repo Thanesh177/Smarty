@@ -20,6 +20,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { EMPTY_POST, hasPostDraft, postReadingStats, readPostDraft, savePostDraft, validatePostMedia } from '../lib/postDraft';
 import { isVideoTopic, validateVideoUpload } from '../lib/videoFeed';
+import { canPrepareVideo, prepareVideoUpload } from '../lib/prepareVideoUpload';
 import { normalizePostResponse } from '../lib/postResponse';
 import { getPostAuthorUsername } from '../lib/postAuthor';
 import './CreatePostComposer.css';
@@ -198,6 +199,7 @@ function PostComposer({ account, user, videoMode }) {
   const [confirmClear, setConfirmClear] = useState(false);
   const mounted = useRef(true);
   const upload = useRef(null);
+  const preparation = useRef(null);
   const submittingRef = useRef(false);
   const latestForm = useRef(form);
   const saveTimer = useRef(null);
@@ -236,6 +238,7 @@ function PostComposer({ account, user, videoMode }) {
     return () => {
       mounted.current = false;
       persist();
+      preparation.current?.abort();
       upload.current?.abort();
       window.removeEventListener('pagehide', persist);
       document.removeEventListener('visibilitychange', hidden);
@@ -313,12 +316,25 @@ function PostComposer({ account, user, videoMode }) {
     if (uploadCache.current?.file === file) return uploadCache.current.result;
     setStage('Preparing attachment…');
     let prepared = file;
-    try { prepared = await compressImage(file); } catch { /* Keep the original if this device cannot compress it. */ }
+    try {
+      if (canPrepareVideo(file)) {
+        const controller = new AbortController();
+        preparation.current = controller;
+        setStage('Optimizing video…'); setProgress(0);
+        try {
+          prepared = await prepareVideoUpload(file, {
+            signal: controller.signal,
+            onProgress: value => { if (mounted.current) setProgress(value); },
+          });
+        } finally { preparation.current = null; }
+        if (controller.signal.aborted) throw new Error('Upload cancelled.');
+      } else prepared = await compressImage(file);
+    } catch { /* Keep the original if this device cannot compress it. */ }
     if (!mounted.current) throw new Error('Upload cancelled.');
     const result = normalizeUploadResponse(await postApi.getUploadUrl({ fileName: prepared.name, fileType: prepared.type }));
     if (!mounted.current) throw new Error('Upload cancelled.');
     if (!result.uploadUrl || (!result.fileUrl && !result.key)) throw new Error('Could not prepare the attachment. Please try again.');
-    setStage('Uploading attachment…');
+    setStage('Uploading attachment…'); setProgress(0);
     await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest(); upload.current = xhr;
       xhr.upload.onprogress = event => { if (event.lengthComputable && mounted.current) setProgress(Math.round(event.loaded / event.total * 100)); };
@@ -407,7 +423,7 @@ function PostComposer({ account, user, videoMode }) {
         <details className="composer-writing-tip"><summary>A little writing help<ChevronDown size={15} /></summary><ol><li>Start with one specific idea.</li><li>Explain it in your own words.</li><li>Add an example and credit your sources.</li></ol></details>
         <div className="composer-publish-area">
           {error && <p className="composer-error" role="alert">{error}</p>}
-          {submitting && <div className="composer-progress" role="status"><span>{stage}</span>{stage === 'Uploading attachment…' && <><progress max="100" value={progress} aria-label="Attachment upload progress" /><small>{progress}% uploaded</small></>}</div>}
+          {submitting && <div className="composer-progress" role="status"><span>{stage}</span>{['Optimizing video…', 'Uploading attachment…'].includes(stage) && <><progress max="100" value={progress} aria-label={stage} /><small>{progress}%{stage === 'Uploading attachment…' ? ' uploaded' : ''}</small></>}</div>}
           <button className="composer-primary" type="submit" disabled={!ready || submitting}><Send size={16} />{submitting ? 'Publishing…' : form.visibility === 'private' ? 'Publish privately' : 'Publish post'}</button>
           <p className="composer-publish-note">{!ready ? videoMode || isVideo ? 'Add a headline, a playable video, and a topic to publish.' : 'Add a headline, your idea, and a topic to publish.' : form.visibility === 'private' ? 'Your private post will appear on your profile.' : 'Share thoughtfully. Keep it useful and respectful.'}</p>
           {(hasPostDraft(form) || media) && !confirmClear && <button type="button" className="composer-clear" disabled={submitting} onClick={() => setConfirmClear(true)}>Clear draft</button>}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Bell, Bookmark, ChartNoAxesCombined, ChevronRight, CircleUserRound, Download, FileText, HelpCircle, LogOut, Shield, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, Bell, Bookmark, ChartNoAxesCombined, ChevronRight, CircleUserRound, Compass, Download, FileText, HelpCircle, LogOut, Shield, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminUser } from '../lib/adminAccess';
 import AppSettingsEngagement from '../components/AppSettingsEngagement';
@@ -10,7 +10,7 @@ function SettingsLink({ to, icon: Icon, title, description }) {
   return <Link className="settings-page-row" to={to}><Icon size={20} aria-hidden="true" /><span><strong>{title}</strong><small>{description}</small></span><ChevronRight size={17} aria-hidden="true" /></Link>;
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({ onOpenTour }) {
   const { user, logout } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -39,6 +39,7 @@ export default function SettingsPage() {
         {native && <button type="button" className="settings-page-row" data-smarty-native-screen="downloads" onClick={() => window.webkit.messageHandlers.smartyNative.postMessage({ action: 'nativeScreen', screen: 'downloads' })}><Download size={20} aria-hidden="true" /><span><strong>Offline library</strong><small>Downloaded books, media, and chat backups</small></span><ChevronRight size={17} aria-hidden="true" /></button>}
       </div></section>
       <section aria-labelledby="settings-help-title"><h2 id="settings-help-title">Help & privacy</h2><div className="settings-page-group">
+        {onOpenTour && <button type="button" className="settings-page-row" onClick={onOpenTour}><Compass size={20} aria-hidden="true" /><span><strong>Quick tour</strong><small>Learn your way around Smarty</small></span><ChevronRight size={17} aria-hidden="true" /></button>}
         <SettingsLink to="/support" icon={HelpCircle} title="Support" description="Get help or tell us what could work better" />
         <SettingsLink to="/privacy" icon={Shield} title="Privacy" description="How your information is handled" />
         <SettingsLink to="/terms" icon={FileText} title="Terms of use" description="Community rules and your rights" />

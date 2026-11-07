@@ -95,7 +95,10 @@ import './styles/routePresentation';
 import './styles/ipad.css';
 import { useQueryClient } from '@tanstack/react-query';
 import { canStartPull, isVerticalPull, PULL_THRESHOLD, requestPageRefresh } from './lib/pullRefresh';
+import { hasSeenLanding } from './lib/initialVisit';
+import { finishWelcomeTour, isWelcomeTourEntry, queueWelcomeTour, readWelcomeTour, shouldOfferWelcomeTour } from './lib/welcomeTour';
 
+const WelcomeTour = lazy(() => import('./components/WelcomeTour'));
 
 function hasStoredAuthToken() {
   return Boolean(
@@ -298,7 +301,7 @@ function getUnreadFromChatsPayload(payload) {
   }, 0);
 }
 
-function Layout() {
+function Layout({ onOpenTour }) {
   const queryClient = useQueryClient();
   const { user, logout, loading: authLoading } = useAuth();
   const location = useLocation();
@@ -1181,7 +1184,7 @@ useEffect(() => {
                 <Route path="/read-book/:bookId" element={<BookReaderPage />} />
                 <Route path="/support" element={<SupportPage/>} />
                 <Route path="/terms" element={<TermsPage/>} />
-                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/settings" element={<SettingsPage onOpenTour={onOpenTour} />} />
                 <Route path="/privacy" element={<PrivacyPage/>} />
                 <Route
                   path="/notifications"
@@ -1835,12 +1838,28 @@ body,
 
 function AppExperience() {
   const { loading } = useAuth();
+  const location = useLocation();
   const continuesBootScreenRef = useRef(Boolean(window.__SMARTY_BOOT_STARTED__));
   const openedAtRef = useRef(
     Number(window.__SMARTY_BOOT_STARTED__) || Date.now()
   );
   const [splashMounted, setSplashMounted] = useState(true);
   const [splashLeaving, setSplashLeaving] = useState(false);
+  const [tourPending, setTourPending] = useState(() => shouldOfferWelcomeTour(hasSeenLanding()));
+  const [replayTour, setReplayTour] = useState(false);
+  const tourSupported = typeof window.HTMLDialogElement?.prototype.showModal === 'function';
+
+  useEffect(() => { if (tourPending) queueWelcomeTour(); }, [tourPending]);
+  useEffect(() => { if (location.pathname !== '/settings') setReplayTour(false); }, [location.pathname]);
+  const openTour = useCallback(() => setReplayTour(true), []);
+  const closeTour = useCallback(() => {
+    finishWelcomeTour();
+    setTourPending(false);
+    setReplayTour(false);
+  }, []);
+  const showReplay = replayTour && location.pathname === '/settings';
+  const showTour = tourSupported && !loading && !splashMounted
+    && (showReplay || (tourPending && readWelcomeTour() !== 'done' && isWelcomeTourEntry(location)));
 
   useEffect(() => {
     if (loading) return undefined;
@@ -1863,7 +1882,7 @@ function AppExperience() {
   return (
     <>
       <ReminderPopupStyles />
-      <Layout />
+      <Layout onOpenTour={tourSupported ? openTour : undefined} />
       <ConnectionStatus />
       {splashMounted && (
         <AppOpeningScreen
@@ -1871,6 +1890,7 @@ function AppExperience() {
           continuation={continuesBootScreenRef.current}
         />
       )}
+      {showTour && <Suspense fallback={null}><WelcomeTour onClose={closeTour} replay={showReplay} /></Suspense>}
     </>
   );
 }

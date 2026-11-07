@@ -48,12 +48,11 @@ export async function discoverVideoPage(fetchPage, startCursor = null) {
 }
 
 export function nextVideoPreload(post, connection) {
-  if (connection?.saveData || /^(?:slow-)?2g$/.test(connection?.effectiveType || '')) return 'none';
-  const source = getPostVideoUrl(post).split(/[?#]/, 1)[0];
-  const size = Number(post?.videoPlaybackBytes || post?.videoBytes || 0);
-  if (/\.(mov|qt)$/i.test(source) || size > 18 * 1024 * 1024) return 'metadata';
-  const fastConnection = connection?.effectiveType === '4g' && connection.downlink >= 8;
-  return size > 0 || fastConnection ? 'auto' : 'metadata';
+  if (!getPostVideoUrl(post) || connection?.saveData || /^(?:slow-)?2g$/.test(connection?.effectiveType || '')) return 'none';
+  if (connection?.effectiveType === '3g') return 'metadata';
+  // Even large legacy MOVs need media bytes, not just their dimensions.
+  // Only the immediate successor gets this hint, once the current video is safe.
+  return 'auto';
 }
 
 export function getMostVisibleVideo(entries) {

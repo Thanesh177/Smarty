@@ -3,7 +3,7 @@ import { Bookmark, Maximize, MessageCircle, MoreHorizontal, Pause, Play, Refresh
 import { Link } from 'react-router-dom';
 import PostAuthor from './PostAuthor';
 import { formatVideoTime, getPostVideoUrl, getVideoPostId } from '../lib/videoFeed';
-import { hasPlaybackHeadroom, startReelPlayback } from '../lib/reelPlayback';
+import { hasBufferedOpening, hasPlaybackHeadroom, startReelPlayback } from '../lib/reelPlayback';
 import NativeDownloadButton from './NativeDownloadButton';
 
 export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'none', muted = false, onMute, onSave, onSafety, onReload, saved, busy, reducedMotion, chromeHidden, onReveal, onPlayingChange, onHeadroom, onSkip }) {
@@ -23,6 +23,8 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
   const [refreshing, setRefreshing] = useState(false);
   const [failureMessage, setFailureMessage] = useState('');
   const [soundOff, setSoundOff] = useState(muted);
+  const [openingBuffered, setOpeningBuffered] = useState(false);
+  const openingReported = useRef(false);
   const mounted = useRef(true);
   const autoRenewed = useRef(false);
   const reloadLock = useRef(false);
@@ -38,6 +40,8 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
   useEffect(() => {
     setPlaying(false); setWaiting(false); setFailed(false); setReady(videoRef.current?.readyState >= 2);
     setDuration(0); setPosition(0); setFailureMessage('');
+    openingReported.current = false;
+    setOpeningBuffered(false);
   }, [source, retry, nearby]);
 
   const reloadSource = useCallback(async () => {
@@ -150,13 +154,26 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
     else video?.requestFullscreen?.()?.catch(() => {});
   };
 
+  const trackBuffer = video => {
+    if (activeRef.current) {
+      if (!headroomReported.current && hasPlaybackHeadroom(video)) {
+        headroomReported.current = true;
+        onHeadroom?.(id);
+      }
+    } else if (preloadNext === 'auto' && !openingReported.current && hasBufferedOpening(video)) {
+      openingReported.current = true;
+      setOpeningBuffered(true);
+    }
+  };
+
   return <article className={'reel-video' + (active ? ' is-active' : '')} data-video-id={id} aria-label={title} aria-hidden={!active} inert={!active ? '' : undefined}>
     <div className={'reel-video-stage' + (playing ? ' is-playing' : '')} aria-busy={active && (!ready || waiting || refreshing) && !failed}>
       {nearby ? <video key={retry} ref={videoRef} src={source} poster={poster || undefined}
-        playsInline loop muted={soundOff || !active} preload={active ? 'auto' : preloadNext} aria-label={title}
+        playsInline loop muted={soundOff || !active} preload={active ? 'auto' : openingBuffered && preloadNext === 'auto' ? 'metadata' : preloadNext} aria-label={title}
         onPlaying={event => {
           if (!activeRef.current || document.visibilityState === 'hidden') { event.currentTarget.pause(); return; }
           setPlaying(true); setWaiting(false); setReady(true);
+          trackBuffer(event.currentTarget);
         }} onPause={() => { setPlaying(false); setWaiting(false); }}
         onVolumeChange={event => { if (activeRef.current) setSoundOff(event.currentTarget.muted); }}
         onWaiting={() => { if (activeRef.current) setWaiting(true); }} onCanPlay={() => { setReady(true); setWaiting(false); }}
@@ -166,14 +183,12 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
           // Reveal a real first frame on mobile Safari without a poster.
           if (reducedMotion) preparePreview(video);
         }}
-        onLoadedData={() => setReady(true)}
+        onProgress={event => trackBuffer(event.currentTarget)}
+        onLoadedData={event => { setReady(true); trackBuffer(event.currentTarget); }}
         onTimeUpdate={event => {
           const video = event.currentTarget;
           setPosition(Math.floor(video.currentTime * 4) / 4);
-          if (activeRef.current && !headroomReported.current && hasPlaybackHeadroom(video)) {
-            headroomReported.current = true;
-            onHeadroom?.(id);
-          }
+          trackBuffer(video);
         }}
         onError={() => {
           setFailed(true); setWaiting(false); setPlaying(false);

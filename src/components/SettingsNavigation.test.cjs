@@ -9,10 +9,14 @@ test('Settings is a routed page for library and account destinations, preserving
   for (const value of ['Offline library', 'to="/saved"', 'to="/notifications"', 'isAdminUser(user)', 'to="/admin"', '<AppSettingsEngagement']) assert.ok(settings.includes(value), value);
   assert.match(settings, /smartyNative\.postMessage\(\{ action: 'nativeScreen', screen: 'downloads' \}\)/);
   assert.match(menu, /to="\/settings"/);
-  assert.match(read('App.jsx'), /path="\/settings" element=\{<SettingsPage \/>\}/);
+  assert.match(read('App.jsx'), /path="\/settings" element=\{<SettingsPage\b/);
   assert.doesNotMatch(settings, /AppearanceSwitch/);
   assert.match(menu, /className="menu-quiz-row"[\s\S]+?<AppearanceSwitch compact \/>/);
   assert.doesNotMatch(read('App.jsx'), /<AppearanceSwitch/);
+});
+test('Settings can replay the quick tour without leaving the page', () => {
+  assert.match(read('App.jsx'), /<SettingsPage onOpenTour=\{onOpenTour\}/);
+  assert.match(read('pages/SettingsPage.jsx'), /onClick=\{onOpenTour\}[^\n]+>Quick tour</);
 });
 test('day-mode legacy conversation palettes follow readable app tokens', () => {
   const css = read('styles/day-theme.css');

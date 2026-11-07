@@ -10,13 +10,14 @@
   --ui-surface-soft: rgba(48, 72, 57, .035);
   --ui-surface-hover: rgba(48, 72, 57, .065);
   --ui-surface-pressed: rgba(48, 72, 57, .10);
-  --ui-line: rgba(36, 61, 48, .13);
-  --ui-line-strong: rgba(36, 61, 48, .26);
-  --ui-text: #202b26;
-  --ui-secondary: #38473e;
+  --ui-line: rgba(0, 0, 0, .12);
+  --ui-line-strong: rgba(0, 0, 0, .23);
+  /* Neutral ink keeps Day mode crisp without changing its warm paper or pine actions. */
+  --ui-text: #000000;
+  --ui-secondary: #191919;
   --ui-muted: #57645b;
   --ui-faint: #59665c;
-  --ui-label: #4b5b51;
+  --ui-label: #3d3d3d;
   --ui-primary: #214d40;
   --ui-primary-rgb: 33, 77, 64;
   --ui-primary-hover: #2a5d4d;
@@ -39,7 +40,7 @@
   --ui-success: #245d44;
   --ui-success-soft: #e3eee2;
   --ui-danger-soft: #f8e4e5;
-  --ui-shadow-float: 0 16px 48px rgba(36, 61, 48, .12);
+  --ui-shadow-float: 0 16px 48px rgba(0, 0, 0, .11);
 }
 
 /* A small, reusable switch. No new fixed controls or route layout changes. */
@@ -130,7 +131,7 @@
 :root[data-app-theme='day'] body .app-shell .content .news-page :is(.news-inline-notice, .cache-note, .news-provider-note, .news-brief-highlights a > span) { color: var(--ui-muted) !important; }
 :root[data-app-theme='day'] body .news-card :is(.skeleton-image, .skeleton-line) { background: var(--ui-surface-raised); }
 
-/* The rail remains a light floating surface, with a pine active action. */
+/* Keep collection screens readable against their light surfaces. */
 /* Collection screens still had legacy white text on their light surfaces. */
 :root[data-app-theme='day'] body .app-shell .content .creator-dashboard-page :is(.dashboard-stats strong, .request-avatar, .dashboard-post-placeholder, .dashboard-post-card, .request-row h3) { color: var(--ui-text) !important; }
 :root[data-app-theme='day'] body .app-shell .content .creator-dashboard-page :is(.dashboard-hero p, .dashboard-stats span, .panel-head p, .dashboard-empty p, .profile-mini, .dashboard-post-card p, .request-row p, .dashboard-status) { color: var(--ui-secondary) !important; }
@@ -138,17 +139,23 @@
 :root[data-app-theme='day'] body .app-shell .content .saved-page .saved-title-btn { color: var(--ui-text) !important; }
 :root[data-app-theme='day'] body .app-shell .content .saved-page :is(.community-eyebrow, .community-page-heading p, .community-results-heading > span, .community-sort, .saved-card-body p, .saved-topic, .saved-topic > span, .saved-placeholder) { color: var(--ui-muted) !important; }
 :root[data-app-theme='day'] body .app-shell .content .saved-page :is(.community-notice, .community-error, .saved-kind-switch, .community-skeleton-grid i) { background: var(--ui-surface-raised) !important; color: var(--ui-secondary) !important; }
-:root[data-app-theme='day'] body .app-shell > .topbar.glass-topbar { border-color: var(--ui-line-strong) !important; box-shadow: 0 8px 28px #243d3017 !important; }
+/* Paper-colored chrome with black for orientation and pine for primary actions. */
+:root[data-app-theme='day'] body .app-shell > .feed-view-switchbar { background: var(--ui-surface); box-shadow: none; }
+:root[data-app-theme='day'] body .feed-view-switch > a[aria-current='page'] { font-weight: 650; }
+:root[data-app-theme='day'] body .feed-view-switch-indicator::after { background: var(--ui-text); }
+:root[data-app-theme='day'] body .app-shell > .topbar.glass-topbar { border-color: var(--ui-line-strong) !important; box-shadow: 0 8px 26px #00000014 !important; }
 :root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .navbar-menu { border-color: var(--ui-line) !important; }
-:root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .hamburger-btn { color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .topbar.glass-topbar :is(.hamburger-btn, .quick-icon-link:not(.topbar-create-btn)) { color: var(--ui-secondary) !important; }
+:root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .quick-icon-link[aria-current='page']:not(.topbar-create-btn) { color: var(--ui-text) !important; background: var(--ui-accent-soft) !important; }
+:root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .quick-icon-link[aria-current='page']:not(.topbar-create-btn)::after { background: var(--ui-text); }
 :root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .hamburger-btn.is-open { color: var(--ui-accent-strong) !important; background: var(--ui-accent-soft) !important; }
 :root[data-app-theme='day'] body .app-shell .topbar.glass-topbar .nav-control-label { background: var(--ui-surface); color: var(--ui-text); border-color: var(--ui-line-strong); box-shadow: var(--ui-shadow-float); }
-:root[data-app-theme='day'] body .navigation-dialog.menu-overlay { background: #202b2638; }
+:root[data-app-theme='day'] body .navigation-dialog.menu-overlay { background: #00000038; }
 :root[data-app-theme='day'] body .navigation-dialog .menu-panel { box-shadow: var(--ui-shadow-float) !important; }
 :root[data-app-theme='day'] body .navigation-dialog :is(.menu-footer, .menu-personal-section) { border-color: var(--ui-line); }
 :root[data-app-theme='day'] body .smarty-brand-copy strong { color: var(--ui-text); }
 :root[data-app-theme='day'] body .smarty-brand-copy small { color: var(--ui-muted); }
-:root[data-app-theme='day'] body :is(.universal-search-layer, .feed-topic-picker-layer) { background: #202b264a; backdrop-filter: none; -webkit-backdrop-filter: none; }
+:root[data-app-theme='day'] body :is(.universal-search-layer, .feed-topic-picker-layer) { background: #0000004a; backdrop-filter: none; -webkit-backdrop-filter: none; }
 :root[data-app-theme='day'] body .universal-search-panel :is(input, h2, strong) { color: var(--ui-text) !important; }
 :root[data-app-theme='day'] body .universal-search-panel :is(p, small, kbd, .universal-search-meta, .universal-search-input-row, .universal-search-footer) { color: var(--ui-muted) !important; border-color: var(--ui-line); }
 :root[data-app-theme='day'] body .universal-search-panel :is(.universal-search-close, .universal-search-clear, .universal-search-filters button, .universal-search-result, .universal-search-quick-grid button) { color: var(--ui-secondary); border-color: var(--ui-line); }
@@ -211,7 +218,7 @@
 :root[data-app-theme='day'] :is(.reader-theme-dark, .reader-theme-sepia, .video-topic-page) {
   color-scheme: dark; --ui-bg: #06070a; --ui-bg-deep: #06070a; --ui-surface: #111112;
   --ui-surface-raised: #1b1b1d; --ui-text: #f6f5f3; --ui-secondary: #d1cfcc;
-  --ui-muted: #afadaa; --ui-faint: #9c9a98; --ui-accent: #c3c1be;
+  --ui-muted: #afadaa; --ui-faint: #9c9a98; --ui-accent: #96d7ff;
   --ui-control-bg: #161618; --ui-control-hover: #242426; --ui-line: #eae9e71f;
 }
 @media (hover: hover) {

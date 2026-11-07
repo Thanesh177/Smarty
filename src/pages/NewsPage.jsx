@@ -903,31 +903,27 @@ export default function NewsPage({ briefingOnly = false }) {
         <SavedNewsStories collapsed />
       </div>
       <div className="news-browse-controls">
-      <div className="news-controls news-compact-search">
-        <label className="news-search-control">
-          <Search size={17} aria-hidden="true" />
-          <input
-            type="search"
-            aria-label={reportView === 'saved' ? 'Search saved reports' : 'Search current news'}
-            placeholder={reportView === 'saved' ? 'Search your saved reports' : `Search ${locationLabel} news`}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-
-      </div>
-
-      <div className="news-reader-tools">
+        <div className="news-controls news-compact-search">
+          <label className="news-search-control">
+            <Search size={17} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label={reportView === 'saved' ? 'Search saved reports' : `Search ${locationLabel} news`}
+              placeholder={reportView === 'saved' ? 'Search saved reports' : 'Search reports'}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+        </div>
+        <label className="news-report-order">Order<select aria-label="Order reports" value={reportOrder} onChange={event => setReportOrder(event.target.value)}>
+          <option value="edition">{reportView === 'saved' ? 'Recently saved' : 'Balanced'}</option><option value="newest">Newest first</option>
+        </select></label>
         <div className="news-reader-views" role="group" aria-label="Report collection">
           {[['edition', 'Latest', editionArticles.length], ['unopened', 'Unopened', editionArticles.filter(article => !reader.opened.has(article.news_link)).length], ['saved', 'Saved reports', saved.length]].map(([value, label, count]) =>
             <button type="button" key={value} aria-pressed={reportView === value} onClick={() => { setReportView(value); setSelectedSection('All'); }}>
               {label}<small>{count}</small>
             </button>)}
         </div>
-        <label className="news-report-order">Order<select aria-label="Order reports" value={reportOrder} onChange={event => setReportOrder(event.target.value)}>
-          <option value="edition">{reportView === 'saved' ? 'Recently saved' : 'Balanced coverage'}</option><option value="newest">Newest first</option>
-        </select></label>
-      </div>
       </div>
       {reportView === 'saved' && <p className="news-reader-note">Saved previews from every edition, kept on this device for your account. Original articles need a connection.</p>}
       {reportView === 'unopened' && <p className="news-reader-note">Reports you haven’t opened in Smarty on this device. Opening a quick read marks it as opened.</p>}

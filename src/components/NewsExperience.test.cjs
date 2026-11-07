@@ -7,7 +7,9 @@ const read = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
 test('the briefing keeps section navigation but removes summary search and the extra learning promotion', () => {
   const news = read('pages/NewsPage.jsx');
   assert.doesNotMatch(news, /summarySearch|Search summaries|Understand the bigger picture|NewsLearningLink/);
-  assert.match(news, /Search current news/);
+  const [briefing, newsroom] = news.split('className="news-page news-compact news-newsroom"');
+  assert.doesNotMatch(briefing, /type="search"/);
+  assert.match(newsroom, /type="search"[\s\S]+?'Search reports'/);
   assert.match(news, /Daily news sections/);
   assert.match(news, /What this means and what comes next/);
   assert.doesNotMatch(news, /<dt>Why it matters|<dt>What to watch/);

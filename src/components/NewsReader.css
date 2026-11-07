@@ -1,12 +1,11 @@
 /* Reader controls belong to the newsroom; no global button overrides. */
-.app-shell .content .news-compact .news-reader-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; margin: 0 0 16px; border-bottom: 1px solid var(--ui-line, #ffffff16); }
 .app-shell .content .news-compact .news-reader-views { display: flex; gap: clamp(14px, 3vw, 24px); min-width: 0; }
 .app-shell .content .news-compact .news-reader-views button { display: inline-flex; align-items: center; gap: 6px; min-height: 46px; padding: 0 1px; background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--ui-muted, #93a0ad); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .app-shell .content .news-compact .news-reader-views button[aria-pressed='true'] { border-color: var(--ui-accent, #b8cee2); color: var(--ui-text, #f5f7fa); }
 .app-shell .content .news-compact .news-reader-views small { font-size: 10px; color: var(--ui-muted, #93a0ad); font-variant-numeric: tabular-nums; }
 .app-shell .content .news-compact .news-report-order { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 11px; color: var(--ui-muted, #93a0ad); }
 .app-shell .content .news-compact .news-report-order select { width: auto; min-height: 44px; padding: 0 22px 0 5px; border: 0; background-color: transparent; color: var(--ui-text, #f5f7fa); border-radius: 4px; font-size: 12px; cursor: pointer; color-scheme: dark; }
-.app-shell .content .news-compact .news-report-order option { background: #101317; color: #f5f7fa; }
+.app-shell .content .news-compact .news-report-order option { background: var(--ui-surface); color: var(--ui-text); }
 .app-shell .content .news-compact .news-reader-note { margin: 0 0 14px; color: var(--ui-muted, #93a0ad); font-size: 12px; line-height: 1.6; }
 .app-shell .content .news-compact .news-card-title { display: block; width: 100%; min-height: 44px; margin: 0; padding: 0; text-align: left; color: inherit; background: none; border: 0; border-radius: 0; font: inherit; line-height: inherit; cursor: pointer; letter-spacing: inherit; }
 .app-shell .content .news-compact .news-opened-label { display: inline-flex; align-items: center; gap: 4px; color: var(--ui-muted, #93a0ad); font-size: 10px; }
@@ -65,7 +64,6 @@
 }
 @media (max-width: 600px) {
   .app-shell .content .news-compact .news-report-order { width: 100%; margin: 0 0 2px; justify-content: flex-end; border-top: 1px solid var(--ui-line, #ffffff16); }
-  .app-shell .content .news-compact .news-reader-tools { row-gap: 0; }
   .app-shell .content .news-compact .news-reader-empty { padding-right: 46px; }
   .news-reader-sheet { border-left: 0; }
   .news-reader-report-actions .news-reader-original { flex-basis: 100%; justify-content: flex-start; }

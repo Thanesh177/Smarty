@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { discoverVideoPage, formatVideoTime, getMostVisibleVideo, getPostVideoUrl, getVideoCreatorId, getVideoCreatorName, getVideoPosts, isVideoTopic, isVideoTopicPost, nextVideoPreload, validateVideoUpload } from './videoFeed.js';
-import { hasPlaybackHeadroom } from './reelPlayback.js';
+import { hasBufferedOpening, hasPlaybackHeadroom } from './reelPlayback.js';
 import { MAIN_TOPICS, getMainTopicDefinition, postMatchesMainTopic } from '../data/topicTaxonomy.js';
 
 test('Video is available in navigation and resolves legacy video labels', () => {
@@ -55,16 +55,27 @@ test('discovery limits requests and terminates repeated cursor loops', async () 
   assert.equal((await discoverVideoPage(async () => ({ items: [], nextCursor: 'same' }), 'same')).nextCursor, null);
 });
 
-test('next clip warming protects the current clip and respects file size and data saving', () => {
+test('next clip warming waits for playback headroom and respects slow links and data saving', () => {
   const video = { paused: false, currentTime: 1, readyState: 4, duration: 20,
     buffered: { length: 1, start: () => 0, end: () => 5.5 } };
   assert.equal(hasPlaybackHeadroom(video), true);
   assert.equal(hasPlaybackHeadroom({ ...video, currentTime: 3 }), false);
   assert.equal(hasPlaybackHeadroom({ ...video, paused: true }), false);
-  assert.equal(nextVideoPreload({ videoUrl: '/large.mov' }, { effectiveType: '4g', downlink: 15 }), 'metadata');
+  assert.equal(nextVideoPreload({ videoUrl: '/large.mov' }, { effectiveType: '4g', downlink: 15 }), 'auto');
   assert.equal(nextVideoPreload({ videoUrl: '/small.mp4', videoBytes: 2000 }), 'auto');
   assert.equal(nextVideoPreload({ videoUrl: '/small.mp4', videoBytes: 2000 }, { saveData: true }), 'none');
-  assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }), 'metadata');
+  assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }), 'auto');
+  assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }, { effectiveType: '3g' }), 'metadata');
+  assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }, { effectiveType: 'slow-2g' }), 'none');
+});
+
+test('a warm clip needs an actual contiguous opening, not just metadata or a later buffered range', () => {
+  const buffered = (start, end) => ({ length: 1, start: () => start, end: () => end });
+  assert.equal(hasBufferedOpening({ readyState: 1, duration: 10, buffered: buffered(0, 5) }), false);
+  assert.equal(hasBufferedOpening({ readyState: 3, duration: 10, buffered: buffered(2, 6) }), false);
+  assert.equal(hasBufferedOpening({ readyState: 3, duration: 10, buffered: buffered(0, 1) }), false);
+  assert.equal(hasBufferedOpening({ readyState: 3, duration: 10, buffered: buffered(0, 3) }), true);
+  assert.equal(hasBufferedOpening({ readyState: 3, duration: 1.5, buffered: buffered(0, 1.5) }), true);
 });
 test('the most visible card wins and completely offscreen cards never play', () => {
   assert.equal(getMostVisibleVideo(new Map([['one', .25], ['two', .75]]), 'one'), 'two');

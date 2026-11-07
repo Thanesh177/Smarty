@@ -17,6 +17,9 @@ export default defineConfig(({ mode }) => {
       targets: ['defaults', 'not IE 11', 'iOS >= 12', 'Android >= 6'],
     }),
   ],
+  // The optional WebCodecs worker uses BigInt; it is never loaded by legacy
+  // clients. Preserve the legacy bundle targets for the rest of Smarty.
+  esbuild: { supported: { bigint: true } },
 
   build: {
     // Let Vite use default optimal targets for production bundling

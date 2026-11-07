@@ -9,6 +9,7 @@ import { cleanPostTopic, POST_LIMITS, postReadingStats, validatePostMedia } from
 import { normalizePostResponse } from '../lib/postResponse';
 import { editPostError, editPostForm, editPostPayload, invalidateEditedFeed, normalizeEditUpload, postForEditing } from '../lib/postEditing';
 import { validateVideoUpload } from '../lib/videoFeed';
+import { canPrepareVideo, prepareVideoUpload } from '../lib/prepareVideoUpload';
 import './CreatePostComposer.css';
 import './EditPostPage.css';
 
@@ -50,6 +51,7 @@ function PostEditor({ id, account }) {
   const operation = useRef(false);
   const loadVersion = useRef(0);
   const xhrRef = useRef(null);
+  const preparation = useRef(null);
   const uploadCache = useRef(null);
   const fileInput = useRef(null);
   const topicInput = useRef(null);
@@ -80,7 +82,7 @@ function PostEditor({ id, account }) {
   }, [id]);
   useEffect(() => {
     mounted.current = true; load();
-    return () => { mounted.current = false; loadVersion.current += 1; xhrRef.current?.abort(); };
+    return () => { mounted.current = false; loadVersion.current += 1; preparation.current?.abort(); xhrRef.current?.abort(); };
   }, [load]);
   useEffect(() => {
     let active = true;
@@ -124,10 +126,23 @@ function PostEditor({ id, account }) {
     if (!file) return null;
     if (uploadCache.current?.file === file) return uploadCache.current.result;
     setStage('Preparing attachment…');
-    const result = normalizeEditUpload(await postApi.getUploadUrl({ fileName: file.name, fileType: file.type }));
+    let prepared = file;
+    if (canPrepareVideo(file)) {
+      const controller = new AbortController();
+      preparation.current = controller;
+      setStage('Optimizing video…');
+      try {
+        prepared = await prepareVideoUpload(file, {
+          signal: controller.signal,
+          onProgress: value => { if (mounted.current) setProgress(value); },
+        });
+      } finally { preparation.current = null; }
+      if (controller.signal.aborted || !mounted.current) throw new Error('Upload cancelled.');
+    }
+    const result = normalizeEditUpload(await postApi.getUploadUrl({ fileName: prepared.name, fileType: prepared.type }));
     if (!mounted.current) throw new Error('Upload cancelled.');
     if (!result.uploadUrl || (!result.fileUrl && !result.key)) throw new Error('Could not prepare the attachment. Please try again.');
-    setStage('Uploading attachment…');
+    setStage('Uploading attachment…'); setProgress(0);
     await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest(); xhrRef.current = xhr;
       const fail = message => { xhrRef.current = null; reject(new Error(message)); };
@@ -136,7 +151,7 @@ function PostEditor({ id, account }) {
       xhr.onerror = () => fail('Upload interrupted. Check your connection and try again.');
       xhr.onabort = () => fail('Upload cancelled.');
       xhr.ontimeout = () => fail('Upload timed out. Try a smaller file or a stronger connection.');
-      xhr.open('PUT', result.uploadUrl); xhr.timeout = 180000; xhr.setRequestHeader('Content-Type', file.type); xhr.send(file);
+      xhr.open('PUT', result.uploadUrl); xhr.timeout = 180000; xhr.setRequestHeader('Content-Type', prepared.type); xhr.send(prepared);
     });
     uploadCache.current = { file, result };
     return result;
@@ -201,7 +216,7 @@ function PostEditor({ id, account }) {
         <div className="composer-setting composer-topic-shell" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setTopicOpen(false); }}><label htmlFor="edit-topic">Topic</label><div className="composer-topic-input"><Search size={16} /><input ref={topicInput} id="edit-topic" role="combobox" aria-autocomplete="list" aria-expanded={topicOpen} aria-controls={topicOpen ? 'edit-topic-options' : undefined} aria-activedescendant={topicOpen && choices[topicIndex] ? 'edit-topic-' + topicIndex : undefined} autoComplete="off" maxLength={POST_LIMITS.topic} value={form.topic} disabled={busy} placeholder="Find or add a topic" onFocus={() => setTopicOpen(true)} onChange={event => { change('topic', event.target.value.replace(/[\u0000-\u001f\u007f]/g, '')); setTopicOpen(true); setTopicIndex(-1); }} onKeyDown={event => { if (event.key === 'Escape') { setTopicOpen(false); event.stopPropagation(); } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setTopicOpen(true); setTopicIndex(index => choices.length ? (index + (event.key === 'ArrowDown' ? 1 : -1) + choices.length) % choices.length : -1); } else if (event.key === 'Enter') { event.preventDefault(); if (topicOpen && choices[topicIndex]) chooseTopic(choices[topicIndex]); else setTopicOpen(false); } }} /></div>
           {topicOpen && choices.length > 0 && <div className="composer-topic-menu" id="edit-topic-options" role="listbox" aria-label="Matching topics">{choices.map((topic, index) => <button key={topic} id={'edit-topic-' + index} type="button" role="option" aria-selected={index === topicIndex} onClick={() => chooseTopic(topic)}>{topic}{topic === form.topic && <Check size={14} />}</button>)}</div>}<p>Search existing topics, or type a new one.</p></div>
         <fieldset className="composer-setting composer-audience"><legend>Who can see it</legend><div><button type="button" aria-pressed={form.visibility === 'public'} disabled={busy} onClick={() => change('visibility', 'public')}><Globe2 size={15} />Public</button><button type="button" aria-pressed={form.visibility === 'private'} disabled={busy} onClick={() => change('visibility', 'private')}><Lock size={15} />Only me</button></div><p>{form.visibility === 'private' ? 'Only you can see this post.' : 'Visible to the Smarty community.'}</p></fieldset>
-        <div className="composer-publish-area">{error && <p className="composer-error" role="alert">{error}</p>}{dirty && validation && <p className="composer-publish-note">{validation}</p>}{busy && <div className="composer-progress" role="status"><span>{stage}</span>{stage === 'Uploading attachment…' && <progress max="100" value={progress} aria-label="Attachment upload progress" />}</div>}{saved && <p className="edit-saved" role="status"><Check size={16} />Your changes are saved.</p>}
+        <div className="composer-publish-area">{error && <p className="composer-error" role="alert">{error}</p>}{dirty && validation && <p className="composer-publish-note">{validation}</p>}{busy && <div className="composer-progress" role="status"><span>{stage}</span>{['Optimizing video…', 'Uploading attachment…'].includes(stage) && <progress max="100" value={progress} aria-label={stage} />}</div>}{saved && <p className="edit-saved" role="status"><Check size={16} />Your changes are saved.</p>}
           <button className="composer-primary" type="submit" disabled={!canSave}><Save size={16} />{busy ? 'Please wait…' : 'Save changes'}</button><button type="button" className="edit-cancel composer-quiet" disabled={busy} onClick={leave}>Back to my posts</button>{saved && <Link className="edit-view-post" to={'/reel/' + encodeURIComponent(id)}>View updated post</Link>}
         </div><div className="edit-danger"><button type="button" className="composer-quiet" disabled={busy} onClick={deletePost}><Trash2 size={15} />Delete post</button><p>Permanently removes this post.</p></div>
       </aside>

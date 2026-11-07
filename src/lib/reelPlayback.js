@@ -1,12 +1,21 @@
 export const VIDEO_CONTROLS_IDLE_MS = 3500;
+export const VIDEO_OPENING_BUFFER_SECONDS = 3;
 
-export function hasPlaybackHeadroom(video) {
-  if (video.paused || video.readyState < 3 || video.currentTime < .75) return false;
-  const ahead = Math.min(Number.isFinite(video.duration) ? video.duration : Infinity, video.currentTime + 4);
+function hasBufferedInterval(video, start, seconds) {
+  const end = Math.min(Number.isFinite(video.duration) ? video.duration : Infinity, start + seconds);
+  if (end <= start) return false;
   for (let index = 0; index < video.buffered.length; index++) {
-    if (video.buffered.start(index) <= video.currentTime && video.buffered.end(index) >= ahead - .05) return true;
+    if (video.buffered.start(index) <= start + .05 && video.buffered.end(index) >= end - .05) return true;
   }
   return false;
+}
+
+export function hasPlaybackHeadroom(video) {
+  return !video.paused && video.readyState >= 3 && hasBufferedInterval(video, video.currentTime, 3);
+}
+
+export function hasBufferedOpening(video) {
+  return video.readyState >= 2 && hasBufferedInterval(video, 0, VIDEO_OPENING_BUFFER_SECONDS);
 }
 
 // Start inside the gesture when one exists. Outside a gesture, Safari and

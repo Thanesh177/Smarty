@@ -13,10 +13,10 @@ function luminance(hex) {
 }
 function contrast(a, b) { const values = [luminance(a), luminance(b)].sort((a,b) => b-a); return (values[0]+.05)/(values[1]+.05); }
 
-test('graphite and molten silver have distinct action, surface and text tokens', () => {
+test('near black and sky blue have distinct action, surface and text tokens', () => {
   assert.equal(token('--ui-bg'), '#06070a');
-  assert.equal(token('--ui-primary'), '#d2d0cc');
-  assert.equal(token('--ui-primary-ink'), '#151515');
+  assert.equal(token('--ui-primary'), '#79c9f3');
+  assert.equal(token('--ui-primary-ink'), '#081b28');
   assert.notEqual(token('--ui-primary'), token('--ui-accent'), 'Links and primary buttons have distinct roles');
   assert.match(token('--ui-brand-finish'), /linear-gradient/);
   assert.notEqual(token('--ui-surface'), token('--ui-bg'));
@@ -34,6 +34,22 @@ test('reading, muted labels, links and primary buttons meet normal-text contrast
   assert.ok(contrast(token('--ui-accent'), token('--ui-accent-soft')) >= 4.5);
 });
 
+test('Day mode uses black ink on light surfaces and preserves its pine actions', () => {
+  const dayPalette = postcss.parse(read('styles/day-theme.css')).nodes.find(node => node.selector === ":root[data-app-theme='day']");
+  const day = name => dayPalette.nodes.find(node => node.prop === name)?.value;
+  assert.equal(day('--ui-text'), '#000000');
+  assert.equal(day('--ui-bg'), '#f4efe6');
+  assert.equal(day('--ui-primary'), '#214d40');
+  assert.equal(day('--ui-accent-soft'), '#e8e0f0');
+  for (const surface of ['--ui-bg', '--ui-surface', '--ui-surface-raised', '--ui-accent-soft']) {
+    for (const ink of ['--ui-text', '--ui-secondary', '--ui-label']) {
+      assert.ok(contrast(day(ink), day(surface)) >= 7, ink + ' on ' + surface);
+    }
+  }
+  const boot = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+  assert.match(boot, /\.boot-loader \{ background: #f4efe6 !important; color: #000000; \}/);
+});
+
 test('finishing styles load after the shared and navigation styles without changing their geometry', () => {
   const main = read('main.jsx');
   assert.ok(main.indexOf("'./styles/cobalt-theme.css'") > main.indexOf("'./styles/navigation-toolbar.css'"));
@@ -47,7 +63,7 @@ test('finishing styles load after the shared and navigation styles without chang
 test('brand and opening screens agree with the app palette before React starts', () => {
   const boot = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
   assert.match(boot, /name="theme-color" content="#06070a"/);
-  assert.match(boot, /\.boot-loader-orb[^}]+color: #151515; background: linear-gradient\(150deg, #f5f4f0, #d2d0cc/);
+  assert.match(boot, /\.boot-loader-orb[^}]+color: #081b28; background: linear-gradient\(150deg, #def5ff, #79c9f3/);
   const rail = read('styles/navigation-toolbar.css');
   assert.match(rail, /background: var\(--ui-primary\) !important; color: var\(--ui-primary-ink\)/);
   assert.match(read('components/FeedViewSwitch.css'), /background: var\(--ui-primary\)/);
