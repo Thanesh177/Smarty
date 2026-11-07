@@ -9,11 +9,20 @@ test('the briefing keeps section navigation but removes summary search and the e
   assert.doesNotMatch(news, /summarySearch|Search summaries|Understand the bigger picture|NewsLearningLink/);
   const [briefing, newsroom] = news.split('className="news-page news-compact news-newsroom"');
   assert.doesNotMatch(briefing, /type="search"/);
+  assert.doesNotMatch(briefing, /news-edition-footer|news-summary-sources|news-briefing-takeaways/);
+  assert.match(briefing, /to="\/news">All reports/);
   assert.match(newsroom, /type="search"[\s\S]+?'Search reports'/);
   assert.match(news, /Daily news sections/);
   assert.match(news, /What this means and what comes next/);
   assert.doesNotMatch(news, /<dt>Why it matters|<dt>What to watch/);
   assert.match(news, /if \(forceRefresh \|\| !hasEditorialBriefing\(availableData\)/, 'Manual refresh must still update the briefing');
+});
+
+test('both News views show the entire briefing without an expander', () => {
+  const news = read('pages/NewsPage.jsx');
+  assert.doesNotMatch(news, /Read the full briefing|news-brief-more/);
+  assert.match(news, /const paragraphs = briefingParagraphs\(summary\);[\s\S]+?paragraphs\.map/);
+  assert.match(news, /const overviewParagraphs = briefingParagraphs\(dailyBriefing\);[\s\S]+?overviewParagraphs\.map/);
 });
 
 test('the deeper lesson retains its guide and next connection, without the follow-up chat panel', () => {

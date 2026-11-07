@@ -129,6 +129,11 @@
 :root[data-app-theme='day'] body .app-shell .content .quiz-progress-workspace :is(.profile-level-fill, .quiz-record-track > div) { background: var(--ui-primary) !important; }
 :root[data-app-theme='day'] body .app-shell .content .quiz-progress-workspace :is(.unlock-action-btn, .remove-mistake-btn) { color: var(--ui-accent-strong); background: var(--ui-accent-soft); border-color: var(--ui-accent-line); }
 :root[data-app-theme='day'] body .app-shell .content .news-page :is(.news-inline-notice, .cache-note, .news-provider-note, .news-brief-highlights a > span) { color: var(--ui-muted) !important; }
+:root[data-app-theme='day'] body .app-shell .content .news-page
+  :is(.news-card, .news-daily-brief, .news-topic-summary, .news-summary-post-copy, .news-summary-context) p,
+:root[data-app-theme='day'] .news-reader :is(.news-reader-prose, .news-reader-context-lead) p { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] .news-reader { color-scheme: light; }
+:root[data-app-theme='day'] .news-reader-sheet { background: var(--ui-surface); }
 :root[data-app-theme='day'] body .news-card :is(.skeleton-image, .skeleton-line) { background: var(--ui-surface-raised); }
 
 /* Keep collection screens readable against their light surfaces. */

@@ -4,11 +4,12 @@ import { FEED_VIEWS, getFeedView } from '../lib/feedViews';
 import { MAIN_TOPIC_LABELS } from '../data/topicTaxonomy';
 import FeedTopicPicker from './FeedTopicPicker';
 import { postApi } from '../api/client';
+import { canWarmVideoFeed } from '../lib/videoFeed';
 import './FeedViewSwitch.css';
 
 const icons = { all: Layers, news: Newspaper, video: Play };
 const prepareVideos = () => {
-  if (!navigator.connection?.saveData) void postApi.getVideoFeed().catch(() => {});
+  if (canWarmVideoFeed(navigator.connection)) void postApi.getVideoFeed().catch(() => {});
 };
 
 // Mounted once above the route outlet so switching views never resets the pill.

@@ -55,6 +55,12 @@ export function nextVideoPreload(post, connection) {
   return 'auto';
 }
 
+// The opening clip is speculative; don't use mobile data on constrained links.
+export function canWarmVideoFeed(connection) {
+  return !connection?.saveData && !/^(?:slow-2g|2g|3g)$/.test(connection?.effectiveType || '')
+    && connection?.type !== 'cellular';
+}
+
 export function getMostVisibleVideo(entries) {
   const visible = [...entries].filter(([, ratio]) => ratio >= 0.5);
   visible.sort((a, b) => b[1] - a[1]);

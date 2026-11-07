@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverVideoPage, formatVideoTime, getMostVisibleVideo, getPostVideoUrl, getVideoCreatorId, getVideoCreatorName, getVideoPosts, isVideoTopic, isVideoTopicPost, nextVideoPreload, validateVideoUpload } from './videoFeed.js';
+import { canWarmVideoFeed, discoverVideoPage, formatVideoTime, getMostVisibleVideo, getPostVideoUrl, getVideoCreatorId, getVideoCreatorName, getVideoPosts, isVideoTopic, isVideoTopicPost, nextVideoPreload, validateVideoUpload } from './videoFeed.js';
 import { hasBufferedOpening, hasPlaybackHeadroom } from './reelPlayback.js';
 import { MAIN_TOPICS, getMainTopicDefinition, postMatchesMainTopic } from '../data/topicTaxonomy.js';
 
@@ -67,6 +67,14 @@ test('next clip warming waits for playback headroom and respects slow links and 
   assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }), 'auto');
   assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }, { effectiveType: '3g' }), 'metadata');
   assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }, { effectiveType: 'slow-2g' }), 'none');
+});
+
+test('warming the unopened Videos tab skips data saver, known cellular and slow links', () => {
+  assert.equal(canWarmVideoFeed({ effectiveType: '4g', type: 'wifi' }), true);
+  assert.equal(canWarmVideoFeed(undefined), true);
+  for (const connection of [{ saveData: true }, { effectiveType: '4g', type: 'cellular' }, { effectiveType: '3g' }, { effectiveType: 'slow-2g' }]) {
+    assert.equal(canWarmVideoFeed(connection), false);
+  }
 });
 
 test('a warm clip needs an actual contiguous opening, not just metadata or a later buffered range', () => {

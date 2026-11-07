@@ -820,23 +820,6 @@ body:has(.rooms-page.has-active-room) .topbar-row {
   border-right: 1px solid rgba(151, 198, 211, 0.12) !important;
 }
 
-.chat-page .chat-sidebar-heading {
-  min-height: 58px;
-  padding: 0 2px 12px;
-}
-
-.chat-page .chat-sidebar-heading > div > span {
-  color: #79d7e8;
-  font-size: 0.62rem;
-  letter-spacing: 0.16em;
-}
-
-.chat-page .chat-sidebar-heading h1 {
-  font-size: clamp(1.65rem, 2vw, 2.15rem);
-  font-weight: 760;
-  letter-spacing: -0.055em;
-}
-
 .chat-page .chat-search {
   padding: 5px !important;
   border: 1px solid rgba(156, 203, 215, 0.09) !important;

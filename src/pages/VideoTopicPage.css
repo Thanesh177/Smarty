@@ -104,3 +104,4 @@
   .video-topic-page :is(.feed-inner-header, .video-topic-tools, .video-topic-navigation, .reel-video-top, .reel-video-bottom),
   .reel-video-stage::after { transition: none; }
 }
+.app-shell .content .video-topic-page[hidden] { display: none !important; }

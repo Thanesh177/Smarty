@@ -471,7 +471,7 @@ input, select, textarea { accent-color: var(--ui-accent); }
 .app-shell .content :is(.chat-page, .rooms-page) { background: var(--ui-bg) !important; color: var(--ui-text); }
 .app-shell .content :is(.chat-window-top, .chat-header, .composer-shell, .rooms-page .input) { background: var(--ui-surface) !important; border-color: var(--ui-line) !important; box-shadow: none !important; }
 .app-shell .content :is(.chat-sidebar, .chat-window, .rooms-page .sidebar, .rooms-page .chat) { background: var(--ui-control-bg) !important; border-color: var(--ui-line) !important; box-shadow: none !important; }
-.app-shell .content :is(.chat-sidebar-heading h1, .rooms-sidebar-heading h1, .chat-info h2) { color: var(--ui-text); font-weight: 550; }
+.app-shell .content :is(.rooms-sidebar-heading h1, .chat-info h2) { color: var(--ui-text); font-weight: 550; }
 .app-shell .content .chat-page .message:not(:has(.message-media-preview, .audio-mini-card)) { background: var(--ui-surface-raised) !important; color: var(--ui-text) !important; }
 .app-shell .content .chat-page .message.mine:not(:has(.message-media-preview, .audio-mini-card)) { background: var(--ui-accent-soft) !important; }
 .app-shell .content .rooms-page .msg:not(:has(.room-message-media-tap)) { background: var(--ui-surface-raised) !important; color: var(--ui-text) !important; }

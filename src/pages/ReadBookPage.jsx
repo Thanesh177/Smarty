@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bookmark, Check, BookOpen, ArrowUpRight, Search, X, RotateCcw, LibraryBig } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Bookmark, Check, BookOpen, ArrowUpRight, Search, X, RotateCcw } from 'lucide-react';
 import { readBooksApi } from '../api/client';
 import useBookLibrary from '../hooks/useBookLibrary';
 import { getStarterCatalog } from '../lib/bookStarterCatalog';
@@ -85,7 +85,7 @@ function BookDetails({ book, entry, onClose, onUpdate, onRemove, error, onSimila
 }
 
 export default function ReadBookPage() {
-  const location = useLocation(), navigate = useNavigate();
+  const location = useLocation();
   const preview = location.pathname === '/preview-books';
   const initialSearch = new URLSearchParams(location.search).get('search') || '';
   const [query, setQuery] = useState(initialSearch), [debounced, setDebounced] = useState(initialSearch);
@@ -168,10 +168,7 @@ export default function ReadBookPage() {
   const beginReading = book => library.update(book,{shelf:'reading'});
   const showSimilar = category => { setCollection(category.toLowerCase());setQuery('');setTab('explore');setSelected(null); };
   const count = status => library.entries.filter(entry => entry.shelf === status).length;
-  return <main className="books-workspace" aria-labelledby="books-workspace-title">
-    <header className="library-header"><div><span className="library-eyebrow"><LibraryBig size={14} /> SMARTY LIBRARY</span><h1 id="books-workspace-title">A little space to read.</h1><p>Follow your curiosity. Keep the ideas that stay with you.</p></div>
-      <div className="library-total"><strong>{library.entries.length}</strong><span>on your shelves</span></div>
-    </header>
+  return <main className="books-workspace" aria-label={preview ? 'Book previews' : 'Books'}>
     <div className="library-toolbar"><nav aria-label="Library views">{[['explore','Explore'],['library','My library']].map(([key,label])=><button type="button" key={key} aria-pressed={tab===key} onClick={()=>{setQuery('');setDebounced('');setTab(key);}}>{label}{key==='library'&&library.entries.length>0&&<small>{library.entries.length}</small>}</button>)}</nav>
       <div className="library-search"><Search size={17} aria-hidden="true" /><input type="search" aria-label="Search books" placeholder={tab==='library'?'Search your books or notes':'Search titles or authors'} value={query} onChange={event=>setQuery(event.target.value)} />{query&&<button type="button" aria-label="Clear book search" onClick={()=>setQuery('')}><X size={16}/></button>}</div>
     </div>
@@ -180,10 +177,10 @@ export default function ReadBookPage() {
     {tab==='explore' ? <>
       {!query && !collection && continueBook && <section className="library-resume"><div><span>CONTINUE READING</span><h2>{continueBook.book.title}</h2><p>{bookAuthor(continueBook.book)}{continueBook.totalChapters>0&&` · Section ${continueBook.chapter+1} of ${continueBook.totalChapters}`}</p></div><Link to={`/read-book/${encodeURIComponent(bookReadId(continueBook.book))}`}>Continue<BookOpen size={16}/></Link></section>}
       <div className="library-collections" aria-label="Book collections">{BOOK_COLLECTIONS.map(([key,label])=><button type="button" key={key} aria-pressed={collection===key} onClick={()=>{setCollection(key);setQuery('');}}>{label}</button>)}</div>
-      <div className="library-filters"><div className="library-access"><button type="button" aria-pressed={!preview} onClick={()=>navigate('/read-books')}>Read in Smarty</button><button type="button" aria-pressed={preview} onClick={()=>navigate('/preview-books')}>External previews</button></div>
-        <div>{!preview&&<label>Language<select aria-label="Book language" value={language} onChange={event=>setLanguage(event.target.value)}>{BOOK_LANGUAGES.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>}
-        {!preview&&<label>Order<select aria-label="Book order" value={sort} onChange={event=>setSort(event.target.value)}><option value="popular">Popular</option><option value="descending">Recently added</option><option value="ascending">Catalog order</option></select></label>}</div>
-      </div>
+      {!preview && <div className="library-filters"><div>
+        <label>Language<select aria-label="Book language" value={language} onChange={event=>setLanguage(event.target.value)}>{BOOK_LANGUAGES.map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
+        <label>Order<select aria-label="Book order" value={sort} onChange={event=>setSort(event.target.value)}><option value="popular">Popular</option><option value="descending">Recently added</option><option value="ascending">Catalog order</option></select></label>
+      </div></div>}
       <header className="library-section-heading"><div><h2>{query ? `Results for “${query}”` : activeCollection?.[1] || collection}</h2><p>{preview?'These editions open at the provider; full text is not guaranteed.':activeCollection?.[2]||'Explore another direction.'}</p></div>
         {!loading&&<span>{catalog.total.toLocaleString()} {catalog.source==='starter'?'starter picks':'catalog matches'}{cacheUsed?' · cached':''}</span>}
       </header>

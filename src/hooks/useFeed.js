@@ -6,6 +6,7 @@ import { getUserScopedStorageKey } from '../lib/userScopedStorage';
 const FEED_CACHE_KEY = 'smarty_cached_feed_v2';
 const FEED_CURSOR_KEY = 'smarty_cached_feed_cursor_v2';
 const BLOCKED_CREATORS_KEY = 'smarty_blocked_creators_v1';
+const FEED_MODERATION_EVENT = 'smarty:feed-moderated';
 
 const getPostCreatorId = (post) =>
   String(
@@ -136,6 +137,30 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
       // ignore storage quota errors
     }
   }, [feedCacheKey, feedCursorKey, videoOnly]);
+
+  // A warmed Videos view can be mounted behind All posts. Share local safety
+  // actions immediately, but never apply one to a different account's feed.
+  useEffect(() => {
+    const onModeration = ({ detail }) => {
+      if (detail?.account !== userId) return;
+      if (detail.postId) {
+        if (hiddenPostIdsRef.current.has(detail.postId)) return;
+        hiddenPostIdsRef.current.add(detail.postId);
+      } else if (detail.creatorId) {
+        if (blockedCreatorIdsRef.current.has(detail.creatorId)) return;
+        blockedCreatorIdsRef.current.add(detail.creatorId);
+      } else return;
+      preloadedPageRef.current = null;
+      setPosts(current => {
+        const updated = removeBlockedPosts(current);
+        if (updated.length === current.length) return current;
+        saveCache(updated, nextCursor);
+        return updated;
+      });
+    };
+    window.addEventListener(FEED_MODERATION_EVENT, onModeration);
+    return () => window.removeEventListener(FEED_MODERATION_EVENT, onModeration);
+  }, [nextCursor, removeBlockedPosts, saveCache, userId]);
 
   useEffect(() => {
     if (activeCacheScopeRef.current === userId) return;
@@ -388,8 +413,9 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
         saveCache(updated, nextCursor);
         return updated;
       });
+      window.dispatchEvent(new CustomEvent(FEED_MODERATION_EVENT, { detail: { account: userId, postId: normalizedId } }));
     },
-    [nextCursor, saveCache]
+    [nextCursor, saveCache, userId]
   );
 
   const refreshPost = useCallback(async postId => {
@@ -429,8 +455,9 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
         saveCache(updated, nextCursor);
         return updated;
       });
+      window.dispatchEvent(new CustomEvent(FEED_MODERATION_EVENT, { detail: { account: userId, creatorId: normalizedId } }));
     },
-    [blockedCreatorsKey, nextCursor, removeBlockedPosts, saveCache]
+    [blockedCreatorsKey, nextCursor, removeBlockedPosts, saveCache, userId]
   );
 
   return {

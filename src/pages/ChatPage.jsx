@@ -2518,16 +2518,7 @@ const runDeleteChat = useCallback(() => {
 
   return (
 <main className={`chat-page ${activeChat ? 'has-active-chat' : ''} ${mobileChatOpen && activeChat ? 'mobile-chat-open' : ''}`}>
-      <section className="chat-sidebar">
-        <header className="chat-sidebar-heading">
-          <div>
-            <span>Inbox</span>
-            <h1>Messages</h1>
-            <p>Share an idea. Ask a question.</p>
-          </div>
-          <span aria-label={`${chats.length} conversations`}>{chats.length}</span>
-        </header>
-
+      <section className="chat-sidebar" aria-label="Messages">
        <div className="chat-search-wrap" ref={searchAreaRef}>
   <form className="chat-search" onSubmit={searchUsers}>
     <input

@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import useFeed from '../hooks/useFeed';
 import useVideoChrome from '../hooks/useVideoChrome';
 import { chatApi, postApi } from '../api/client';
-import { getMostVisibleVideo, getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts, nextVideoPreload } from '../lib/videoFeed';
+import { canWarmVideoFeed, getMostVisibleVideo, getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts, nextVideoPreload } from '../lib/videoFeed';
 import './VideoTopicPage.css';
 
 const REASONS = ['Harassment or bullying', 'Hate speech', 'Sexual or explicit content', 'Violence or threats', 'Spam or scam', 'Other objectionable content'];
@@ -36,7 +36,7 @@ export default function VideoTopicPage(props) {
   return <VideoFeed key={account} {...props} account={account} user={user} />;
 }
 
-function VideoFeed({ onOpenSearch, account, user }) {
+function VideoFeed({ onOpenSearch, account, user, selected = true }) {
   const navigate = useNavigate();
   const { posts, loading, refreshing, loadingMore, error, nextCursor, loadMore, refreshFeed, refreshPost, savePost, hidePost, blockCreator } = useFeed({ videoOnly: true });
   const videos = useMemo(() => getVideoPosts(posts), [posts]);
@@ -49,6 +49,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
   const pendingAdvance = useRef(null);
   const visitedCursors = useRef(new Set());
   const mounted = useRef(true);
+  const wasSelected = useRef(selected);
   const [activeId, setActiveId] = useState('');
   const [playingId, setPlayingId] = useState('');
   const [bufferedId, setBufferedId] = useState('');
@@ -62,7 +63,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
   const [safetyError, setSafetyError] = useState('');
   const activeIndex = Math.max(0, videos.findIndex(post => getVideoPostId(post) === activeId));
   const canLoad = Boolean(nextCursor) && !loading && !refreshing && !loadingMore && !error;
-  const activePlaying = Boolean(activeId && playingId === activeId && visible && !safety);
+  const activePlaying = Boolean(selected && activeId && playingId === activeId && visible && !safety);
   const { idle, reveal } = useVideoChrome(pageRef, activeId, activePlaying);
   const updatePlaying = useCallback((id, playing) => {
     setPlayingId(previous => playing ? id : previous === id ? '' : previous);
@@ -82,8 +83,14 @@ function VideoFeed({ onOpenSearch, account, user }) {
     const timer = window.setTimeout(() => setNotice(''), 3500);
     return () => window.clearTimeout(timer);
   }, [notice]);
+  useEffect(() => {
+    const justOpened = selected && !wasSelected.current;
+    wasSelected.current = selected;
+    if (justOpened && error && !videos.length) void refreshFeed(true);
+  }, [error, refreshFeed, selected, videos.length]);
 
   useEffect(() => {
+    if (!selected) return undefined;
     const root = rootRef.current;
     if (!root || !videos.length) { setActiveId(''); return undefined; }
     const ratios = new Map();
@@ -106,7 +113,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
     }, { root, threshold: [0, 0.25, 0.5, 0.75, 1] });
     root.querySelectorAll('[data-video-id]').forEach(element => observer.observe(element));
     return () => observer.disconnect();
-  }, [videos]);
+  }, [selected, videos]);
 
   useEffect(() => {
     if (videos.length > previousVideoCount.current) scans.current = 0;
@@ -134,11 +141,11 @@ function VideoFeed({ onOpenSearch, account, user }) {
   // Each discovery request already searches a bounded number of mixed pages.
   // After that, give the reader a choice instead of silently scanning more.
   useEffect(() => {
-    if (!videos.length || !canLoad) return undefined;
+    if (!selected || !videos.length || !canLoad) return undefined;
     const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting && scans.current < 3) fetchMore(); }, { root: rootRef.current, rootMargin: '240px 0px' });
     if (sentinelRef.current) observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [canLoad, fetchMore, videos.length, posts.length]);
+  }, [selected, canLoad, fetchMore, videos.length, posts.length]);
 
   const retryFeed = () => { scans.current = 0; visitedCursors.current.clear(); refreshFeed(true); };
   const move = direction => {
@@ -175,7 +182,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
     finally { if (mounted.current) setSafetyBusy(false); }
   };
 
-  return <main ref={pageRef} className={'video-topic-page has-inner-feed' + (idle ? ' is-video-idle' : '')}
+  return <main ref={pageRef} hidden={!selected} className={'video-topic-page has-inner-feed' + (idle ? ' is-video-idle' : '')}
     onPointerMove={event => { if (!idle && event.pointerType === 'mouse') reveal(); }}
     onFocusCapture={event => { if (event.target.matches(':focus-visible')) reveal(); }}>
     <FeedHeader topic="Video" onBack={() => navigate('/topics')} onOpenSearch={onOpenSearch}
@@ -186,8 +193,10 @@ function VideoFeed({ onOpenSearch, account, user }) {
       event.preventDefault(); move(['ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1);
     }}>
       {videos.map((post, index) => <ReelVideo key={getVideoPostId(post)} post={post}
-        active={getVideoPostId(post) === activeId && visible && !safety} nearby={Math.abs(index - activeIndex) <= 1}
-        preloadNext={activePlaying && bufferedId === activeId && index === activeIndex + 1 ? nextVideoPreload(post, navigator.connection) : 'none'}
+        active={selected && getVideoPostId(post) === activeId && visible && !safety}
+        nearby={selected ? Math.abs(index - activeIndex) <= 1 : index === activeIndex}
+        preloadNext={!selected && index === activeIndex && visible && canWarmVideoFeed(navigator.connection) ? 'auto'
+          : activePlaying && bufferedId === activeId && index === activeIndex + 1 ? nextVideoPreload(post, navigator.connection) : 'none'}
         chromeHidden={idle && index === activeIndex} onReveal={reveal} onPlayingChange={updatePlaying} onHeadroom={setBufferedId}
         onSkip={index < videos.length - 1 || nextCursor ? () => move(1) : undefined}
         muted={muted} onMute={setMuted} onSave={save} onSafety={openSafety} onReload={refreshPost} busy={saving === getVideoPostId(post)}

@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from './newsEdition.js';
+import { briefingParagraphs, normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from './newsEdition.js';
 
 const report = { id: 'one', title: 'A real report', news_link: 'https://example.com/report', summary: 'Original coverage.', section: 'World' };
 const reports = { location: {countryCode:'IN',region:'Tamil Nadu'}, articles: [report], sections: {World:[report]}, generatedAt:'2026-10-13T12:00:00Z' };
 const summary = { summaryMode:'editorial', overview:'A sourced daily summary.', sectionDigests:[{section:'World',summary:'World context'}] };
+test('the briefing keeps every nonempty paragraph and supports older plain-text editions', () => {
+  assert.deepEqual(briefingParagraphs({ overview: 'Short fallback.', overviewParagraphs: ['First.', '', 'Second.', null, 'Third.'] }), ['First.', 'Second.', 'Third.']);
+  assert.deepEqual(briefingParagraphs({ overview: 'First.\n\nSecond.', overviewParagraphs: [] }), ['First.', 'Second.']);
+  assert.deepEqual(briefingParagraphs(undefined), []);
+});
 test('a late summary-only response never erases already loaded reports', () => {
   const merged = mergeNewsBriefing(reports, { location:reports.location, dailySummary:summary, articles:[], sections:{}, generatedAt:'2026-10-13T12:02:00Z' });
   assert.equal(merged.articles[0].news_link, report.news_link);

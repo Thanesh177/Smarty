@@ -21,7 +21,7 @@ export default function PageTransition() {
     if (direction) content?.scrollTo({ top: 0, behavior: 'instant' });
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
     // Animate only the new view. The shared toggle and fixed navigation stay still.
-    const target = direction ? content?.querySelector(':scope > main, :scope > section') : content;
+    const target = direction ? content?.querySelector(':scope > main:not([hidden]), :scope > section:not([hidden])') : content;
     if (!target?.animate) return undefined;
     const animation = target.animate(direction ? [
       { opacity: 1, transform: `translateX(${direction * 72}px)` },

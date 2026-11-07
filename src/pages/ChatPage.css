@@ -3198,52 +3198,6 @@ button {
   backdrop-filter: none !important;
 }
 
-.chat-page .chat-sidebar-heading {
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 6px 10px;
-}
-
-.chat-page .chat-sidebar-heading > div {
-  min-width: 0;
-}
-
-.chat-page .chat-sidebar-heading > div > span {
-  display: block;
-  margin-bottom: 1px;
-  color: var(--chat-muted);
-  font-size: 0.67rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.chat-page .chat-sidebar-heading h1 {
-  margin: 0;
-  color: var(--chat-ink);
-  font-size: clamp(1.12rem, 1.5vw, 1.3rem);
-  font-weight: 720;
-  letter-spacing: -0.035em;
-  line-height: 1.25;
-}
-
-.chat-page .chat-sidebar-heading > span {
-  min-width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: rgba(125, 211, 252, 0.09);
-  color: #b9e7fb;
-  font-size: 0.72rem;
-  font-weight: 750;
-}
-
 .chat-page .chat-search-wrap {
   position: relative;
   z-index: 20;
@@ -3762,11 +3716,6 @@ button {
   .chat-page .chat-sidebar {
     padding: max(10px, env(safe-area-inset-top, 0px)) 9px 10px !important;
     border-right: 0 !important;
-  }
-
-  .chat-page .chat-sidebar-heading {
-    padding-right: 5px;
-    padding-left: 5px;
   }
 
   .chat-page .chat-window-top {

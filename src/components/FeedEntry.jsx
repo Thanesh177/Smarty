@@ -5,8 +5,9 @@ import NewsPage from './NewsRoute';
 import SmartyLanding from './landing/SmartyLanding';
 import FeedHeader from './FeedHeader';
 import VideoTopicPage from '../pages/VideoTopicPage';
-import { isVideoTopic } from '../lib/videoFeed';
+import { canWarmVideoFeed, isVideoTopic } from '../lib/videoFeed';
 import { hasSeenLanding, rememberLanding } from '../lib/initialVisit';
+import { useAuth } from '../contexts/AuthContext';
 
 function InitialVisit({ onOpenSearch }) {
   const navigate = useNavigate();
@@ -42,11 +43,27 @@ function NewsFeed({ onOpenSearch }) {
 export default function FeedEntry({ onOpenSearch }) {
   const location = useLocation();
   const { topic: pathTopic } = useParams();
+  const { loading: authLoading } = useAuth();
   const topic = new URLSearchParams(location.search).get('topic') || pathTopic || '';
+  const hasTopic = Boolean(topic.trim());
+  const selectedVideo = isVideoTopic(topic);
+  const [keepVideoFeed, setKeepVideoFeed] = useState(false);
   // Returning native installations can already open the feed directly.
-  useEffect(() => { if (topic.trim()) rememberLanding(); }, [topic]);
-  if (!topic.trim()) return <InitialVisit onOpenSearch={onOpenSearch} />;
-  if (topic.trim().toLowerCase() === 'news') return <NewsFeed onOpenSearch={onOpenSearch} />;
-  if (isVideoTopic(topic)) return <VideoTopicPage onOpenSearch={onOpenSearch} />;
-  return <FeedPage onOpenSearch={onOpenSearch} />;
+  useEffect(() => { if (hasTopic) rememberLanding(); }, [hasTopic]);
+  useEffect(() => {
+    if (keepVideoFeed) return undefined;
+    if (selectedVideo) { setKeepVideoFeed(true); return undefined; }
+    if (!hasTopic || authLoading || !canWarmVideoFeed(navigator.connection)) return undefined;
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState !== 'hidden' && navigator.onLine !== false
+        && canWarmVideoFeed(navigator.connection)) setKeepVideoFeed(true);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [authLoading, hasTopic, keepVideoFeed, selectedVideo]);
+  if (!hasTopic) return <InitialVisit onOpenSearch={onOpenSearch} />;
+  return <>
+    {!selectedVideo && (topic.trim().toLowerCase() === 'news'
+      ? <NewsFeed onOpenSearch={onOpenSearch} /> : <FeedPage onOpenSearch={onOpenSearch} />)}
+    {(selectedVideo || keepVideoFeed) && <VideoTopicPage selected={selectedVideo} onOpenSearch={onOpenSearch} />}
+  </>;
 }

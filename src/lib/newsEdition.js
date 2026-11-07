@@ -24,6 +24,11 @@ export function normalizeSavedNews(value) {
 
 const text = value => typeof value === 'string' ? value : '';
 const paragraphs = value => (Array.isArray(value) ? value : []).filter(value => typeof value === 'string' && value.trim());
+export function briefingParagraphs(summary) {
+  const overview = paragraphs(summary?.overviewParagraphs);
+  return overview.length ? overview : text(summary?.overview).trim().split(/\n\s*\n/).filter(Boolean);
+}
+
 function cleanSummary(summary) {
   if (!summary || typeof summary !== 'object' || Array.isArray(summary)) return undefined;
   const count=value=>Number.isFinite(value)&&value>=0?Math.floor(value):0;

@@ -9,6 +9,7 @@ const deferred = () => { let resolve, reject; const promise = new Promise((a, b)
 const tick = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
 function harness() {
   const slots = [], effects = [], requests = [], storage = new Map();
+  const events = new EventTarget();
   let index = 0, user = { userId: 'one' };
   const api = { getFeed(params) { const task = deferred(); requests.push({ ...params, ...task }); return task.promise; },
     getSingleReel: async id => ({ id, videoUrl: '/fresh.mp4' }) };
@@ -23,14 +24,14 @@ function harness() {
       } },
   };
   const module = { exports: {} };
-  vm.runInNewContext(code, { module, exports: module.exports, console,
+  vm.runInNewContext(code, { module, exports: module.exports, console, window: events, CustomEvent,
     localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
     require(name) { if (name === 'react') return react;
       if (name === '../api/client') return { postApi: api };
       if (name === '../contexts/AuthContext') return { useAuth: () => ({ user }) };
       throw new Error(name);
     } });
-  return { requests, api, storage, setUser: value => { user = value; }, render() {
+  return { requests, api, storage, events, setUser: value => { user = value; }, render() {
     index = 0; const result = module.exports.default({ pageSize: 30 });
     effects.splice(0).forEach(fn => fn()); return result;
   } };
@@ -87,6 +88,18 @@ test('hidden videos do not reappear from an already-running next page', async ()
   const feed = app.render(); const more = feed.loadMore(); feed.hidePost('hidden');
   app.requests[1].resolve({ items: [{ id: 'hidden' }, { id: 'new' }], nextCursor: null }); await more;
   assert.equal(app.render().posts.map(post => post.id).join(','), 'new');
+});
+
+test('a mounted feed removes moderated content from the same account only', async () => {
+  const app = harness(); app.render();
+  app.requests[0].resolve({ items: [{ id: 'reported' }, { id: 'blocked', creatorId: 'creator' }, { id: 'safe' }], nextCursor: null });
+  await tick();
+  const moderate = detail => app.events.dispatchEvent(new CustomEvent('smarty:feed-moderated', { detail }));
+  moderate({ account: 'two', postId: 'reported' });
+  assert.equal(app.render().posts.length, 3);
+  moderate({ account: 'one', postId: 'reported' });
+  moderate({ account: 'one', creatorId: 'creator' });
+  assert.equal(app.render().posts.map(post => post.id).join(','), 'safe');
 });
 
 test('failed prefetched pages can be retried with the same cursor', async () => {

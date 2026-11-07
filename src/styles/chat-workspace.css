@@ -5,29 +5,8 @@
   grid-template-columns: clamp(290px, 28vw, 360px) minmax(0, 1fr) !important;
 }
 .app-shell .content .chat-page .chat-sidebar {
-  padding: 32px 20px 20px !important;
+  padding: max(16px, env(safe-area-inset-top)) 20px 20px !important;
   background: var(--ui-bg) !important;
-}
-.app-shell .content .chat-page .chat-sidebar-heading {
-  padding: 0 8px 24px;
-  align-items: flex-start;
-}
-.app-shell .content .chat-page .chat-sidebar-heading h1 {
-  font-size: 1.75rem;
-  font-weight: 600;
-  letter-spacing: -.045em;
-  margin-top: 8px;
-}
-.app-shell .content .chat-page .chat-sidebar-heading p {
-  margin: 9px 0 0;
-  color: var(--ui-muted);
-  font-size: .8125rem;
-  line-height: 1.5;
-}
-.app-shell .content .chat-page .chat-sidebar-heading > span {
-  margin-top: 28px;
-  background: var(--ui-accent-soft);
-  color: var(--ui-accent);
 }
 .app-shell .content .chat-page .chat-search {
   grid-template-columns: minmax(0, 1fr) 44px !important;
@@ -167,7 +146,7 @@
 @keyframes chat-search-turn { to { transform: rotate(360deg); } }
 @media (max-width: 860px) {
   .app-shell .content .chat-page { grid-template-columns: minmax(0, 1fr) !important; }
-  .app-shell .content .chat-page .chat-sidebar { padding: max(24px, env(safe-area-inset-top, 0px)) 16px 14px !important; }
+  .app-shell .content .chat-page .chat-sidebar { padding: max(12px, env(safe-area-inset-top, 0px)) 16px 14px !important; }
   .app-shell .content .chat-page:not(.mobile-chat-open) .chat-window { display: none !important; }
   .app-shell .content .chat-page.mobile-chat-open .chat-window { display: flex !important; }
   .app-shell .content .chat-page.mobile-chat-open .chat-sidebar { display: none !important; }
@@ -185,12 +164,6 @@
 @media (prefers-reduced-motion: reduce) { .chat-search-spinner { animation: none; } }
 
 /* Quiet details, without changing the scroll container or media geometry. */
-.app-shell .content .chat-page .chat-sidebar-heading > span {
-  color: var(--ui-muted);
-  background: var(--ui-surface-raised);
-  font-weight: 500;
-}
-.app-shell .content .chat-page .chat-sidebar-heading > div > span { font-weight: 500; letter-spacing: .08em; }
 .app-shell .content .chat-page .chat-list h3 { color: var(--ui-muted); font-size: .75rem; letter-spacing: .02em; }
 .app-shell .content .chat-page :is(.chat-search input, .message-form input)::placeholder { color: var(--ui-muted) !important; }
 .app-shell .content .chat-page .chat-list-item:hover { transform: none; background: var(--ui-surface) !important; }

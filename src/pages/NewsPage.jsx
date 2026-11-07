@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowDown, ArrowRight, ArrowUpRight, Bookmark, BriefcaseBusiness, Check, Cpu, FlaskConical, Globe2, HeartPulse, Landmark, Leaf, Newspaper, RefreshCw, Search, Share2, Trophy } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Bookmark, BriefcaseBusiness, Check, Cpu, FlaskConical, Globe2, HeartPulse, Landmark, Leaf, Newspaper, RefreshCw, Search, Share2, Trophy } from 'lucide-react';
 import { newsApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -15,7 +15,7 @@ import { getNewsCacheKey as getCacheKey, getCachedNews, setCachedNews, newsOutlo
 import useNewsPersonalization from '../hooks/useNewsPersonalization';
 import { NewsBriefingChoice, NewsFollowButton, NewsUpdatesShelf } from '../components/NewsPersonalization';
 import { briefingPlace, readNewsPreference } from '../lib/newsPreferences';
-import { normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from '../lib/newsEdition';
+import { briefingParagraphs, normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews } from '../lib/newsEdition';
 import { balancedNewsReports, newsPreviewParagraphs, reportBriefingContext, selectNewsReports } from '../lib/newsReader';
 import useNewsReader from '../hooks/useNewsReader';
 import NewsReader from '../components/NewsReader';
@@ -30,27 +30,6 @@ const SECTION_ICONS = {
 function NewsSectionIcon({ section }) {
   const Icon = SECTION_ICONS[String(section).toLowerCase()] || Newspaper;
   return <Icon size={21} strokeWidth={1.6} aria-hidden="true" />;
-}
-
-function BriefingSources({ stories = [], label = 'Briefing sources' }) {
-  const links = [...new Map((Array.isArray(stories) ? stories : []).flatMap(story => {
-    try {
-      const url = new URL(story?.news_link);
-      return /^https?:$/.test(url.protocol) ? [[url.href, { ...story, news_link: url.href }]] : [];
-    } catch { return []; }
-  })).values()];
-  if (!links.length) return null;
-  const publishers = [...new Set(links.map(story => story.source).filter(Boolean))];
-  return (
-    <details className="news-summary-sources" aria-label={label}>
-      <summary><div><strong>Sources · {links.length}</strong><small>{publishers.slice(0, 3).join(' · ') || 'Original reporting'}</small></div><span aria-hidden="true">+</span></summary>
-      <ul>{links.map(story => <li key={story.news_link}>
-        <a href={story.news_link} target="_blank" rel="noopener noreferrer">
-          {story.title || 'Read original report'}<small>{story.source || 'Original report'} · Opens in a new tab</small>
-        </a>
-      </li>)}</ul>
-    </details>
-  );
 }
 
 function getSavedRegion(country) {
@@ -171,8 +150,7 @@ const SectionTab = memo(function SectionTab({ section, active, count, onSelect }
 const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSection, world = false, showSections = true }) {
   if (!summary) return null;
   const titleId = world ? 'world-brief-title' : 'daily-brief-title';
-  const paragraphs = summary.overviewParagraphs?.length
-    ? summary.overviewParagraphs : [summary.overview];
+  const paragraphs = briefingParagraphs(summary);
 
   return (
     <section className="news-daily-brief" aria-labelledby={titleId}>
@@ -183,10 +161,7 @@ const DailyBrief = memo(function DailyBrief({ summary, locationLabel, onSelectSe
             {summary.title || `${locationLabel} at a glance`}
           </h2>
           <div className="news-brief-prose">
-            <p>{paragraphs[0]}</p>
-            {paragraphs.length > 1 && <details className="news-brief-more"><summary>Read the full briefing</summary>
-              {paragraphs.slice(1).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-            </details>}
+            {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
           </div>
 
           <dl className="news-brief-stats">
@@ -382,7 +357,6 @@ export default function NewsPage({ briefingOnly = false }) {
 
   const loaderRef = useRef(null);
   const newsStoriesRef = useRef(null);
-  const summaryHeadingRef = useRef(null);
   const reportsHeadingRef = useRef(null);
   const requestIdRef = useRef(0);
   const mountedRef = useRef(true);
@@ -657,6 +631,7 @@ export default function NewsPage({ briefingOnly = false }) {
       : []
   ), [newsData, briefingOnly]);
   const dailyBriefing = hasEditorialBriefing(newsData) ? newsData.dailySummary : null;
+  const overviewParagraphs = briefingParagraphs(dailyBriefing);
   const visibleSummaries = summarySections.filter(
     digest => selectedSection === 'All' || digest.section === selectedSection
   );
@@ -711,15 +686,6 @@ export default function NewsPage({ briefingOnly = false }) {
     catch { /* Reading preferences still work for this visit. */ }
   };
 
-  const jumpToSummaries = () => {
-    const heading = summaryHeadingRef.current;
-    heading?.focus({ preventScroll: true });
-    heading?.scrollIntoView({
-      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      block: 'start',
-    });
-  };
-
   const readerPanel = selectedReport && <NewsReader article={selectedReport}
     saved={savedLinks.has(selectedReport.news_link)} context={reportBriefingContext(dailyBriefing, selectedReport)}
     nextReports={nextReports} comfortableText={comfortableText} status={actionStatus} onToggleText={toggleComfortableText}
@@ -732,7 +698,7 @@ export default function NewsPage({ briefingOnly = false }) {
       <div className="news-feed-toolbar">
         <div className="news-feed-heading">
           <span className="news-kicker">{country === 'GLOBAL' ? 'Your world briefing' : `Your ${locationLabel} briefing`}</span>
-          <strong>{dailyBriefing?.generatedAt ? `Edition published ${formatUpdatedAt(dailyBriefing.generatedAt)}` : lastUpdated ? `Updated ${lastUpdated}` : 'The world today, explained clearly.'}</strong>
+          <strong>{dailyBriefing?.generatedAt ? `Published ${formatUpdatedAt(dailyBriefing.generatedAt)}` : lastUpdated ? `Updated ${lastUpdated}` : 'The world today, explained clearly.'}</strong>
         </div>
         <div className="news-feed-actions">
           <Link to="/news">All reports <ArrowUpRight size={14} aria-hidden="true" /></Link>
@@ -758,40 +724,14 @@ export default function NewsPage({ briefingOnly = false }) {
           {dailyBriefing && (
             <section className="news-topic-summary" aria-labelledby="news-topic-summary-title">
               <div>
-                <span>AI daily briefing · {readingTime((dailyBriefing.overviewParagraphs || [dailyBriefing.overview]).join(' '))}</span>
+                <span>AI daily briefing · {readingTime(overviewParagraphs.join(' '))}</span>
                 <h2 id="news-topic-summary-title">
-                  {newsData.dailySummary.title || 'The world today'}
+                  {dailyBriefing.title || 'The world today'}
                 </h2>
-                {(newsData.dailySummary.overviewParagraphs?.length
-                  ? newsData.dailySummary.overviewParagraphs
-                  : [newsData.dailySummary.overview]).filter(Boolean).slice(0, 1).map((paragraph, index) => (
-                  <p key={index}>{paragraph}</p>
-                ))}
-                {newsData.dailySummary.overviewParagraphs?.length > 1 && <details className="news-brief-more">
-                  <summary>Read the full briefing</summary>
-                  {newsData.dailySummary.overviewParagraphs.slice(1).filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-                </details>}
+                {overviewParagraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
               </div>
-              <div className="news-edition-footer">
-              <dl>
-                <div><dt>Edition</dt><dd>{dailyBriefing.editionDate || 'Daily'}{dailyBriefing.editionDate ? ' UTC' : ''}</dd></div>
-                <div><dt>Coverage</dt><dd>Previous 24 hours</dd></div>
-                <div><dt>Sections</dt><dd>{summarySections.length}</dd></div>
-              </dl>
-              {summarySections.length > 0 && <button type="button" className="news-edition-jump" onClick={jumpToSummaries}>
-                Explore the sections <ArrowDown size={16} aria-hidden="true" />
-              </button>}
-              </div>
-              <BriefingSources stories={dailyBriefing.highlights} label="Daily overview sources" />
             </section>
           )}
-          {dailyBriefing?.keyTakeaways?.length > 0 && <details className="news-briefing-takeaways" aria-label="The day in brief">
-            <summary>Key developments <span>{dailyBriefing.keyTakeaways.length}</span></summary>
-            <div>{dailyBriefing.keyTakeaways.slice(0, 3).map((item, index) => <article key={index}>
-              <span aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-              <h3>{item.title}</h3><p>{item.summary}</p>
-            </article>)}</div>
-          </details>}
 
           {summarySections.length > 0 && (
             <nav className="section-tabs news-topic-tabs" aria-label="Daily news sections">
@@ -809,7 +749,7 @@ export default function NewsPage({ briefingOnly = false }) {
           <div className="news-stream-heading news-summary-heading">
             <div>
               <span>{!summarySections.length ? 'Original reporting' : selectedSection === 'All' ? 'Latest summaries' : selectedSection}</span>
-              <h2 ref={summaryHeadingRef} tabIndex={-1}>{!summarySections.length ? 'Latest available reports' : selectedSection === 'All' ? 'The day, section by section' : `${selectedSection} summaries`}</h2>
+              <h2>{!summarySections.length ? 'Latest available reports' : selectedSection === 'All' ? 'The day, section by section' : `${selectedSection} summaries`}</h2>
             </div>
             <div className="news-reading-tools">
               <small aria-live="polite">{summarySections.length ? `${visibleSummaries.length} ${visibleSummaries.length === 1 ? 'summary' : 'summaries'}` : `${articles.length} ${articles.length === 1 ? 'report' : 'reports'}`}</small>
@@ -840,7 +780,6 @@ export default function NewsPage({ briefingOnly = false }) {
                     <h4>What this means and what comes next</h4>
                     {newsOutlookParagraphs(digest).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
                   </section>}
-                  <BriefingSources stories={digest.topStories} label={`${digest.section} summary sources`} />
                 </article>
               ))}
             </div>
