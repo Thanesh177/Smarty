@@ -46,10 +46,10 @@ test('a lesson has one quiz action that includes all its ideas and no topic pick
   assert.deepEqual(Array.from(app.starts[0].subjects), ['Ohm’s law', 'Series circuits', 'Parallel circuits']);
 });
 
-test('Science starts with four named lessons; Physics can launch as a whole lesson', () => {
+test('Science starts with three named lessons; Physics can launch as a whole lesson', () => {
   const app = harness(); let tree = app.render();
   const headings = app.find(tree, node => node.type === 'h2').map(app.text);
-  assert.deepEqual(headings, ['Physics', 'Chemistry', 'Mathematics', 'Experimental Methods']);
+  assert.deepEqual(headings, ['Physics', 'Chemistry', 'Mathematics']);
   app.find(tree, node => node.props['aria-label'] === 'Start quiz: Physics')[0].props.onClick();
   assert.equal(app.starts[0].title, 'Physics');
   assert.equal(app.starts[0].id, 'science-mathematics--chapter-physics');
@@ -63,7 +63,15 @@ test('clearing an empty search restores the named lessons', () => {
   assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 0);
   app.find(tree, node => node.type === 'button' && app.text(node) === 'Show all lessons')[0].props.onClick();
   tree = app.render();
-  assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 4);
+  assert.equal(app.find(tree, node => node.props.className === 'quiz-lesson-card').length, 3);
+});
+
+test('Load more reveals concrete Science lessons without replacing the initial ones', () => {
+  const app = harness();
+  const tree = app.render();
+  app.find(tree, node => node.type === 'button' && app.text(node).startsWith('Load more lessons'))[0].props.onClick();
+  assert.deepEqual(app.find(app.render(), node => node.type === 'h2').map(app.text),
+    ['Physics', 'Chemistry', 'Mathematics', 'Experimental Methods', 'Thermodynamics', 'Organic Chemistry', 'Linear Algebra']);
 });
 
 test('load more appends unique search matches and hides itself at the end', () => {
@@ -72,11 +80,11 @@ test('load more appends unique search matches and hides itself at the end', () =
   const more = tree => app.find(tree, node => node.type === 'button' && app.text(node).startsWith('Load more lessons'))[0];
   app.find(app.render(), node => node.type === 'input')[0].props.onChange({ target: { value: 'a' } });
   const first = app.render();
-  assert.equal(cards(first).length, 6);
+  assert.equal(cards(first).length, 3);
   more(first).props.onClick();
   const second = app.render();
-  assert.ok(cards(second).length > 6);
-  assert.deepEqual(cards(second).slice(0, 6), cards(first));
+  assert.equal(cards(second).length, 7);
+  assert.deepEqual(cards(second).slice(0, 3), cards(first));
   let last = second;
   while (more(last)) { more(last).props.onClick(); last = app.render(); }
   assert.equal(new Set(cards(last)).size, cards(last).length);

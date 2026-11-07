@@ -6,6 +6,7 @@ import { QUIZ_LESSONS, getQuizChapters, getQuizLessons, getQuizLesson, getQuizCo
 import { EXPANDED_QUIZ_LESSONS } from './quizLessonExpansion.js';
 import { LESSON_QUESTIONS, getLessonTopicQuestions } from './quizLessonQuestions.js';
 import { getQuestionFingerprint } from '../lib/quizQuestionStore.js';
+import focusedStudy from '../../infrastructure/ai-content/focused_study.json' with { type: 'json' };
 
 test('all subjects have an expanded lesson catalog and historical review IDs remain valid', () => {
   const ids = new Set();
@@ -29,7 +30,7 @@ test('all subjects have an expanded lesson catalog and historical review IDs rem
       }
     }
   }
-  assert.equal(Object.values(QUIZ_LESSONS).flat().length, 143);
+  assert.equal(Object.values(QUIZ_LESSONS).flat().length, 143 + focusedStudy.length);
   assert.deepEqual(getQuizLessons('unknown'), []);
   assert.equal(getQuizLesson('unknown', 'unknown'), null);
   assert.equal(getQuizLessonLabel('old-quiz-id'), '');
@@ -37,8 +38,8 @@ test('all subjects have an expanded lesson catalog and historical review IDs rem
 
 test('science offers physics, chemistry, mathematics and experimental reasoning', () => {
   const science = getQuizLessons('science-mathematics');
-  assert.equal(science.length, 17);
-  assert.deepEqual(new Set(science.map(item => item.branch)), new Set(['Physics', 'Chemistry', 'Mathematics', 'Scientific thinking']));
+  assert.equal(science.length, 20);
+  assert.deepEqual(new Set(science.map(item => item.branch)), new Set(['Physics', 'Chemistry', 'Mathematics', 'Scientific thinking', 'Thermodynamics', 'Organic Chemistry', 'Linear Algebra']));
   const subject = QUIZ_SUBJECTS.find(item => item.id === 'science-mathematics');
   const circuits = getQuizLesson(subject.id, 'circuits');
   const selected = makeLessonQuizTopic(subject, circuits, 'Ohm’s law');
@@ -46,6 +47,18 @@ test('science offers physics, chemistry, mathematics and experimental reasoning'
   assert.match(selected.focus, /Inside an electric circuit: Ohm’s law/);
   assert.notEqual(selected.id, makeLessonQuizTopic(subject, circuits).id);
   assert.throws(() => makeLessonQuizTopic(subject, circuits, 'Photosynthesis'), RangeError);
+});
+
+test('every subject has more lessons to load and the new quizzes use concrete examples', () => {
+  assert.equal(focusedStudy.length, 35);
+  for (const subject of QUIZ_SUBJECTS) assert.ok(getQuizChapters(subject.id).length > 3, subject.id);
+  for (const row of focusedStudy) {
+    const subject = QUIZ_SUBJECTS.find(item => item.id === row.subject);
+    const chapter = getQuizChapters(row.subject).find(item => item.title === row.chapter);
+    const topic = makeLessonQuizTopic(subject, chapter);
+    assert.deepEqual(topic.subjects, row.concepts);
+    assert.ok(getLessonStudyReference(topic).sourceBody.includes(row.feedAngle));
+  }
 });
 
 test('every subject exposes real named lessons and preserves all existing practice IDs', () => {

@@ -6,8 +6,8 @@ import ReelVideo from '../components/ReelVideo';
 import { useAuth } from '../contexts/AuthContext';
 import useFeed from '../hooks/useFeed';
 import useVideoChrome from '../hooks/useVideoChrome';
-import { chatApi } from '../api/client';
-import { getMostVisibleVideo, getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts } from '../lib/videoFeed';
+import { chatApi, postApi } from '../api/client';
+import { getMostVisibleVideo, getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts, nextVideoPreload } from '../lib/videoFeed';
 import './VideoTopicPage.css';
 
 const REASONS = ['Harassment or bullying', 'Hate speech', 'Sexual or explicit content', 'Violence or threats', 'Spam or scam', 'Other objectionable content'];
@@ -38,7 +38,7 @@ export default function VideoTopicPage(props) {
 
 function VideoFeed({ onOpenSearch, account, user }) {
   const navigate = useNavigate();
-  const { posts, loading, refreshing, loadingMore, error, nextCursor, loadMore, refreshFeed, refreshPost, savePost, hidePost, blockCreator } = useFeed({ pageSize: 20 });
+  const { posts, loading, refreshing, loadingMore, error, nextCursor, loadMore, refreshFeed, refreshPost, savePost, hidePost, blockCreator } = useFeed({ videoOnly: true });
   const videos = useMemo(() => getVideoPosts(posts), [posts]);
   const rootRef = useRef(null);
   const pageRef = useRef(null);
@@ -51,6 +51,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
   const mounted = useRef(true);
   const [activeId, setActiveId] = useState('');
   const [playingId, setPlayingId] = useState('');
+  const [bufferedId, setBufferedId] = useState('');
   const [muted, setMuted] = useState(false);
   const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -130,9 +131,8 @@ function VideoFeed({ onOpenSearch, account, user }) {
     try { await loadMore(); } finally { loadLock.current = false; }
   }, [loading, refreshing, loadingMore, error, loadMore, nextCursor]);
 
-  // Existing servers page through mixed posts. Bound empty searches rather
-  // than fetching an entire archive invisibly when no video exists yet.
-  useEffect(() => { if (!videos.length && scans.current < 3) fetchMore(); }, [videos.length, fetchMore, posts.length]);
+  // Each discovery request already searches a bounded number of mixed pages.
+  // After that, give the reader a choice instead of silently scanning more.
   useEffect(() => {
     if (!videos.length || !canLoad) return undefined;
     const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting && scans.current < 3) fetchMore(); }, { root: rootRef.current, rootMargin: '240px 0px' });
@@ -140,7 +140,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
     return () => observer.disconnect();
   }, [canLoad, fetchMore, videos.length, posts.length]);
 
-  const retryFeed = () => { scans.current = 0; visitedCursors.current.clear(); refreshFeed(); };
+  const retryFeed = () => { scans.current = 0; visitedCursors.current.clear(); refreshFeed(true); };
   const move = direction => {
     reveal();
     const root = rootRef.current;
@@ -169,6 +169,7 @@ function VideoFeed({ onOpenSearch, account, user }) {
     try {
       if (mode === 'block') { await chatApi.blockUser(creatorId, context); if (mounted.current) blockCreator(creatorId); }
       else { await chatApi.reportUser({ ...context, reportedUserId: creatorId }); if (mounted.current) hidePost(postId); }
+      postApi.invalidateVideoFeed();
       if (mounted.current) { setSafety(null); setNotice(mode === 'block' ? 'Creator blocked. Their videos are hidden.' : 'Video reported and hidden while it is reviewed.'); }
     } catch { if (mounted.current) setSafetyError('Couldn’t send this request. Please try again.'); }
     finally { if (mounted.current) setSafetyBusy(false); }
@@ -186,12 +187,13 @@ function VideoFeed({ onOpenSearch, account, user }) {
     }}>
       {videos.map((post, index) => <ReelVideo key={getVideoPostId(post)} post={post}
         active={getVideoPostId(post) === activeId && visible && !safety} nearby={Math.abs(index - activeIndex) <= 1}
-        preloadNext={activePlaying && index === activeIndex + 1 && !navigator.connection?.saveData}
-        chromeHidden={idle && index === activeIndex} onReveal={reveal} onPlayingChange={updatePlaying}
+        preloadNext={activePlaying && bufferedId === activeId && index === activeIndex + 1 ? nextVideoPreload(post, navigator.connection) : 'none'}
+        chromeHidden={idle && index === activeIndex} onReveal={reveal} onPlayingChange={updatePlaying} onHeadroom={setBufferedId}
+        onSkip={index < videos.length - 1 || nextCursor ? () => move(1) : undefined}
         muted={muted} onMute={setMuted} onSave={save} onSafety={openSafety} onReload={refreshPost} busy={saving === getVideoPostId(post)}
         saved={Boolean(post.saved || post.isSaved || post.bookmarked || post.isBookmarked || post.savedByCurrentUser)} reducedMotion={reducedMotion} />)}
       {!videos.length && <div className="video-topic-state">
-        <Video size={28} /><h2>{loading || refreshing || loadingMore ? 'Finding videos…' : error ? 'Videos couldn’t load.' : nextCursor ? 'Keep exploring.' : 'A new way to share what you know.'}</h2>
+        <Video size={28} /><h2>{loading || refreshing || loadingMore ? 'Finding videos…' : error ? 'Videos couldn’t load.' : nextCursor ? 'Look for older videos' : 'No videos to show yet'}</h2>
         <p>{error ? 'Check your connection and try again.' : loading || refreshing || loadingMore ? 'Bringing community ideas into view.' : nextCursor ? 'No videos in the newest posts. Look through older posts or share one of your own.' : 'Upload a video about something you learned. Community videos from every topic appear here.'}</p>
         {loading || refreshing || loadingMore ? <LoaderCircle className="video-loading-icon" size={23} /> : error ? <button type="button" onClick={retryFeed}><RefreshCw size={16} />Try again</button> : <><Link to="/create?topic=Video&type=video"><Plus size={17} />Upload a video</Link>{nextCursor && <button type="button" onClick={() => fetchMore(true)}>Look for older videos</button>}</>}
       </div>}

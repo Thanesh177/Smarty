@@ -3,14 +3,16 @@ import { getPostAuthorId, getPostAuthorUsername } from './postAuthor.js';
 export const getVideoPostId = post => String(post?.reelId || post?.postId || post?.id || '').trim();
 
 export function getPostVideoUrl(post) {
-  const value = typeof post?.videoUrl === 'string' ? post.videoUrl.trim() : '';
-  if (!value || /[\u0000-\u001f]/.test(value)) return '';
-  // A media URL is never an executable link or an embedded data payload.
-  if (value.startsWith('/') && !value.startsWith('//')) return value;
-  try {
-    const url = new URL(value);
-    return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? value : '';
-  } catch { return ''; }
+  for (const candidate of [post?.videoPlaybackUrl, post?.videoUrl]) {
+    const value = typeof candidate === 'string' ? candidate.trim() : '';
+    if (!value || /[\u0000-\u001f\\]/.test(value)) continue;
+    if (value.startsWith('/') && !value.startsWith('//')) return value;
+    try {
+      const url = new URL(value);
+      if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) return value;
+    } catch { /* Try the original when an optimized rendition is unavailable. */ }
+  }
+  return '';
 }
 
 export const getVideoCreatorId = getPostAuthorId;
@@ -27,6 +29,31 @@ export function getVideoPosts(posts = []) {
     seen.add(id);
     return true;
   });
+}
+
+export const VIDEO_PAGE_SIZE = 20;
+const VIDEO_PAGE_SCAN_LIMIT = 4;
+export async function discoverVideoPage(fetchPage, startCursor = null) {
+  let cursor = startCursor;
+  const seen = new Set();
+  for (let step = 0; step < VIDEO_PAGE_SCAN_LIMIT; step++) {
+    seen.add(JSON.stringify(cursor));
+    const page = await fetchPage(cursor);
+    const items = getVideoPosts(page.items);
+    cursor = page.nextCursor || null;
+    if (cursor && seen.has(JSON.stringify(cursor))) cursor = null;
+    if (items.length || !cursor) return { items, nextCursor: cursor, count: items.length };
+  }
+  return { items: [], nextCursor: cursor, count: 0 };
+}
+
+export function nextVideoPreload(post, connection) {
+  if (connection?.saveData || /^(?:slow-)?2g$/.test(connection?.effectiveType || '')) return 'none';
+  const source = getPostVideoUrl(post).split(/[?#]/, 1)[0];
+  const size = Number(post?.videoPlaybackBytes || post?.videoBytes || 0);
+  if (/\.(mov|qt)$/i.test(source) || size > 18 * 1024 * 1024) return 'metadata';
+  const fastConnection = connection?.effectiveType === '4g' && connection.downlink >= 8;
+  return size > 0 || fastConnection ? 'auto' : 'metadata';
 }
 
 export function getMostVisibleVideo(entries) {

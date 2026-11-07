@@ -64,3 +64,11 @@ test('active conversations still use their own controls instead of the app rail'
   assert.equal(declaration(conversations, 'display').value, 'none');
   assert.equal(declaration(conversations, 'display').important, true);
 });
+
+test('profile is available through Settings and no longer takes up a rail slot', () => {
+  const app = fs.readFileSync(path.join(__dirname, '../App.jsx'), 'utf8');
+  const rail = app.slice(app.indexOf('className="brand-actions" aria-label="Quick navigation"'), app.indexOf('</nav>', app.indexOf('aria-label="Quick navigation"')));
+  assert.ok(rail.includes('to="/chat"'));
+  assert.doesNotMatch(rail, /Profile|CircleUserRound|navigate\('\/profile'\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '../pages/SettingsPage.jsx'), 'utf8'), /to="\/profile"/);
+});

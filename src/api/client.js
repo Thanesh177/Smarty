@@ -9,6 +9,7 @@ import { normalizePersonalNews } from '../lib/newsPersonalization';
 import { normalizeStoryTimeline } from '../lib/newsStories';
 import { getLearningGuide } from '../data/learningGuides';
 import { getPostAuthorId } from '../lib/postAuthor';
+import { discoverVideoPage, VIDEO_PAGE_SIZE } from '../lib/videoFeed';
 import { DETAILED_EXPLANATION_VERSION, detailedExplanationFromResponse } from '../lib/explanationFormat';
 import { fetchAuthSession } from 'aws-amplify/auth';
 import { endpoints } from './endpoints';
@@ -125,12 +126,14 @@ let cachedAuthTokenAt = 0;
 let pendingAuthTokenPromise = null;
 let authTokenGeneration = 0;
 const readCache = createRequestCache();
+const videoFeedCache = createRequestCache({ maxEntries: 8 });
 // Bibliographic metadata is public; private shelves/notes never enter here.
 const bookMetadataCache = createRequestCache({ maxEntries: 24 });
 const storyTimelineCache = createRequestCache({ maxEntries: 16 });
 
 const resetAuthTokenCache = () => {
   readCache.clear();
+  videoFeedCache.clear();
   authTokenGeneration += 1;
   cachedAuthToken = '';
   cachedAuthTokenAt = 0;
@@ -139,7 +142,7 @@ const resetAuthTokenCache = () => {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('smarty:auth-changed', resetAuthTokenCache);
-  window.addEventListener('smarty-global-refresh', () => { readCache.clear(); bookMetadataCache.clear(); storyTimelineCache.clear(); });
+  window.addEventListener('smarty-global-refresh', () => { readCache.clear(); videoFeedCache.clear(); bookMetadataCache.clear(); storyTimelineCache.clear(); });
 }
 
 const mockFeed = [];
@@ -2093,7 +2096,7 @@ async saveLearningQuiz(payload) {
   const { data } = await api.post('/quiz/save', payload);
   return parseApiBody(data);
 },
-async getFeed({ limit = 10, cursor = null, topic = null } = {}) {
+async getFeed({ limit = 10, cursor = null, topic = null, timeout } = {}) {
   if (USE_MOCK) {
     await delay(300);
     return {
@@ -2105,15 +2108,28 @@ async getFeed({ limit = 10, cursor = null, topic = null } = {}) {
 
   const params = { limit, ...(cursor ? { cursor } : {}), ...(topic ? { topic } : {}) };
   return readCache.get(`feed:pending:${JSON.stringify(params)}`, async () => {
-    const { data } = await api.get(endpoints.posts.feed, { params });
+    const { data } = await api.get(endpoints.posts.feed, { params, ...(timeout ? { timeout } : {}) });
+    const page = parseApiBody(data);
 
     return {
-      items: normalizeList(data),
-      nextCursor: data?.nextCursor || null,
-      count: data?.count || 0,
+      items: normalizeList(page),
+      nextCursor: page?.nextCursor || null,
+      count: page?.count || 0,
     };
   }, 0);
 },
+
+async getVideoFeed({ cursor = null, fresh = false } = {}) {
+  return videoFeedCache.get(JSON.stringify(cursor), () => {
+    const deadline = Date.now() + 11000;
+    return discoverVideoPage(next => {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error('Video discovery timed out.');
+      return postApi.getFeed({ limit: VIDEO_PAGE_SIZE, cursor: next, timeout: Math.min(6500, remaining) });
+    }, cursor);
+  }, 20000, { forceRefresh: fresh });
+},
+invalidateVideoFeed() { videoFeedCache.clear(); },
 
 async getCreatorPrivatePosts(userId) {
   const creatorId = String(userId || '').trim();
@@ -2267,6 +2283,7 @@ async editComment(payload) {
     }
 
     const { data } = await api.post(endpoints.posts.create, payload);
+    if (payload?.videoUrl || payload?.videoKey) videoFeedCache.clear();
     return data;
   },
 

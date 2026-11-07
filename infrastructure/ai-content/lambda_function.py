@@ -1595,13 +1595,20 @@ def learning_teaching_context(target=None):
 
 def read_learning_path_state(topic):
     path_id = learning_path_id(topic)
-    signature = hashlib.sha256(json.dumps(topic_learning_path(topic), sort_keys=True).encode()).hexdigest()
+    path = topic_learning_path(topic)
+    signature = hashlib.sha256(json.dumps(path, sort_keys=True).encode()).hexdigest()
     raw = explanations_table.get_item(Key={"explanationId": path_id}, ConsistentRead=True).get("Item")
-    if raw and raw.get("catalogSignature") != signature:
-        # Never silently reset a published path when its authored order changes.
-        raise RuntimeError("Learning path changed; review and version the curriculum before publishing")
     index = int((raw or {}).get("nextIndex", 0))
-    if not 0 <= index <= len(topic_learning_path(topic)):
+    if raw and raw.get("catalogSignature") != signature:
+        # Only this exact append-only extension is compatible with the old
+        # signature. Persist the new signature with the existing version guard
+        # when a step completes, never by writing or resetting progress here.
+        previous_path = topic_learning_path(topic, include_focused=False)
+        previous_signature = hashlib.sha256(json.dumps(previous_path, sort_keys=True).encode()).hexdigest()
+        if raw.get("catalogSignature") != previous_signature or path[:len(previous_path)] != previous_path or index > len(previous_path):
+            raise RuntimeError("Learning path changed; review and version the curriculum before publishing")
+        raw = {**raw, "catalogSignature": signature}
+    if not 0 <= index <= len(path):
         raise RuntimeError("Invalid saved learning progression")
     return raw or {
         "explanationId": path_id, "entryType": "learningProgression",

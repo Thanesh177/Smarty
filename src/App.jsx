@@ -36,7 +36,6 @@ import useBriefingPreload from './hooks/useBriefingPreload';
 import { nativeNotificationRequest, supportsNativeReminders } from './lib/nativeNotifications';
 import { ActionConfirmationProvider } from './components/ActionConfirmation';
 import {
-  CircleUserRound,
   MessagesSquare,
   House,
   BookOpen,
@@ -1083,28 +1082,6 @@ useEffect(() => {
                 <span className="nav-control-label" aria-hidden="true">Feed</span>
               </Link>
 
-              <button
-                type="button"
-                className="quick-icon-link"
-                aria-label={user ? 'Profile' : 'Sign in'}
-                aria-current={location.pathname === '/profile' ? 'page' : undefined}
-                title={user ? 'Profile' : 'Sign in'}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-
-                  if (user) {
-                    navigate('/profile');
-                    return;
-                  }
-
-                  navigate('/login', { state: { from: '/profile' } });
-                }}
-              >
-                <CircleUserRound size={16} strokeWidth={2.15} />
-                <span className="nav-control-label" aria-hidden="true">{user ? 'Profile' : 'Sign in'}</span>
-              </button>
-
               <NavLink
                 to="/chat"
                 className="quick-icon-link"
@@ -1386,22 +1363,22 @@ function ReminderPopupStyles() {
       .app-opening-screen {
         position: fixed; inset: 0; z-index: 40000;
         display: grid; place-items: center; overflow: hidden;
-        background: #08090b; color: #f0f0ed;
+        background: var(--ui-bg, #06070a); color: var(--ui-text, #f6f5f3);
         transition: opacity 220ms ease, visibility 220ms;
       }
       .app-opening-screen.is-leaving { opacity: 0; visibility: hidden; pointer-events: none; }
       .app-opening-identity { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; text-align: center; }
       .app-opening-mark {
         display: grid; place-items: center; width: 56px; height: 56px;
-        margin-bottom: 16px; border-radius: 14px; background: #eeefed;
-        color: #121820; font-size: 27px; font-weight: 650; letter-spacing: -.06em;
+        margin-bottom: 16px; border-radius: 14px; background: var(--ui-brand-bg) var(--ui-brand-finish);
+        color: var(--ui-brand-ink); font-size: 27px; font-weight: 650; letter-spacing: -.06em;
       }
       .app-opening-wordmark { display: contents; }
       .app-opening-wordmark strong { font-size: 25px; font-weight: 550; line-height: 1.2; letter-spacing: -.055em; }
-      .app-opening-wordmark > span { font-size: 13px; line-height: 1.6; color: #a1a5ad; }
-      .app-opening-status { margin-top: 24px; color: #a1a5ad; font-size: 12px; line-height: 1.6; }
-      .app-opening-progress { position: relative; width: 96px; height: 2px; margin-top: 9px; overflow: hidden; border-radius: 2px; background: #252a31; }
-      .app-opening-progress > span { position: absolute; inset: 0; background: #b0c8e4; transform-origin: left; animation: smartyReadingLine 1.8s ease-in-out infinite; }
+      .app-opening-wordmark > span { font-size: 13px; line-height: 1.6; color: var(--ui-muted); }
+      .app-opening-status { margin-top: 24px; color: var(--ui-muted); font-size: 12px; line-height: 1.6; }
+      .app-opening-progress { position: relative; width: 96px; height: 2px; margin-top: 9px; overflow: hidden; border-radius: 2px; background: var(--ui-accent-soft); }
+      .app-opening-progress > span { position: absolute; inset: 0; background: var(--ui-primary); transform-origin: left; animation: smartyReadingLine 1.8s ease-in-out infinite; }
       @keyframes smartyReadingLine { from { transform: translateX(-100%) scaleX(.45); } to { transform: translateX(100%) scaleX(.45); } }
       .app-page-loader { min-height: 60dvh; display: grid; place-items: center; padding: 24px; }
       .app-page-loader-card { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; max-width: 360px; padding: 22px; background: transparent; border: 0; box-shadow: none; }

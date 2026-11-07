@@ -1,5 +1,6 @@
 import { EXPANDED_QUIZ_LESSONS } from './quizLessonExpansion.js';
 import { QUIZ_CHAPTER_MAP } from './quizChapters.js';
+import focusedStudy from '../../infrastructure/ai-content/focused_study.json' with { type: 'json' };
 
 // A lesson connects ideas within one meaningful scope, not an exam syllabus.
 // Keep IDs stable: they scope cached questions, attempts and mistake review.
@@ -134,8 +135,16 @@ const EXISTING_QUIZ_LESSONS = {
   ],
 };
 
+const focusedBySubject = new Map();
+for (const item of focusedStudy) {
+  if (!focusedBySubject.has(item.subject)) focusedBySubject.set(item.subject, []);
+  focusedBySubject.get(item.subject).push(item);
+}
 export const QUIZ_LESSONS = Object.fromEntries(Object.entries(EXISTING_QUIZ_LESSONS).map(([id, existing]) => [id,
-  [...(EXPANDED_QUIZ_LESSONS[id] || []), ...existing],
+  [...(EXPANDED_QUIZ_LESSONS[id] || []), ...existing, ...(focusedBySubject.get(id) || []).map(item => ({
+    ...lesson(item.id, item.title, item.chapter, item.outcome, item.concepts),
+    studyNote: `Example to explore: ${item.feedAngle}.`,
+  }))],
 ]));
 
 export const getQuizLessons = subjectId => Object.hasOwn(QUIZ_LESSONS, subjectId) ? QUIZ_LESSONS[subjectId] : [];
@@ -149,13 +158,17 @@ const SCIENCE_LESSON_OUTCOMES = {
 };
 const QUIZ_CHAPTERS = Object.fromEntries(Object.entries(QUIZ_CHAPTER_MAP).map(([subjectId, chapters]) => {
   const lessons = new Map(getQuizLessons(subjectId).map(item => [item.id, item]));
-  return [subjectId, Object.entries(chapters).map(([title, members]) => {
+  const chapterMembers = new Map(Object.entries(chapters));
+  for (const item of focusedBySubject.get(subjectId) || []) {
+    chapterMembers.set(item.chapter, [...(chapterMembers.get(item.chapter) || []), item.id]);
+  }
+  return [subjectId, [...chapterMembers].map(([title, members]) => {
     const practiceSets = members.map(id => lessons.get(id)).filter(Boolean);
     return {
       id: 'chapter-' + getQuizConceptId(title), title, branch: title, practiceSets,
       outcome: SCIENCE_LESSON_OUTCOMES[title] ?? (practiceSets.length === 1 ? practiceSets[0].outcome : `Practice ${title.toLowerCase()} across ${practiceSets.length} connected areas.`),
-      concepts: practiceSets.map(item => item.title),
-      studyNote: practiceSets.map(item => `${item.title}: ${item.outcome} Concepts: ${item.concepts.join(', ')}.`).join('\n'),
+      concepts: practiceSets.length === 1 ? practiceSets[0].concepts : practiceSets.map(item => item.title),
+      studyNote: practiceSets.map(item => [`${item.title}: ${item.outcome} Concepts: ${item.concepts.join(', ')}.`, item.studyNote].filter(Boolean).join(' ')).join('\n'),
     };
   })];
 }));

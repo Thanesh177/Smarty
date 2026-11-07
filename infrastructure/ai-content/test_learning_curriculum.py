@@ -6,6 +6,7 @@ from contextlib import ExitStack
 from unittest import mock
 
 import test_content_quality as quality
+from content_catalog import FOCUSED_STUDY
 from test_content_quality import LAMBDA
 from test_shared_cache import MemoryTable, ConditionalFailure
 
@@ -34,6 +35,35 @@ class LearningCurriculumTests(unittest.TestCase):
 
     def publish(self, slot):
         return json.loads(LAMBDA.create_post(publication_id=slot)["body"])
+
+    def test_quiz_examples_extend_paths_without_changing_any_published_position(self):
+        for row in FOCUSED_STUDY:
+            topic = row["feedTopic"]
+            old = LAMBDA.topic_learning_path(topic, include_focused=False)
+            path = LAMBDA.topic_learning_path(topic)
+            self.assertEqual(path[:len(old)], old)
+            self.assertIn(row["feedAngle"], {entry["subTopic"] for entry in path[len(old):]})
+
+    def test_accepts_the_original_signature_but_preserves_saved_progress_and_rejects_unknown_paths(self):
+        topic = "Physics"
+        path_id = LAMBDA.learning_path_id(topic)
+        old_path = LAMBDA.topic_learning_path(topic, include_focused=False)
+        old_count = len(old_path)
+        old_signature = hashlib.sha256(json.dumps(old_path, sort_keys=True).encode()).hexdigest()
+        saved = {"explanationId": path_id, "nextIndex": old_count, "progressionVersion": old_count,
+                 "catalogSignature": old_signature, "lastPostId": LAMBDA.learning_post_id(path_id, old_count)}
+        self.progress.put_item(Item=saved)
+        state = LAMBDA.read_learning_path_state(topic)
+        self.assertEqual(state["nextIndex"], old_count)
+        self.assertEqual(state["lastPostId"], saved["lastPostId"])
+        self.assertEqual(self.progress.get_item(Key={"explanationId": path_id})["Item"]["catalogSignature"], old_signature)
+        target = LAMBDA.learning_target_for_topic(topic, old_count)
+        self.assertEqual(target["previousLearningPostId"], saved["lastPostId"])
+        LAMBDA.complete_learning_step(state, target)
+        self.assertEqual(LAMBDA.read_learning_path_state(topic)["nextIndex"], old_count + 1)
+        self.progress.put_item(Item={**saved, "catalogSignature": "unrecognized"})
+        with self.assertRaisesRegex(RuntimeError, "Learning path changed"):
+            LAMBDA.read_learning_path_state(topic)
 
     def test_every_topic_has_a_unique_ordered_basic_to_advanced_path(self):
         levels = {"foundation": 0, "intermediate": 1, "advanced": 2}

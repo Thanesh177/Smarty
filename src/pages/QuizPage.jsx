@@ -348,7 +348,7 @@ const TopicCard = memo(function TopicCard({ item, progress, onStart, ordinal }) 
       <h3>{item.title}</h3>
       <p>{item.desc}</p>
       <div className="quiz-subject-areas">{(item.subjects || []).slice(0, 3).map((area) => <span key={area}>{area}</span>)}</div>
-      <div className="quiz-subject-bottom"><span>{getQuizLessons(item.id).length} focused lessons</span><span className="quiz-subject-open"><ArrowUpRight size={17} aria-hidden="true" /><span className="sr-only">Explore lessons</span></span></div>
+      <div className="quiz-subject-bottom"><span>{getQuizChapters(item.id).length} lessons</span><span className="quiz-subject-open"><ArrowUpRight size={17} aria-hidden="true" /><span className="sr-only">Explore lessons</span></span></div>
     </button>
   );
 });

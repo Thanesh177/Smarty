@@ -1,5 +1,12 @@
 /* Finishing layer for legacy workspaces. Geometry stays with each route;
-   color and spacing follow the shared black / cobalt / white tokens. */
+   color and spacing follow the shared app palette. */
+body :is(.app-shell, .menu-panel) .smarty-brand-mark,
+body .smarty-landing .smarty-brand-mark,
+body .feed-view-brand-mark {
+  color: var(--ui-brand-ink) !important;
+  background: var(--ui-brand-bg) var(--ui-brand-finish) !important;
+}
+body .smarty-brand-mark::after { display: none; }
 body .app-shell .content :is(.quiz-workspace, .rooms-workspace),
 body .rooms-dialog-portal { background: var(--ui-bg) !important; color: var(--ui-text); }
 body .app-shell .content .quiz-workspace :is(.quiz-subject-card, .quiz-loading-card, .quiz-saved-review),
@@ -25,7 +32,7 @@ body .app-shell .content .quiz-workspace .option-btn.selected:not(.correct):not(
   background: var(--ui-accent-soft) !important; border-color: var(--ui-accent) !important;
 }
 
-/* White-on-cobalt is reserved for the action that moves a task forward. */
+/* The solid primary color is reserved for the action that moves a task forward. */
 body .app-shell .content :is(.login-submit, .register-submit, .profile-edit-btn, .dashboard-primary,
   .quiz-progress-primary, .quiz-next-primary, .learning-primary-action, .learn-primary,
   .submit-answer-btn, .publish-btn, .composer-publish-btn, .room-invite-join-btn, .library-primary),
@@ -71,7 +78,6 @@ body .app-shell .content .auth-loading-mark { background: var(--ui-brand-bg); co
 body .app-shell .content .login-page .login-card {
   background: var(--ui-surface) !important; border-color: var(--ui-line-strong) !important;
 }
-body .smarty-landing .smarty-brand-mark { color: var(--ui-brand-ink) !important; }
 body .app-shell .content .smarty-landing .sl-hero { gap: clamp(28px, 5vw, 80px); }
 body .app-shell .content .smarty-landing .sl-action-primary { color: var(--ui-primary-ink); background: var(--ui-primary); }
 

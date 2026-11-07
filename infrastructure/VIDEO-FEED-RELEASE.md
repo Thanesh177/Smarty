@@ -9,7 +9,8 @@
 - Only the active video attempts playback. Only it and its immediate neighbours have video elements; distant players release their decoders when detached. Playback pauses on navigation, document hiding, and safety dialogs.
 - Playback starts muted; autoplay refusal exposes a manual play button. Reduced-motion users start videos manually. Controls include sound, play/pause, seeking, fullscreen, captions/description, saved state, comments, creator profiles, and reporting/blocking.
 - Native scrolling and CSS snap handle movement, without scroll-driven animation loops or a new animation dependency. Phone controls remain clear of the existing floating navigation rail.
-- The existing server returns a mixed-post feed. Discovery scans are limited to three consecutive pages without new videos, with explicit older-video loading afterward. A repeated cursor cannot cause an infinite background fetch.
+- The existing server returns a mixed-post feed. Video discovery skips up to four text-only pages per request, stops on repeated cursors, and offers explicit older-video loading when the first pass finds none. The Videos tab can share an in-flight discovery request with the viewer. Results are short-lived in memory, not mixed into the saved text-feed cache.
+- The visible clip starts loading first. The next clip warms after playback has begun and the current clip has a buffer; large MOV files receive only a metadata preload hint. The current upload pipeline does not create smaller versions of existing originals.
 - Video is a feed format, not an exam subject; quiz subjects remain unchanged.
 
 ## Verification and rollout

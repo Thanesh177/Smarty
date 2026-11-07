@@ -3,12 +3,13 @@ import { Search, Play, Grid2X2, BookOpen, Check } from 'lucide-react';
 import { getLessonQuizId, getQuizChapters, makeLessonQuizTopic } from '../data/quizLessons.js';
 import { getLessonTopicQuestions } from '../data/quizLessonQuestions.js';
 
-const PAGE_SIZE = 6;
+const INITIAL_LESSONS = 3;
+const LESSONS_PER_PAGE = 4;
 
 export default function QuizLessonLibrary({ subject, progress, onStart, onBack, onMixedStart, initialView }) {
   const [query, setQuery] = useState(initialView?.query ?? '');
   const [expandedLesson, setExpandedLesson] = useState(initialView?.expandedLesson ?? '');
-  const [limit, setLimit] = useState(initialView?.limit ?? PAGE_SIZE);
+  const [limit, setLimit] = useState(initialView?.limit ?? INITIAL_LESSONS);
   const heading = useRef(null);
   const list = useRef(null);
   const firstNewIndex = useRef(null);
@@ -48,7 +49,7 @@ export default function QuizLessonLibrary({ subject, progress, onStart, onBack, 
     </header>
     <div className="quiz-lesson-tools">
       <label className="quiz-lesson-search"><Search size={17} aria-hidden="true" /><span className="sr-only">Search lessons in {subject.title}</span>
-        <input type="search" value={query} onChange={event => { setQuery(event.target.value); setLimit(PAGE_SIZE); setExpandedLesson(''); }} maxLength={120} placeholder="Find a lesson or idea" /></label>
+        <input type="search" value={query} onChange={event => { setQuery(event.target.value); setLimit(INITIAL_LESSONS); setExpandedLesson(''); }} maxLength={120} placeholder="Find a lesson or idea" /></label>
       <p role="status">{visible.length} of {filtered.length} {query.trim() ? 'matches' : 'lessons'}</p>
     </div>
     <div className="quiz-lesson-list" ref={list}>{visible.map(item => {
@@ -74,8 +75,8 @@ export default function QuizLessonLibrary({ subject, progress, onStart, onBack, 
         </div>}
       </article>;
     })}</div>
-    {remaining > 0 && <div className="quiz-lesson-more"><button type="button" onClick={() => { firstNewIndex.current = visible.length; setLimit(count => count + PAGE_SIZE); }}>Load more lessons <span aria-hidden="true">+{Math.min(PAGE_SIZE, remaining)}</span></button></div>}
-    {!filtered.length && <div className="quiz-lesson-empty"><h2>No lessons match</h2><p>Try another idea or clear the search.</p><button type="button" onClick={() => { setQuery(''); setLimit(PAGE_SIZE); }}>Show all lessons</button></div>}
+    {remaining > 0 && <div className="quiz-lesson-more"><button type="button" onClick={() => { firstNewIndex.current = visible.length; setLimit(count => count + LESSONS_PER_PAGE); }}>Load more lessons <span aria-hidden="true">+{Math.min(LESSONS_PER_PAGE, remaining)}</span></button></div>}
+    {!filtered.length && <div className="quiz-lesson-empty"><h2>No lessons match</h2><p>Try another idea or clear the search.</p><button type="button" onClick={() => { setQuery(''); setLimit(INITIAL_LESSONS); }}>Show all lessons</button></div>}
     <p className="quiz-lesson-note">Built-in practice opens without generating a new set. Other lessons and fresh question sets need a connection. This is study practice, not a complete or official exam syllabus.</p>
   </section>;
 }

@@ -34,6 +34,7 @@
   --ui-control-line: #aeb6aa;
   --ui-brand-bg: #214d40;
   --ui-brand-ink: #ffffff;
+  --ui-brand-finish: none;
   --ui-danger: #a43240;
   --ui-success: #245d44;
   --ui-success-soft: #e3eee2;
@@ -208,10 +209,10 @@
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace .room-privacy-toggle button.active { color: var(--ui-accent-strong) !important; border-color: var(--ui-accent) !important; }
 /* Keep deliberate dark reading/video experiences independent of app chrome. */
 :root[data-app-theme='day'] :is(.reader-theme-dark, .reader-theme-sepia, .video-topic-page) {
-  color-scheme: dark; --ui-bg: #06070a; --ui-bg-deep: #06070a; --ui-surface: #0e1118;
-  --ui-surface-raised: #171c28; --ui-text: #f7f9ff; --ui-secondary: #c9d0e0;
-  --ui-muted: #a0acc1; --ui-faint: #8996ad; --ui-accent: #8dabff;
-  --ui-control-bg: #111622; --ui-control-hover: #1b2437; --ui-line: #dee8ff1a;
+  color-scheme: dark; --ui-bg: #06070a; --ui-bg-deep: #06070a; --ui-surface: #111112;
+  --ui-surface-raised: #1b1b1d; --ui-text: #f6f5f3; --ui-secondary: #d1cfcc;
+  --ui-muted: #afadaa; --ui-faint: #9c9a98; --ui-accent: #c3c1be;
+  --ui-control-bg: #161618; --ui-control-hover: #242426; --ui-line: #eae9e71f;
 }
 @media (hover: hover) {
   :root[data-app-theme='day'] body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):hover:not([aria-current='page']):not(.topbar-create-btn) { background: var(--ui-accent-soft) !important; color: var(--ui-accent-strong) !important; }

@@ -3,10 +3,10 @@ import { Bookmark, Maximize, MessageCircle, MoreHorizontal, Pause, Play, Refresh
 import { Link } from 'react-router-dom';
 import PostAuthor from './PostAuthor';
 import { formatVideoTime, getPostVideoUrl, getVideoPostId } from '../lib/videoFeed';
-import { startReelPlayback } from '../lib/reelPlayback';
+import { hasPlaybackHeadroom, startReelPlayback } from '../lib/reelPlayback';
 import NativeDownloadButton from './NativeDownloadButton';
 
-export default memo(function ReelVideo({ post, active, nearby, preloadNext, muted = false, onMute, onSave, onSafety, onReload, saved, busy, reducedMotion, chromeHidden, onReveal, onPlayingChange }) {
+export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'none', muted = false, onMute, onSave, onSafety, onReload, saved, busy, reducedMotion, chromeHidden, onReveal, onPlayingChange, onHeadroom, onSkip }) {
   const videoRef = useRef(null);
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -26,6 +26,9 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext, mute
   const mounted = useRef(true);
   const autoRenewed = useRef(false);
   const reloadLock = useRef(false);
+  const reloadRef = useRef(onReload);
+  reloadRef.current = onReload;
+  const headroomReported = useRef(false);
   const id = getVideoPostId(post);
   const title = post.title || 'Community video';
   const source = getPostVideoUrl(post);
@@ -45,8 +48,8 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext, mute
     try {
       // Media links can expire while an article remains in the feed cache.
       // Ask for current media rather than retrying an expired link forever.
-      if (onReload) {
-        const fresh = await onReload(id);
+      if (reloadRef.current) {
+        const fresh = await reloadRef.current(id);
         if (!getPostVideoUrl(fresh)) throw new Error('Unavailable');
       }
       if (mounted.current) { setFailed(false); setWaiting(false); setReady(false); setRetry(value => value + 1); }
@@ -56,7 +59,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext, mute
       reloadLock.current = false;
       if (mounted.current) setRefreshing(false);
     }
-  }, [id, onReload]);
+  }, [id]);
 
   const beginPlayback = useCallback((video, withMute, allowMutedFallback) => {
     const request = ++playRequest.current;
@@ -90,7 +93,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext, mute
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !active) return undefined;
-    if (failed && onReload && video.error && !autoRenewed.current) {
+    if (failed && reloadRef.current && video.error && !autoRenewed.current) {
       autoRenewed.current = true;
       void reloadSource();
     } else if (!reducedMotion && !failed && !refreshing) {
@@ -105,7 +108,8 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext, mute
       document.removeEventListener('visibilitychange', hidden);
       window.removeEventListener('pagehide', pause);
     };
-  }, [active, nearby, retry, source, failed, refreshing, reducedMotion, beginPlayback, onReload, reloadSource]);
+  }, [active, nearby, retry, source, failed, refreshing, reducedMotion, beginPlayback, reloadSource]);
+  useEffect(() => { headroomReported.current = false; }, [active, retry, source]);
   useEffect(() => { if (active) onPlayingChange?.(id, playing && !waiting); }, [active, id, playing, waiting, onPlayingChange]);
 
   // Release the decoder and download when a distant video leaves the window.
@@ -149,7 +153,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext, mute
   return <article className={'reel-video' + (active ? ' is-active' : '')} data-video-id={id} aria-label={title} aria-hidden={!active} inert={!active ? '' : undefined}>
     <div className={'reel-video-stage' + (playing ? ' is-playing' : '')} aria-busy={active && (!ready || waiting || refreshing) && !failed}>
       {nearby ? <video key={retry} ref={videoRef} src={source} poster={poster || undefined}
-        playsInline loop muted={soundOff || !active} preload={active || preloadNext ? 'auto' : 'metadata'} aria-label={title}
+        playsInline loop muted={soundOff || !active} preload={active ? 'auto' : preloadNext} aria-label={title}
         onPlaying={event => {
           if (!activeRef.current || document.visibilityState === 'hidden') { event.currentTarget.pause(); return; }
           setPlaying(true); setWaiting(false); setReady(true);
@@ -163,7 +167,14 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext, mute
           if (reducedMotion) preparePreview(video);
         }}
         onLoadedData={() => setReady(true)}
-        onTimeUpdate={event => setPosition(Math.floor(event.currentTarget.currentTime * 4) / 4)}
+        onTimeUpdate={event => {
+          const video = event.currentTarget;
+          setPosition(Math.floor(video.currentTime * 4) / 4);
+          if (activeRef.current && !headroomReported.current && hasPlaybackHeadroom(video)) {
+            headroomReported.current = true;
+            onHeadroom?.(id);
+          }
+        }}
         onError={() => {
           setFailed(true); setWaiting(false); setPlaying(false);
           setFailureMessage('It may be unavailable or use a format this device cannot play.');
@@ -177,7 +188,10 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext, mute
       {active && (refreshing || ((!ready || waiting) && !failed)) && <span className="reel-video-buffer" role="status"><span />{refreshing ? 'Reconnecting video…' : 'Buffering video…'}</span>}
       {failed && !refreshing && <div className="reel-video-error" role="status"><Play size={26} /><strong>This video couldn’t play.</strong>
         <p>{failureMessage || 'Check your connection and try again.'}</p>
-        <button type="button" onClick={reloadSource}><RefreshCw size={16} />Reload video</button>
+        <div className="reel-video-recovery">
+          <button type="button" onClick={reloadSource}><RefreshCw size={16} />Retry video</button>
+          {onSkip && <button type="button" onClick={onSkip}>Next video</button>}
+        </div>
       </div>}
       <div className="reel-video-top"><span>{post.topic || 'Video'}</span><button type="button" onClick={toggleSound} aria-label={soundOff ? 'Turn sound on' : 'Mute video'}>{soundOff ? <VolumeX size={19} /> : <Volume2 size={19} />}</button></div>
       <div className="reel-video-bottom">

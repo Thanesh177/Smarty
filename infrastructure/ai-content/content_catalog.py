@@ -5,6 +5,10 @@ than that parent so generation begins with a teachable mechanism, event, compone
 experiment, or case rather than a broad summary.
 """
 
+import json
+from pathlib import Path
+
+
 TOPIC_SUBTOPICS = {
     "Artificial Intelligence": (
         "how self-attention heads connect tokens across a prompt",
@@ -713,6 +717,16 @@ TOPIC_SUBTOPICS.update({
     ),
 })
 
+# Quiz and feed share the same concrete study targets. Keep established
+# subtopics and progression order; append rather than replacing them.
+FOCUSED_STUDY = json.loads(Path(__file__).with_name("focused_study.json").read_text(encoding="utf-8"))
+ORIGINAL_PATH_SUBTOPICS = TOPIC_SUBTOPICS.copy()
+FOCUSED_ANGLES = {}
+for lesson in FOCUSED_STUDY:
+    topic, angle = lesson["feedTopic"], lesson["feedAngle"]
+    TOPIC_SUBTOPICS[topic] += (angle,)
+    FOCUSED_ANGLES.setdefault(topic, []).append(angle)
+
 # Rotate between these domains before returning to a similar area. The topic
 # catalog remains the source of truth; this grouping only controls variety.
 TOPIC_DOMAINS = {
@@ -1025,9 +1039,9 @@ LEVEL_INSTRUCTIONS = {
 LEVEL_LABELS = {"foundation": "Foundations", "intermediate": "In depth", "advanced": "Advanced"}
 
 
-def topic_learning_path(topic):
+def topic_learning_path(topic, *, include_focused=True):
     foundation, capstone = TOPIC_PATH_BOOKENDS[topic]
-    mechanisms = TOPIC_SUBTOPICS[topic]
+    mechanisms = ORIGINAL_PATH_SUBTOPICS[topic]
     if topic == "Artificial Intelligence":
         # Tokens and embeddings precede attention; serving and adaptation follow.
         mechanisms = (mechanisms[2], "how word embeddings represent tokens as learned numeric vectors",
@@ -1037,6 +1051,10 @@ def topic_learning_path(topic):
     if topic == "Artificial Intelligence":
         entries = [("foundation" if index < 3 else "advanced" if index >= 6 else level, subject)
                    for index, (level, subject) in enumerate(entries)]
+    # Published post IDs encode path position. New focused cases go after
+    # the original capstone so saved links never point at a different lesson.
+    if include_focused:
+        entries.extend(("advanced", angle) for angle in FOCUSED_ANGLES.get(topic, ()))
     return tuple({"level": level, "subTopic": subject} for level, subject in entries)
 
 

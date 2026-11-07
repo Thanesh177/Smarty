@@ -79,3 +79,9 @@ Before production, check that /reels and /reel preserve the new post metadata,
 verify scheduled retry/recovery on an isolated staging path, and review real
 foundation/intermediate/advanced output for accuracy and teaching quality. Check
 the deployed role's existing table read/write permissions and real lease expiry.
+
+## Quiz-aligned editorial additions
+
+`focused_study.json` supplies specific examples to both the quiz library and the scheduled feed catalog. New examples extend the end of each existing path, leaving every published order and ID in place. The publisher accepts the exact pre-extension signature and records the new signature only when an existing conditional progress write succeeds. Any other unexpected signature still stops publication.
+
+Package the JSON alongside `content_catalog.py` via `scripts/package-news-learning.sh`. The web build alone does not publish posts or update the scheduled generator.

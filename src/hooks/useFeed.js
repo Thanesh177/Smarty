@@ -51,7 +51,7 @@ const dedupePosts = (items) => {
   return Array.from(seen.values()).sort((a, b) => getPostTime(b) - getPostTime(a));
 };
 
-export default function useFeed({ pageSize = 10 } = {}) {
+export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
   const { user } = useAuth();
   const userId = user?.userId || user?.sub || user?.id || '';
   const feedCacheKey = useMemo(
@@ -76,6 +76,7 @@ export default function useFeed({ pageSize = 10 } = {}) {
   const activeCacheScopeRef = useRef(userId);
 
   const [posts, setPosts] = useState(() => {
+    if (videoOnly) return [];
     try {
       const cached = localStorage.getItem(feedCacheKey);
       return cached ? dedupePosts(JSON.parse(cached)) : [];
@@ -85,6 +86,7 @@ export default function useFeed({ pageSize = 10 } = {}) {
   });
 
   const [nextCursor, setNextCursor] = useState(() => {
+    if (videoOnly) return null;
     try { return localStorage.getItem(feedCursorKey) || null; }
     catch { return null; }
   });
@@ -121,6 +123,7 @@ export default function useFeed({ pageSize = 10 } = {}) {
   );
 
   const saveCache = useCallback((items, cursor) => {
+    if (videoOnly) return;
     try {
       localStorage.setItem(feedCacheKey, JSON.stringify(items));
 
@@ -132,7 +135,7 @@ export default function useFeed({ pageSize = 10 } = {}) {
     } catch {
       // ignore storage quota errors
     }
-  }, [feedCacheKey, feedCursorKey]);
+  }, [feedCacheKey, feedCursorKey, videoOnly]);
 
   useEffect(() => {
     if (activeCacheScopeRef.current === userId) return;
@@ -146,13 +149,13 @@ export default function useFeed({ pageSize = 10 } = {}) {
     loadRequestRef.current = null;
 
     try {
-      const cached = localStorage.getItem(feedCacheKey);
+      const cached = videoOnly ? null : localStorage.getItem(feedCacheKey);
       const cachedPosts = cached
         ? removeBlockedPosts(dedupePosts(JSON.parse(cached)))
         : [];
 
       setPosts(cachedPosts);
-      setNextCursor(localStorage.getItem(feedCursorKey) || null);
+      setNextCursor(videoOnly ? null : localStorage.getItem(feedCursorKey) || null);
       setLoading(cachedPosts.length === 0);
     } catch {
       setPosts([]);
@@ -169,6 +172,7 @@ export default function useFeed({ pageSize = 10 } = {}) {
     readBlockedCreatorIds,
     removeBlockedPosts,
     userId,
+    videoOnly,
   ]);
 
   useEffect(() => {
@@ -176,16 +180,13 @@ export default function useFeed({ pageSize = 10 } = {}) {
     setPosts((current) => removeBlockedPosts(current));
   }, [readBlockedCreatorIds, removeBlockedPosts]);
 
-  const fetchPage = useCallback(async (cursor = null) => {
-    return postApi.getFeed({
-      limit: pageSize,
-      cursor,
-    });
-  }, [pageSize]);
+  const fetchPage = useCallback((cursor = null, fresh = false) => videoOnly
+    ? postApi.getVideoFeed({ cursor, fresh })
+    : postApi.getFeed({ limit: pageSize, cursor }), [pageSize, videoOnly]);
 
   const preloadNextPage = useCallback(
     (cursor) => {
-      if (!cursor) return;
+      if (!cursor || videoOnly) return;
       const key = JSON.stringify(cursor);
       const current = preloadedPageRef.current;
       if (current?.key === key && current.generation === generationRef.current) return;
@@ -197,10 +198,10 @@ export default function useFeed({ pageSize = 10 } = {}) {
         if (preloadedPageRef.current === entry) preloadedPageRef.current = null;
       });
     },
-    [fetchPage]
+    [fetchPage, videoOnly]
   );
 
-  const refreshFeed = useCallback(async () => {
+  const refreshFeed = useCallback(async (fresh = false) => {
     const generation = ++generationRef.current;
     preloadedPageRef.current = null;
     loadRequestRef.current = null;
@@ -210,7 +211,7 @@ export default function useFeed({ pageSize = 10 } = {}) {
       setError('');
       setLoading(posts.length === 0);
 
-      const data = await fetchPage(null);
+      const data = await fetchPage(null, fresh === true);
       if (generation !== generationRef.current || activeCacheScopeRef.current !== userId) return;
       const freshItems = removeBlockedPosts(dedupePosts(data.items || []));
       const cursor = data.nextCursor || null;

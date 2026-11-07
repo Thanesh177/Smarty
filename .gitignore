@@ -23,6 +23,7 @@ function.zip
 # ===== FIREBASE / SECRETS =====
 google key
 *.json
+!infrastructure/ai-content/focused_study.json
 serviceAccountKey.json
 *.pem
 *.key

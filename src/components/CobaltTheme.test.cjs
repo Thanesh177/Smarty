@@ -13,11 +13,12 @@ function luminance(hex) {
 }
 function contrast(a, b) { const values = [luminance(a), luminance(b)].sort((a,b) => b-a); return (values[0]+.05)/(values[1]+.05); }
 
-test('black, cobalt and white have distinct action, surface and text tokens', () => {
+test('graphite and molten silver have distinct action, surface and text tokens', () => {
   assert.equal(token('--ui-bg'), '#06070a');
-  assert.equal(token('--ui-primary'), '#3a6bec');
-  assert.equal(token('--ui-primary-ink'), '#ffffff');
-  assert.notEqual(token('--ui-primary'), token('--ui-accent'), 'Dark surfaces need a lighter blue for small link text');
+  assert.equal(token('--ui-primary'), '#d2d0cc');
+  assert.equal(token('--ui-primary-ink'), '#151515');
+  assert.notEqual(token('--ui-primary'), token('--ui-accent'), 'Links and primary buttons have distinct roles');
+  assert.match(token('--ui-brand-finish'), /linear-gradient/);
   assert.notEqual(token('--ui-surface'), token('--ui-bg'));
 });
 
@@ -28,7 +29,7 @@ test('reading, muted labels, links and primary buttons meet normal-text contrast
     }
   }
   for (const background of ['--ui-primary', '--ui-primary-hover', '--ui-primary-pressed']) {
-    assert.ok(contrast(token('--ui-primary-ink'), token(background)) >= 4.5, 'White text on ' + background);
+    assert.ok(contrast(token('--ui-primary-ink'), token(background)) >= 4.5, 'Action text on ' + background);
   }
   assert.ok(contrast(token('--ui-accent'), token('--ui-accent-soft')) >= 4.5);
 });
@@ -46,7 +47,7 @@ test('finishing styles load after the shared and navigation styles without chang
 test('brand and opening screens agree with the app palette before React starts', () => {
   const boot = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
   assert.match(boot, /name="theme-color" content="#06070a"/);
-  assert.match(boot, /\.boot-loader-orb[^}]+color: #ffffff; background: #3a6bec/);
+  assert.match(boot, /\.boot-loader-orb[^}]+color: #151515; background: linear-gradient\(150deg, #f5f4f0, #d2d0cc/);
   const rail = read('styles/navigation-toolbar.css');
   assert.match(rail, /background: var\(--ui-primary\) !important; color: var\(--ui-primary-ink\)/);
   assert.match(read('components/FeedViewSwitch.css'), /background: var\(--ui-primary\)/);

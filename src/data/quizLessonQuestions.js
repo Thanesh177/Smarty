@@ -191,7 +191,7 @@ export function getLessonTopicQuestions(topic) {
   const chapter = getQuizChapter(topic.baseTopicId, topic.lessonId);
   const questions = chapter
     ? chapter.practiceSets.flatMap(item => getLessonQuestions(getLessonQuizId(topic.baseTopicId, item.id))
-      .map(question => ({ ...question, concepts: [getQuizConceptId(item.title)] })))
+      .map(question => chapter.practiceSets.length === 1 ? question : { ...question, concepts: [getQuizConceptId(item.title)] }))
     : getLessonQuestions(getLessonQuizId(topic.baseTopicId, topic.lessonId));
   return topic.conceptId ? questions.filter(question => question.concepts.includes(topic.conceptId)) : questions;
 }

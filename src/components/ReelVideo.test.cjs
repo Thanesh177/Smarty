@@ -158,11 +158,12 @@ test('autoplay retries silently if the browser blocks sound', async () => {
 test('only the active clip and explicitly warmed next clip preload video data', () => {
   const media = player => player.tree.props.children.props.children.find(element => element?.type === 'video');
   assert.equal(media(renderPlayer()).props.preload, 'auto');
-  const next = renderPlayer({ active: false, preloadNext: true });
+  const next = renderPlayer({ active: false, preloadNext: 'auto' });
   assert.equal(media(next).props.preload, 'auto');
   next.effects.forEach(effect => effect());
   assert.equal(next.fakeVideo.playCalls, 0);
-  assert.equal(media(renderPlayer({ active: false })).props.preload, 'metadata');
+  assert.equal(media(renderPlayer({ active: false, preloadNext: 'metadata' })).props.preload, 'metadata');
+  assert.equal(media(renderPlayer({ active: false })).props.preload, 'none');
   assert.equal(media(renderPlayer({ active: false, nearby: false })), undefined);
 });
 
