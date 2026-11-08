@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import "../GameStyles.css";
 
 const ROUNDS = [
@@ -29,6 +29,7 @@ const ROUNDS = [
 ];
 
 export default function PatternMatchGame({ onComplete }) {
+  const pairLabelId = useId();
   const [roundIndex, setRoundIndex] = useState(0);
   const [matches, setMatches] = useState({});
   const [activeLeft, setActiveLeft] = useState(null);
@@ -153,7 +154,7 @@ export default function PatternMatchGame({ onComplete }) {
   };
 
   return (
-    <div className="brain-game">
+    <div className="brain-game match-game">
       <p className="game-kicker">MATCH GAME</p>
       <h2>Connect related ideas</h2>
       <p className="memory-round-label">
@@ -165,11 +166,12 @@ export default function PatternMatchGame({ onComplete }) {
 
       <div className="match-grid">
         <div className="match-column">
-          {left.map((item) => (
+          {left.map((item, index) => (
             <button
               key={item}
               type="button"
               aria-pressed={activeLeft === item}
+              aria-describedby={matches[item] ? `${pairLabelId}-left-${index}` : undefined}
               className={[
                 "match-tile",
                 activeLeft === item ? "active" : "",
@@ -179,19 +181,21 @@ export default function PatternMatchGame({ onComplete }) {
               disabled={locked}
             >
               <span>{item}</span>
-              {matches[item] && <small aria-hidden="true">Connected</small>}
+              {matches[item] && <small id={`${pairLabelId}-left-${index}`} aria-hidden="true">Pair {index + 1}</small>}
             </button>
           ))}
         </div>
 
         <div className="match-column">
-          {right.map((item) => {
-            const matched = Object.values(matches).includes(item);
+          {right.map((item, index) => {
+            const pairIndex = left.findIndex((leftItem) => matches[leftItem] === item);
+            const matched = pairIndex !== -1;
             return (
               <button
                 key={item}
                 type="button"
                 aria-pressed={activeRight === item}
+                aria-describedby={matched ? `${pairLabelId}-right-${index}` : undefined}
                 className={[
                   "match-tile",
                   activeRight === item ? "active" : "",
@@ -201,7 +205,7 @@ export default function PatternMatchGame({ onComplete }) {
                 disabled={locked}
               >
                 <span>{item}</span>
-                {matched && <small aria-hidden="true">Connected</small>}
+                {matched && <small id={`${pairLabelId}-right-${index}`} aria-hidden="true">Pair {pairIndex + 1}</small>}
               </button>
             );
           })}
@@ -210,6 +214,7 @@ export default function PatternMatchGame({ onComplete }) {
 
       {feedback && (
         <div
+          role="status"
           className={
             feedback.success
               ? "memory-result success"

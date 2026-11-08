@@ -40,6 +40,7 @@ import useSoundFeedback from "../components/audio/useSoundFeedback";
 import QuizSubjectArt from '../components/QuizSubjectArt';
 import { ArrowUpRight, Search, Grid2X2, Check } from 'lucide-react';
 import QuizPracticeControls, { getQuizPracticeLevel } from '../components/QuizPracticeControls';
+import { ArcadeEntry, ArcadeLobby, ArcadeStage } from '../components/games/QuizArcade';
 
 
 const BrainGameEngine = lazy(() => import("../components/games/BrainGameEngine"));
@@ -1499,22 +1500,11 @@ const handleGameComplete = useCallback((result) => {
 
 if (topic && bossMode && !finished) {
   return (
-    <main className="quiz-page quiz-workspace">
-      <section className="question-card">
-        <div className="quiz-top-row">
-          <button type="button" className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
-          <span>Boss Level</span>
-        </div>
-
-        <Suspense fallback={<QuizLoadingCard label="Loading boss level..." />}>
-          <BossChallenge
-            topicId={topic.id}
-            onComplete={handleBossComplete}
-          />
-        </Suspense>
-      </section>
-
-    </main>
+    <ArcadeStage boss subject={topic.title} onExit={restart} soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(enabled => !enabled)}>
+      <Suspense fallback={<QuizLoadingCard label="Loading boss level..." />}>
+        <BossChallenge topicId={topic.id} onComplete={handleBossComplete} />
+      </Suspense>
+    </ArcadeStage>
   );
 }
 
@@ -1557,14 +1547,20 @@ if (topic && bossMode && !finished) {
     <span>Smarty <span aria-hidden="true">/</span> Practice</span>
     <button type="button" className="quiz-text-control" onClick={() => navigate('/game-profile')}>Your progress <ArrowUpRight size={16} aria-hidden="true" /></button>
   </div>
-  {!selectedLibrarySubject && <header className="quiz-library-intro">
+  {!selectedLibrarySubject && (sessionMode === 'mixed' ? <ArcadeLobby onChoose={id => {
+    const subject = TOPICS.find(item => item.id === id);
+    if (subject) openSubject(subject);
+  }} /> : <>
+    <ArcadeEntry onOpen={() => setSessionMode('mixed')} />
+    <header className="quiz-library-intro">
     <div><span className="quiz-eyebrow">A little curiosity. A clearer mind.</span><h1>One idea.<br />A deeper understanding.</h1><p>Choose a subject, find a lesson, and learn by working through it.</p></div>
     <div className="quiz-library-stats" aria-label="Quiz progress summary">
       <span><strong>{TOPICS.length}</strong> subjects to explore</span>
       <span><strong>{TOPICS.reduce((total, item) => total + getQuizChapters(item.id).length, 0)}</strong> lessons</span>
       <span><strong>{visitProgress.streak}</strong> day{visitProgress.streak === 1 ? '' : 's'} of practice</span>
     </div>
-  </header>}
+    </header>
+  </>)}
   <div className="quiz-library-layout">
     <aside className="quiz-study-sidebar">
         <QuizPracticeControls level={practiceLevel} onLevel={setPracticeLevel} mode={sessionMode} onMode={setSessionMode} sound={soundEnabled} onSound={setSoundEnabled} />
@@ -1576,7 +1572,7 @@ if (topic && bossMode && !finished) {
       {selectedLibrarySubject ? <QuizLessonLibrary key={selectedLibrarySubject.id} subject={selectedLibrarySubject} progress={topicProgressMap}
         initialView={lessonLibraryView?.subjectId === selectedLibrarySubject.id ? lessonLibraryView : undefined}
         onStart={(item, view) => { setLessonLibraryView({ ...view, subjectId: selectedLibrarySubject.id }); startQuiz(item); }} onBack={() => navigate('/quiz')}
-        onMixedStart={sessionMode === 'mixed' || bossRequested ? () => startQuiz(selectedLibrarySubject) : undefined} /> : <>
+        onMixedStart={sessionMode === 'mixed' || bossRequested ? () => startQuiz(selectedLibrarySubject) : undefined} bossChallenge={bossRequested} /> : <>
         <div className="quiz-subject-toolbar">
           <div><h2>The subject library</h2><span className="quiz-library-count">{renderedTopics.length} of {TOPICS.length} subjects</span></div>
           <label><Search size={17} aria-hidden="true" /><span className="sr-only">Search quiz subjects</span><input type="search" value={subjectQuery} onChange={(event) => setSubjectQuery(event.target.value)} placeholder="Find your subject" /></label>
@@ -1752,43 +1748,16 @@ if (topic && bossMode && !finished) {
   }
 
   if (topic && current?.type === "game" && !finished) {
-  return (
-    <main className="quiz-page quiz-workspace">
-      <section className="question-card">
-        <div className="quiz-top-row">
-          <button type="button" className="back-btn" onClick={restart}><span className="arrow">←</span> Topics</button>
-          <span>
-            Challenge {index + 1}/{mixedSteps.length}
-          </span>
-        </div>
-
-<div className="progress-track">
-  <div
-    className="progress-fill"
-    style={{ width: `${((index + 1) / mixedSteps.length) * 100}%` }}
-  />
-</div>
-
-{survivalMode && sessionMode === 'mixed' && !reviewMode && (
-  <div className="survival-timer">
-    <span>⏱ Survival</span>
-    <strong>{survivalTimeLeft}s</strong>
-  </div>
-)}
-
-
-
+    return (
+      <ArcadeStage subject={topic.title} round={index + 1} total={mixedSteps.length} onExit={restart}
+        survivalTime={survivalMode && sessionMode === 'mixed' && !reviewMode ? survivalTimeLeft : null}
+        soundEnabled={soundEnabled} onToggleSound={() => setSoundEnabled(enabled => !enabled)}>
         <Suspense fallback={<QuizLoadingCard />}>
-          <BrainGameEngine
-            game={current}
-            topicId={topic.id}
-            onComplete={handleGameComplete}
-          />
+          <BrainGameEngine game={current} topicId={topic.id} onComplete={handleGameComplete} />
         </Suspense>
-      </section>
-    </main>
-  );
-}
+      </ArcadeStage>
+    );
+  }
   
 
   return (

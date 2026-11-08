@@ -2,11 +2,12 @@ import { useMemo, useRef, useState, useEffect } from 'react';
 import { Search, Play, Grid2X2, BookOpen, Check } from 'lucide-react';
 import { getLessonQuizId, getQuizChapters, makeLessonQuizTopic } from '../data/quizLessons.js';
 import { getLessonTopicQuestions } from '../data/quizLessonQuestions.js';
+import { ArcadeEntry } from './games/QuizArcade';
 
 const INITIAL_LESSONS = 3;
 const LESSONS_PER_PAGE = 4;
 
-export default function QuizLessonLibrary({ subject, progress, onStart, onBack, onMixedStart, initialView }) {
+export default function QuizLessonLibrary({ subject, progress, onStart, onBack, onMixedStart, bossChallenge = false, initialView }) {
   const [query, setQuery] = useState(initialView?.query ?? '');
   const [expandedLesson, setExpandedLesson] = useState(initialView?.expandedLesson ?? '');
   const [limit, setLimit] = useState(initialView?.limit ?? INITIAL_LESSONS);
@@ -45,7 +46,8 @@ export default function QuizLessonLibrary({ subject, progress, onStart, onBack, 
     <header className="quiz-lesson-intro">
       <h1 id="quiz-lesson-title" ref={heading} tabIndex={-1}>{subject.title} lessons</h1>
       <p>Choose a lesson for a quiz across its key ideas, or open one practice set to study something specific.</p>
-      {onMixedStart && <button type="button" className="quiz-text-control" onClick={onMixedStart}>Start subject challenge</button>}
+      {onMixedStart && <ArcadeEntry onOpen={onMixedStart} title={bossChallenge ? 'Start boss challenge' : 'Start subject challenge'}
+        description={bossChallenge ? 'Enter the boss round.' : 'Mix quiz questions with mini-games.'} />}
     </header>
     <div className="quiz-lesson-tools">
       <label className="quiz-lesson-search"><Search size={17} aria-hidden="true" /><span className="sr-only">Search lessons in {subject.title}</span>

@@ -5,6 +5,7 @@ import '../pages/QuizPage.css';
 import '../pages/QuizLearning.css';
 import '../pages/QuizWorkspace.css';
 import '../pages/QuizLessons.css';
+import '../components/games/QuizArcade.css';
 import '../components/ui/XPOrb.css';
 import '../pages/progress/ProgressPage.css';
 import '../pages/progress/QuizProgress.css';

@@ -7,7 +7,7 @@ const path = require('node:path');
 const code = buildSync({ entryPoints: [path.join(__dirname, 'QuizLessonLibrary.jsx')], bundle: true,
   write: false, format: 'cjs', platform: 'node', jsx: 'automatic', external: ['react', 'react/jsx-runtime', 'lucide-react'] }).outputFiles[0].text;
 
-function harness(initialView) {
+function harness(initialView, props = {}) {
   let slot = 0;
   const state = [], starts = [], views = [], scope = { exports: {} };
   const jsx = (type, props) => ({ type, props: props || {} });
@@ -20,7 +20,7 @@ function harness(initialView) {
       throw new Error(name);
     } });
   const subject = { id: 'science-mathematics', title: 'Science & Mathematics' };
-  function render() { slot = 0; return scope.exports.default({ subject, progress: {}, initialView, onStart: (item, view) => { starts.push(item); views.push(view); }, onBack() {} }); }
+  function render() { slot = 0; return scope.exports.default({ subject, progress: {}, initialView, onStart: (item, view) => { starts.push(item); views.push(view); }, onBack() {}, ...props }); }
   function find(node, predicate) {
     if (!node || typeof node !== 'object') return [];
     if (Array.isArray(node)) return node.flatMap(item => find(item, predicate));
@@ -29,6 +29,21 @@ function harness(initialView) {
   const text = node => typeof node === 'string' ? node : typeof node === 'number' ? String(node) : Array.isArray(node) ? node.map(text).join('') : node?.props ? text(node.props.children) : '';
   return { starts, views, render, find, text };
 }
+
+test('the arcade launch is offered only for a subject challenge and uses its own action', () => {
+  const findEntry = app => app.find(app.render(), node => node.type?.name === 'ArcadeEntry')[0];
+  assert.equal(findEntry(harness()), undefined);
+  let launches = 0;
+  const app = harness(undefined, { onMixedStart: () => { launches++; } });
+  const entry = findEntry(app);
+  const button = entry.type(entry.props);
+  assert.equal(button.type, 'button');
+  assert.match(app.text(button), /Start subject challenge/);
+  button.props.onClick();
+  assert.equal(launches, 1);
+  assert.equal(app.starts.length, 0);
+  assert.equal(findEntry(harness(undefined, { onMixedStart() {}, bossChallenge: true })).props.title, 'Start boss challenge');
+});
 
 test('a lesson has one quiz action that includes all its ideas and no topic picker', () => {
   const app = harness(); let tree = app.render();

@@ -1,0 +1,133 @@
+/* A dark playfield inside the app's regular Day or Night chrome. */
+.arcade-lobby-screen, .arcade-screen {
+  --arcade-screen: #0b1222;
+  --arcade-deck: #151f33;
+  --arcade-key: #1a2940;
+  --arcade-line: #334765;
+  --arcade-ink: #f4f8ff;
+  --arcade-muted: #b7c8dc;
+  --arcade-live: #9fddff;
+  --ui-text: var(--arcade-ink);
+  --ui-secondary: var(--arcade-muted);
+  --ui-muted: var(--arcade-muted);
+  --ui-accent: var(--arcade-live);
+  --ui-line: var(--arcade-line);
+  --ui-surface: var(--arcade-screen);
+  color: var(--arcade-ink);
+  background: var(--arcade-screen);
+  color-scheme: dark;
+}
+.arcade-entry, .arcade-pick {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
+  gap: 12px; min-width: 0; min-height: 64px; padding: 10px 14px;
+  color: var(--ui-text); background: var(--ui-surface); border: 1px solid var(--ui-line-strong); border-radius: 12px;
+  font: inherit; text-align: start; cursor: pointer; touch-action: manipulation;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+.arcade-entry { width: 100%; margin: 14px 0 0; }
+.arcade-entry-icon, .arcade-pick-icon {
+  display: grid; place-items: center; width: 42px; height: 42px; border-radius: 10px;
+  background: var(--ui-accent-soft); color: var(--ui-accent-strong);
+}
+.arcade-entry strong, .arcade-pick strong { display: block; color: var(--ui-text); font-size: 15px; font-weight: 650; }
+.arcade-entry small, .arcade-pick small { display: block; margin-top: 4px; color: var(--ui-secondary); font-size: 12px; line-height: 1.45; }
+.arcade-lobby { margin: clamp(16px, 3vw, 28px) 0 24px; }
+.arcade-lobby-screen {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+  gap: clamp(14px, 4vw, 52px); padding: clamp(18px, 4vw, 40px);
+  border: 1px solid var(--arcade-line); border-radius: 16px;
+  background: linear-gradient(112deg, #0b1222 40%, #1b2e4d);
+}
+.arcade-lobby-copy p { margin: 0; max-width: 44ch; color: var(--arcade-muted); font-size: 14px; line-height: 1.55; }
+.arcade-lobby-copy p:first-child { display: inline-flex; align-items: center; gap: 8px; color: var(--arcade-live); font-size: 12px; font-weight: 650; }
+.arcade-lobby-copy h1 { margin: 8px 0 10px; color: var(--arcade-ink); font-size: clamp(30px, 5vw, 58px); line-height: 1; letter-spacing: -.055em; }
+.arcade-pad-art { display: grid; grid-template-columns: repeat(3, 1fr); width: clamp(76px, 14vw, 176px); gap: clamp(3px, .7vw, 9px); transform: rotate(-9deg); }
+.arcade-pad-art span { aspect-ratio: 1; border: 1px solid #5c7baa; border-radius: 24%; background: #253b5e; box-shadow: 0 3px #111d33; }
+.arcade-pad-art span:nth-child(3n + 2) { background: #9fddff; border-color: #c9ebff; box-shadow: 0 3px #3c80b4; }
+.arcade-pad-art span:nth-child(5) { background: #cae9ff; }
+.arcade-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.arcade-pick.is-iris .arcade-pick-icon { background: #e7ddf4; color: #4b2d78; }
+.arcade-pick.is-sky .arcade-pick-icon { background: #d9edff; color: #164e79; }
+.arcade-pick.is-mint .arcade-pick-icon { background: #d3eee6; color: #165949; }
+.app-shell .content .quiz-workspace.quiz-arcade { padding-top: clamp(10px, 2.4vw, 26px) !important; }
+.arcade-console { width: min(100%, 1040px); margin-inline: auto; }
+.arcade-console-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-bottom: 10px; }
+.arcade-console-control { display: inline-flex; align-items: center; justify-self: start; justify-content: center; gap: 7px; min-height: 44px; min-width: 44px; padding: 0 9px; color: var(--ui-text); border: 1px solid var(--ui-line); border-radius: 9px; background: var(--ui-surface); font: inherit; font-size: 12px; cursor: pointer; touch-action: manipulation; }
+.arcade-console-control.arcade-sound { justify-self: end; }
+.arcade-console-brand { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; color: var(--ui-muted); white-space: nowrap; }
+.arcade-screen { padding: clamp(13px, 3vw, 32px); border: 1px solid var(--arcade-line); border-top: 3px solid var(--arcade-live); border-radius: 16px; }
+.is-boss-round .arcade-screen { --arcade-live: #ffdb92; }
+.arcade-round-header { display: flex; align-items: end; justify-content: space-between; gap: 12px; padding-bottom: 10px; }
+.arcade-round-header > div:first-child { min-width: 0; }
+.arcade-round-header > div > span { color: var(--arcade-muted); font-size: 12px; }
+.arcade-round-header h1 { margin: 4px 0 0; color: var(--arcade-ink); font-size: clamp(19px, 3vw, 31px); line-height: 1.15; letter-spacing: -.03em; overflow-wrap: anywhere; }
+.arcade-round-header h1:focus { outline: none; }
+.arcade-round-count { flex: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.arcade-round-count strong { color: var(--arcade-live); font-size: clamp(21px, 3.6vw, 31px); line-height: 1; }
+.arcade-round-meter { display: flex; gap: 4px; margin-bottom: clamp(14px, 3vw, 24px); }
+.arcade-round-meter span { flex: 1; height: 4px; border-radius: 3px; background: var(--arcade-line); }
+.arcade-round-meter .is-complete { background: #52749b; }
+.arcade-round-meter .is-current { background: var(--arcade-live); }
+.arcade-survival-time { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; background: var(--arcade-deck); color: var(--arcade-muted); font-size: 13px; }
+.arcade-survival-time strong { color: var(--arcade-live); font-variant-numeric: tabular-nums; }
+body .app-shell .content .quiz-arcade .arcade-screen :is(.brain-game, .boss-stage) {
+  width: 100%; min-width: 0; margin: 0; padding: 0 !important; border: 0 !important; border-radius: 0 !important;
+  background: transparent !important; box-shadow: none !important; color: var(--arcade-ink);
+}
+.quiz-arcade .arcade-screen .boss-header { display: none; } /* The console already labels the boss round. */
+.quiz-arcade .arcade-screen .brain-game { gap: clamp(10px, 2vw, 18px); }
+.quiz-arcade .arcade-screen .brain-game::before { content: none; }
+.quiz-arcade .arcade-screen .brain-game h2 { margin: 0; color: var(--arcade-ink); font-size: clamp(23px, 4vw, 38px); line-height: 1.1; }
+.quiz-arcade .arcade-screen .brain-game :is(.game-hint, .game-feedback, .memory-round-label, .game-kicker) { color: var(--arcade-muted); }
+.quiz-arcade .arcade-screen .brain-game .game-hint { font-size: 14px; line-height: 1.55; }
+.quiz-arcade .arcade-screen .brain-game .game-kicker { color: var(--arcade-live); }
+.quiz-arcade .arcade-screen .brain-game :is(.decision-btn, .match-tile, .word-chip, .memory-tile, .sequence-cell, .game-main-btn, .secondary-btn) { min-height: 48px; touch-action: manipulation; }
+.quiz-arcade .arcade-screen :is(.match-tile, .decision-btn, .memory-tile, .word-chip, .sequence-cell):not(.correct):not(.wrong):not(.missed):not(.active):not(.matched):not(.selected):not(.study) {
+  background: var(--arcade-key); color: var(--arcade-ink); border-color: var(--arcade-line); border-radius: 12px;
+}
+.quiz-arcade .arcade-screen .brain-game :is(.match-tile.active, .decision-btn.selected, .memory-tile.selected, .word-chip.active):not(.correct):not(.wrong):not(.missed) {
+  background: #284b68 !important; color: var(--arcade-ink) !important;
+  border-color: var(--arcade-live) !important; box-shadow: inset 0 0 0 1px var(--arcade-live) !important;
+}
+.quiz-arcade .arcade-screen .brain-game .match-tile.matched:not(.active):not(.correct):not(.wrong):not(.missed) {
+  background: #123c37 !important; border-color: #589c8b !important; color: #e2fff4 !important; box-shadow: none !important;
+}
+.quiz-arcade .arcade-screen .brain-game .match-tile > span { color: inherit !important; }
+.quiz-arcade .arcade-screen .brain-game .match-tile.matched small { color: inherit; opacity: .9; }
+.quiz-arcade .arcade-screen .brain-game .game-main-btn {
+  background: var(--arcade-live) !important; color: #081624 !important; border: 1px solid transparent !important;
+  border-radius: 10px; box-shadow: 0 3px 0 #315f7e;
+}
+.quiz-arcade .arcade-screen .brain-game .game-main-btn::after { content: none; }
+.quiz-arcade .arcade-screen .match-game > .game-main-btn { width: fit-content !important; min-width: 192px; }
+.quiz-arcade .arcade-screen .brain-game .game-main-btn:not(:disabled):active { transform: translateY(2px); box-shadow: 0 1px 0 #315f7e; }
+.quiz-arcade .arcade-screen .brain-game .game-main-btn:disabled { opacity: .52; box-shadow: none; }
+.quiz-arcade .arcade-screen .brain-game :is(.market-board, .market-stat-card, .market-scenario-card, .trade-brief, .science-order-box) { background: var(--arcade-deck); border-color: var(--arcade-line); }
+.quiz-arcade .arcade-screen .brain-game .memory-progress-track { background: var(--arcade-deck); border-color: var(--arcade-line); }
+.quiz-arcade .arcade-screen .brain-game .memory-progress-track span { background: var(--arcade-live); box-shadow: none; }
+.quiz-arcade .arcade-screen .brain-game :is(.match-grid, .decision-row, .memory-palace-grid) { min-width: 0; gap: clamp(7px, 1.8vw, 16px); }
+.quiz-arcade .arcade-screen .brain-game .match-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.quiz-arcade .arcade-screen .match-column { min-width: 0; gap: clamp(8px, 1.5vw, 12px); }
+.quiz-arcade .arcade-screen .brain-game .match-tile {
+  min-width: 0; min-height: 62px; padding: 7px clamp(8px, 2vw, 16px); line-height: 1.25; overflow-wrap: anywhere;
+}
+.quiz-arcade .arcade-screen :is(button, input):focus-visible { outline: 2px solid var(--arcade-live) !important; outline-offset: 3px !important; }
+.arcade-entry:focus-visible, .arcade-pick:focus-visible, .arcade-console-control:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+@media (hover: hover) {
+  .arcade-entry:hover, .arcade-pick:hover, .arcade-console-control:hover { background: var(--ui-control-hover); border-color: var(--ui-accent-line); }
+}
+@media (max-width: 780px) {
+  .arcade-picks { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .arcade-console-brand svg { display: none; }
+  .arcade-pick { min-height: 58px; }
+  .arcade-screen { border-radius: 12px; }
+  .quiz-arcade .arcade-screen .brain-game .game-main-btn,
+  .quiz-arcade .arcade-screen .match-game > .game-main-btn { width: 100% !important; min-width: 0; justify-content: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arcade-entry, .arcade-pick { transition: none; }
+  .quiz-arcade .arcade-screen :is(.memory-timer.danger, .sequence-cell.active) { animation: none; }
+  .quiz-arcade .arcade-screen .brain-game button { transition: none !important; }
+}
