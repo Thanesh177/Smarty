@@ -18,8 +18,11 @@ import {
 } from 'lucide-react';
 import { chatApi, newsApi, postApi, readBooksApi, roomApi } from '../api/client';
 import { getDefaultNewsCountry } from '../data/newsLocations';
+import { MAIN_TOPICS, getMainTopicDefinition } from '../data/topicTaxonomy';
 import { getUserScopedStorageKey } from '../lib/userScopedStorage';
 import { getMemberId, getPublicMemberName, memberProfilePath } from '../lib/memberProfile';
+import { getPreferredSearchQuery, normalizeSearchText as normalizeText, rankSearchMatches } from '../lib/searchRelevance';
+import { rankTopicChoices } from '../lib/topicSearch';
 import './UniversalSearch.css';
 
 const SEARCH_DELAY_MS = 240;
@@ -31,23 +34,9 @@ const MAX_SEARCH_CACHE_ENTRIES = 40;
 const MAX_SOURCE_CACHE_ENTRIES = 8;
 const MAX_QUERY_LENGTH = 120;
 const RESULT_LIMIT = 6;
+const TOPIC_RESULT_LIMIT = 8;
 const searchCache = new Map();
 const sourceCache = new Map();
-
-const QUERY_ALIASES = {
-  ai: ['artificial intelligence', 'machine learning', 'neural networks'],
-  ml: ['machine learning', 'artificial intelligence'],
-  coding: ['programming', 'software development'],
-  programming: ['coding', 'software development'],
-  money: ['finance', 'personal finance', 'investing'],
-  stocks: ['stock market', 'investing', 'trading'],
-  brain: ['neuroscience', 'brain function', 'cognitive psychology'],
-  mind: ['psychology', 'mental health', 'neuroscience'],
-  space: ['astronomy', 'cosmos', 'spaceflight'],
-  climate: ['climate change', 'environment', 'sustainability'],
-  startup: ['startups', 'entrepreneurship', 'business'],
-  startups: ['entrepreneurship', 'business'],
-};
 
 const SOURCE_LABELS = {
   topics: 'topics',
@@ -59,6 +48,7 @@ const SOURCE_LABELS = {
 };
 
 const DEFAULT_TOPICS = [
+  ...MAIN_TOPICS.flatMap(topic => [topic.label, ...topic.topics]),
   'Artificial Intelligence', 'Astronomy', 'Biology', 'Brain Function',
   'Business', 'Chemistry', 'Climate Change', 'Coding', 'Consumer Behavior',
   'Culture', 'Cybersecurity', 'Decision Making', 'Economics', 'Entrepreneurship',
@@ -67,7 +57,7 @@ const DEFAULT_TOPICS = [
   'Marketing', 'Memory', 'Mental Health', 'Motivation', 'Neuroscience',
   'Nutrition', 'Personal Finance', 'Physics', 'Productivity', 'Psychology',
   'Self Improvement', 'Sleep', 'Society', 'Software Systems', 'Space',
-  'Startups', 'Stock Market', 'Sustainability', 'Technology', 'Trading',
+  'Startups', 'Stock Market', 'Sustainability', 'Trading',
 ];
 
 const QUICK_DESTINATIONS = [
@@ -99,15 +89,6 @@ const FILTERS = [
   ['news', 'News'],
 ];
 
-function normalizeText(value) {
-  return String(value || '')
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function setBoundedCache(cache, key, value, limit) {
   if (cache.has(key)) cache.delete(key);
   cache.set(key, value);
@@ -129,94 +110,6 @@ function withTimeout(promise, timeoutMs, sourceName) {
   });
 
   return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timer));
-}
-
-function editDistanceWithinOne(left, right) {
-  if (left === right) return true;
-  if (Math.abs(left.length - right.length) > 1) return false;
-
-  let leftIndex = 0;
-  let rightIndex = 0;
-  let edits = 0;
-
-  while (leftIndex < left.length && rightIndex < right.length) {
-    if (left[leftIndex] === right[rightIndex]) {
-      leftIndex += 1;
-      rightIndex += 1;
-      continue;
-    }
-
-    edits += 1;
-    if (edits > 1) return false;
-
-    if (left.length > right.length) leftIndex += 1;
-    else if (right.length > left.length) rightIndex += 1;
-    else {
-      leftIndex += 1;
-      rightIndex += 1;
-    }
-  }
-
-  if (leftIndex < left.length || rightIndex < right.length) edits += 1;
-  return edits <= 1;
-}
-
-function tokenMatchScore(queryToken, candidateToken) {
-  if (!queryToken || !candidateToken) return 0;
-  if (queryToken === candidateToken) return 1;
-  if (candidateToken.startsWith(queryToken) && queryToken.length >= 2) return 0.88;
-  if (queryToken.startsWith(candidateToken) && candidateToken.length >= 3) return 0.78;
-  if (
-    queryToken.length >= 4 &&
-    candidateToken.length >= 4 &&
-    editDistanceWithinOne(queryToken, candidateToken)
-  ) {
-    return 0.68;
-  }
-  return 0;
-}
-
-function getQueryVariants(query) {
-  const normalized = normalizeText(query);
-  const aliases = QUERY_ALIASES[normalized] || [];
-
-  // Two-character concepts such as AI and ML are too broad for regular
-  // word-prefix matching. Rank their expanded concepts instead while keeping
-  // the user's original text for the input and destination links.
-  if (normalized.length <= 2 && aliases.length > 0) {
-    return aliases.map(normalizeText).filter(Boolean);
-  }
-
-  return [normalized, ...aliases.map(normalizeText)].filter(Boolean);
-}
-
-function scoreSingleMatch(searchableValue, normalizedQuery) {
-  const searchable = normalizeText(searchableValue);
-  if (!searchable || !normalizedQuery) return 0;
-  if (searchable === normalizedQuery) return 140;
-  if (searchable.startsWith(normalizedQuery)) return 118;
-  if (normalizedQuery.length >= 3 && searchable.includes(normalizedQuery)) return 96;
-
-  const queryWords = normalizedQuery.split(/[^a-z0-9]+/).filter(Boolean);
-  const candidateWords = searchable.split(/[^a-z0-9]+/).filter(Boolean);
-  if (!queryWords.length || !candidateWords.length) return 0;
-
-  const tokenScores = queryWords.map((queryWord) =>
-    candidateWords.reduce(
-      (best, candidateWord) => Math.max(best, tokenMatchScore(queryWord, candidateWord)),
-      0
-    )
-  );
-  const matchedScores = tokenScores.filter((score) => score > 0);
-  const coverage = matchedScores.length / queryWords.length;
-
-  if (coverage === 1) {
-    const quality = matchedScores.reduce((sum, score) => sum + score, 0) / matchedScores.length;
-    return 54 + quality * 34;
-  }
-
-  if (queryWords.length > 1 && coverage >= 0.66) return 36 * coverage;
-  return 0;
 }
 
 function getTopicValue(value) {
@@ -246,22 +139,6 @@ function uniqueTopics(values = []) {
     topics.push(topic);
     return topics;
   }, []);
-}
-
-function scoreMatch(searchableValue, query) {
-  return getQueryVariants(query).reduce((best, variant, index) => {
-    const score = scoreSingleMatch(searchableValue, variant);
-    return Math.max(best, index === 0 ? score : score * 0.8);
-  }, 0);
-}
-
-function rankMatches(items, query, getSearchText, limit = RESULT_LIMIT) {
-  return (items || [])
-    .map((item, index) => ({ item, index, score: scoreMatch(getSearchText(item), query) }))
-    .filter(({ score }) => score > 0)
-    .sort((left, right) => right.score - left.score || left.index - right.index)
-    .slice(0, limit)
-    .map(({ item }) => item);
 }
 
 function dedupe(items, getKey) {
@@ -371,30 +248,28 @@ function getNewsSearchLocation() {
 }
 
 function makeTopicResults(topics, query) {
-  return rankMatches(uniqueTopics(topics), query, (topic) => topic).map((topic) => ({
-    key: `topic-${normalizeText(topic)}`,
-    type: 'topic',
-    label: topic,
-    description: `Explore focused lessons, posts, and ideas about ${topic}.`,
-    meta: 'Topic',
-    path: `/feed?topic=${encodeURIComponent(topic)}`,
-  }));
+  return rankTopicChoices(uniqueTopics(topics), query, TOPIC_RESULT_LIMIT).map((topic) => {
+    const family = getMainTopicDefinition(topic)?.label;
+    return {
+      key: `topic-${normalizeText(topic)}`,
+      type: 'topic',
+      label: topic,
+      description: family && family !== topic
+        ? `Explore ${topic} in the ${family} feed.`
+        : `Explore lessons, posts, and ideas about ${topic}.`,
+      meta: 'Topic',
+      path: `/feed?topic=${encodeURIComponent(family || topic)}`,
+    };
+  });
 }
 
 function makePostResults(posts, query) {
-  const ranked = rankMatches(
-    dedupe(posts, getPostId),
-    query,
-    (post) => [
-      post?.title,
-      post?.body,
-      post?.description,
-      post?.caption,
-      post?.topic,
-      post?.subTopic,
-      post?.subtopic,
-    ].flat().filter(Boolean).join(' ')
-  );
+  const ranked = rankSearchMatches(dedupe(posts, getPostId), query, {
+    title: post => post?.title || post?.caption,
+    keywords: post => [post?.subTopic, post?.subtopic, post?.topic, post?.category].flat(),
+    context: post => [post?.body, post?.description, post?.caption],
+    limit: RESULT_LIMIT,
+  });
 
   return ranked.map((post) => {
     const postId = getPostId(post);
@@ -413,11 +288,12 @@ function makePostResults(posts, query) {
 }
 
 function makePeopleResults(people, query) {
-  return rankMatches(
-    dedupe(people, getPersonId),
-    query,
-    (person) => [person?.name, person?.displayName, person?.username, person?.email].filter(Boolean).join(' ')
-  ).map((person) => {
+  return rankSearchMatches(dedupe(people, getPersonId), query, {
+    title: person => [person?.name, person?.displayName, person?.username, person?.userName],
+    context: person => person?.email,
+    related: false,
+    limit: RESULT_LIMIT,
+  }).map((person) => {
     const personId = getPersonId(person);
     const username = getPublicMemberName(person?.username, person?.userName);
     const name = getPublicMemberName(username, person?.displayName, person?.name) || 'Smarty member';
@@ -435,11 +311,12 @@ function makePeopleResults(people, query) {
 }
 
 function makeRoomResults(rooms, query) {
-  return rankMatches(
-    dedupe(rooms, getRoomId),
-    query,
-    (room) => [room?.name, room?.title, room?.description, room?.topic, room?.category].filter(Boolean).join(' ')
-  ).map((room) => {
+  return rankSearchMatches(dedupe(rooms, getRoomId), query, {
+    title: room => room?.name || room?.title,
+    keywords: room => [room?.topic, room?.category],
+    context: room => room?.description || room?.about,
+    limit: RESULT_LIMIT,
+  }).map((room) => {
     const roomId = getRoomId(room);
 
     return {
@@ -456,10 +333,11 @@ function makeRoomResults(rooms, query) {
 }
 
 function makeBookResults(books, query) {
-  return rankMatches(
+  return rankSearchMatches(
     dedupe(books, (book) => getBookId(book) || `${book?.title}-${getBookAuthor(book)}`),
     query,
-    (book) => [book?.title, getBookAuthor(book), book?.subjects, book?.description].flat().filter(Boolean).join(' ')
+    { title: book => book?.title, keywords: book => [getBookAuthor(book), book?.subjects].flat(),
+      context: book => book?.description, limit: RESULT_LIMIT }
   ).map((book) => {
     const bookId = getBookId(book);
     const readable = Boolean(book?.readable || book?.gutenberg_id || book?.book_id || book?.ia);
@@ -479,11 +357,12 @@ function makeBookResults(books, query) {
 }
 
 function makeNewsResults(articles, query) {
-  return rankMatches(
-    articles,
-    query,
-    (article) => [article?.title, article?.summary, article?.source, article?.section].filter(Boolean).join(' ')
-  ).map((article, index) => ({
+  return rankSearchMatches(articles, query, {
+    title: article => article?.title,
+    keywords: article => [article?.source, article?.section],
+    context: article => article?.summary,
+    limit: RESULT_LIMIT,
+  }).map((article, index) => ({
     key: `news-${article?.id || index}-${normalizeText(article?.title)}`,
     type: 'news',
     label: article?.title || 'News story',
@@ -495,7 +374,7 @@ function makeNewsResults(articles, query) {
 }
 
 function makeActionResults(query, signedIn) {
-  const canonicalQuery = QUERY_ALIASES[normalizeText(query)]?.[0] || query;
+  const canonicalQuery = getPreferredSearchQuery(query);
   const encoded = encodeURIComponent(canonicalQuery);
   const literalEncoded = encodeURIComponent(query);
   const actions = [
@@ -1022,6 +901,20 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
     }
   }, [navigate, onClose, query, saveRecentSearch]);
 
+  function changeQuery(value) {
+    const next = value.slice(0, MAX_QUERY_LENGTH);
+    if (next === query) return;
+    // A result for the previous text must not win Enter during the debounce.
+    requestSequenceRef.current += 1;
+    abortControllerRef.current?.abort();
+    setResults(EMPTY_RESULTS);
+    setPendingSources([]);
+    setFailedSources([]);
+    setPartialFailure(false);
+    setLoading(next.trim().length >= 2);
+    setQuery(next);
+  }
+
   const handleInputKeyDown = (event) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -1086,7 +979,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
             maxLength={MAX_QUERY_LENGTH}
             placeholder="Search Smarty"
             value={query}
-            onChange={(event) => setQuery(event.target.value.slice(0, MAX_QUERY_LENGTH))}
+            onChange={(event) => changeQuery(event.target.value)}
             onKeyDown={handleInputKeyDown}
             aria-controls="universal-search-results"
             aria-activedescendant={hasResults ? `universal-result-${activeIndex}` : undefined}
@@ -1097,7 +990,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
               type="button"
               className="universal-search-clear"
               onClick={() => {
-                setQuery('');
+                changeQuery('');
                 inputRef.current?.focus();
               }}
               aria-label="Clear search"
@@ -1149,7 +1042,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
                 <p>Search ideas, topics, people, and more.</p>
               </div>
               <div className="universal-search-suggestions" aria-label="Try a search">
-                {['AI', 'Memory', 'Space', 'Decision making'].map(suggestion => <button type="button" key={suggestion} onClick={() => setQuery(suggestion)}><Search size={13} />{suggestion}</button>)}
+                {['AI', 'Memory', 'Space', 'Decision making'].map(suggestion => <button type="button" key={suggestion} onClick={() => changeQuery(suggestion)}><Search size={13} />{suggestion}</button>)}
               </div>
 
               {recentSearches.length > 0 && (
@@ -1160,7 +1053,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
                   </header>
                   <div>
                     {recentSearches.map((item) => (
-                      <button type="button" key={item} onClick={() => setQuery(item)}>{item}</button>
+                      <button type="button" key={item} onClick={() => changeQuery(item)}>{item}</button>
                     ))}
                   </div>
                 </section>
@@ -1254,7 +1147,7 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
               {!loading && !hasResults && (
                 <div className="universal-search-empty">
                   <Search size={24} strokeWidth={1.6} aria-hidden="true" />
-                  <strong>No exact matches yet</strong>
+                  <strong>No matching results in this section</strong>
                   <p>Try a shorter phrase, or use the learning paths below.</p>
                   <button type="button" onClick={() => setActiveFilter('all')}>Show all paths</button>
                 </div>

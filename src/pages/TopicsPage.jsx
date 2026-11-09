@@ -1,8 +1,11 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpRight, Search, X } from "lucide-react";
-import { MAIN_TOPICS, getMainTopicDefinition } from "../data/topicTaxonomy";
+import { MAIN_TOPICS } from "../data/topicTaxonomy";
+import { rankTopicChoices } from "../lib/topicSearch";
 import "./TopicsPage.css";
+
+const DIRECTORY_TOPICS = MAIN_TOPICS.map((topic, order) => ({ ...topic, order }));
 
 const TopicCard = memo(function TopicCard({ topic, onNavigate }) {
   const handleClick = useCallback(() => {
@@ -40,13 +43,7 @@ const TopicCard = memo(function TopicCard({ topic, onNavigate }) {
 export default function TopicsPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
-  const topics = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const matched = getMainTopicDefinition(query);
-    return MAIN_TOPICS.map((topic, order) => ({ ...topic, order })).filter((topic) =>
-      !query || topic.id === matched?.id || [topic.label, topic.description, ...topic.topics].join(' ').toLowerCase().includes(query)
-    );
-  }, [search]);
+  const topics = useMemo(() => rankTopicChoices(DIRECTORY_TOPICS, search), [search]);
 
   const handleNavigate = useCallback(
     (topic) => {
@@ -68,7 +65,7 @@ export default function TopicsPage() {
       <div className="topic-directory-tools">
         <label className="topic-directory-search">
           <Search size={18} aria-hidden="true" />
-          <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a subject. Try AI, sleep, history…" aria-label="Find a subject" />
+          <input type="search" maxLength={120} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a subject. Try AI, sleep, history…" aria-label="Find a subject" />
           {search && <button type="button" onClick={() => setSearch('')} aria-label="Clear subject search"><X size={17} /></button>}
         </label>
         <span role="status">{topics.length} {topics.length === 1 ? 'topic' : 'topics'}</span>

@@ -1,4 +1,4 @@
-/* One console palette for /quiz; the surrounding app keeps its own appearance. */
+/* The console keeps its own night palette and uses Smarty's paper palette in Day. */
 .quiz-arcade {
   --arcade-base: #080d18;
   --arcade-screen: #0b1222;
@@ -8,6 +8,24 @@
   --arcade-ink: #f4f8ff;
   --arcade-muted: #b7c8dc;
   --arcade-live: #9fddff;
+  --arcade-frame: var(--arcade-live);
+  --arcade-lobby-glow: #203653;
+  --arcade-pad-face: #253b5e;
+  --arcade-pad-edge: #5c7baa;
+  --arcade-pad-shadow: #111d33;
+  --arcade-pad-lit: #9fddff;
+  --arcade-pad-lit-edge: #c9ebff;
+  --arcade-pad-lit-shadow: #3c80b4;
+  --arcade-pad-center: #cae9ff;
+  --arcade-art-ink: #83a5c6;
+  --arcade-meter-track: var(--arcade-line);
+  --arcade-meter-done: #52749b;
+  --arcade-boss-live: #ffdb92;
+  --arcade-uncertain-ink: #f8db9e;
+  --arcade-uncertain-bg: #382e24;
+  color: var(--arcade-ink);
+}
+:root:not([data-app-theme='day']) .quiz-arcade {
   --ui-bg: var(--arcade-base);
   --ui-surface: var(--arcade-screen);
   --ui-surface-raised: var(--arcade-deck);
@@ -33,8 +51,33 @@
   --ui-success-soft: #153931;
   --ui-danger: #ffd0d5;
   --ui-danger-soft: #3b2631;
-  color: var(--arcade-ink);
   color-scheme: dark;
+}
+:root[data-app-theme='day'] .quiz-arcade {
+  --arcade-base: var(--ui-bg);
+  --arcade-screen: var(--ui-surface);
+  --arcade-deck: var(--ui-surface-raised);
+  --arcade-key: var(--ui-control-bg);
+  --arcade-line: var(--ui-line);
+  --arcade-ink: var(--ui-text);
+  --arcade-muted: var(--ui-muted);
+  --arcade-live: var(--ui-accent-strong);
+  --arcade-frame: var(--arcade-line);
+  --arcade-lobby-glow: #ece4f3;
+  --arcade-pad-face: #e8e0f0;
+  --arcade-pad-edge: var(--arcade-line);
+  --arcade-pad-shadow: #c8b9d6;
+  --arcade-pad-lit: #b8d3c2;
+  --arcade-pad-lit-edge: var(--arcade-line);
+  --arcade-pad-lit-shadow: #739984;
+  --arcade-pad-center: #214d40;
+  --arcade-art-ink: var(--ui-accent-strong);
+  --arcade-meter-track: #ded6c9;
+  --arcade-meter-done: #769885;
+  --arcade-boss-live: #78511c;
+  --arcade-uncertain-ink: #67451a;
+  --arcade-uncertain-bg: #f3e5ca;
+  color-scheme: light;
 }
 .arcade-entry, .arcade-pick {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center;
@@ -53,8 +96,8 @@
 .arcade-lobby {
   margin: 0 0 clamp(12px, 2vw, 22px);
   padding: clamp(12px, 2.6vw, 30px);
-  border: 1px solid var(--arcade-line); border-top: 3px solid var(--arcade-live); border-radius: 16px;
-  background: radial-gradient(ellipse at 95% 0%, #203653 0%, transparent 53%), var(--arcade-screen);
+  border: 1px solid var(--arcade-line); border-top: 3px solid var(--arcade-frame); border-radius: 16px;
+  background: radial-gradient(ellipse at 95% 0%, var(--arcade-lobby-glow) 0%, transparent 53%), var(--arcade-screen);
 }
 .arcade-lobby-screen {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
@@ -63,9 +106,9 @@
 .arcade-lobby-copy p { margin: 0; max-width: 48ch; color: var(--arcade-muted); font-size: 14px !important; line-height: 1.5 !important; }
 .arcade-lobby-copy h1 { margin: 0 0 8px; color: var(--arcade-ink); font-size: clamp(29px, 4.6vw, 54px); line-height: 1; letter-spacing: -.055em; }
 .arcade-pad-art { display: grid; grid-template-columns: repeat(3, 1fr); width: clamp(54px, 8.7vw, 112px); gap: clamp(3px, .6vw, 7px); margin-inline-end: 5px; transform: rotate(-9deg); }
-.arcade-pad-art span { aspect-ratio: 1; border: 1px solid #5c7baa; border-radius: 24%; background: #253b5e; box-shadow: 0 3px #111d33; }
-.arcade-pad-art span:nth-child(3n + 2) { background: #9fddff; border-color: #c9ebff; box-shadow: 0 3px #3c80b4; }
-.arcade-pad-art span:nth-child(5) { background: #cae9ff; }
+.arcade-pad-art span { aspect-ratio: 1; border: 1px solid var(--arcade-pad-edge); border-radius: 24%; background: var(--arcade-pad-face); box-shadow: 0 3px var(--arcade-pad-shadow); }
+.arcade-pad-art span:nth-child(3n + 2) { background: var(--arcade-pad-lit); border-color: var(--arcade-pad-lit-edge); box-shadow: 0 3px var(--arcade-pad-lit-shadow); }
+.arcade-pad-art span:nth-child(5) { background: var(--arcade-pad-center); }
 .arcade-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: clamp(14px, 2.5vw, 24px); }
 .arcade-pick { background: var(--arcade-deck); }
 .arcade-pick > svg { color: var(--arcade-live); }
@@ -86,7 +129,7 @@ body .app-shell .content .quiz-workspace.quiz-arcade {
 .arcade-console-control svg { flex: none; }
 .arcade-console-brand { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; color: var(--ui-muted); white-space: nowrap; }
 .arcade-console-brand svg { color: var(--arcade-live); }
-.arcade-screen { padding: clamp(13px, 3vw, 32px); border: 1px solid var(--arcade-line); border-top: 3px solid var(--arcade-live); border-radius: 16px; background: var(--arcade-screen); }
+.arcade-screen { padding: clamp(13px, 3vw, 32px); border: 1px solid var(--arcade-line); border-top: 3px solid var(--arcade-frame); border-radius: 16px; background: var(--arcade-screen); }
 
 /* A compact settings strip leaves the full width for subjects and lessons. */
 .quiz-arcade.quiz-workspace .quiz-library-layout {
@@ -159,7 +202,7 @@ body .app-shell .content .quiz-workspace.quiz-arcade .quiz-subject-card {
 .quiz-arcade .quiz-subject-art {
   position: static; width: 58px; height: 46px; margin: 0; flex: none;
   padding: 2px; box-sizing: border-box; border: 1px solid var(--arcade-line); border-radius: 8px;
-  background: var(--arcade-deck); color: #83a5c6; opacity: 1;
+  background: var(--arcade-deck); color: var(--arcade-art-ink); opacity: 1;
 }
 body .app-shell .content .quiz-workspace.quiz-arcade .quiz-subject-card h3 {
   max-width: none; margin: 0 0 5px !important; font-size: clamp(16px, 1.5vw, 20px) !important; font-weight: 620; line-height: 1.25;
@@ -174,7 +217,7 @@ body .app-shell .content .quiz-arcade .quiz-subject-card p { max-width: 42ch; li
 
 .quiz-arcade .quiz-lesson-intro {
   margin: 0 0 18px; padding: clamp(16px, 3vw, 26px);
-  border: 1px solid var(--arcade-line); border-top: 3px solid var(--arcade-live);
+  border: 1px solid var(--arcade-line); border-top: 3px solid var(--arcade-frame);
   border-radius: 13px; background: var(--arcade-screen);
 }
 .quiz-arcade .quiz-lesson-intro h1 { font-weight: 650; overflow-wrap: anywhere; }
@@ -248,7 +291,7 @@ body .app-shell .content .quiz-arcade .answer-feedback {
 }
 .arcade-recap .is-correct { color: var(--ui-success); background: var(--ui-success-soft); }
 .arcade-recap .is-incorrect { color: var(--ui-danger); background: var(--ui-danger-soft); }
-.arcade-recap .is-unsure { color: #f8db9e; background: #382e24; }
+.arcade-recap .is-unsure { color: var(--arcade-uncertain-ink); background: var(--arcade-uncertain-bg); }
 .arcade-result-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 14px 0; }
 .arcade-result-stats > div { padding: 10px; border: 1px solid var(--arcade-line); border-radius: 8px; background: var(--arcade-screen); }
 .arcade-result-stats dd { margin: 3px 0 0; font-size: 21px; font-variant-numeric: tabular-nums; font-weight: 620; }
@@ -266,7 +309,8 @@ body .app-shell .content .quiz-arcade .result-actions button {
 }
 body .app-shell .content .quiz-arcade .result-actions .secondary-btn { background: var(--arcade-screen); border-color: var(--arcade-line); color: var(--arcade-muted); }
 
-.is-boss-round .arcade-screen { --arcade-live: #ffdb92; }
+.is-boss-round .arcade-screen { --arcade-live: var(--arcade-boss-live); }
+:root:not([data-app-theme='day']) .is-boss-round .arcade-screen { --arcade-frame: var(--arcade-live); }
 .arcade-round-header { display: flex; align-items: end; justify-content: space-between; gap: 12px; padding-bottom: 10px; }
 .arcade-round-header > div:first-child { min-width: 0; }
 .arcade-round-header > div > span { color: var(--arcade-muted); font-size: 12px; }
@@ -275,8 +319,8 @@ body .app-shell .content .quiz-arcade .result-actions .secondary-btn { backgroun
 .arcade-round-count { flex: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .arcade-round-count strong { color: var(--arcade-live); font-size: clamp(21px, 3.6vw, 31px); line-height: 1; }
 .arcade-round-meter { display: flex; gap: 4px; margin-bottom: clamp(14px, 3vw, 24px); }
-.arcade-round-meter span { flex: 1; height: 4px; border-radius: 3px; background: var(--arcade-line); }
-.arcade-round-meter .is-complete { background: #52749b; }
+.arcade-round-meter span { flex: 1; height: 4px; border-radius: 3px; background: var(--arcade-meter-track); }
+.arcade-round-meter .is-complete { background: var(--arcade-meter-done); }
 .arcade-round-meter .is-current { background: var(--arcade-live); }
 .arcade-survival-time { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; background: var(--arcade-deck); color: var(--arcade-muted); font-size: 13px; }
 .arcade-survival-time strong { color: var(--arcade-live); font-variant-numeric: tabular-nums; }
@@ -295,11 +339,11 @@ body .app-shell .content .quiz-arcade .arcade-screen :is(.brain-game, .boss-stag
 .quiz-arcade .arcade-screen :is(.match-tile, .decision-btn, .memory-tile, .word-chip, .sequence-cell):not(.correct):not(.wrong):not(.missed):not(.active):not(.matched):not(.selected):not(.study) {
   background: var(--arcade-key); color: var(--arcade-ink); border-color: var(--arcade-line); border-radius: 12px;
 }
-.quiz-arcade .arcade-screen .brain-game :is(.match-tile.active, .decision-btn.selected, .memory-tile.selected, .word-chip.active):not(.correct):not(.wrong):not(.missed) {
+:root:not([data-app-theme='day']) .quiz-arcade .arcade-screen .brain-game :is(.match-tile.active, .decision-btn.selected, .memory-tile.selected, .word-chip.active):not(.correct):not(.wrong):not(.missed) {
   background: #284b68 !important; color: var(--arcade-ink) !important;
   border-color: var(--arcade-live) !important; box-shadow: inset 0 0 0 1px var(--arcade-live) !important;
 }
-.quiz-arcade .arcade-screen .brain-game .match-tile.matched:not(.active):not(.correct):not(.wrong):not(.missed) {
+:root:not([data-app-theme='day']) .quiz-arcade .arcade-screen .brain-game .match-tile.matched:not(.active):not(.correct):not(.wrong):not(.missed) {
   background: #123c37 !important; border-color: #589c8b !important; color: #e2fff4 !important; box-shadow: none !important;
 }
 .quiz-arcade .arcade-screen .brain-game .match-tile > span { color: inherit !important; }
@@ -321,6 +365,73 @@ body .app-shell .content .quiz-arcade .arcade-screen :is(.brain-game, .boss-stag
 .quiz-arcade .arcade-screen .brain-game .match-tile {
   min-width: 0; min-height: 62px; padding: 7px clamp(8px, 2vw, 16px); line-height: 1.25; overflow-wrap: anywhere;
 }
+
+/* Mini-games are loaded on demand and have legacy dark styles of their own.
+   Keep their outlines black in Day; fills, symbols and labels signal state. */
+:root[data-app-theme='day'] body .app-shell .content .quiz-workspace.quiz-arcade :is(
+  .option-btn, .quiz-confidence button, .quiz-level-choices button, .quiz-library-filters button,
+  .submit-answer-btn, .answer-feedback
+) {
+  border-color: var(--arcade-line) !important;
+}
+:root[data-app-theme='day'] body .app-shell .content .quiz-arcade .quiz-subject-card { color: var(--arcade-ink); }
+:root[data-app-theme='day'] body .app-shell .content .quiz-arcade :is(.option-btn.selected:not(.correct, .wrong), .quiz-level-choices button[aria-pressed='true']) {
+  background: var(--ui-accent-soft) !important;
+  color: var(--ui-text) !important;
+}
+:root[data-app-theme='day'] body .app-shell .content .quiz-arcade :is(.option-btn, .answer-feedback).correct { background: var(--ui-success-soft) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-arcade :is(.option-btn, .answer-feedback).wrong { background: var(--ui-danger-soft) !important; }
+:root[data-app-theme='day'] .quiz-arcade :is(.quiz-subject-toolbar label, .quiz-lesson-search):focus-within {
+  border-color: var(--arcade-line);
+  outline: 2px solid var(--arcade-live); outline-offset: 2px;
+}
+:root[data-app-theme='day'] body .app-shell .content .quiz-arcade .brain-game :is(
+  .match-tile, .decision-btn, .memory-tile, .word-chip, .sequence-cell, .pattern-chip,
+  .secondary-btn, .match-feedback, .memory-timer, .memory-result, .science-order-box,
+  .market-board, .market-stat-card, .market-scenario-card, .trade-brief, .trade-badge,
+  .trade-feedback, .risk-pill, .candle-chart, .memory-progress-track, .game-main-btn
+) {
+  background: var(--arcade-game-fill, var(--arcade-key)) !important;
+  color: var(--arcade-game-ink, var(--arcade-ink)) !important;
+  border-color: var(--arcade-line) !important;
+  box-shadow: none !important;
+}
+:root[data-app-theme='day'] .quiz-arcade .brain-game :is(.selected, .active, .study, [aria-pressed='true']) {
+  --arcade-game-fill: var(--ui-accent-soft);
+  --arcade-game-ink: var(--ui-accent-strong);
+}
+:root[data-app-theme='day'] .quiz-arcade .brain-game :is(.correct, .matched:not(.active), .success, .win) {
+  --arcade-game-fill: var(--ui-success-soft);
+  --arcade-game-ink: var(--ui-success);
+}
+:root[data-app-theme='day'] .quiz-arcade .brain-game :is(.wrong, .danger, .memory-result:not(.success)) {
+  --arcade-game-fill: var(--ui-danger-soft);
+  --arcade-game-ink: var(--ui-danger);
+}
+:root[data-app-theme='day'] .quiz-arcade .brain-game :is(.missed, .risk-pill, .memory-timer:not(.recall, .danger)) {
+  --arcade-game-fill: var(--arcade-uncertain-bg);
+  --arcade-game-ink: var(--arcade-uncertain-ink);
+}
+:root[data-app-theme='day'] .quiz-arcade .brain-game .game-main-btn {
+  --arcade-game-fill: var(--ui-primary);
+  --arcade-game-ink: var(--ui-primary-ink);
+}
+:root[data-app-theme='day'] .quiz-arcade .brain-game .sequence-cell.active {
+  --arcade-game-fill: var(--ui-primary);
+  --arcade-game-ink: var(--ui-primary-ink);
+}
+:root[data-app-theme='day'] .quiz-arcade .brain-game .game-main-btn:disabled {
+  --arcade-game-fill: var(--arcade-deck);
+  --arcade-game-ink: var(--arcade-muted);
+  opacity: 1 !important;
+}
+:root[data-app-theme='day'] body .app-shell .content .quiz-arcade .brain-game :is(
+  .match-tile, .decision-btn, .memory-result, .trade-brief, .market-stat-card, .market-header
+) :is(small, strong, span, p) { color: inherit !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-arcade .brain-game .market-stat-card .positive { color: var(--ui-success) !important; }
+:root[data-app-theme='day'] body .app-shell .content .quiz-arcade .brain-game .market-stat-card .negative { color: var(--ui-danger) !important; }
+:root[data-app-theme='day'] .quiz-arcade .brain-game :is(.market-mini-chart, .market-header strong) { color: var(--arcade-live); filter: none; }
+
 .quiz-arcade .arcade-screen :is(button, input):focus-visible { outline: 2px solid var(--arcade-live) !important; outline-offset: 3px !important; }
 .arcade-entry:focus-visible, .arcade-pick:focus-visible, .arcade-console-control:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
 @media (hover: hover) {

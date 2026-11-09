@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import SmartyBrand from '../SmartyBrand';
 import AppearanceSwitch from '../AppearanceSwitch';
-import { MAIN_TOPICS, getMainTopicDefinition } from '../../data/topicTaxonomy';
+import { MAIN_TOPICS } from '../../data/topicTaxonomy';
+import { rankTopicChoices } from '../../lib/topicSearch';
 import './SmartyLanding.css';
 
 const TOPIC_ICONS = [Newspaper, Cpu, Wrench, FlaskConical, HeartPulse, Globe2, Brain,
@@ -145,17 +146,7 @@ export default function SmartyLanding({ onSelect, onOpenSearch }) {
   const rootRef = useRef(null);
   const { hash } = useLocation();
   const [query, setQuery] = useState('');
-  const filteredTopics = useMemo(() => {
-    const search = query.trim().toLowerCase();
-    const exactTopic = getMainTopicDefinition(search);
-    return MAIN_TOPICS.filter((topic) => {
-      if (!search || topic.id === exactTopic?.id) return true;
-      const text = [topic.label, topic.description, ...topic.topics].join(' ').toLowerCase();
-      return search.length <= 2
-        ? text.split(/[^a-z0-9]+/).some((word) => word.startsWith(search))
-        : text.includes(search);
-    });
-  }, [query]);
+  const filteredTopics = useMemo(() => rankTopicChoices(MAIN_TOPICS, query), [query]);
 
   const scrollToSection = (event, id) => {
     event?.preventDefault();
@@ -239,7 +230,7 @@ export default function SmartyLanding({ onSelect, onOpenSearch }) {
           <p>Choose a subject. Find the small details that make the bigger picture click.</p>
         </header>
         <div className="sl-catalog-toolbar">
-          <label className="sl-search" htmlFor="sl-topic-search"><Search size={18} aria-hidden="true" /><input id="sl-topic-search" type="search" placeholder="Try AI, sleep, history…" value={query} onChange={(event) => setQuery(event.target.value)} autoComplete="off" aria-label="Search topics and subjects" />{query && <button onClick={() => { setQuery(''); rootRef.current.querySelector('#sl-topic-search')?.focus(); }} aria-label="Clear topic search"><X size={16} /></button>}</label>
+          <label className="sl-search" htmlFor="sl-topic-search"><Search size={18} aria-hidden="true" /><input id="sl-topic-search" type="search" maxLength={120} placeholder="Try AI, sleep, history…" value={query} onChange={(event) => setQuery(event.target.value)} autoComplete="off" aria-label="Search topics and subjects" />{query && <button onClick={() => { setQuery(''); rootRef.current.querySelector('#sl-topic-search')?.focus(); }} aria-label="Clear topic search"><X size={16} /></button>}</label>
           <span className="sl-topic-count" role="status">{filteredTopics.length} {filteredTopics.length === 1 ? 'topic' : 'topics'}</span>
           <button className="sl-text-action" onClick={() => onSelect('All')}>All posts <ArrowUpRight size={16} /></button>
         </div>

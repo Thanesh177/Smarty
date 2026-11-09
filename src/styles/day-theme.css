@@ -10,8 +10,8 @@
   --ui-surface-soft: rgba(48, 72, 57, .035);
   --ui-surface-hover: rgba(48, 72, 57, .065);
   --ui-surface-pressed: rgba(48, 72, 57, .10);
-  --ui-line: rgba(0, 0, 0, .12);
-  --ui-line-strong: rgba(0, 0, 0, .23);
+  --ui-line: #000000;
+  --ui-line-strong: var(--ui-line);
   /* Neutral ink keeps Day mode crisp without changing its warm paper or pine actions. */
   --ui-text: #000000;
   --ui-secondary: #191919;
@@ -29,10 +29,10 @@
   --ui-accent-hover: #244737;
   --ui-accent-ink: #ffffff;
   --ui-accent-soft: #e8e0f0;
-  --ui-accent-line: #b9a9c9;
+  --ui-accent-line: var(--ui-line);
   --ui-control-bg: #f9f5ed;
   --ui-control-hover: #ede5f2;
-  --ui-control-line: #aeb6aa;
+  --ui-control-line: var(--ui-line);
   --ui-brand-bg: #214d40;
   --ui-brand-ink: #ffffff;
   --ui-brand-finish: none;
@@ -176,9 +176,47 @@
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace :is(.room-description, .room-preview, .room-meta, .rooms-list-heading > span, .rooms-sidebar-heading > span, .msg-time) { color: var(--ui-muted) !important; }
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace .input :is(input, textarea) { background: transparent !important; color: var(--ui-text) !important; }
 :root[data-app-theme='day'] body .app-shell .content :is(.rooms-workspace .rooms-menu-btn, .rooms-workspace .active-room-menu-btn, .rooms-workspace .mobile-back-btn, .rooms-workspace .room-card-menu-btn) { background: var(--ui-control-bg) !important; color: var(--ui-secondary) !important; }
-:root[data-app-theme='day'] body .rooms-dialog-portal :is(.members-card, .create-form) { color: var(--ui-text); }
-:root[data-app-theme='day'] body .rooms-dialog-portal :is(h2, h3, label, input, select, textarea) { color: var(--ui-text) !important; }
-:root[data-app-theme='day'] body .rooms-dialog-portal p { color: var(--ui-muted); }
+
+/* Create Room and its image editor render directly under body. */
+:root[data-app-theme='day'] body .rooms-dialog-portal { color-scheme: light; }
+:root[data-app-theme='day'] body .rooms-dialog-portal .members-modal { background: rgb(20 19 17 / 48%); }
+:root[data-app-theme='day'] body .rooms-dialog-portal .members-card {
+  background: var(--ui-surface) !important; color: var(--ui-text);
+  border-color: var(--ui-line) !important; box-shadow: var(--ui-shadow-float);
+}
+:root[data-app-theme='day'] body .rooms-dialog-portal :is(h3, label) { color: var(--ui-text) !important; }
+:root[data-app-theme='day'] body .rooms-dialog-portal :is(.room-modal-eyebrow, #room-create-description, .room-privacy-help, .create-room-image-picker small) { color: var(--ui-muted); }
+:root[data-app-theme='day'] body .rooms-dialog-portal .create-form :is(input:not([type='file']), select) {
+  color-scheme: light;
+  background: var(--ui-control-bg) !important; color: var(--ui-text) !important; border-color: var(--ui-control-line) !important;
+}
+:root[data-app-theme='day'] body .rooms-dialog-portal .create-form input::placeholder { color: var(--ui-faint); opacity: 1; }
+:root[data-app-theme='day'] body .rooms-dialog-portal .create-room-image-picker {
+  padding: 12px; border: 1px dashed var(--ui-line); background: var(--ui-control-bg);
+}
+:root[data-app-theme='day'] body .rooms-dialog-portal .create-room-image-picker input[type='file'] { color: var(--ui-secondary); }
+:root[data-app-theme='day'] body .rooms-dialog-portal .create-room-image-picker input[type='file']::file-selector-button,
+:root[data-app-theme='day'] body .rooms-dialog-portal :is(.close-members, .delete-room-btn) {
+  background: var(--ui-control-bg); color: var(--ui-text);
+  border: 1px solid var(--ui-line); border-radius: 8px;
+}
+:root[data-app-theme='day'] body .rooms-dialog-portal :is(.create-room-image-preview-row, .image-crop-preview) {
+  background: var(--ui-surface-raised); border-color: var(--ui-line);
+}
+:root[data-app-theme='day'] body .rooms-dialog-portal input[type='range'] { accent-color: var(--ui-primary); }
+:root[data-app-theme='day'] body .rooms-dialog-portal .room-status {
+  background: var(--ui-accent-soft); color: var(--ui-accent-strong); border: 1px solid var(--ui-line);
+}
+:root[data-app-theme='day'] body .rooms-dialog-portal :is(.create-form button[type='submit'], .crop-actions .approve-request-btn) {
+  background: var(--ui-primary) !important; color: var(--ui-primary-ink) !important;
+  border: 1px solid var(--ui-line) !important; box-shadow: none !important;
+}
+:root[data-app-theme='day'] body .rooms-dialog-portal .create-form button[type='submit']:disabled {
+  background: var(--ui-surface-raised) !important; color: var(--ui-muted) !important; opacity: 1;
+}
+:root[data-app-theme='day'] body .rooms-dialog-portal :is(button, input, select):focus-visible {
+  outline: 2px solid var(--ui-accent) !important; outline-offset: 2px;
+}
 
 /* Status meaning is preserved rather than turned into a decorative accent. */
 :root[data-app-theme='day'] body :is(.status.error, .login-error, .form-error, .news-error, .error-message) { color: var(--ui-danger) !important; background-color: var(--ui-danger-soft); }
@@ -215,8 +253,6 @@
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace :is(.room-search-wrap, .room-image-wrap, .active-room-image, .room-status, .room-card-menu, .active-room-menu) { background: var(--ui-control-bg) !important; color: var(--ui-secondary) !important; border-color: var(--ui-control-line) !important; }
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace .input .room-media-picker-btn { background: var(--ui-control-bg) !important; color: var(--ui-secondary) !important; }
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace .msg:not(:has(.room-message-media-tap)) { color: var(--ui-text) !important; }
-:root[data-app-theme='day'] body .rooms-dialog-portal :is(.room-create-field, .room-privacy-help, .create-room-image-picker small, .close-members) { color: var(--ui-muted) !important; }
-:root[data-app-theme='day'] body .rooms-dialog-portal select { color-scheme: light; }
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace .room-privacy-toggle button { color: var(--ui-muted) !important; }
 :root[data-app-theme='day'] body .app-shell .content .rooms-workspace .room-privacy-toggle button.active { color: var(--ui-accent-strong) !important; border-color: var(--ui-accent) !important; }
 /* Keep deliberate dark reading/video experiences independent of app chrome. */
@@ -225,6 +261,7 @@
   --ui-surface-raised: #1b1b1d; --ui-text: #f6f5f3; --ui-secondary: #d1cfcc;
   --ui-muted: #afadaa; --ui-faint: #9c9a98; --ui-accent: #96d7ff;
   --ui-control-bg: #161618; --ui-control-hover: #242426; --ui-line: #eae9e71f;
+  --ui-line-strong: #eae9e73d; --ui-accent-line: #96d7ff52; --ui-control-line: #eae9e73d;
 }
 @media (hover: hover) {
   :root[data-app-theme='day'] body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn):hover:not([aria-current='page']):not(.topbar-create-btn) { background: var(--ui-accent-soft) !important; color: var(--ui-accent-strong) !important; }

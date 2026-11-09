@@ -26,6 +26,39 @@ test('the day palette uses oatmeal, pine and lilac with readable text', () => {
   assert.ok(contrast(token('--ui-success'), token('--ui-success-soft')) >= 4.5);
 });
 
+test('shared day borders use black while dark reader and video borders stay independent', () => {
+  assert.equal(token('--ui-line'), '#000000');
+  const isolated = postcss.parse(css).nodes.find(node => node.selector?.includes(':is(.reader-theme-dark, .reader-theme-sepia, .video-topic-page)'));
+  for (const name of ['--ui-line-strong', '--ui-accent-line', '--ui-control-line']) {
+    assert.equal(token(name), 'var(--ui-line)');
+    assert.match(isolated.nodes.find(node => node.prop === name)?.value, /^#[\da-f]{8}$/i);
+  }
+});
+
+test('Arcade follows the app appearance without replacing day text or controls with night colors', () => {
+  const arcade = postcss.parse(read('components/games/QuizArcade.css'));
+  const dark = arcade.nodes.find(node => node.selector === ":root:not([data-app-theme='day']) .quiz-arcade");
+  const day = arcade.nodes.find(node => node.selector === ":root[data-app-theme='day'] .quiz-arcade");
+  const color = (rule, name) => rule.nodes.find(node => node.prop === name)?.value;
+  assert.equal(color(dark, 'color-scheme'), 'dark');
+  assert.equal(color(day, 'color-scheme'), 'light');
+  assert.equal(color(day, '--arcade-base'), 'var(--ui-bg)');
+  assert.equal(color(day, '--arcade-ink'), 'var(--ui-text)');
+  assert.equal(color(day, '--arcade-line'), 'var(--ui-line)');
+  assert.equal(color(day, '--arcade-frame'), 'var(--arcade-line)');
+  assert.ok(!day.nodes.some(node => node.prop?.startsWith('--ui-')));
+});
+
+test('the Create Room portal has light native controls, black outlines and a distinct disabled action', () => {
+  const rules = postcss.parse(css).nodes.filter(node => node.selector?.includes("[data-app-theme='day'] body .rooms-dialog-portal"));
+  const has = (selector, prop, value) => rules.some(rule => rule.selector.includes(selector)
+    && rule.nodes.some(node => node.prop === prop && node.value === value));
+  assert.ok(has('.members-card', 'border-color', 'var(--ui-line)'));
+  assert.ok(has(".create-form :is(input:not([type='file']), select)", 'color-scheme', 'light'));
+  assert.ok(has('::file-selector-button', 'border', '1px solid var(--ui-line)'));
+  assert.ok(has("button[type='submit']:disabled", 'background', 'var(--ui-surface-raised)'));
+});
+
 test('one appearance provider serves all routes and syncs device changes without touching accounts', () => {
   const main = read('main.jsx');
   assert.match(main, /<AppearanceProvider>\s*<App \/>\s*<\/AppearanceProvider>/);

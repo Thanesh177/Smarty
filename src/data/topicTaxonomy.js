@@ -84,6 +84,7 @@ export const MAIN_TOPICS = [
     domain: 'Mind, learning, and health',
     eyebrow: 'Think and thrive',
     description: 'Psychology, learning, decisions, wellbeing, movement, food, and rest.',
+    searchKeywords: ['Cognitive Psychology', 'Cognitive Science', 'Cognition', 'Cognitive Bias'],
     topics: [
       'Psychology', 'Human Behavior', 'Decision Making', 'Memory', 'Learning',
       'Sleep', 'Nutrition', 'Fitness', 'Health', 'Mental Health', 'Education',
@@ -166,6 +167,7 @@ const LEGACY_TOPIC_GROUPS = {
 };
 
 const topicLookup = new Map();
+const mainTopicSearchTerms = new Map();
 
 MAIN_TOPICS.forEach((mainTopic) => {
   const values = [
@@ -176,6 +178,8 @@ MAIN_TOPICS.forEach((mainTopic) => {
     ...(LEGACY_TOPIC_GROUPS[mainTopic.id] || []),
   ];
 
+  mainTopicSearchTerms.set(normalizeTopicKey(mainTopic.label), [...values, ...(mainTopic.searchKeywords || [])]);
+
   values.forEach((value) => {
     const key = normalizeTopicKey(value);
     if (key) topicLookup.set(key, mainTopic);
@@ -183,6 +187,10 @@ MAIN_TOPICS.forEach((mainTopic) => {
 });
 
 export const MAIN_TOPIC_LABELS = MAIN_TOPICS.map((topic) => topic.label);
+
+export function getMainTopicSearchTerms(label) {
+  return mainTopicSearchTerms.get(normalizeTopicKey(label));
+}
 
 export function getMainTopicDefinition(value) {
   return topicLookup.get(normalizeTopicKey(value)) || null;

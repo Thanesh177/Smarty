@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { Check, ChevronDown, LayoutGrid, Search } from 'lucide-react';
 import { topicPickerPosition } from '../lib/topicPickerPosition';
+import { rankTopicChoices } from '../lib/topicSearch';
 
 export default function FeedTopicPicker({ selected, choices, onSelect, onBrowse, compact = false }) {
   const { pathname, search } = useLocation();
@@ -17,9 +18,7 @@ export default function FeedTopicPicker({ selected, choices, onSelect, onBrowse,
   const listRef = useRef(null);
   const scrollActiveRef = useRef(true);
   const listId = useId();
-  const filtered = useMemo(() => choices.filter(choice =>
-    (choice === 'All' ? 'All posts' : choice).toLowerCase().includes(query.trim().toLowerCase())
-  ), [choices, query]);
+  const filtered = useMemo(() => rankTopicChoices(choices, query), [choices, query]);
   const label = selected === 'All' ? 'All posts' : selected;
 
   function close(restoreFocus = true) {
@@ -120,7 +119,7 @@ export default function FeedTopicPicker({ selected, choices, onSelect, onBrowse,
         if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget) && event.relatedTarget !== triggerRef.current) close(false);
       }}>
       <div className="feed-topic-picker-search"><Search size={17} aria-hidden="true" />
-        <input ref={inputRef} type="search" placeholder="Find a topic" aria-label="Find a feed topic"
+        <input ref={inputRef} type="search" maxLength={120} placeholder="Find a topic" aria-label="Find a feed topic"
           role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list"
           aria-activedescendant={filtered[active] ? `${listId}-${active}` : undefined}
           value={query} onChange={event => setQuery(event.target.value)} autoComplete="off" />
