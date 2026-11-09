@@ -18,6 +18,21 @@ ancient, political, economic, diplomatic, colonial and other history subjects.
 - Existing mechanisms, experiments, failure modes, tradeoffs and comparisons
   remain available. Lenses do not replace the assigned curriculum subject/stage.
 
+## Readable across majors
+
+Write for a curious adult meeting the subject for the first time. Start with
+something they can picture, explain specialist terms when they become useful,
+then show why a different condition changes the outcome. For instance, start
+with why a crowded café can suddenly stop serving people quickly, then name
+the bottleneck and explain why adding more tables would not help if the kitchen
+cannot fill orders any faster. Keep the specific mechanism and its limits;
+advanced lessons go further into the reasoning, not further into jargon.
+
+The existing editorial review now checks accuracy and readability separately.
+A correct but unclear post is not published; actionable feedback is reused
+within the existing draft retry limit. Successful reviews do not add a model
+call. Existing published posts and saved explanations are not rewritten.
+
 ## Retrieval and safeguards
 
 History subjects retrieve up to two relevant Wikipedia reference extracts using

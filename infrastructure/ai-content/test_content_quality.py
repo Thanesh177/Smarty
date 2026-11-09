@@ -257,13 +257,15 @@ class ContentCatalogTests(unittest.TestCase):
                  "mechanismParagraph": paragraph, "exampleParagraph": paragraph,
                  "image_search_query": "computer model memory", "sourceIds": []}
         with (mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
-              mock.patch.object(LAMBDA, "call_bedrock_text", return_value=json.dumps(draft)) as model,
-              mock.patch.object(LAMBDA, "review_concept_text", return_value=True)):
+              mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[
+                  json.dumps(draft), '{"accurate":true,"readerReady":true,"issues":[]}',
+              ]) as model):
             result = LAMBDA.generate_specific_post("Artificial Intelligence", "how a KV cache avoids recomputing earlier tokens", LAMBDA.resolve_content_angle("mechanism"), [])
         self.assertIsNotNone(result)
-        self.assertEqual(model.call_count, 1)
-        prompt = model.call_args.args[0]
-        guide = model.call_args.kwargs["system_prompt"]
+        self.assertEqual(model.call_count, 2)
+        generation, review = model.call_args_list
+        prompt = generation.args[0]
+        guide = generation.kwargs["system_prompt"]
         self.assertEqual(guide, LAMBDA.POST_WRITING_GUIDE)
         for instruction in ("no specialist background", "define each immediately", "Expand an acronym", "less accurate", "hypothetical"):
             self.assertIn(instruction, guide)
@@ -271,8 +273,11 @@ class ContentCatalogTests(unittest.TestCase):
         self.assertIn("varied length", prompt)
         self.assertNotIn("4 to 6 short sentences", prompt)
         self.assertNotIn("8 to 18 words", guide)
-        self.assertEqual(model.call_args.kwargs["max_tokens"], 850)
+        self.assertEqual(generation.kwargs["max_tokens"], 850)
         self.assertIn("sourceIds", prompt)
+        self.assertIn("a student from a different major", guide)
+        self.assertIn("what transfers and what does not", guide)
+        self.assertIn(LAMBDA.CROSS_FIELD_REVIEW_GUIDE, review.args[0])
         for instruction in ("complete mini-lesson", "not a shortened summary",
                             "Retain the complete causal chain", "Earn curiosity",
                             "vary sentence length", "current post must still stand on its own"):
@@ -316,7 +321,7 @@ class ContentCatalogTests(unittest.TestCase):
 
         def fake_bedrock(prompt, **kwargs):
             if kwargs.get("max_tokens") == 450:
-                return '{"accurate":true,"issues":[]}'
+                return '{"accurate":true,"readerReady":true,"issues":[]}'
             captured["prompt"] = prompt
             captured["options"] = kwargs
             return generated

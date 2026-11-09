@@ -29,6 +29,6 @@ test('difficulty and question/game formats keep independent selected states', ()
 test('quiz no longer renders the removed setup or saved-review sections', () => {
   const page = fs.readFileSync(__dirname+'/../pages/QuizPage.jsx','utf8');
   assert.doesNotMatch(page,/Worth another look|Study setup|quiz-saved-review/);
-  assert.match(page,/!topic\.challengeMode && <details/);
+  assert.match(page,/!topic\.conceptId && !topic\.challengeMode && <>/);
   assert.match(page,/Review lesson notes/);
 });

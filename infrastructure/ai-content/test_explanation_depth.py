@@ -47,7 +47,7 @@ class ExplanationDepthTests(unittest.TestCase):
 
     def test_prompt_requires_new_depth_terms_origin_and_evidence_boundaries(self):
         for title, topic in (("KV cache", "AI"), ("An ancient city's water system", "History"), ("Why a refrigerator moves heat", "Engineering")):
-            with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[self.lesson, '{"accurate":true,"issues":[]}']) as model:
+            with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[self.lesson, '{"accurate":true,"readerReady":true,"issues":[]}']) as model:
                 LAMBDA.generate_detailed_explanation(title, self.body, topic)
             prompt = model.call_args_list[0].args[0]
             for requirement in (
@@ -58,35 +58,51 @@ class ExplanationDepthTests(unittest.TestCase):
                 "records", "untrusted source material", "intermediate changes",
                 "clearly hypothetical setup", "steady state", "limiting case",
                 "A conservation law alone does not prove",
+                "a reader from another major", "increase the depth of reasoning, not the entry barrier",
             ):
                 self.assertIn(requirement, prompt)
             self.assertIn(json.dumps(title), prompt)
             self.assertTrue(model.call_args.kwargs["require_complete"])
 
     def test_accuracy_review_rejection_cannot_be_returned_as_a_saved_lesson(self):
-        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[self.lesson, '{"accurate":false,"issues":["wrong causal inference"]}'] * 2) as model:
+        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[self.lesson, '{"accurate":false,"readerReady":true,"issues":["wrong causal inference"]}'] * 2) as model:
             self.assertEqual(LAMBDA.generate_detailed_explanation("A mechanism", self.body), "")
         self.assertEqual(model.call_count, 4)
 
     def test_one_corrective_attempt_must_also_pass_review(self):
         with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[
-            self.lesson, '{"accurate":false,"issues":["wrong causal inference"]}',
-            self.lesson, '{"accurate":true,"issues":[]}',
+            self.lesson, '{"accurate":false,"readerReady":true,"issues":["wrong causal inference"]}',
+            self.lesson, '{"accurate":true,"readerReady":true,"issues":[]}',
         ]) as model:
             self.assertEqual(LAMBDA.generate_detailed_explanation("A mechanism", self.body), self.lesson)
         self.assertEqual(model.call_count, 4)
         self.assertIn('wrong causal inference', model.call_args_list[2].args[0])
 
+    def test_accurate_but_unreadable_lesson_gets_one_teaching_revision(self):
+        barrier = '{"accurate":true,"readerReady":false,"issues":["Cache is used before it is explained"]}'
+        for follow_up, expected in ((barrier, ""), ('{"accurate":true,"readerReady":true,"issues":[]}', self.lesson)):
+            with self.subTest(follow_up=follow_up), mock.patch.object(
+                LAMBDA, "call_bedrock_text", side_effect=[self.lesson, barrier, self.lesson, follow_up],
+            ) as model:
+                self.assertEqual(LAMBDA.generate_detailed_explanation("A mechanism", self.body), expected)
+            self.assertEqual(model.call_count, 4)
+            self.assertIn("Cache is used before it is explained", model.call_args_list[2].args[0])
+
     def test_incomplete_review_does_not_launch_another_generation(self):
-        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[self.lesson, '']) as model:
-            self.assertEqual(LAMBDA.generate_detailed_explanation("A mechanism", self.body), "")
-        self.assertEqual(model.call_count, 2)
+        for review in ('', '{"accurate":false,"issues":["not a complete verdict"]}'):
+            with self.subTest(review=review), mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[self.lesson, review]) as model:
+                self.assertEqual(LAMBDA.generate_detailed_explanation("A mechanism", self.body), "")
+            self.assertEqual(model.call_count, 2)
 
     def test_accuracy_review_requires_strict_positive_complete_verdict(self):
-        for verdict in ('{}', 'not JSON', '{"accurate":"true","issues":[]}', '{"accurate":true,"issues":["wrong premise"]}', '{"accurate":true}'):
+        for verdict in ('{}', 'not JSON', '{"accurate":"true","readerReady":true,"issues":[]}',
+                        '{"accurate":true,"readerReady":true,"issues":["wrong premise"]}',
+                        '{"accurate":true,"readerReady":"true","issues":[]}',
+                        '{"accurate":true,"readerReady":false,"issues":[]}',
+                        '{"accurate":true,"issues":[]}', '{"accurate":true,"readerReady":true}'):
             with mock.patch.object(LAMBDA, "call_bedrock_text", return_value=verdict):
                 self.assertFalse(LAMBDA.review_concept_text(self.lesson))
-        with mock.patch.object(LAMBDA, "call_bedrock_text", return_value='{"accurate":true,"issues":[]}') as model:
+        with mock.patch.object(LAMBDA, "call_bedrock_text", return_value='{"accurate":true,"readerReady":true,"issues":[]}') as model:
             self.assertTrue(LAMBDA.review_concept_text(self.lesson, {"body": "Untrusted source"}, LAMBDA.DETAILS_MODEL_ID))
         self.assertEqual(model.call_args.kwargs['max_tokens'], 450)
         self.assertEqual(model.call_args.kwargs['model_id'], LAMBDA.DETAILS_MODEL_ID)

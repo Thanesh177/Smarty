@@ -125,7 +125,7 @@ class EditorialPublicationTests(unittest.TestCase):
         model.assert_not_called()
 
     def test_source_grounded_history_is_saved_with_real_citations(self):
-        with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value=evidence()), mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(self.candidate()), '{"supported":true,"issues":[]}']):
+        with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value=evidence()), mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(self.candidate()), '{"supported":true,"readerReady":true,"issues":[]}']):
             post = LAMBDA.generate_specific_post("World History", "how the Suez Canal changed shipping trade", LAMBDA.resolve_content_angle("mechanism"), [])
         self.assertEqual(post["editorialMode"], "history")
         self.assertEqual(post["sources"][0]["url"], evidence()["sources"][0]["url"])
@@ -133,7 +133,10 @@ class EditorialPublicationTests(unittest.TestCase):
         self.assertEqual(post["sourceEvidence"]["sources"][0]["id"], "history-1")
 
     def test_unsupported_claim_and_fabricated_citation_stop_publication(self):
-        for verdict in ('{"supported":false,"issues":["invented motive"]}', '{"supported":"true","issues":[]}', '{"supported":true,"issues":["wrong date"]}', '{}'):
+        for verdict in ('{"supported":false,"readerReady":true,"issues":["invented motive"]}',
+                        '{"supported":"true","readerReady":true,"issues":[]}',
+                        '{"supported":true,"readerReady":true,"issues":["wrong date"]}',
+                        '{"supported":true,"issues":[]}', '{}'):
             with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value=evidence()), mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(self.candidate()), verdict]):
                 self.assertIsNone(LAMBDA.generate_specific_post("World History", "how the Suez Canal changed shipping trade", LAMBDA.resolve_content_angle("mechanism"), []))
         draft = {**self.candidate(), "sourceIds": ["invented"]}
@@ -143,7 +146,7 @@ class EditorialPublicationTests(unittest.TestCase):
 
     def test_missing_recent_reports_fall_back_to_a_concept_not_invented_news(self):
         draft = {**self.candidate(), "sourceIds": []}
-        with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "current", "sources": []}), mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(draft), '{"accurate":true,"issues":[]}']):
+        with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "current", "sources": []}), mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(draft), '{"accurate":true,"readerReady":true,"issues":[]}']):
             post = LAMBDA.generate_specific_post("Engineering", "how the Suez Canal changed shipping trade", LAMBDA.resolve_content_angle("current_connection"), [])
         self.assertEqual(post["editorialMode"], "concept")
         self.assertEqual(post["contentAngle"], "mechanism")
@@ -152,13 +155,28 @@ class EditorialPublicationTests(unittest.TestCase):
     def test_conceptual_error_stops_publication(self):
         draft = {**self.candidate(), "sourceIds": []}
         with (mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
-              mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(draft), '{"accurate":false,"issues":["incorrect mechanism"]}'])):
+              mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(draft), '{"accurate":false,"readerReady":true,"issues":["incorrect mechanism"]}'])):
             self.assertIsNone(LAMBDA.generate_specific_post("Engineering", "how a canal changes shipping routes", LAMBDA.resolve_content_angle("mechanism"), []))
+
+    def test_accurate_but_unreadable_posts_cannot_publish_in_either_mode(self):
+        for pack, field, source_ids, topic in (
+            (evidence(), "supported", ["history-1"], "World History"),
+            ({"mode": "concept", "sources": []}, "accurate", [], "Engineering"),
+        ):
+            draft = {**self.candidate(), "sourceIds": source_ids}
+            verdict = json.dumps({field: True, "readerReady": False, "issues": ["The example skips its key step"]})
+            with (self.subTest(mode=pack["mode"]),
+                  mock.patch.object(LAMBDA, "load_editorial_evidence", return_value=pack),
+                  mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(draft), verdict]) as model):
+                post = LAMBDA.generate_specific_post(topic, "how the Suez Canal changed shipping trade", LAMBDA.resolve_content_angle("mechanism"), [])
+                self.assertIsNone(post)
+                self.assertEqual(model.call_count, 2)
+                self.assertIn(LAMBDA.CROSS_FIELD_REVIEW_GUIDE, model.call_args.args[0])
 
     def test_recent_report_is_retained_with_its_original_date(self):
         pack = evidence("current")
         draft = {**self.candidate(), "exampleParagraph": "Today " + self.candidate()["exampleParagraph"]}
-        with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value=pack), mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(draft), '{"supported":true,"issues":[]}']):
+        with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value=pack), mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(draft), '{"supported":true,"readerReady":true,"issues":[]}']):
             post = LAMBDA.generate_specific_post("Engineering", "how the Suez Canal changed shipping trade", LAMBDA.resolve_content_angle("current_connection"), [])
         self.assertEqual(post["editorialMode"], "current")
         self.assertEqual(post["sources"][0]["publishedAt"], pack["sources"][0]["publishedAt"])
@@ -193,7 +211,7 @@ class EditorialPublicationTests(unittest.TestCase):
         self.assertNotEqual(first, LAMBDA.explanation_source_hash({**source, "sourceEvidence": changed}))
 
     def test_deep_lesson_with_unsupported_details_is_not_stored(self):
-        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[quality.ContentCatalogTests.complete_explanation(), '{"supported":false,"issues":["unsupported detail"]}']):
+        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[quality.ContentCatalogTests.complete_explanation(), '{"supported":false,"readerReady":true,"issues":["unsupported detail"]}']):
             result = LAMBDA.generate_detailed_explanation("Suez Canal", "Source", "World History", source_evidence=evidence())
         self.assertEqual(result, "")
 

@@ -43,6 +43,7 @@ test('the arcade launch is offered only for a subject challenge and uses its own
   assert.equal(launches, 1);
   assert.equal(app.starts.length, 0);
   assert.equal(findEntry(harness(undefined, { onMixedStart() {}, bossChallenge: true })).props.title, 'Start boss challenge');
+  assert.equal(findEntry(harness(undefined, { onMixedStart() {}, subjectIncludesGames: false })).props.title, 'Start subject quiz');
 });
 
 test('a lesson has one quiz action that includes all its ideas and no topic picker', () => {

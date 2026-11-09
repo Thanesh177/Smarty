@@ -111,6 +111,28 @@ class LearningCurriculumTests(unittest.TestCase):
         self.assertEqual(self.generate.call_count, 1)
         self.assertEqual(LAMBDA.read_learning_path_state("Artificial Intelligence")["nextIndex"], 1)
 
+    def test_scheduled_post_uses_readability_feedback_without_an_extra_review_pass(self):
+        paragraph = (
+            "Imagine a model gives a bad estimate. During training it compares the estimate "
+            "with a target, then changes internal numbers called weights to reduce its error. "
+            "At inference, when it makes a new estimate, it uses those saved weights rather "
+            "than learning them again. The new estimate can still be wrong if the example "
+            "differs greatly from the examples the model trained on."
+        )
+        draft = json.dumps({"title": "Why AI Training Changes How a Model Answers",
+                            "mechanismParagraph": paragraph, "exampleParagraph": paragraph,
+                            "sourceIds": []})
+        barrier = '{"accurate":true,"readerReady":false,"issues":["Explain inference when it first appears"]}'
+        approval = '{"accurate":true,"readerReady":true,"issues":[]}'
+        with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
+              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
+              mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[draft, barrier, draft, approval]) as model):
+            post = self.publish("readable-draft")["post"]
+        self.assertEqual(post["learningOrder"], 1)
+        self.assertEqual(model.call_count, 4)
+        self.assertNotIn("Explain inference when it first appears", model.call_args_list[0].args[0])
+        self.assertIn("Explain inference when it first appears", model.call_args_list[2].args[0])
+
     def test_failed_draft_does_not_skip_the_missing_lesson(self):
         self.generate.return_value = None
         with self.assertRaises(RuntimeError): self.publish("draft-failure")
@@ -215,6 +237,18 @@ class LearningCurriculumTests(unittest.TestCase):
         self.publish('expired-draft')
         self.assertEqual(self.generate.call_count, 2)
 
+    def test_old_editorial_draft_is_regenerated_without_changing_published_lesson_version(self):
+        self.details.return_value = ''
+        with self.assertRaises(RuntimeError):
+            self.publish('old-writing-review')
+        draft = next(item for item in self.progress.items.values() if item.get('entryType') == 'learningDraft')
+        self.assertEqual(draft['postReviewVersion'], LAMBDA.POST_REVIEW_VERSION)
+        draft['postReviewVersion'] = LAMBDA.POST_REVIEW_VERSION - 1
+        self.details.return_value = quality.ContentCatalogTests.complete_explanation()
+        post = self.publish('old-writing-review')['post']
+        self.assertEqual(self.generate.call_count, 2)
+        self.assertEqual(post['aiDetailedExplanationReviewVersion'], LAMBDA.EXPLANATION_REVIEW_VERSION)
+
     def test_readers_reuse_the_prepared_lesson_without_a_model_call(self):
         post = self.publish('prepared-for-readers')['post']
         self.details.reset_mock()
@@ -311,7 +345,7 @@ class LearningCurriculumTests(unittest.TestCase):
         self.assertIn('"stage": "advanced"', prompt)
         self.assertIn(target["prerequisiteSubject"], prompt)
         self.assertIn("test assumptions and edge cases", prompt)
-        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[quality.ContentCatalogTests.complete_explanation(), '{"accurate":true,"issues":[]}']) as details:
+        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[quality.ContentCatalogTests.complete_explanation(), '{"accurate":true,"readerReady":true,"issues":[]}']) as details:
             GENERATE_DETAILS("LoRA adapters", "Source", "Artificial Intelligence", target["subTopic"], learning_target=target)
         self.assertIn('"stage": "advanced"', details.call_args_list[0].args[0])
         self.assertIn(target["nextLearningSubject"], details.call_args_list[0].args[0])

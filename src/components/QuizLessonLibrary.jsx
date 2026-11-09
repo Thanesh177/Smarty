@@ -7,7 +7,7 @@ import { ArcadeEntry } from './games/QuizArcade';
 const INITIAL_LESSONS = 3;
 const LESSONS_PER_PAGE = 4;
 
-export default function QuizLessonLibrary({ subject, progress, onStart, onBack, onMixedStart, bossChallenge = false, initialView }) {
+export default function QuizLessonLibrary({ subject, progress, onStart, onBack, onMixedStart, bossChallenge = false, subjectIncludesGames = true, initialView }) {
   const [query, setQuery] = useState(initialView?.query ?? '');
   const [expandedLesson, setExpandedLesson] = useState(initialView?.expandedLesson ?? '');
   const [limit, setLimit] = useState(initialView?.limit ?? INITIAL_LESSONS);
@@ -42,12 +42,13 @@ export default function QuizLessonLibrary({ subject, progress, onStart, onBack, 
   const remaining = filtered.length - visible.length;
   const start = (item, chapterId = '') => onStart(makeLessonQuizTopic(subject, item), { query, limit, lessonId: item.id, expandedLesson: chapterId });
   return <section className="quiz-lesson-library" aria-labelledby="quiz-lesson-title">
-    <button type="button" className="quiz-text-control" onClick={onBack}><Grid2X2 size={16} aria-hidden="true" />All subjects</button>
+    {onBack && <button type="button" className="quiz-text-control" onClick={onBack}><Grid2X2 size={16} aria-hidden="true" />All subjects</button>}
     <header className="quiz-lesson-intro">
       <h1 id="quiz-lesson-title" ref={heading} tabIndex={-1}>{subject.title} lessons</h1>
       <p>Choose a lesson for a quiz across its key ideas, or open one practice set to study something specific.</p>
-      {onMixedStart && <ArcadeEntry onOpen={onMixedStart} title={bossChallenge ? 'Start boss challenge' : 'Start subject challenge'}
-        description={bossChallenge ? 'Enter the boss round.' : 'Mix quiz questions with mini-games.'} />}
+      {onMixedStart && <ArcadeEntry onOpen={onMixedStart}
+        title={bossChallenge ? 'Start boss challenge' : subjectIncludesGames ? 'Start subject challenge' : 'Start subject quiz'}
+        description={bossChallenge ? 'Enter the boss round.' : subjectIncludesGames ? 'Mix quiz questions with mini-games.' : 'Answer questions from across this subject.'} />}
     </header>
     <div className="quiz-lesson-tools">
       <label className="quiz-lesson-search"><Search size={17} aria-hidden="true" /><span className="sr-only">Search lessons in {subject.title}</span>
