@@ -1,5 +1,6 @@
 export const VIDEO_CONTROLS_IDLE_MS = 3500;
 export const VIDEO_OPENING_BUFFER_SECONDS = 3;
+export const VIDEO_LOADING_INDICATOR_MS = 420;
 
 function hasBufferedInterval(video, start, seconds) {
   const end = Math.min(Number.isFinite(video.duration) ? video.duration : Infinity, start + seconds);
@@ -10,12 +11,14 @@ function hasBufferedInterval(video, start, seconds) {
   return false;
 }
 
-export function hasPlaybackHeadroom(video) {
-  return !video.paused && video.readyState >= 3 && hasBufferedInterval(video, video.currentTime, 3);
-}
-
 export function hasBufferedOpening(video) {
   return video.readyState >= 2 && hasBufferedInterval(video, 0, VIDEO_OPENING_BUFFER_SECONDS);
+}
+
+export function canWarmSuccessor(video) {
+  // A decoded clip with a little lead is enough to start the next request.
+  // This also works when the viewer pauses or uses manual play.
+  return video.readyState >= 3 && hasBufferedInterval(video, video.currentTime, 1);
 }
 
 // Start inside the gesture when one exists. Outside a gesture, Safari and

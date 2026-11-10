@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowDown, ArrowUp, Flag, LoaderCircle, Plus, RefreshCw, UserX, Video, X } from 'lucide-react';
 import FeedHeader from '../components/FeedHeader';
@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import useFeed from '../hooks/useFeed';
 import useVideoChrome from '../hooks/useVideoChrome';
 import { chatApi, postApi } from '../api/client';
-import { canWarmVideoFeed, getMostVisibleVideo, getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts, nextVideoPreload } from '../lib/videoFeed';
+import { canWarmVideoFeed, getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts, nextVideoPreload, shouldDiscoverMoreVideos, videoIndexAtScroll } from '../lib/videoFeed';
 import './VideoTopicPage.css';
 
 const REASONS = ['Harassment or bullying', 'Hate speech', 'Sexual or explicit content', 'Violence or threats', 'Spam or scam', 'Other objectionable content'];
@@ -42,15 +42,12 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
   const videos = useMemo(() => getVideoPosts(posts), [posts]);
   const rootRef = useRef(null);
   const pageRef = useRef(null);
-  const sentinelRef = useRef(null);
-  const loadLock = useRef(false);
-  const scans = useRef(0);
-  const previousVideoCount = useRef(0);
+  const indexRef = useRef(0);
+  const heightRef = useRef(0);
   const pendingAdvance = useRef(null);
-  const visitedCursors = useRef(new Set());
   const mounted = useRef(true);
   const wasSelected = useRef(selected);
-  const [activeId, setActiveId] = useState('');
+  const [index, setIndex] = useState(0);
   const [playingId, setPlayingId] = useState('');
   const [bufferedId, setBufferedId] = useState('');
   const [muted, setMuted] = useState(false);
@@ -61,8 +58,10 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
   const [safety, setSafety] = useState(null);
   const [safetyBusy, setSafetyBusy] = useState(false);
   const [safetyError, setSafetyError] = useState('');
-  const activeIndex = Math.max(0, videos.findIndex(post => getVideoPostId(post) === activeId));
-  const canLoad = Boolean(nextCursor) && !loading && !refreshing && !loadingMore && !error;
+  const activeIndex = Math.max(0, Math.min(index, videos.length - 1));
+  const activeId = getVideoPostId(videos[activeIndex]);
+  const busy = loading || refreshing || loadingMore;
+  const looking = busy || Boolean(nextCursor && !error);
   const activePlaying = Boolean(selected && activeId && playingId === activeId && visible && !safety);
   const { idle, reveal } = useVideoChrome(pageRef, activeId, activePlaying);
   const updatePlaying = useCallback((id, playing) => {
@@ -89,73 +88,72 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
     if (justOpened && error && !videos.length) void refreshFeed(true);
   }, [error, refreshFeed, selected, videos.length]);
 
-  useEffect(() => {
-    if (!selected) return undefined;
+  const scrollToClip = useCallback((clip, smooth = true) => {
     const root = rootRef.current;
-    if (!root || !videos.length) { setActiveId(''); return undefined; }
-    const ratios = new Map();
-    // Pick the initial visible clip immediately, including restored scroll
-    // positions. A tap must not depend on an observer's first delivery.
-    const bounds = root.getBoundingClientRect();
-    root.querySelectorAll('[data-video-id]').forEach(element => {
-      const rect = element.getBoundingClientRect();
-      ratios.set(element.dataset.videoId, Math.max(0, Math.min(rect.bottom, bounds.bottom) - Math.max(rect.top, bounds.top)) / Math.max(1, rect.height));
-    });
-    setActiveId(getMostVisibleVideo(ratios));
-    const observer = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        const ratio = entry.isIntersecting ? entry.intersectionRatio : 0;
-        ratios.set(entry.target.dataset.videoId, ratio);
-        // Pause at the visibility boundary, before React commits.
-        if (ratio < .5) entry.target.querySelector('video')?.pause();
-      });
-      setActiveId(getMostVisibleVideo(ratios));
-    }, { root, threshold: [0, 0.25, 0.5, 0.75, 1] });
-    root.querySelectorAll('[data-video-id]').forEach(element => observer.observe(element));
-    return () => observer.disconnect();
-  }, [selected, videos]);
-
-  useEffect(() => {
-    if (videos.length > previousVideoCount.current) scans.current = 0;
-    previousVideoCount.current = videos.length;
-    if (pendingAdvance.current !== null && videos.length > pendingAdvance.current) {
-      const root = rootRef.current;
-      const target = root?.querySelectorAll('[data-video-id]')[pendingAdvance.current];
-      pendingAdvance.current = null;
-      if (target) root.scrollTo({ top: root.scrollTop + target.getBoundingClientRect().top - root.getBoundingClientRect().top, behavior: reducedMotion ? 'auto' : 'smooth' });
+    if (!root || !heightRef.current) return;
+    root.scrollTo({ top: heightRef.current * clip, behavior: smooth && !reducedMotion ? 'smooth' : 'instant' });
+  }, [reducedMotion]);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!selected || !root) return undefined;
+    const measure = () => {
+      const height = root.getBoundingClientRect().height;
+      if (!height || height === heightRef.current) return;
+      heightRef.current = height;
+      root.scrollTo({ top: heightRef.current * indexRef.current, behavior: 'instant' });
+    };
+    heightRef.current = 0;
+    measure();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(measure);
+      observer.observe(root);
+      return () => observer.disconnect();
     }
-  }, [videos.length, reducedMotion]);
-  useEffect(() => { if (error) pendingAdvance.current = null; }, [error]);
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [selected]);
+  useLayoutEffect(() => {
+    const lastIndex = Math.max(0, videos.length - 1);
+    if (indexRef.current > lastIndex) {
+      indexRef.current = lastIndex;
+      setIndex(indexRef.current);
+      if (selected) scrollToClip(indexRef.current, false);
+    }
+    if (!selected || pendingAdvance.current === null) return;
+    if (videos.length > pendingAdvance.current) {
+      const target = pendingAdvance.current;
+      pendingAdvance.current = null;
+      scrollToClip(target);
+    } else if (!nextCursor && !busy) pendingAdvance.current = null;
+  }, [videos.length, nextCursor, busy, selected, scrollToClip]);
 
-  const fetchMore = useCallback(async (manual = false) => {
-    if (!nextCursor || loading || refreshing || loadingMore || (!manual && error) || loadLock.current) return;
-    const cursor = typeof nextCursor === 'string' ? nextCursor : JSON.stringify(nextCursor);
-    if (manual) { scans.current = 0; if (error) visitedCursors.current.delete(cursor); }
-    if (visitedCursors.current.has(cursor)) return;
-    loadLock.current = true;
-    visitedCursors.current.add(cursor);
-    scans.current += 1;
-    try { await loadMore(); } finally { loadLock.current = false; }
-  }, [loading, refreshing, loadingMore, error, loadMore, nextCursor]);
-
-  // Each discovery request already searches a bounded number of mixed pages.
-  // After that, give the reader a choice instead of silently scanning more.
+  // Each request scans only a bounded batch. Keep following valid cursors
+  // while someone is waiting at the tail, even after a text-only batch.
   useEffect(() => {
-    if (!selected || !videos.length || !canLoad) return undefined;
-    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting && scans.current < 3) fetchMore(); }, { root: rootRef.current, rootMargin: '240px 0px' });
-    if (sentinelRef.current) observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [selected, canLoad, fetchMore, videos.length, posts.length]);
+    if (!shouldDiscoverMoreVideos({ selected, visible, hasCursor: Boolean(nextCursor), busy, error, activeIndex, count: videos.length })) return undefined;
+    const timer = window.setTimeout(() => { void loadMore(); }, 180);
+    return () => window.clearTimeout(timer);
+  }, [selected, visible, nextCursor, busy, error, activeIndex, videos.length, loadMore]);
 
-  const retryFeed = () => { scans.current = 0; visitedCursors.current.clear(); refreshFeed(true); };
+  const onScroll = event => {
+    if (!selected || !heightRef.current) return;
+    const root = event.currentTarget;
+    const next = videoIndexAtScroll(root.scrollTop, heightRef.current, videos.length);
+    if (next === indexRef.current) return;
+    root.children[indexRef.current]?.querySelector('video')?.pause();
+    indexRef.current = next;
+    pendingAdvance.current = null;
+    setIndex(next);
+  };
+  const retryFeed = () => { if (nextCursor) void loadMore(); else void refreshFeed(true); };
   const move = direction => {
     reveal();
-    const root = rootRef.current;
-    if (direction > 0 && activeIndex === videos.length - 1 && nextCursor) { pendingAdvance.current = videos.length; fetchMore(true); return; }
-    const index = Math.min(videos.length - 1, Math.max(0, activeIndex + direction));
-    const target = root?.querySelectorAll('[data-video-id]')[index];
-    if (target) root.scrollTo({ top: root.scrollTop + target.getBoundingClientRect().top - root.getBoundingClientRect().top, behavior: reducedMotion ? 'auto' : 'smooth' });
-    else if (direction > 0) fetchMore();
+    if (direction > 0 && activeIndex === videos.length - 1 && nextCursor) {
+      pendingAdvance.current = videos.length;
+      if (!busy) void loadMore();
+      return;
+    }
+    scrollToClip(Math.min(videos.length - 1, Math.max(0, activeIndex + direction)));
   };
   const requireLogin = () => { if (user) return true; navigate('/login', { state: { from: { pathname: '/feed', search: '?topic=Video' } } }); return false; };
   const save = async (post, saved) => {
@@ -187,30 +185,38 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
     onFocusCapture={event => { if (event.target.matches(':focus-visible')) reveal(); }}>
     <FeedHeader topic="Video" onBack={() => navigate('/topics')} onOpenSearch={onOpenSearch}
       onSelect={topic => navigate('/feed?topic=' + encodeURIComponent(topic))} status={loading ? 'Loading videos' : `${videos.length} videos loaded`} />
-    <div className="video-topic-tools"><span><Video size={15} />{videos.length ? `${activeIndex + 1} of ${videos.length}${nextCursor ? '+' : ''}` : 'Videos'}</span><Link to="/create?topic=Video&type=video"><Plus size={16} />Upload video</Link></div>
-    <section ref={rootRef} className="video-topic-scroll" aria-label="Video feed" tabIndex={0} onKeyDown={event => {
+    <div className="video-topic-tools"><Link to="/create?topic=Video&type=video" aria-label="Upload video"><Plus size={20} /><span>Upload</span></Link></div>
+    <section ref={rootRef} className="video-topic-scroll" aria-label="Video feed" tabIndex={0} onScroll={onScroll} onKeyDown={event => {
       if (event.target !== event.currentTarget || !['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].includes(event.key)) return;
       event.preventDefault(); move(['ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1);
     }}>
-      {videos.map((post, index) => <ReelVideo key={getVideoPostId(post)} post={post}
-        active={selected && getVideoPostId(post) === activeId && visible && !safety}
-        nearby={selected ? Math.abs(index - activeIndex) <= 1 : index === activeIndex}
-        preloadNext={!selected && index === activeIndex && visible && canWarmVideoFeed(navigator.connection) ? 'auto'
-          : activePlaying && bufferedId === activeId && index === activeIndex + 1 ? nextVideoPreload(post, navigator.connection) : 'none'}
-        chromeHidden={idle && index === activeIndex} onReveal={reveal} onPlayingChange={updatePlaying} onHeadroom={setBufferedId}
-        onSkip={index < videos.length - 1 || nextCursor ? () => move(1) : undefined}
-        muted={muted} onMute={setMuted} onSave={save} onSafety={openSafety} onReload={refreshPost} busy={saving === getVideoPostId(post)}
-        saved={Boolean(post.saved || post.isSaved || post.bookmarked || post.isBookmarked || post.savedByCurrentUser)} reducedMotion={reducedMotion} />)}
+      {videos.map((post, clipIndex) => {
+        const id = getVideoPostId(post);
+        const nearby = selected ? Math.abs(clipIndex - activeIndex) <= 1 : clipIndex === activeIndex;
+        if (!nearby) return <div key={id} className="reel-video reel-video-slot" data-video-id={id} aria-hidden="true" />;
+        const isNext = selected && visible && !safety && clipIndex === activeIndex + 1;
+        const nextHint = isNext ? nextVideoPreload(post, navigator.connection) : 'none';
+        const warmHidden = !selected && visible && canWarmVideoFeed(navigator.connection);
+        const preload = warmHidden ? 'auto' : nextHint === 'auto' && bufferedId !== activeId ? 'metadata' : nextHint;
+        return <ReelVideo key={id} post={post}
+          active={selected && id === activeId && visible && !safety}
+          nearby preloadNext={preload}
+          chromeHidden={idle && clipIndex === activeIndex} onReveal={reveal} onPlayingChange={updatePlaying} onHeadroom={setBufferedId}
+          onSkip={clipIndex < videos.length - 1 || nextCursor ? () => move(1) : undefined}
+          muted={muted} onMute={setMuted} onSave={save} onSafety={openSafety} onReload={refreshPost} busy={saving === id}
+          saved={Boolean(post.saved || post.isSaved || post.bookmarked || post.isBookmarked || post.savedByCurrentUser)} reducedMotion={reducedMotion} />;
+      })}
       {!videos.length && <div className="video-topic-state">
-        <Video size={28} /><h2>{loading || refreshing || loadingMore ? 'Finding videos…' : error ? 'Videos couldn’t load.' : nextCursor ? 'Look for older videos' : 'No videos to show yet'}</h2>
-        <p>{error ? 'Check your connection and try again.' : loading || refreshing || loadingMore ? 'Bringing community ideas into view.' : nextCursor ? 'No videos in the newest posts. Look through older posts or share one of your own.' : 'Upload a video about something you learned. Community videos from every topic appear here.'}</p>
-        {loading || refreshing || loadingMore ? <LoaderCircle className="video-loading-icon" size={23} /> : error ? <button type="button" onClick={retryFeed}><RefreshCw size={16} />Try again</button> : <><Link to="/create?topic=Video&type=video"><Plus size={17} />Upload a video</Link>{nextCursor && <button type="button" onClick={() => fetchMore(true)}>Look for older videos</button>}</>}
-      </div>}
-      {videos.length > 0 && <div ref={sentinelRef} className="video-topic-end" role="status">
-        {loadingMore ? <><LoaderCircle size={18} className="video-loading-icon" />Loading more videos…</> : error ? <><span>More videos couldn’t load.</span><button type="button" onClick={() => fetchMore(true)}>Try again</button></> : nextCursor ? <button type="button" onClick={() => fetchMore(true)}>Load more videos</button> : <><span>You’re all caught up.</span><Link to="/create?topic=Video&type=video">Share a video <Plus size={15} /></Link></>}
+        <Video size={28} /><h2>{looking ? 'Finding videos…' : error ? 'Videos couldn’t load.' : 'No videos to show yet'}</h2>
+        <p>{error ? 'Check your connection and try again.' : looking ? 'Looking for community videos across all topics.' : 'Upload a video about something you learned. Community videos from every topic appear here.'}</p>
+        {looking ? <LoaderCircle className="video-loading-icon" size={23} /> : error ? <button type="button" onClick={retryFeed}><RefreshCw size={16} />Try again</button> : <Link to="/create?topic=Video&type=video"><Plus size={17} />Upload a video</Link>}
       </div>}
     </section>
-    {videos.length > 1 && <nav className="video-topic-navigation" aria-label="Video navigation"><button type="button" disabled={activeIndex === 0} onClick={() => move(-1)} aria-label="Previous video"><ArrowUp size={19} /></button><span>{activeIndex + 1} / {videos.length}{nextCursor ? '+' : ''}</span><button type="button" disabled={activeIndex === videos.length - 1 && !nextCursor} onClick={() => move(1)} aria-label="Next video"><ArrowDown size={19} /></button></nav>}
+    {videos.length > 0 && activeIndex === videos.length - 1 && nextCursor && <div className="video-topic-tail" role="status">
+      {error ? <><span>More videos couldn’t load.</span><button type="button" onClick={retryFeed}>Retry</button></>
+        : <span>{loadingMore ? 'Finding more videos…' : 'More videos ahead'}</span>}
+    </div>}
+    {(videos.length > 1 || (videos.length > 0 && nextCursor)) && <nav className="video-topic-navigation" aria-label="Video navigation"><button type="button" disabled={activeIndex === 0} onClick={() => move(-1)} aria-label="Previous video"><ArrowUp size={19} /></button><button type="button" disabled={activeIndex === videos.length - 1 && !nextCursor} onClick={() => move(1)} aria-label="Next video"><ArrowDown size={19} /></button></nav>}
     {notice && <div className="video-topic-notice" role="status">{notice}</div>}
     {safety && <VideoSafetyDialog post={safety} busy={safetyBusy} error={safetyError} onClose={() => { if (!safetyBusy) setSafety(null); }} onSubmit={submitSafety} />}
   </main>;

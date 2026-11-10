@@ -29,7 +29,7 @@ function renderPlayer(overrides = {}) {
     module: scope, exports: scope.exports, queueMicrotask, URL,
     document: { visibilityState: 'visible', addEventListener: (name, handler) => listeners.set(name, handler), removeEventListener: name => listeners.delete(name) },
     window: { addEventListener: (name, handler) => listeners.set(name, handler), removeEventListener: name => listeners.delete(name),
-      setTimeout: callback => { const id = timers.size + 1; timers.set(id, callback); return id; }, clearTimeout: id => timers.delete(id) },
+      setTimeout: (callback, delay) => { const id = timers.size + 1; timers.set(id, { callback, delay }); return id; }, clearTimeout: id => timers.delete(id) },
     require: name => name === 'react' ? hookReact : ['./PostAuthor', './NativeDownloadButton'].includes(name) ? () => null : name.startsWith('../lib/') ? require(name + '.js') : require(name),
   });
   const tree = scope.exports.default({
@@ -181,11 +181,37 @@ test('the first tap after controls hide brings them back without pausing', () =>
 test('a stalled active preview has a bounded wait instead of an endless blank player', () => {
   const player = renderPlayer();
   player.effects.forEach(effect => effect());
-  assert.equal(player.timers.size, 1);
-  [...player.timers.values()][0]();
+  const [indicator, timeout] = [...player.timers.values()].sort((a, b) => a.delay - b.delay);
+  assert.equal(indicator.delay, 420);
+  assert.equal(timeout.delay, 18000);
+  assert(!player.tree.props.children.props.children.some(element => element?.props?.className === 'reel-video-buffer'));
+  timeout.callback();
   assert(player.writes.some(write => write.slot === 2 && write.value === true));
   assert(player.writes.some(write => typeof write.value === 'string' && write.value.includes('taking too long')));
   const offscreen = renderPlayer({ active: false });
   offscreen.effects.forEach(effect => effect());
   assert.equal(offscreen.timers.size, 0);
+});
+
+test('a broken optimized URL tries the original without refreshing the post first', () => {
+  let renewals = 0;
+  const player = renderPlayer({ post: { id: 'clip', videoPlaybackUrl: '/optimized.mp4', videoUrl: '/original.mov' }, onReload() { renewals++; } });
+  player.effects.forEach(effect => effect());
+  const media = player.tree.props.children.props.children.find(element => element?.type === 'video');
+  assert.equal(media.props.src, '/optimized.mp4');
+  media.props.onError();
+  assert(player.writes.some(write => write.value === '/optimized.mp4'));
+  assert.equal(renewals, 0);
+});
+
+test('a key-only clip resolves its URL when opened, not for every distant clip', async () => {
+  const calls = [];
+  const props = { post: { id: 'older', videoKey: 'uploads/older.mp4' }, onReload: async id => { calls.push(id); return { videoUrl: '/older.mp4' }; } };
+  const preview = renderPlayer({ ...props, active: false });
+  preview.effects.forEach(effect => effect());
+  const active = renderPlayer(props);
+  active.effects.forEach(effect => effect());
+  await Promise.resolve();
+  assert.deepEqual(calls, ['older']);
+  assert(!active.tree.props.children.props.children.some(element => element?.type === 'video'));
 });

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canWarmVideoFeed, discoverVideoPage, formatVideoTime, getMostVisibleVideo, getPostVideoUrl, getVideoCreatorId, getVideoCreatorName, getVideoPosts, isVideoTopic, isVideoTopicPost, nextVideoPreload, validateVideoUpload } from './videoFeed.js';
-import { hasBufferedOpening, hasPlaybackHeadroom } from './reelPlayback.js';
+import { canWarmVideoFeed, discoverVideoPage, formatVideoTime, getPostVideoSources, getPostVideoUrl, getVideoCreatorId, getVideoCreatorName, getVideoPosts, isVideoTopic, isVideoTopicPost, nextVideoPreload, shouldDiscoverMoreVideos, validateVideoUpload, videoIndexAtScroll } from './videoFeed.js';
+import { hasBufferedOpening, canWarmSuccessor } from './reelPlayback.js';
 import { MAIN_TOPICS, getMainTopicDefinition, postMatchesMainTopic } from '../data/topicTaxonomy.js';
 
 test('Video is available in navigation and resolves legacy video labels', () => {
@@ -23,8 +23,9 @@ test('only public, unmoderated, unique playable videos enter the viewer', () => 
   const posts = [video, video, { id: 'text' }, { ...video, id: 'private', visibility: 'private' },
     { ...video, id: 'pending', moderationStatus: 'pending' }, { ...video, id: 'removed', moderationStatus: 'removed' },
     { ...video, id: 'deleted', deleted: true }, { ...video, id: 'approved', moderationStatus: 'approved' },
-    { ...video, id: 'invalid', videoUrl: 'javascript:alert(1)' }];
-  assert.deepEqual(getVideoPosts(posts).map(post => post.id), ['one', 'approved']);
+    { ...video, id: 'invalid', videoUrl: 'javascript:alert(1)' },
+    { id: 'old-upload', videoKey: 'uploads/old.mp4' }, { id: 'unlisted', isPrivate: true, videoKey: 'uploads/private.mp4' }];
+  assert.deepEqual(getVideoPosts(posts).map(post => post.id), ['one', 'approved', 'old-upload']);
 });
 test('media URLs reject executable, credential-like, and invalid payloads', () => {
   for (const value of ['javascript:alert(1)', 'data:video/mp4;base64,x', 'file:///private/x', '//external/x', 'not a URL', {}, 'https://media.example/\nvideo', 'https://name:password@media.example/movie.mp4']) {
@@ -35,6 +36,7 @@ test('media URLs reject executable, credential-like, and invalid payloads', () =
   assert.equal(getPostVideoUrl({ videoPlaybackUrl: '/lighter.mp4', videoUrl: '/original.mov' }), '/lighter.mp4');
   assert.equal(getPostVideoUrl({ videoPlaybackUrl: 'javascript:alert(1)', videoUrl: '/original.mov' }), '/original.mov');
   assert.equal(getPostVideoUrl({ videoUrl: '/\\example.invalid/movie.mp4' }), '');
+  assert.deepEqual(getPostVideoSources({ videoPlaybackUrl: '/lighter.mp4', videoUrl: '/original.mov', video: { url: '/original.mov' } }), ['/lighter.mp4', '/original.mov']);
 });
 
 test('video discovery follows the mixed-feed cursor before exposing an empty page', async () => {
@@ -55,12 +57,12 @@ test('discovery limits requests and terminates repeated cursor loops', async () 
   assert.equal((await discoverVideoPage(async () => ({ items: [], nextCursor: 'same' }), 'same')).nextCursor, null);
 });
 
-test('next clip warming waits for playback headroom and respects slow links and data saving', () => {
+test('next clip warming starts with a small buffer and respects slow links and data saving', () => {
   const video = { paused: false, currentTime: 1, readyState: 4, duration: 20,
     buffered: { length: 1, start: () => 0, end: () => 5.5 } };
-  assert.equal(hasPlaybackHeadroom(video), true);
-  assert.equal(hasPlaybackHeadroom({ ...video, currentTime: 3 }), false);
-  assert.equal(hasPlaybackHeadroom({ ...video, paused: true }), false);
+  assert.equal(canWarmSuccessor(video), true);
+  assert.equal(canWarmSuccessor({ ...video, currentTime: 5 }), false);
+  assert.equal(canWarmSuccessor({ ...video, paused: true }), true);
   assert.equal(nextVideoPreload({ videoUrl: '/large.mov' }, { effectiveType: '4g', downlink: 15 }), 'auto');
   assert.equal(nextVideoPreload({ videoUrl: '/small.mp4', videoBytes: 2000 }), 'auto');
   assert.equal(nextVideoPreload({ videoUrl: '/small.mp4', videoBytes: 2000 }, { saveData: true }), 'none');
@@ -85,10 +87,34 @@ test('a warm clip needs an actual contiguous opening, not just metadata or a lat
   assert.equal(hasBufferedOpening({ readyState: 3, duration: 10, buffered: buffered(0, 3) }), true);
   assert.equal(hasBufferedOpening({ readyState: 3, duration: 1.5, buffered: buffered(0, 1.5) }), true);
 });
-test('the most visible card wins and completely offscreen cards never play', () => {
-  assert.equal(getMostVisibleVideo(new Map([['one', .25], ['two', .75]]), 'one'), 'two');
-  assert.equal(getMostVisibleVideo(new Map([['one', 0], ['two', 0]]), 'one'), '');
-  assert.equal(getMostVisibleVideo(new Map([['one', .25]]), 'one'), '');
+test('snap positions select one clip and clamp the index at either end', () => {
+  assert.equal(videoIndexAtScroll(399, 800, 5), 0);
+  assert.equal(videoIndexAtScroll(400, 800, 5), 1);
+  assert.equal(videoIndexAtScroll(800, 800, 5), 1);
+  assert.equal(videoIndexAtScroll(9000, 800, 5), 4);
+  assert.equal(videoIndexAtScroll(-40, 800, 5), 0);
+  assert.equal(videoIndexAtScroll(0, 0, 5), 0);
+});
+
+test('searches through consecutive empty batches only while the reader needs more videos', async () => {
+  let rawPages = 0;
+  let cursor = null;
+  let items = [];
+  do {
+    const page = await discoverVideoPage(async () => {
+      rawPages++;
+      return { items: rawPages === 19 ? [{ id: 'older', videoUrl: '/older.mp4' }] : [], nextCursor: rawPages < 19 ? String(rawPages) : null };
+    }, cursor);
+    cursor = page.nextCursor;
+    items = items.concat(page.items);
+  } while (shouldDiscoverMoreVideos({ selected: true, visible: true, hasCursor: Boolean(cursor), activeIndex: 0, count: items.length }));
+  assert.equal(rawPages, 19);
+  assert.equal(items[0].id, 'older');
+  const state = { selected: true, visible: true, hasCursor: true, activeIndex: 2, count: 4 };
+  assert.equal(shouldDiscoverMoreVideos(state), true);
+  for (const patch of [{ selected: false }, { visible: false }, { busy: true }, { error: 'Offline' }, { count: 8 }]) {
+    assert.equal(shouldDiscoverMoreVideos({ ...state, ...patch }), false);
+  }
 });
 test('All posts excludes Video-topic aliases but retains videos in other learning subjects', () => {
   for (const post of [{ topic: 'Video' }, { topic: ['Physics', 'Reels'] }, { topic: 'Physics,Video' }, { topicDomain: 'Videos' }, { category: 'video' }, { categories: ['Reels'] }]) assert(isVideoTopicPost(post));

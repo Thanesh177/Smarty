@@ -7,11 +7,12 @@ const code = buildSync({ entryPoints: [path.join(__dirname, '../hooks/useFeed.js
   write: false, platform: 'node', format: 'cjs', external: ['react', '../api/client', '../contexts/AuthContext'] }).outputFiles[0].text;
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
 const tick = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
-function harness() {
+function harness({ videoOnly = false } = {}) {
   const slots = [], effects = [], requests = [], storage = new Map();
   const events = new EventTarget();
   let index = 0, user = { userId: 'one' };
   const api = { getFeed(params) { const task = deferred(); requests.push({ ...params, ...task }); return task.promise; },
+    getVideoFeed(params) { return this.getFeed(params); },
     getSingleReel: async id => ({ id, videoUrl: '/fresh.mp4' }) };
   const react = {
     useState(initial) { const i = index++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial;
@@ -32,7 +33,7 @@ function harness() {
       throw new Error(name);
     } });
   return { requests, api, storage, events, setUser: value => { user = value; }, render() {
-    index = 0; const result = module.exports.default({ pageSize: 30 });
+    index = 0; const result = module.exports.default({ pageSize: 30, videoOnly });
     effects.splice(0).forEach(fn => fn()); return result;
   } };
 }
@@ -127,4 +128,16 @@ test('media renewal only updates the requested post and rejects another identity
   app.api.getSingleReel = async () => ({ id: 'another', videoUrl: '/other.mp4' });
   await assert.rejects(app.render().refreshPost('video'));
   assert.equal(app.render().posts[0].id, 'video');
+});
+
+test('video pagination appends in cursor order, passes empty pages, and closes a cursor cycle', async () => {
+  const app = harness({ videoOnly: true }); app.render();
+  app.requests[0].resolve({ items: [{ id: 'first', createdAt: 10, videoUrl: '/one.mp4' }], nextCursor: 'a' }); await tick();
+  const firstBatch = app.render().loadMore();
+  app.requests[1].resolve({ items: [], nextCursor: 'b' }); await firstBatch;
+  const nextBatch = app.render().loadMore();
+  app.requests[2].resolve({ items: [{ id: 'first', videoUrl: '/one.mp4' }, { id: 'second', createdAt: 99, videoKey: 'older.mp4' }], nextCursor: 'a' });
+  await nextBatch;
+  assert.equal(app.render().posts.map(post => post.id).join(','), 'first,second');
+  assert.equal(app.render().nextCursor, null);
 });

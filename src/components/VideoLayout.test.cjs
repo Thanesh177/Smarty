@@ -17,3 +17,11 @@ test('the scrolling preview avoids size containment and transformed controls tha
   assert.equal(value('.reel-video-bottom', 'transform'), undefined);
   assert.equal(value('.reel-video-bottom', 'margin-inline'), 'auto');
 });
+
+test('the action rail and upload controls overlay each viewport-sized clip', () => {
+  assert.equal(value('.video-topic-tools', 'position'), 'absolute');
+  assert.equal(value('.reel-video-actions', 'flex-direction'), 'column');
+  assert.equal(value('.reel-video', 'height'), '100%');
+  assert.equal(value('.reel-video', 'scroll-snap-stop'), 'always');
+  assert.equal(value('.video-topic-tail', 'position'), 'absolute');
+});

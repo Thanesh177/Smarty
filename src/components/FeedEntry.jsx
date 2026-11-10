@@ -5,7 +5,7 @@ import NewsPage from './NewsRoute';
 import SmartyLanding from './landing/SmartyLanding';
 import FeedHeader from './FeedHeader';
 import VideoTopicPage from '../pages/VideoTopicPage';
-import { canWarmVideoFeed, isVideoTopic } from '../lib/videoFeed';
+import { canWarmVideoFeed, isVideoTopic, VIDEO_FEED_INTENT_EVENT } from '../lib/videoFeed';
 import { hasSeenLanding, rememberLanding } from '../lib/initialVisit';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -54,11 +54,14 @@ export default function FeedEntry({ onOpenSearch }) {
     if (keepVideoFeed) return undefined;
     if (selectedVideo) { setKeepVideoFeed(true); return undefined; }
     if (!hasTopic || authLoading || !canWarmVideoFeed(navigator.connection)) return undefined;
-    const timer = window.setTimeout(() => {
+    const warm = () => {
       if (document.visibilityState !== 'hidden' && navigator.onLine !== false
         && canWarmVideoFeed(navigator.connection)) setKeepVideoFeed(true);
-    }, 900);
-    return () => window.clearTimeout(timer);
+    };
+    const timer = window.setTimeout(warm, 600);
+    // Keep the actual first player, not a second speculative media request.
+    window.addEventListener(VIDEO_FEED_INTENT_EVENT, warm);
+    return () => { window.clearTimeout(timer); window.removeEventListener(VIDEO_FEED_INTENT_EVENT, warm); };
   }, [authLoading, hasTopic, keepVideoFeed, selectedVideo]);
   if (!hasTopic) return <InitialVisit onOpenSearch={onOpenSearch} />;
   return <>

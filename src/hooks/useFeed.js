@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserScopedStorageKey } from '../lib/userScopedStorage';
+import { getVideoPosts, unseenVideoCursor, videoCursorKey } from '../lib/videoFeed';
 
 const FEED_CACHE_KEY = 'smarty_cached_feed_v2';
 const FEED_CURSOR_KEY = 'smarty_cached_feed_cursor_v2';
@@ -73,6 +74,7 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
   const lastFetchedScopeRef = useRef('');
   const preloadedPageRef = useRef(null);
   const generationRef = useRef(0);
+  const visitedVideoCursors = useRef(new Set());
   const loadRequestRef = useRef(null);
   const activeCacheScopeRef = useRef(userId);
 
@@ -170,6 +172,7 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
     hiddenPostIdsRef.current = new Set();
     hasFetched.current = false;
     generationRef.current += 1;
+    visitedVideoCursors.current.clear();
     preloadedPageRef.current = null;
     loadRequestRef.current = null;
 
@@ -228,6 +231,7 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
 
   const refreshFeed = useCallback(async (fresh = false) => {
     const generation = ++generationRef.current;
+    visitedVideoCursors.current.clear();
     preloadedPageRef.current = null;
     loadRequestRef.current = null;
     setLoadingMore(false);
@@ -238,7 +242,7 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
 
       const data = await fetchPage(null, fresh === true);
       if (generation !== generationRef.current || activeCacheScopeRef.current !== userId) return;
-      const freshItems = removeBlockedPosts(dedupePosts(data.items || []));
+      const freshItems = removeBlockedPosts(videoOnly ? getVideoPosts(data.items) : dedupePosts(data.items));
       const cursor = data.nextCursor || null;
 
       setPosts(freshItems);
@@ -258,6 +262,7 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
     removeBlockedPosts,
     saveCache,
     userId,
+    videoOnly,
   ]);
 
   const loadMore = useCallback(async () => {
@@ -274,12 +279,16 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
         ? prefetched.promise : fetchPage(nextCursor));
       if (request.generation !== generationRef.current || activeCacheScopeRef.current !== userId) return;
 
-      const mergedCursor = page.nextCursor || null;
+      if (videoOnly) visitedVideoCursors.current.add(videoCursorKey(nextCursor));
+      const mergedCursor = videoOnly
+        ? unseenVideoCursor(page.nextCursor, visitedVideoCursors.current)
+        : page.nextCursor || null;
 
       setPosts((current) => {
-        const updated = removeBlockedPosts(
-          dedupePosts([...current, ...(page.items || [])])
-        );
+        const items = [...current, ...(page.items || [])];
+        // A saved-state or timestamp update must not move a clip to a new
+        // snap position. The server's cursor order defines the playlist.
+        const updated = removeBlockedPosts(videoOnly ? getVideoPosts(items) : dedupePosts(items));
         saveCache(updated, mergedCursor);
         return updated;
       });
@@ -302,6 +311,7 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
     removeBlockedPosts,
     saveCache,
     userId,
+    videoOnly,
   ]);
 
   useEffect(() => {

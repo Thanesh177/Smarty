@@ -2,8 +2,8 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Bookmark, Maximize, MessageCircle, MoreHorizontal, Pause, Play, RefreshCw, Volume2, VolumeX } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PostAuthor from './PostAuthor';
-import { formatVideoTime, getPostVideoUrl, getVideoPostId } from '../lib/videoFeed';
-import { hasBufferedOpening, hasPlaybackHeadroom, startReelPlayback } from '../lib/reelPlayback';
+import { formatVideoTime, getPostVideoSources, getPostVideoUrl, getVideoPostId, getVideoPoster } from '../lib/videoFeed';
+import { canWarmSuccessor, hasBufferedOpening, startReelPlayback, VIDEO_LOADING_INDICATOR_MS } from '../lib/reelPlayback';
 import NativeDownloadButton from './NativeDownloadButton';
 
 export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'none', muted = false, onMute, onSave, onSafety, onReload, saved, busy, reducedMotion, chromeHidden, onReveal, onPlayingChange, onHeadroom, onSkip }) {
@@ -24,6 +24,8 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
   const [failureMessage, setFailureMessage] = useState('');
   const [soundOff, setSoundOff] = useState(muted);
   const [openingBuffered, setOpeningBuffered] = useState(false);
+  const [showLoading, setShowLoading] = useState(false);
+  const [failedRendition, setFailedRendition] = useState('');
   const openingReported = useRef(false);
   const mounted = useRef(true);
   const autoRenewed = useRef(false);
@@ -33,8 +35,10 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
   const headroomReported = useRef(false);
   const id = getVideoPostId(post);
   const title = post.title || 'Community video';
-  const source = getPostVideoUrl(post);
-  const poster = getPostVideoUrl({ videoUrl: post.thumbUrl || post.imageUrl });
+  const [primary = '', fallback = ''] = getPostVideoSources(post);
+  const source = primary === failedRendition && fallback ? fallback : primary;
+  const poster = getVideoPoster(post);
+  const buffering = active && (!ready || waiting || refreshing) && !failed;
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
@@ -56,7 +60,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
         const fresh = await reloadRef.current(id);
         if (!getPostVideoUrl(fresh)) throw new Error('Unavailable');
       }
-      if (mounted.current) { setFailed(false); setWaiting(false); setReady(false); setRetry(value => value + 1); }
+      if (mounted.current) { setFailedRendition(''); setFailed(false); setWaiting(false); setReady(false); setRetry(value => value + 1); }
     } catch {
       if (mounted.current) { setFailed(true); setFailureMessage('The video could not be refreshed. Check your connection and try again.'); }
     } finally {
@@ -64,6 +68,20 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
       if (mounted.current) setRefreshing(false);
     }
   }, [id]);
+
+  useEffect(() => {
+    if (active && !source && reloadRef.current && !autoRenewed.current) {
+      autoRenewed.current = true;
+      void reloadSource();
+    }
+  }, [active, reloadSource, source]);
+
+  useEffect(() => {
+    setShowLoading(false);
+    if (!buffering) return undefined;
+    const timer = window.setTimeout(() => setShowLoading(true), VIDEO_LOADING_INDICATOR_MS);
+    return () => window.clearTimeout(timer);
+  }, [buffering, source]);
 
   const beginPlayback = useCallback((video, withMute, allowMutedFallback) => {
     const request = ++playRequest.current;
@@ -96,7 +114,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !active) return undefined;
+    if (!video || !active || !source) return undefined;
     if (failed && reloadRef.current && video.error && !autoRenewed.current) {
       autoRenewed.current = true;
       void reloadSource();
@@ -156,7 +174,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
 
   const trackBuffer = video => {
     if (activeRef.current) {
-      if (!headroomReported.current && hasPlaybackHeadroom(video)) {
+      if (!headroomReported.current && canWarmSuccessor(video)) {
         headroomReported.current = true;
         onHeadroom?.(id);
       }
@@ -167,8 +185,8 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
   };
 
   return <article className={'reel-video' + (active ? ' is-active' : '')} data-video-id={id} aria-label={title} aria-hidden={!active} inert={!active ? '' : undefined}>
-    <div className={'reel-video-stage' + (playing ? ' is-playing' : '')} aria-busy={active && (!ready || waiting || refreshing) && !failed}>
-      {nearby ? <video key={retry} ref={videoRef} src={source} poster={poster || undefined}
+    <div className={'reel-video-stage' + (playing ? ' is-playing' : '')} aria-busy={buffering}>
+      {nearby && source ? <video key={retry} ref={videoRef} src={source} poster={poster || undefined} className={ready || poster ? 'has-frame' : ''}
         playsInline loop muted={soundOff || !active} preload={active ? 'auto' : openingBuffered && preloadNext === 'auto' ? 'metadata' : preloadNext} aria-label={title}
         onPlaying={event => {
           if (!activeRef.current || document.visibilityState === 'hidden') { event.currentTarget.pause(); return; }
@@ -176,7 +194,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
           trackBuffer(event.currentTarget);
         }} onPause={() => { setPlaying(false); setWaiting(false); }}
         onVolumeChange={event => { if (activeRef.current) setSoundOff(event.currentTarget.muted); }}
-        onWaiting={() => { if (activeRef.current) setWaiting(true); }} onCanPlay={() => { setReady(true); setWaiting(false); }}
+        onWaiting={() => { if (activeRef.current) setWaiting(true); }} onCanPlay={event => { setReady(true); setWaiting(false); trackBuffer(event.currentTarget); }}
         onLoadedMetadata={event => {
           const video = event.currentTarget;
           setDuration(video.duration); setFailed(false);
@@ -191,6 +209,10 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
           trackBuffer(video);
         }}
         onError={() => {
+          if (source === primary && fallback) {
+            setFailedRendition(primary);
+            return;
+          }
           setFailed(true); setWaiting(false); setPlaying(false);
           setFailureMessage('It may be unavailable or use a format this device cannot play.');
           if (activeRef.current && onReload && !autoRenewed.current) { autoRenewed.current = true; reloadSource(); }
@@ -200,7 +222,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
         aria-label={chromeHidden ? 'Show video controls' : playing ? 'Pause video' : 'Play video'} aria-pressed={chromeHidden ? undefined : playing}>
         {!playing && !waiting && ready && <span><Play size={28} fill="currentColor" /><small>{soundOff ? 'Play video' : 'Play with sound'}</small></span>}
       </button>}
-      {active && (refreshing || ((!ready || waiting) && !failed)) && <span className="reel-video-buffer" role="status"><span />{refreshing ? 'Reconnecting video…' : 'Buffering video…'}</span>}
+      {buffering && showLoading && <span className="reel-video-buffer" role="status"><span />{refreshing ? 'Reconnecting video…' : 'Buffering video…'}</span>}
       {failed && !refreshing && <div className="reel-video-error" role="status"><Play size={26} /><strong>This video couldn’t play.</strong>
         <p>{failureMessage || 'Check your connection and try again.'}</p>
         <div className="reel-video-recovery">
@@ -208,18 +230,18 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
           {onSkip && <button type="button" onClick={onSkip}>Next video</button>}
         </div>
       </div>}
-      <div className="reel-video-top"><span>{post.topic || 'Video'}</span><button type="button" onClick={toggleSound} aria-label={soundOff ? 'Turn sound on' : 'Mute video'}>{soundOff ? <VolumeX size={19} /> : <Volume2 size={19} />}</button></div>
       <div className="reel-video-bottom">
         <div className="reel-video-copy">
-          <PostAuthor post={post} className="reel-video-author" resolve={nearby} />
+          <PostAuthor post={post} className="reel-video-author" resolve={active} />
           <h2>{title}</h2>
           {post.body && <details className="reel-video-caption"><summary>About this video</summary><p>{post.body}</p></details>}
         </div>
         <div className="reel-video-actions" role="group" aria-label="Video actions">
-          {post.downloadAllowed !== false && <NativeDownloadButton iconOnly label="Download video" payload={{kind:'video',sourceId:id,title,url:source}}/>}
-          <button type="button" onClick={() => onSave(post, saved)} disabled={busy} aria-label={saved ? 'Unsave video' : 'Save video'} aria-pressed={saved}><Bookmark size={21} fill={saved ? 'currentColor' : 'none'} /></button>
-          <Link to={'/comments/' + encodeURIComponent(id)} state={{ post }} aria-label="View video comments"><MessageCircle size={21} /></Link>
-          <button type="button" onClick={fullscreen} aria-label="View fullscreen"><Maximize size={20} /></button>
+          <button type="button" onClick={toggleSound} disabled={!source || failed} aria-label={soundOff ? 'Turn sound on' : 'Mute video'}>{soundOff ? <VolumeX size={21} /> : <Volume2 size={21} />}</button>
+          <Link to={'/comments/' + encodeURIComponent(id)} state={{ post }} aria-label="View video comments"><MessageCircle size={23} /></Link>
+          <button type="button" onClick={() => onSave(post, saved)} disabled={busy} aria-label={saved ? 'Unsave video' : 'Save video'} aria-pressed={saved}><Bookmark size={22} fill={saved ? 'currentColor' : 'none'} /></button>
+          {source && post.downloadAllowed !== false && <NativeDownloadButton iconOnly label="Download video" payload={{kind:'video',sourceId:id,title,url:source}}/>}
+          <button type="button" onClick={fullscreen} disabled={!source || failed} aria-label="View fullscreen"><Maximize size={19} /></button>
           <button type="button" onClick={() => onSafety(post)} aria-label="Video safety options"><MoreHorizontal size={21} /></button>
         </div>
         <div className="reel-video-playback">

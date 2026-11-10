@@ -3,14 +3,11 @@ import { Layers, Newspaper, Play } from 'lucide-react';
 import { FEED_VIEWS, getFeedView } from '../lib/feedViews';
 import { MAIN_TOPIC_LABELS } from '../data/topicTaxonomy';
 import FeedTopicPicker from './FeedTopicPicker';
-import { postApi } from '../api/client';
-import { canWarmVideoFeed } from '../lib/videoFeed';
+import { VIDEO_FEED_INTENT_EVENT } from '../lib/videoFeed';
 import './FeedViewSwitch.css';
 
 const icons = { all: Layers, news: Newspaper, video: Play };
-const prepareVideos = () => {
-  if (canWarmVideoFeed(navigator.connection)) void postApi.getVideoFeed().catch(() => {});
-};
+const prepareVideos = () => window.dispatchEvent(new Event(VIDEO_FEED_INTENT_EVENT));
 
 // Mounted once above the route outlet so switching views never resets the pill.
 export default function FeedViewSwitch() {
@@ -22,7 +19,7 @@ export default function FeedViewSwitch() {
   const selected = String(new URLSearchParams(location.search).get('topic') || pathTopic || 'All').trim();
   const choices = [...new Set(['All', ...MAIN_TOPIC_LABELS, selected])];
   if (!active) return null;
-  return <header className="feed-view-switchbar">
+  return <header className={`feed-view-switchbar${active === 'video' ? ' is-video-view' : ''}`}>
     <Link className="feed-view-brand" to="/feed?topic=All" aria-label="Smarty — all posts">
       <span className="feed-view-brand-mark" aria-hidden="true">S</span><span>Smarty</span>
     </Link>

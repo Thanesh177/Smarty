@@ -6,6 +6,13 @@
   background: var(--ui-bg); border-bottom: 1px solid var(--ui-line);
   box-shadow: 0 8px 24px -20px #0009;
 }
+.app-shell > .feed-view-switchbar.is-video-view {
+  --ui-bg: #000; --ui-surface: #000; --ui-surface-hover: #17191e;
+  --ui-text: #f6f5f3; --ui-secondary: #e0e3e8; --ui-muted: #b7bfcb;
+  --ui-line: #fff2; --ui-line-strong: #fff4; --ui-accent: #96d7ff;
+  --ui-primary: #96d7ff; --ui-accent-soft: #171f29; --ui-accent-strong: #bfe8ff; --ui-accent-line: #96d7ff55;
+  box-shadow: none;
+}
 .feed-view-switch {
   display: grid; grid-template-columns: repeat(var(--feed-view-count, 3), minmax(0, 1fr));
   position: relative; isolation: isolate; width: 100%; margin: 0 auto;
