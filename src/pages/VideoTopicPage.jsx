@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Flag, LoaderCircle, Plus, RefreshCw, UserX, Video, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Flag, Plus, RefreshCw, UserX, Video, X } from 'lucide-react';
 import FeedHeader from '../components/FeedHeader';
 import ReelVideo from '../components/ReelVideo';
 import { useAuth } from '../contexts/AuthContext';
 import useFeed from '../hooks/useFeed';
 import useVideoChrome from '../hooks/useVideoChrome';
 import { chatApi, postApi } from '../api/client';
-import { canWarmVideoFeed, getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts, nextVideoPreload, shouldDiscoverMoreVideos, videoIndexAtScroll } from '../lib/videoFeed';
+import { getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts, nextVideoPreload, shouldDiscoverMoreVideos, videoFeedWarmPreload, videoIndexAtScroll } from '../lib/videoFeed';
 import './VideoTopicPage.css';
 
 const REASONS = ['Harassment or bullying', 'Hate speech', 'Sexual or explicit content', 'Violence or threats', 'Spam or scam', 'Other objectionable content'];
@@ -45,6 +45,7 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
   const indexRef = useRef(0);
   const heightRef = useRef(0);
   const pendingAdvance = useRef(null);
+  const warmLookahead = useRef(false);
   const mounted = useRef(true);
   const wasSelected = useRef(selected);
   const [index, setIndex] = useState(0);
@@ -60,6 +61,8 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
   const [safetyError, setSafetyError] = useState('');
   const activeIndex = Math.max(0, Math.min(index, videos.length - 1));
   const activeId = getVideoPostId(videos[activeIndex]);
+  const connection = navigator.connection;
+  const warmMode = !selected && visible ? videoFeedWarmPreload(connection) : 'none';
   const busy = loading || refreshing || loadingMore;
   const looking = busy || Boolean(nextCursor && !error);
   const activePlaying = Boolean(selected && activeId && playingId === activeId && visible && !safety);
@@ -127,13 +130,17 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
     } else if (!nextCursor && !busy) pendingAdvance.current = null;
   }, [videos.length, nextCursor, busy, selected, scrollToClip]);
 
-  // Each request scans only a bounded batch. Keep following valid cursors
-  // while someone is waiting at the tail, even after a text-only batch.
+  // Advance across empty cursor pages at the tail. While hidden, look ahead
+  // just once on a fast link if the opening page couldn't fill both players.
   useEffect(() => {
-    if (!shouldDiscoverMoreVideos({ selected, visible, hasCursor: Boolean(nextCursor), busy, error, activeIndex, count: videos.length })) return undefined;
-    const timer = window.setTimeout(() => { void loadMore(); }, 180);
+    const warmMore = warmMode === 'auto' && !warmLookahead.current && videos.length < 2 && nextCursor && !busy && !error;
+    if (!warmMore && !shouldDiscoverMoreVideos({ selected, visible, hasCursor: Boolean(nextCursor), busy, error, activeIndex, count: videos.length })) return undefined;
+    const timer = window.setTimeout(() => {
+      if (warmMore) warmLookahead.current = true;
+      void loadMore();
+    }, 180);
     return () => window.clearTimeout(timer);
-  }, [selected, visible, nextCursor, busy, error, activeIndex, videos.length, loadMore]);
+  }, [selected, visible, nextCursor, busy, error, activeIndex, videos.length, loadMore, warmMode]);
 
   const onScroll = event => {
     if (!selected || !heightRef.current) return;
@@ -180,7 +187,8 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
     finally { if (mounted.current) setSafetyBusy(false); }
   };
 
-  return <main ref={pageRef} hidden={!selected} className={'video-topic-page has-inner-feed' + (idle ? ' is-video-idle' : '')}
+  return <main ref={pageRef} data-prewarming={!selected ? '' : undefined} aria-hidden={!selected || undefined} inert={!selected ? '' : undefined}
+    className={'video-topic-page has-inner-feed' + (idle ? ' is-video-idle' : '')}
     onPointerMove={event => { if (!idle && event.pointerType === 'mouse') reveal(); }}
     onFocusCapture={event => { if (event.target.matches(':focus-visible')) reveal(); }}>
     <FeedHeader topic="Video" onBack={() => navigate('/topics')} onOpenSearch={onOpenSearch}
@@ -192,29 +200,29 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
     }}>
       {videos.map((post, clipIndex) => {
         const id = getVideoPostId(post);
-        const nearby = selected ? Math.abs(clipIndex - activeIndex) <= 1 : clipIndex === activeIndex;
+        const isCurrent = clipIndex === activeIndex;
+        const isNext = (selected || warmMode === 'auto') && visible && !safety && clipIndex === activeIndex + 1;
+        const nearby = isCurrent || isNext || (selected && clipIndex === activeIndex - 1);
         if (!nearby) return <div key={id} className="reel-video reel-video-slot" data-video-id={id} aria-hidden="true" />;
-        const isNext = selected && visible && !safety && clipIndex === activeIndex + 1;
-        const nextHint = isNext ? nextVideoPreload(post, navigator.connection) : 'none';
-        const warmHidden = !selected && visible && canWarmVideoFeed(navigator.connection);
-        const preload = warmHidden ? 'auto' : nextHint === 'auto' && bufferedId !== activeId ? 'metadata' : nextHint;
+        const nextHint = isNext ? nextVideoPreload(post, connection) : 'none';
+        const preload = isCurrent ? warmMode : nextHint === 'auto' && bufferedId !== activeId ? 'metadata' : nextHint;
         return <ReelVideo key={id} post={post}
           active={selected && id === activeId && visible && !safety}
           nearby preloadNext={preload}
-          chromeHidden={idle && clipIndex === activeIndex} onReveal={reveal} onPlayingChange={updatePlaying} onHeadroom={setBufferedId}
+          chromeHidden={idle && isCurrent} onReveal={reveal} onPlayingChange={updatePlaying} onHeadroom={isCurrent ? setBufferedId : undefined}
           onSkip={clipIndex < videos.length - 1 || nextCursor ? () => move(1) : undefined}
           muted={muted} onMute={setMuted} onSave={save} onSafety={openSafety} onReload={refreshPost} busy={saving === id}
           saved={Boolean(post.saved || post.isSaved || post.bookmarked || post.isBookmarked || post.savedByCurrentUser)} reducedMotion={reducedMotion} />;
       })}
-      {!videos.length && <div className="video-topic-state">
-        <Video size={28} /><h2>{looking ? 'Finding videos…' : error ? 'Videos couldn’t load.' : 'No videos to show yet'}</h2>
-        <p>{error ? 'Check your connection and try again.' : looking ? 'Looking for community videos across all topics.' : 'Upload a video about something you learned. Community videos from every topic appear here.'}</p>
-        {looking ? <LoaderCircle className="video-loading-icon" size={23} /> : error ? <button type="button" onClick={retryFeed}><RefreshCw size={16} />Try again</button> : <Link to="/create?topic=Video&type=video"><Plus size={17} />Upload a video</Link>}
-      </div>}
+      {!videos.length && (looking ? <div className="video-topic-preview" aria-busy="true"><span className="feed-view-route-label" role="status">Preparing the video feed</span></div>
+        : <div className="video-topic-state">
+          <Video size={28} /><h2>{error ? 'Videos couldn’t load.' : 'No videos to show yet'}</h2>
+          <p>{error ? 'Check your connection and try again.' : 'Upload a video about something you learned. Community videos from every topic appear here.'}</p>
+          {error ? <button type="button" onClick={retryFeed}><RefreshCw size={16} />Try again</button> : <Link to="/create?topic=Video&type=video"><Plus size={17} />Upload a video</Link>}
+        </div>)}
     </section>
-    {videos.length > 0 && activeIndex === videos.length - 1 && nextCursor && <div className="video-topic-tail" role="status">
-      {error ? <><span>More videos couldn’t load.</span><button type="button" onClick={retryFeed}>Retry</button></>
-        : <span>{loadingMore ? 'Finding more videos…' : 'More videos ahead'}</span>}
+    {videos.length > 0 && activeIndex >= videos.length - 2 && nextCursor && error && <div className="video-topic-tail" role="status">
+      <span>More videos couldn’t load.</span><button type="button" onClick={retryFeed}>Retry</button>
     </div>}
     {(videos.length > 1 || (videos.length > 0 && nextCursor)) && <nav className="video-topic-navigation" aria-label="Video navigation"><button type="button" disabled={activeIndex === 0} onClick={() => move(-1)} aria-label="Previous video"><ArrowUp size={19} /></button><button type="button" disabled={activeIndex === videos.length - 1 && !nextCursor} onClick={() => move(1)} aria-label="Next video"><ArrowDown size={19} /></button></nav>}
     {notice && <div className="video-topic-notice" role="status">{notice}</div>}

@@ -42,13 +42,12 @@
 .reel-video-stage .reel-video-playback button { min-width: 32px; min-height: 32px; border: 0; background: transparent; }
 .reel-video-playback input { min-width: 0; width: 100%; height: 32px; padding: 0; cursor: pointer; accent-color: var(--ui-accent); }
 .reel-video-playback > span { white-space: nowrap; font-size: .6875rem; color: #d1cfcc; font-variant-numeric: tabular-nums; }
-.reel-video-buffer { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 8px; z-index: 3; pointer-events: none; color: #e3e1de; font-size: .8125rem; }
-.reel-video-buffer > span { width: 14px; height: 14px; border: 1px solid #ffffff30; border-top-color: var(--ui-accent); border-radius: 50%; animation: videoLoading .8s linear infinite; }
 .reel-video-error { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 64px 24px 220px; text-align: center; background: #0009; }
 .reel-video-error p { margin: 0; color: #d1cfcc; font-size: .8125rem; line-height: 1.5; max-width: 260px; }
 .reel-video-stage .reel-video-error button { padding: 0 18px; border-radius: 24px; gap: 8px; }
 .reel-video-recovery { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
 .video-topic-state { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; width: min(100%, 500px); height: 100%; min-height: 260px; margin: auto; padding: 32px 24px 64px; text-align: center; }
+.video-topic-preview { width: 100%; height: 100%; background: radial-gradient(ellipse at 48% 42%, #171a21, #000 72%); }
 .video-topic-state h2 { margin: 0; color: #f6f5f3; font-size: clamp(1.375rem, 3vw, 2rem); letter-spacing: -.035em; line-height: 1.25; }
 .video-topic-state p { margin: 0; max-width: 320px; line-height: 1.7; color: #afadaa; font-size: .875rem; }
 .video-topic-state :is(a, button) { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 18px; gap: 8px; border-radius: 24px; border: 1px solid #434345; background: #161618; color: #e3e1de; font-size: .8125rem; text-decoration: none; cursor: pointer; }
@@ -74,8 +73,6 @@
 .video-safety-dialog footer { display: flex; gap: 8px; justify-content: end; margin-top: 24px; }
 .video-safety-dialog .video-safety-error { color: #f1b3af; }
 .video-topic-page :is(button, a, input):focus-visible, .video-safety-dialog :is(button, select):focus-visible { outline: 2px solid #e3e1de; outline-offset: 3px; }
-.video-loading-icon { animation: videoLoading 1s linear infinite; }
-@keyframes videoLoading { to { transform: rotate(360deg); } }
 @media (max-width: 700px) {
   .video-topic-tools { padding-inline: max(14px, env(safe-area-inset-left)) max(14px, env(safe-area-inset-right)); }
   .video-topic-tools a { padding: 0; }
@@ -95,8 +92,9 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .video-topic-scroll { scroll-behavior: auto; }
-  .video-loading-icon, .reel-video-buffer > span { animation: none; }
   .video-topic-page :is(.feed-inner-header, .video-topic-tools, .video-topic-navigation, .reel-video-bottom),
   .reel-video-stage::after { transition: none; }
 }
-.app-shell .content .video-topic-page[hidden] { display: none !important; }
+/* Keep the warm media elements laid out. Display:none can defer data/frame
+   loading until the exact moment the user opens the video tab. */
+.app-shell .content .video-topic-page[data-prewarming] { position: fixed; inset: 0; z-index: -1; opacity: 0; pointer-events: none; }

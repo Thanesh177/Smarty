@@ -3,7 +3,7 @@ import { Bookmark, Maximize, MessageCircle, MoreHorizontal, Pause, Play, Refresh
 import { Link } from 'react-router-dom';
 import PostAuthor from './PostAuthor';
 import { formatVideoTime, getPostVideoSources, getPostVideoUrl, getVideoPostId, getVideoPoster } from '../lib/videoFeed';
-import { canWarmSuccessor, hasBufferedOpening, startReelPlayback, VIDEO_LOADING_INDICATOR_MS } from '../lib/reelPlayback';
+import { canWarmSuccessor, hasBufferedOpening, needsPreloadKick, startReelPlayback } from '../lib/reelPlayback';
 import NativeDownloadButton from './NativeDownloadButton';
 
 export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'none', muted = false, onMute, onSave, onSafety, onReload, saved, busy, reducedMotion, chromeHidden, onReveal, onPlayingChange, onHeadroom, onSkip }) {
@@ -24,7 +24,6 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
   const [failureMessage, setFailureMessage] = useState('');
   const [soundOff, setSoundOff] = useState(muted);
   const [openingBuffered, setOpeningBuffered] = useState(false);
-  const [showLoading, setShowLoading] = useState(false);
   const [failedRendition, setFailedRendition] = useState('');
   const openingReported = useRef(false);
   const mounted = useRef(true);
@@ -70,18 +69,16 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
   }, [id]);
 
   useEffect(() => {
-    if (active && !source && reloadRef.current && !autoRenewed.current) {
+    if ((active || (nearby && preloadNext !== 'none')) && !source && reloadRef.current && !autoRenewed.current) {
       autoRenewed.current = true;
       void reloadSource();
     }
-  }, [active, reloadSource, source]);
+  }, [active, nearby, preloadNext, reloadSource, source]);
 
   useEffect(() => {
-    setShowLoading(false);
-    if (!buffering) return undefined;
-    const timer = window.setTimeout(() => setShowLoading(true), VIDEO_LOADING_INDICATOR_MS);
-    return () => window.clearTimeout(timer);
-  }, [buffering, source]);
+    const video = videoRef.current;
+    if (!active && nearby && source && preloadNext === 'auto' && video && needsPreloadKick(video)) video.load();
+  }, [active, nearby, preloadNext, retry, source]);
 
   const beginPlayback = useCallback((video, withMute, allowMutedFallback) => {
     const request = ++playRequest.current;
@@ -144,7 +141,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
       // release a genuinely detached player, not the next active rehearsal.
       queueMicrotask(() => { if (!video.isConnected) { video.removeAttribute('src'); video.load(); } });
     };
-  }, [nearby, retry]);
+  }, [nearby, retry, source]);
 
   const play = () => {
     onReveal?.();
@@ -173,12 +170,11 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
   };
 
   const trackBuffer = video => {
-    if (activeRef.current) {
-      if (!headroomReported.current && canWarmSuccessor(video)) {
-        headroomReported.current = true;
-        onHeadroom?.(id);
-      }
-    } else if (preloadNext === 'auto' && !openingReported.current && hasBufferedOpening(video)) {
+    if (onHeadroom && !headroomReported.current && canWarmSuccessor(video)) {
+      headroomReported.current = true;
+      onHeadroom(id);
+    }
+    if (!activeRef.current && preloadNext === 'auto' && !openingReported.current && hasBufferedOpening(video)) {
       openingReported.current = true;
       setOpeningBuffered(true);
     }
@@ -199,7 +195,7 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
           const video = event.currentTarget;
           setDuration(video.duration); setFailed(false);
           // Reveal a real first frame on mobile Safari without a poster.
-          if (reducedMotion) preparePreview(video);
+          if (reducedMotion || (!activeRef.current && preloadNext === 'auto' && video.readyState < 2)) preparePreview(video);
         }}
         onProgress={event => trackBuffer(event.currentTarget)}
         onLoadedData={event => { setReady(true); trackBuffer(event.currentTarget); }}
@@ -222,7 +218,6 @@ export default memo(function ReelVideo({ post, active, nearby, preloadNext = 'no
         aria-label={chromeHidden ? 'Show video controls' : playing ? 'Pause video' : 'Play video'} aria-pressed={chromeHidden ? undefined : playing}>
         {!playing && !waiting && ready && <span><Play size={28} fill="currentColor" /><small>{soundOff ? 'Play video' : 'Play with sound'}</small></span>}
       </button>}
-      {buffering && showLoading && <span className="reel-video-buffer" role="status"><span />{refreshing ? 'Reconnecting video…' : 'Buffering video…'}</span>}
       {failed && !refreshing && <div className="reel-video-error" role="status"><Play size={26} /><strong>This video couldn’t play.</strong>
         <p>{failureMessage || 'Check your connection and try again.'}</p>
         <div className="reel-video-recovery">

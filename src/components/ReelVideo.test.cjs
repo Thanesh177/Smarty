@@ -181,8 +181,8 @@ test('the first tap after controls hide brings them back without pausing', () =>
 test('a stalled active preview has a bounded wait instead of an endless blank player', () => {
   const player = renderPlayer();
   player.effects.forEach(effect => effect());
-  const [indicator, timeout] = [...player.timers.values()].sort((a, b) => a.delay - b.delay);
-  assert.equal(indicator.delay, 420);
+  assert.equal(player.timers.size, 1);
+  const [timeout] = player.timers.values();
   assert.equal(timeout.delay, 18000);
   assert(!player.tree.props.children.props.children.some(element => element?.props?.className === 'reel-video-buffer'));
   timeout.callback();
@@ -204,14 +204,16 @@ test('a broken optimized URL tries the original without refreshing the post firs
   assert.equal(renewals, 0);
 });
 
-test('a key-only clip resolves its URL when opened, not for every distant clip', async () => {
+test('a key-only clip resolves when active or explicitly warmed, not for every distant clip', async () => {
   const calls = [];
   const props = { post: { id: 'older', videoKey: 'uploads/older.mp4' }, onReload: async id => { calls.push(id); return { videoUrl: '/older.mp4' }; } };
   const preview = renderPlayer({ ...props, active: false });
   preview.effects.forEach(effect => effect());
+  const warm = renderPlayer({ ...props, active: false, preloadNext: 'auto' });
+  warm.effects.forEach(effect => effect());
   const active = renderPlayer(props);
   active.effects.forEach(effect => effect());
   await Promise.resolve();
-  assert.deepEqual(calls, ['older']);
+  assert.deepEqual(calls, ['older', 'older']);
   assert(!active.tree.props.children.props.children.some(element => element?.type === 'video'));
 });

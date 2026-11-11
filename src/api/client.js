@@ -2096,7 +2096,7 @@ async saveLearningQuiz(payload) {
   const { data } = await api.post('/quiz/save', payload);
   return parseApiBody(data);
 },
-async getFeed({ limit = 10, cursor = null, topic = null, timeout } = {}) {
+async getFeed({ limit = 10, cursor = null, topic = null, media = null, timeout } = {}) {
   if (USE_MOCK) {
     await delay(300);
     return {
@@ -2106,7 +2106,7 @@ async getFeed({ limit = 10, cursor = null, topic = null, timeout } = {}) {
     };
   }
 
-  const params = { limit, ...(cursor ? { cursor } : {}), ...(topic ? { topic } : {}) };
+  const params = { limit, ...(cursor ? { cursor } : {}), ...(topic ? { topic } : {}), ...(media ? { media } : {}) };
   return readCache.get(`feed:pending:${JSON.stringify(params)}`, async () => {
     const { data } = await api.get(endpoints.posts.feed, { params, ...(timeout ? { timeout } : {}) });
     const page = parseApiBody(data);
@@ -2115,6 +2115,7 @@ async getFeed({ limit = 10, cursor = null, topic = null, timeout } = {}) {
       items: normalizeList(page),
       nextCursor: page?.nextCursor || null,
       count: page?.count || 0,
+      ...(page?.mediaType === 'video' ? { mediaType: 'video' } : {}),
     };
   }, 0);
 },
@@ -2125,7 +2126,7 @@ async getVideoFeed({ cursor = null, fresh = false } = {}) {
     return discoverVideoPage(next => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error('Video discovery timed out.');
-      return postApi.getFeed({ limit: VIDEO_PAGE_SIZE, cursor: next, timeout: Math.min(6500, remaining) });
+      return postApi.getFeed({ limit: VIDEO_PAGE_SIZE, cursor: next, media: 'video', timeout: Math.min(6500, remaining) });
     }, cursor);
   }, 20000, { forceRefresh: fresh });
 },

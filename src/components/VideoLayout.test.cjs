@@ -25,3 +25,11 @@ test('the action rail and upload controls overlay each viewport-sized clip', () 
   assert.equal(value('.reel-video', 'scroll-snap-stop'), 'always');
   assert.equal(value('.video-topic-tail', 'position'), 'absolute');
 });
+
+test('prewarmed players are laid out but do not cover or intercept the current feed', () => {
+  const selector = '.app-shell .content .video-topic-page[data-prewarming]';
+  assert.equal(value(selector, 'display'), undefined);
+  assert.equal(value(selector, 'position'), 'fixed');
+  assert.equal(value(selector, 'opacity'), '0');
+  assert.equal(value(selector, 'pointer-events'), 'none');
+});

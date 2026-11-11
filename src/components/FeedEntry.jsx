@@ -58,10 +58,12 @@ export default function FeedEntry({ onOpenSearch }) {
       if (document.visibilityState !== 'hidden' && navigator.onLine !== false
         && canWarmVideoFeed(navigator.connection)) setKeepVideoFeed(true);
     };
-    const timer = window.setTimeout(warm, 600);
+    // Start as soon as the account is restored instead of waiting for a hover
+    // or delaying media until the first tab switch on a touch device.
+    warm();
     // Keep the actual first player, not a second speculative media request.
     window.addEventListener(VIDEO_FEED_INTENT_EVENT, warm);
-    return () => { window.clearTimeout(timer); window.removeEventListener(VIDEO_FEED_INTENT_EVENT, warm); };
+    return () => window.removeEventListener(VIDEO_FEED_INTENT_EVENT, warm);
   }, [authLoading, hasTopic, keepVideoFeed, selectedVideo]);
   if (!hasTopic) return <InitialVisit onOpenSearch={onOpenSearch} />;
   return <>

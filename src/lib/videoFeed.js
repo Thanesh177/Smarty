@@ -29,11 +29,11 @@ export function getVideoPosts(posts = []) {
   const seen = new Set();
   return (Array.isArray(posts) ? posts : []).filter(post => {
     const id = getVideoPostId(post);
-    const visibility = String(post?.visibility || 'public').toLowerCase();
-    const moderation = String(post?.moderationStatus || '').toLowerCase();
+    const visibility = String(post?.visibility || 'public').trim().toLowerCase();
+    const moderation = String(post?.moderationStatus || '').trim().toLowerCase();
     const hasVideoKey = typeof post?.videoKey === 'string' && Boolean(post.videoKey.trim());
     if (!id || seen.has(id) || (!getPostVideoUrl(post) && !hasVideoKey) || !['public', 'published', '', 'null'].includes(visibility)
-      || ['pending', 'removed'].includes(moderation) || post?.deleted === true || post?.isPrivate === true) return false;
+      || ['pending', 'pending_review', 'removed', 'rejected', 'hidden'].includes(moderation) || post?.deleted === true || post?.isPrivate === true) return false;
     seen.add(id);
     return true;
   });
@@ -53,15 +53,17 @@ export async function discoverVideoPage(fetchPage, startCursor = null) {
     const page = await fetchPage(cursor);
     const items = getVideoPosts(page.items);
     cursor = unseenVideoCursor(page.nextCursor, seen);
-    if (items.length || !cursor) return { items, nextCursor: cursor, count: items.length };
+    // The server already looked through a bounded set of indexed posts. Give
+    // its cursor to the viewer even when this part of the feed had no videos.
+    if (page.mediaType === 'video' || items.length || !cursor) return { items, nextCursor: cursor, count: items.length };
   }
   return { items: [], nextCursor: cursor, count: 0 };
 }
 
 export function nextVideoPreload(post, connection) {
-  if (!getPostVideoUrl(post) || connection?.saveData || /^(?:slow-)?2g$/.test(connection?.effectiveType || '')) return 'none';
-  if (connection?.effectiveType === '3g') return 'metadata';
-  return 'auto';
+  return getPostVideoUrl(post) || (typeof post?.videoKey === 'string' && post.videoKey.trim())
+    ? videoFeedWarmPreload(connection)
+    : 'none';
 }
 
 export function shouldDiscoverMoreVideos({ selected, visible, hasCursor, busy, error, activeIndex, count }) {
@@ -75,11 +77,15 @@ export function videoIndexAtScroll(scrollTop, height, count) {
   return Math.min(count - 1, Math.max(0, Math.round(scrollTop / height)));
 }
 
-// The opening clip is speculative; don't use mobile data on constrained links.
-export function canWarmVideoFeed(connection) {
-  return !connection?.saveData && !/^(?:slow-2g|2g|3g)$/.test(connection?.effectiveType || '')
-    && connection?.type !== 'cellular';
+// Do not speculatively fetch large MOVs on cellular or slow links. Metadata
+// on those connections can still resolve dimensions and open the media host.
+export function videoFeedWarmPreload(connection) {
+  if (connection?.saveData || /^(?:slow-)?2g$/.test(connection?.effectiveType || '')) return 'none';
+  if (connection?.type === 'cellular' || connection?.effectiveType === '3g') return 'metadata';
+  return 'auto';
 }
+
+export const canWarmVideoFeed = connection => videoFeedWarmPreload(connection) !== 'none';
 
 export const isVideoTopic = topic => ['video', 'videos', 'reels'].includes(String(topic || '').trim().toLowerCase());
 export function isVideoTopicPost(post) {

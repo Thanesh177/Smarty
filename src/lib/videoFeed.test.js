@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canWarmVideoFeed, discoverVideoPage, formatVideoTime, getPostVideoSources, getPostVideoUrl, getVideoCreatorId, getVideoCreatorName, getVideoPosts, isVideoTopic, isVideoTopicPost, nextVideoPreload, shouldDiscoverMoreVideos, validateVideoUpload, videoIndexAtScroll } from './videoFeed.js';
-import { hasBufferedOpening, canWarmSuccessor } from './reelPlayback.js';
+import { canWarmVideoFeed, discoverVideoPage, formatVideoTime, getPostVideoSources, getPostVideoUrl, getVideoCreatorId, getVideoCreatorName, getVideoPosts, isVideoTopic, isVideoTopicPost, nextVideoPreload, shouldDiscoverMoreVideos, validateVideoUpload, videoFeedWarmPreload, videoIndexAtScroll } from './videoFeed.js';
+import { hasBufferedOpening, canWarmSuccessor, needsPreloadKick } from './reelPlayback.js';
 import { MAIN_TOPICS, getMainTopicDefinition, postMatchesMainTopic } from '../data/topicTaxonomy.js';
 
 test('Video is available in navigation and resolves legacy video labels', () => {
@@ -57,6 +57,21 @@ test('discovery limits requests and terminates repeated cursor loops', async () 
   assert.equal((await discoverVideoPage(async () => ({ items: [], nextCursor: 'same' }), 'same')).nextCursor, null);
 });
 
+test('a video-only page is used directly and keeps its cursor through empty windows', async () => {
+  let pages = 0;
+  const fetchPage = async cursor => {
+    pages++;
+    return cursor
+      ? { mediaType: 'video', items: [{ id: 'clip', videoUrl: '/clip.mp4' }], nextCursor: null }
+      : { mediaType: 'video', items: [], nextCursor: 'older' };
+  };
+  const opening = await discoverVideoPage(fetchPage);
+  assert.deepEqual(opening, { items: [], nextCursor: 'older', count: 0 });
+  assert.equal(pages, 1);
+  assert.equal((await discoverVideoPage(fetchPage, opening.nextCursor)).items[0].id, 'clip');
+  assert.equal(pages, 2);
+});
+
 test('next clip warming starts with a small buffer and respects slow links and data saving', () => {
   const video = { paused: false, currentTime: 1, readyState: 4, duration: 20,
     buffered: { length: 1, start: () => 0, end: () => 5.5 } };
@@ -69,14 +84,24 @@ test('next clip warming starts with a small buffer and respects slow links and d
   assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }), 'auto');
   assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }, { effectiveType: '3g' }), 'metadata');
   assert.equal(nextVideoPreload({ videoUrl: '/unknown.mp4' }, { effectiveType: 'slow-2g' }), 'none');
+  assert.equal(nextVideoPreload({ videoKey: 'legacy.mov' }, { type: 'cellular' }), 'metadata');
+  assert.equal(nextVideoPreload({}, { type: 'wifi' }), 'none');
 });
 
-test('warming the unopened Videos tab skips data saver, known cellular and slow links', () => {
+test('the unopened Videos tab limits cellular warming to metadata and skips data saver and 2G', () => {
   assert.equal(canWarmVideoFeed({ effectiveType: '4g', type: 'wifi' }), true);
   assert.equal(canWarmVideoFeed(undefined), true);
-  for (const connection of [{ saveData: true }, { effectiveType: '4g', type: 'cellular' }, { effectiveType: '3g' }, { effectiveType: 'slow-2g' }]) {
+  assert.equal(videoFeedWarmPreload({ effectiveType: '4g', type: 'cellular' }), 'metadata');
+  assert.equal(videoFeedWarmPreload({ effectiveType: '3g' }), 'metadata');
+  for (const connection of [{ saveData: true }, { effectiveType: 'slow-2g' }]) {
     assert.equal(canWarmVideoFeed(connection), false);
   }
+});
+
+test('preload can restart an idle metadata player without resetting an active download or a decoded frame', () => {
+  assert(needsPreloadKick({ readyState: 1, networkState: 1 }));
+  assert(!needsPreloadKick({ readyState: 1, networkState: 2 }));
+  assert(!needsPreloadKick({ readyState: 2, networkState: 1 }));
 });
 
 test('a warm clip needs an actual contiguous opening, not just metadata or a later buffered range', () => {
