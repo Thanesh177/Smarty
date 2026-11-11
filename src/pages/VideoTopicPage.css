@@ -5,6 +5,12 @@
 }
 .video-topic-tools { position: absolute; z-index: 4; inset: calc(var(--feed-header-height, 60px) + 8px) 0 auto; display: flex; align-items: center; justify-content: flex-end; width: min(100%, 930px); margin-inline: auto; padding: 0 clamp(14px, 3vw, 26px); pointer-events: none; }
 .video-topic-tools a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 44px; min-height: 44px; padding: 0 12px; border: 1px solid #fff2; border-radius: 24px; color: #f6f5f3; font-size: .8125rem; text-decoration: none; background: #111216b8; pointer-events: auto; }
+.video-topic-tools { gap: 8px; }
+.video-topic-tools select { min-height: 44px; max-width: min(54vw, 13rem); padding: 0 10px; border: 1px solid #fff3; border-radius: 24px; color: #f6f5f3; color-scheme: dark; background: #111216e8; font-size: .8125rem; pointer-events: auto; }
+.video-topic-page.is-video-idle .video-topic-tools select { pointer-events: none; }
+.video-topic-page.is-video-idle .video-topic-tools:focus-within { opacity: 1; visibility: visible; }
+.video-topic-page.is-video-idle .video-topic-tools:focus-within :is(a, select) { pointer-events: auto; }
+.video-topic-tools :is(select, a):focus-visible { outline: 2px solid #9bdcff; outline-offset: 2px; }
 .app-shell .content .video-topic-scroll { flex: 1 1 0; min-height: 0; overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; overscroll-behavior-y: contain; overflow-anchor: none; scrollbar-width: none; position: relative; }
 .video-topic-scroll::-webkit-scrollbar { display: none; }
 .reel-video { box-sizing: border-box; width: 100%; height: 100%; min-height: 100%; display: flex; justify-content: center; padding: 0; scroll-snap-align: start; scroll-snap-stop: always; }

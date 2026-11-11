@@ -7,6 +7,7 @@ body .app-shell.has-overlay-navigation {
   --app-rail-scroll-room: calc(280px + env(safe-area-inset-bottom));
 }
 body .app-shell[inert] > .content { overflow: hidden !important; touch-action: none !important; }
+html, body, .app-shell > .content { overscroll-behavior-x: none; }
 /* The rail does not reserve a header row or a sidebar in the page layout. */
 body .app-shell > .content {
   width: 100% !important; max-width: none !important; min-width: 0; margin-inline: 0 !important;
@@ -67,6 +68,13 @@ body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) {
 body .app-shell .topbar.glass-topbar :is(.quick-icon-link, .hamburger-btn) > svg {
   width: 19px; height: 19px; flex: none; stroke-width: 1.7;
 }
+body .app-shell .topbar.glass-topbar .app-back-control {
+  flex-direction: column;
+  justify-content: center;
+  font-size: .62rem;
+  line-height: 1;
+}
+body .app-shell .topbar.glass-topbar .app-back-control > svg { width: 18px; height: 18px; }
 body .app-shell .topbar.glass-topbar .navbar-menu {
   flex: none; margin-top: 3px; padding-top: 4px; border-top: 1px solid #ffffff12;
 }

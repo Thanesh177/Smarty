@@ -27,8 +27,8 @@ export default function FeedViewSwipe() {
       reset();
       const touch = event.touches?.[0];
       if (!touch || event.touches.length !== 1 || !swipeTargetAllowed(event.target, content)) return;
-      // Preserve native/back-edge gestures; App also owns the left edge.
-      if (touch.clientX <= 45 || touch.clientX >= window.innerWidth - 24) return;
+      // Screen edges are inert; only intentional center swipes switch feed tabs.
+      if (touch.clientX <= 45 || touch.clientX >= window.innerWidth - 45) return;
       gesture = { x: touch.clientX, y: touch.clientY, started: performance.now(), dx: 0, dy: 0, locked: false,
         target: content?.querySelector(':scope > main, :scope > section') };
     };

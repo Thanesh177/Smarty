@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { newsApi } from '../api/client';
 import { createBriefingPreloader } from '../lib/newsBriefingCache';
 import { briefingPlace, readNewsPreference, newsPreferenceKey } from '../lib/newsPreferences';
+import { scheduleStartupIdle } from '../lib/startupIdle';
 
 const preloadBriefing = createBriefingPreloader({ load: options => newsApi.getLatestNews(options) });
 
@@ -15,12 +16,13 @@ export default function useBriefingPreload(account, authLoading, enabled) {
     };
     const preferenceChanged = event => { if (event.detail === account) warm(); };
     const storageChanged = event => { if (event.key === newsPreferenceKey(account)) warm(); };
-    warm();
+    const cancelWarm = scheduleStartupIdle(warm);
     window.addEventListener('online', warm);
     window.addEventListener('smarty-news-place-changed', preferenceChanged);
     window.addEventListener('storage', storageChanged);
     document.addEventListener('visibilitychange', warm);
     return () => {
+      cancelWarm();
       window.removeEventListener('online', warm);
       window.removeEventListener('smarty-news-place-changed', preferenceChanged);
       window.removeEventListener('storage', storageChanged);

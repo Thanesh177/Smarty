@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { responsiveImage } from '../lib/imageDelivery';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -52,7 +52,7 @@ import {
 } from '../data/topicTaxonomy';
 import './FeedPage.css';
 import './FeedPageFinal.css';
-import SmartyLanding from '../components/landing/SmartyLanding';
+const SmartyLanding = lazy(() => import('../components/landing/SmartyLanding'));
 
 const normalizeTopic = (value) =>
   String(value || '')

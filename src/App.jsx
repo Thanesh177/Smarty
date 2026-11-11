@@ -2,12 +2,8 @@ import { Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate } from
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import RouteSkeleton from './components/RouteSkeleton';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import SupportPage from './pages/SupportPage';
-import TermsPage from './pages/TermsPage';
-import PrivacyPage from './pages/PrivacyPage';
 import PublicDeletionPage from './pages/PublicDeletionPage';
 import { getDeletionPageKind } from './lib/deletionPages';
-import NotificationSettingsPage from './pages/NotificationSettingsPage';
 import NavbarMenu from './components/NavbarMenu';
 import { notificationApi, chatApi, getPendingRoomInvite } from './api/client';
 import {
@@ -17,7 +13,6 @@ import {
 import AuthRedirectHandler from './components/AuthRedirectHandler';
 import { clearAuthDestination, isAuthenticationPath, readAuthDestination } from './lib/authNavigation';
 import InstallPrompt from './components/InstallPrompt';
-import UniversalSearch from './components/UniversalSearch';
 import PageTransition from './components/PageTransition';
 import FeedViewSwitch from './components/FeedViewSwitch';
 import FeedViewSwipe from './components/FeedViewSwipe';
@@ -40,6 +35,7 @@ import {
   House,
   BookOpen,
   Search,
+  ChevronLeft,
 } from 'lucide-react';
 import SmartyBrand from './components/SmartyBrand';
 
@@ -61,33 +57,39 @@ import {
   syncNotificationPreferencesToWorker,
 } from './lib/notificationPreferences';
 
-import JoinRoomPage from './pages/JoinRoomPage';
+const SupportPage = lazy(() => import('./pages/SupportPage'));
+const TermsPage = lazy(() => import('./pages/TermsPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const NotificationSettingsPage = lazy(() => import('./pages/NotificationSettingsPage'));
+const UniversalSearch = lazy(() => import('./components/UniversalSearch'));
+const JoinRoomPage = lazy(() => import('./pages/JoinRoomPage'));
 const Booksinfo = lazy(() => import('./pages/Booksinfo'));
 const QuizPage = lazy(() => import('./pages/QuizPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ProgressPage = lazy(() => import('./pages/progress/ProgressPage'));
 const GameProfile = lazy(() => import('./pages/profile/GameProfile'));
-import CommentsPage from './pages/CommentsPage';
+const CommentsPage = lazy(() => import('./pages/CommentsPage'));
 const EditPostPage = lazy(() => import('./pages/EditPostPage'));
 import FeedEntry from './components/FeedEntry';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import ProfilePage from './pages/ProfilePage';
-import SavedPage from './pages/SavedPage';
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const SavedPage = lazy(() => import('./pages/SavedPage'));
 const CreatePostPage = lazy(() => import('./pages/CreatePostPage'));
-import TopicsPage from './pages/TopicsPage';
-import ConfirmPage from './pages/ConfirmPage';
+const VideoUploadPage = lazy(() => import('./pages/VideoUploadPage'));
+const TopicsPage = lazy(() => import('./pages/TopicsPage'));
+const ConfirmPage = lazy(() => import('./pages/ConfirmPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
-import CreatorProfilePage from './pages/CreatorProfilePage';
-import CreatorDashboardPage from './pages/CreatorDashboardPage';
-import FollowRequestsPage from './pages/FollowRequestsPage';
+const CreatorProfilePage = lazy(() => import('./pages/CreatorProfilePage'));
+const CreatorDashboardPage = lazy(() => import('./pages/CreatorDashboardPage'));
+const FollowRequestsPage = lazy(() => import('./pages/FollowRequestsPage'));
 const TopicRoomsPage = lazy(() => import('./pages/TopicRoomsPage'));
-import ReelDetailPage from './pages/ReelDetailPage';
+const ReelDetailPage = lazy(() => import('./pages/ReelDetailPage'));
 import NewsPage, { NewsStoryRoute as NewsStoryPage } from './components/NewsRoute';
 const ReadBookPage = lazy(() => import('./pages/ReadBookPage'));
 const BookReaderPage = lazy(() => import('./pages/BookReaderPage'));
 const PostAiPage = lazy(() => import('./pages/PostAiPage'));
-import LearningPage from './pages/LearningPage';
+const LearningPage = lazy(() => import('./pages/LearningPage'));
 const AdminModerationPage = lazy(() => import('./pages/AdminModerationPage'));
 import { isAdminUser } from './lib/adminAccess';
 import './styles/production-pages.css';
@@ -96,6 +98,7 @@ import './styles/ipad.css';
 import { useQueryClient } from '@tanstack/react-query';
 import { canStartPull, isVerticalPull, PULL_THRESHOLD, requestPageRefresh } from './lib/pullRefresh';
 import { hasSeenLanding } from './lib/initialVisit';
+import { scheduleStartupIdle } from './lib/startupIdle';
 import { finishWelcomeTour, isWelcomeTourEntry, queueWelcomeTour, readWelcomeTour, shouldOfferWelcomeTour } from './lib/welcomeTour';
 
 const WelcomeTour = lazy(() => import('./components/WelcomeTour'));
@@ -119,29 +122,6 @@ function PageLoader() {
           <strong>Loading</strong>
           <p>Getting things ready for you.</p>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function AppOpeningScreen({ leaving = false, continuation = false }) {
-  return (
-    <div
-      className={`app-opening-screen${leaving ? ' is-leaving' : ''}${continuation ? ' is-continuation' : ''}`}
-      role="status"
-      aria-live="polite"
-      aria-label="Opening Smarty"
-    >
-      <div className="app-opening-identity">
-        <span className="app-opening-mark" aria-hidden="true">S</span>
-        <div className="app-opening-wordmark">
-          <strong>Smarty</strong>
-          <span>A little curiosity, every day.</span>
-        </div>
-        <span className="app-opening-status">
-          Opening your space
-        </span>
-        <span className="app-opening-progress" aria-hidden="true"><span /></span>
       </div>
     </div>
   );
@@ -357,7 +337,6 @@ function Layout({ onOpenTour }) {
   const pullStartXRef = useRef(0);
   const [universalSearchOpen, setUniversalSearchOpen] = useState(false);
 
-  const touchStartXRef = useRef(null);
   const unreadRefreshInFlightRef = useRef(false);
   const unreadRefreshTimerRef = useRef(null);
   const seenBadgeMessageIdsRef = useRef(new Set());
@@ -373,7 +352,8 @@ function Layout({ onOpenTour }) {
 
   const isAllPosts = location.pathname === '/feed' && new URLSearchParams(location.search).get('topic') === 'All';
   const feedView = getFeedView(location);
-  const showNavigationRail = !isAuthPage && feedView !== 'video';
+  const isVideoUpload = location.pathname === '/create/video';
+  const showNavigationRail = !isAuthPage && feedView !== 'video' && !isVideoUpload;
   useBriefingPreload(String(user?.sub || user?.userId || user?.id || ''), authLoading, !isAuthPage);
 
   const openUniversalSearch = useCallback(() => {
@@ -388,6 +368,27 @@ function Layout({ onOpenTour }) {
   const closeUniversalSearch = useCallback(() => {
     setUniversalSearchOpen(false);
   }, []);
+
+  useEffect(() => {
+    if (isAuthPage) return undefined;
+    const handleSearchShortcut = (event) => {
+      if (event.defaultPrevented) return;
+      const target = event.target;
+      const typing = target instanceof HTMLElement && (
+        target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
+      );
+      if (universalSearchOpen && event.key === 'Escape') {
+        event.preventDefault();
+        closeUniversalSearch();
+      } else if (((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') ||
+        (!universalSearchOpen && event.key === '/' && !typing && !event.metaKey && !event.ctrlKey && !event.altKey)) {
+        event.preventDefault();
+        openUniversalSearch();
+      }
+    };
+    window.addEventListener('keydown', handleSearchShortcut);
+    return () => window.removeEventListener('keydown', handleSearchShortcut);
+  }, [isAuthPage, universalSearchOpen, closeUniversalSearch, openUniversalSearch]);
 
 useEffect(() => {
   if (!user) return;
@@ -434,9 +435,11 @@ useEffect(() => {
 }, [user, location.pathname, navigate]);
 
 
+  const canGoBackInApp = Number(window.history.state?.idx) > 0;
   const goBack = useCallback(() => {
-    window.history.back();
-  }, []);
+    if (canGoBackInApp) navigate(-1);
+    else navigate('/feed?topic=All', { replace: true });
+  }, [canGoBackInApp, navigate]);
 
   const isPageAtTop = useCallback(() => {
     const scrollingElement = document.scrollingElement || document.documentElement;
@@ -547,38 +550,6 @@ useEffect(() => {
 
     resetGlobalPullRefresh();
   }, [globalRefreshing, isPageAtTop, resetGlobalPullRefresh, runGlobalPullRefresh]);
-
-  // Only handle swipe navigation, do not clear session or logout on back/navigation events
-  useEffect(() => {
-    const isMobileView = () => window.matchMedia('(max-width: 768px)').matches;
-
-    const handleTouchStart = (event) => {
-      if (!isMobileView()) return;
-      touchStartXRef.current = event.touches[0]?.clientX ?? null;
-    };
-
-    const handleTouchEnd = (event) => {
-      if (!isMobileView() || touchStartXRef.current === null) return;
-
-      const touchEndX = event.changedTouches[0]?.clientX ?? touchStartXRef.current;
-      const swipeDistance = touchEndX - touchStartXRef.current;
-      const startedNearLeftEdge = touchStartXRef.current <= 45;
-
-      touchStartXRef.current = null;
-
-      if (startedNearLeftEdge && swipeDistance > 80 && window.history.length > 1) {
-        goBack();
-      }
-    };
-
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd, { passive: true });
-
-    return () => {
-      window.removeEventListener('touchstart', handleTouchStart);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [goBack]);
 
   useEffect(() => {
     const contentElement = document.querySelector('.content');
@@ -949,12 +920,13 @@ useEffect(() => {
 
   }
 
-  setupMessaging();
+  const cancelSetup = scheduleStartupIdle(setupMessaging);
 
   return () => {
 
     cancelled = true;
 
+    cancelSetup();
     unsubscribe();
 
   };
@@ -1026,12 +998,11 @@ useEffect(() => {
       <PageTransition />
       <EngagementNudge user={user} />
 
-      {!isAuthPage && <UniversalSearch
-        open={universalSearchOpen}
-        onOpen={openUniversalSearch}
-        onClose={closeUniversalSearch}
-        user={user}
-      />}
+      {!isAuthPage && universalSearchOpen && (
+        <RouteErrorBoundary key="search" resetKey={location.key}>
+          <Suspense fallback={null}><UniversalSearch open onClose={closeUniversalSearch} user={user} /></Suspense>
+        </RouteErrorBoundary>
+      )}
 
       <ReminderPopup
         title={popupNotification?.title || 'Smarty'}
@@ -1060,8 +1031,12 @@ useEffect(() => {
             </NavLink>
 
             <nav className="brand-actions" aria-label="Quick navigation">
-
-
+              {!isAllPosts && (canGoBackInApp || location.pathname !== '/feed') && (
+                <button type="button" className="quick-icon-link app-back-control" onClick={goBack}
+                  title={canGoBackInApp ? 'Back' : 'Back to feed'} aria-label={canGoBackInApp ? 'Back' : 'Back to feed'}>
+                  <ChevronLeft aria-hidden="true" /><span className="app-back-label" aria-hidden="true">Back</span>
+                </button>
+              )}
 
               <Link
                 to="/feed?topic=All"
@@ -1272,6 +1247,7 @@ useEffect(() => {
                     </ProtectedRoute>
                   }
                 />
+                <Route path="/create/video" element={<ProtectedRoute><VideoUploadPage /></ProtectedRoute>} />
 
                 <Route path="/post-ai/:postId" element={<PostAiPage />} />
 
@@ -1363,26 +1339,6 @@ useEffect(() => {
 function ReminderPopupStyles() {
   return (
     <style>{`
-      .app-opening-screen {
-        position: fixed; inset: 0; z-index: 40000;
-        display: grid; place-items: center; overflow: hidden;
-        background: var(--ui-bg, #06070a); color: var(--ui-text, #f6f5f3);
-        transition: opacity 220ms ease, visibility 220ms;
-      }
-      .app-opening-screen.is-leaving { opacity: 0; visibility: hidden; pointer-events: none; }
-      .app-opening-identity { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; text-align: center; }
-      .app-opening-mark {
-        display: grid; place-items: center; width: 56px; height: 56px;
-        margin-bottom: 16px; border-radius: 14px; background: var(--ui-brand-bg) var(--ui-brand-finish);
-        color: var(--ui-brand-ink); font-size: 27px; font-weight: 650; letter-spacing: -.06em;
-      }
-      .app-opening-wordmark { display: contents; }
-      .app-opening-wordmark strong { font-size: 25px; font-weight: 550; line-height: 1.2; letter-spacing: -.055em; }
-      .app-opening-wordmark > span { font-size: 13px; line-height: 1.6; color: var(--ui-muted); }
-      .app-opening-status { margin-top: 24px; color: var(--ui-muted); font-size: 12px; line-height: 1.6; }
-      .app-opening-progress { position: relative; width: 96px; height: 2px; margin-top: 9px; overflow: hidden; border-radius: 2px; background: var(--ui-accent-soft); }
-      .app-opening-progress > span { position: absolute; inset: 0; background: var(--ui-primary); transform-origin: left; animation: smartyReadingLine 1.8s ease-in-out infinite; }
-      @keyframes smartyReadingLine { from { transform: translateX(-100%) scaleX(.45); } to { transform: translateX(100%) scaleX(.45); } }
       .app-page-loader { min-height: 60dvh; display: grid; place-items: center; padding: 24px; }
       .app-page-loader-card { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; max-width: 360px; padding: 22px; background: transparent; border: 0; box-shadow: none; }
       .app-page-loader-orb { width: 20px; height: 20px; flex: 0 0 20px; border: 2px solid var(--ui-line-strong); border-top-color: var(--ui-accent); border-radius: 50%; animation: smartyLoaderTurn 1s linear infinite; }
@@ -1390,8 +1346,7 @@ function ReminderPopupStyles() {
       .app-page-loader-card p { margin: 4px 0 0; color: var(--ui-muted); font-size: .8125rem; line-height: 1.65; }
       @keyframes smartyLoaderTurn { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) {
-        .app-opening-screen { transition: none; }
-        .app-opening-progress > span, .app-page-loader-orb { animation: none; }
+        .app-page-loader-orb { animation: none; }
       }
       .global-pull-refresh {
         position: fixed;
@@ -1839,12 +1794,6 @@ body,
 function AppExperience() {
   const { loading } = useAuth();
   const location = useLocation();
-  const continuesBootScreenRef = useRef(Boolean(window.__SMARTY_BOOT_STARTED__));
-  const openedAtRef = useRef(
-    Number(window.__SMARTY_BOOT_STARTED__) || Date.now()
-  );
-  const [splashMounted, setSplashMounted] = useState(true);
-  const [splashLeaving, setSplashLeaving] = useState(false);
   const [tourPending, setTourPending] = useState(() => shouldOfferWelcomeTour(hasSeenLanding()));
   const [replayTour, setReplayTour] = useState(false);
   const tourSupported = typeof window.HTMLDialogElement?.prototype.showModal === 'function';
@@ -1858,38 +1807,14 @@ function AppExperience() {
     setReplayTour(false);
   }, []);
   const showReplay = replayTour && location.pathname === '/settings';
-  const showTour = tourSupported && !loading && !splashMounted
+  const showTour = tourSupported && !loading
     && (showReplay || (tourPending && readWelcomeTour() !== 'done' && isWelcomeTourEntry(location)));
-
-  useEffect(() => {
-    if (loading) return undefined;
-
-    const minimumDisplayTime = 180;
-    const remainingTime = Math.max(0, minimumDisplayTime - (Date.now() - openedAtRef.current));
-    let removeTimer;
-
-    const leaveTimer = window.setTimeout(() => {
-      setSplashLeaving(true);
-      removeTimer = window.setTimeout(() => setSplashMounted(false), 230);
-    }, remainingTime);
-
-    return () => {
-      window.clearTimeout(leaveTimer);
-      if (removeTimer) window.clearTimeout(removeTimer);
-    };
-  }, [loading]);
 
   return (
     <>
       <ReminderPopupStyles />
       <Layout onOpenTour={tourSupported ? openTour : undefined} />
       <ConnectionStatus />
-      {splashMounted && (
-        <AppOpeningScreen
-          leaving={splashLeaving}
-          continuation={continuesBootScreenRef.current}
-        />
-      )}
       {showTour && <Suspense fallback={null}><WelcomeTour onClose={closeTour} replay={showReplay} /></Suspense>}
     </>
   );

@@ -1,10 +1,3 @@
-import { initializeApp } from 'firebase/app';
-import {
-  getMessaging,
-  getToken,
-  isSupported,
-  onMessage,
-} from 'firebase/messaging';
 import {
   getNotificationBody,
   getNotificationDecision,
@@ -22,9 +15,7 @@ const firebaseConfig = {
   measurementId: 'G-11J4F0N4V1',
 };
 
-const firebaseApp = initializeApp(firebaseConfig);
-
-let messagingInstance = null;
+let messagingSetup;
 
 function isSmartyIOSApp() {
   return Boolean(
@@ -43,42 +34,22 @@ function dispatchSmartyForegroundNotification(detail) {
 }
 
 async function getFirebaseMessaging() {
-  if (messagingInstance) {
-    return messagingInstance;
-  }
-
   // Firebase Web Messaging must not initialize inside the iOS WKWebView.
   // Native iOS push notifications should be handled by APNs/FCM in Swift.
-  if (isSmartyIOSApp()) {
-    console.info(
-      '[Firebase Messaging] Skipped inside the Smarty iOS app.'
-    );
-
-    return null;
+  if (isSmartyIOSApp() || !('serviceWorker' in navigator) || !('Notification' in window)) return null;
+  if (!messagingSetup) {
+    messagingSetup = Promise.all([import('firebase/app'), import('firebase/messaging')])
+      .then(async ([app, sdk]) => {
+        if (!await sdk.isSupported()) return null;
+        return { instance: sdk.getMessaging(app.initializeApp(firebaseConfig)), sdk };
+      })
+      .catch(error => {
+        messagingSetup = undefined;
+        console.warn('[Firebase Messaging] Setup failed:', error);
+        return null;
+      });
   }
-
-  try {
-    const supported = await isSupported();
-
-    if (!supported) {
-      console.info(
-        '[Firebase Messaging] This browser does not support web push.'
-      );
-
-      return null;
-    }
-
-    messagingInstance = getMessaging(firebaseApp);
-
-    return messagingInstance;
-  } catch (error) {
-    console.warn(
-      '[Firebase Messaging] Support check failed:',
-      error
-    );
-
-    return null;
-  }
+  return messagingSetup;
 }
 
 export async function requestNotificationToken() {
@@ -133,7 +104,7 @@ export async function requestNotificationToken() {
       loadActiveNotificationPreferences()
     );
 
-    const token = await getToken(messaging, {
+    const token = await messaging.sdk.getToken(messaging.instance, {
       vapidKey:
         'BKyUg8B4BnFUUE4zMQMJko8Czw71f-TJw6HakyNRp9nZGam42tR7R6N7vwC4SZY3Avs2-PAM117y_2RZ9ZvPp78',
       serviceWorkerRegistration: registration,
@@ -203,7 +174,7 @@ export async function listenForForegroundMessages() {
     return () => {};
   }
 
-  return onMessage(messaging, async (payload) => {
+  return messaging.sdk.onMessage(messaging.instance, async (payload) => {
     console.log('Foreground push received:', payload);
 
     const title =

@@ -36,3 +36,21 @@ test('unavailable device storage cannot start an empty authentication SDK or cle
   assert.deepEqual(app.events,['error']);
   assert.match(app.window.__SMARTY_BOOT_ERROR__,/session has not been removed/);
 });
+
+test('build hints fetch the modern shell, not a legacy bundle or an optional page', async () => {
+  const { default: preload } = await import('../scripts/startup-preload.mjs');
+  const asset = (fileName, facadeModuleId, imports = [], css = []) =>
+    ({ type: 'chunk', fileName, facadeModuleId, imports, viteMetadata: { importedCss: new Set(css) } });
+  const legacy = asset('assets/main-legacy-test.js', '/site/src/main.jsx');
+  const vendor = asset('assets/vendor.js', null, [], ['assets/common.css']);
+  const app = asset('assets/main.js', '/site/src/main.jsx', [vendor.fileName], ['assets/app.css']);
+  const chunk = { fileName: 'assets/index.js', dynamicImports: [app.fileName] };
+  const bundle = { [legacy.fileName]: legacy, [vendor.fileName]: vendor, [app.fileName]: app };
+  const tags = preload().transformIndexHtml.handler('', { bundle, chunk });
+  assert.deepEqual(tags.map(tag => tag.attrs.href), ['/assets/main.js', '/assets/common.css', '/assets/app.css']);
+  assert.equal(tags[0].attrs.rel, 'modulepreload');
+  assert(tags.slice(1).every(tag => tag.attrs.as === 'style' && tag.attrs.rel === 'preload'));
+  assert.deepEqual(preload().transformIndexHtml.handler('', {
+    bundle, chunk: { fileName: 'assets/index-legacy-test.js', dynamicImports: [legacy.fileName] },
+  }), []);
+});

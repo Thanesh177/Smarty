@@ -101,7 +101,7 @@ const NewsCard = memo(function NewsCard({ article, index, saved, opened, context
         </div>
 
         <h3><button type="button" className="news-card-title" onClick={() => onOpen(article)}>{article.title || 'Untitled news'}</button></h3>
-        {(preview || context) && <p>{preview || context.summary}</p>}
+        {(preview || context) && <p className="news-report-description">{preview || context.summary}</p>}
         {!preview && context && <small className="news-card-context-label">Briefing context · AI-assisted</small>}
         <span className="news-card-source">{article.source || 'News source'}</span>
         <div className="news-card-story-tools"><NewsStoryLink story={article} /><NewsFollowButton story={article}/></div>

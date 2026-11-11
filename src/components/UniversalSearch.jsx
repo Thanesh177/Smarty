@@ -445,7 +445,7 @@ const EMPTY_RESULTS = {
   actions: [],
 };
 
-export default function UniversalSearch({ open, onOpen, onClose, user }) {
+export default function UniversalSearch({ open, onClose, user }) {
   const navigate = useNavigate();
   const inputRef = useRef(null);
   const panelRef = useRef(null);
@@ -749,36 +749,6 @@ export default function UniversalSearch({ open, onOpen, onClose, user }) {
       }
     };
   }, [open, query, runSearch]);
-
-  useEffect(() => {
-    const handleGlobalShortcut = (event) => {
-      const target = event.target;
-      const isTyping = target instanceof HTMLElement && (
-        target.isContentEditable ||
-        ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)
-      );
-
-      if (open && event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        onOpen();
-        return;
-      }
-
-      if (!open && event.key === '/' && !isTyping && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault();
-        onOpen();
-      }
-    };
-
-    window.addEventListener('keydown', handleGlobalShortcut);
-    return () => window.removeEventListener('keydown', handleGlobalShortcut);
-  }, [onClose, onOpen, open]);
 
   useEffect(() => {
     if (!open) return undefined;

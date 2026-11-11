@@ -18,6 +18,7 @@ export default class RouteErrorBoundary extends Component {
   }
 
   render() {
+    if (this.state.hasError && this.props.silent) return null;
     if (this.state.hasError) return <section className="app-recovery-state" role="alert">
       <span className="app-recovery-kicker">A small interruption</span>
       <h1>This page couldn’t open.</h1>

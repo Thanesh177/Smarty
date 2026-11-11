@@ -20,8 +20,18 @@ for (const key of entry.dynamicImports || []) include(key);
 const files = [...new Set([...loaded].map(key => manifest[key].file))];
 const gzipBytes = files.reduce((sum, file) => sum + gzipSync(fs.readFileSync(path.join(root, file))).length, 0);
 console.log(`Initial modern JavaScript: ${(gzipBytes / 1024).toFixed(1)} KiB gzip (${files.length} files)`);
-const limit = 350 * 1024;
-if (gzipBytes > limit) throw new Error('Startup JavaScript exceeds the 350 KiB gzip budget');
+const limit = 260 * 1024;
+if (gzipBytes > limit) throw new Error('Startup JavaScript exceeds the 260 KiB gzip budget');
+const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+for (const key of entry.dynamicImports || []) {
+  if (!html.includes(`rel="modulepreload" href="/${manifest[key].file}"`)) {
+    throw new Error('Startup shell is no longer preloaded alongside session storage restoration');
+  }
+}
+for (const screen of ['LoginPage', 'ProfilePage', 'SmartyLanding', 'UniversalSearch', 'VideoTopicPage']) {
+  const key = Object.keys(manifest).find(key => key.endsWith(`/${screen}.jsx`));
+  if (!key || !manifest[key].isDynamicEntry || loaded.has(key)) throw new Error(`${screen} is no longer deferred`);
+}
 for (const screen of ['QuizPage', 'ChatPage', 'TopicRoomsPage', 'PostAiPage']) {
   const key = Object.keys(manifest).find(key => key.endsWith(`/${screen}.jsx`));
   if (!key || !manifest[key].isDynamicEntry || loaded.has(key)) throw new Error(`${screen} is no longer deferred`);

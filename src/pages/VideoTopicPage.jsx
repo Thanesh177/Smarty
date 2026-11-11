@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, Flag, Plus, RefreshCw, UserX, Video, X } from 'lucide-react';
 import FeedHeader from '../components/FeedHeader';
 import ReelVideo from '../components/ReelVideo';
@@ -8,6 +8,7 @@ import useFeed from '../hooks/useFeed';
 import useVideoChrome from '../hooks/useVideoChrome';
 import { chatApi, postApi } from '../api/client';
 import { getVideoCreatorId, getVideoCreatorName, getVideoPostId, getVideoPosts, nextVideoPreload, shouldDiscoverMoreVideos, videoFeedWarmPreload, videoIndexAtScroll } from '../lib/videoFeed';
+import { VIDEO_TOPICS, getVideoTopic, matchesVideoTopic, videoFeedPath, videoUploadPath } from '../data/videoTopics';
 import './VideoTopicPage.css';
 
 const REASONS = ['Harassment or bullying', 'Hate speech', 'Sexual or explicit content', 'Violence or threats', 'Spam or scam', 'Other objectionable content'];
@@ -38,8 +39,10 @@ export default function VideoTopicPage(props) {
 
 function VideoFeed({ onOpenSearch, account, user, selected = true }) {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const category = selected ? getVideoTopic(params.get('category'))?.id || '' : '';
   const { posts, loading, refreshing, loadingMore, error, nextCursor, loadMore, refreshFeed, refreshPost, savePost, hidePost, blockCreator } = useFeed({ videoOnly: true });
-  const videos = useMemo(() => getVideoPosts(posts), [posts]);
+  const videos = useMemo(() => getVideoPosts(posts).filter(post => matchesVideoTopic(post, category)), [posts, category]);
   const rootRef = useRef(null);
   const pageRef = useRef(null);
   const indexRef = useRef(0);
@@ -96,6 +99,15 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
     if (!root || !heightRef.current) return;
     root.scrollTo({ top: heightRef.current * clip, behavior: smooth && !reducedMotion ? 'smooth' : 'instant' });
   }, [reducedMotion]);
+  const lastCategory = useRef(category);
+  useLayoutEffect(() => {
+    if (lastCategory.current === category) return;
+    lastCategory.current = category;
+    pendingAdvance.current = null;
+    indexRef.current = 0;
+    setIndex(0);
+    if (selected) scrollToClip(0, false);
+  }, [category, selected, scrollToClip]);
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!selected || !root) return undefined;
@@ -193,7 +205,13 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
     onFocusCapture={event => { if (event.target.matches(':focus-visible')) reveal(); }}>
     <FeedHeader topic="Video" onBack={() => navigate('/topics')} onOpenSearch={onOpenSearch}
       onSelect={topic => navigate('/feed?topic=' + encodeURIComponent(topic))} status={loading ? 'Loading videos' : `${videos.length} videos loaded`} />
-    <div className="video-topic-tools"><Link to="/create?topic=Video&type=video" aria-label="Upload video"><Plus size={20} /><span>Upload</span></Link></div>
+    <div className="video-topic-tools" onPointerDown={reveal}>
+      <select aria-label="Video topic" value={category} onChange={event => navigate(videoFeedPath(event.target.value), { replace: true, preventScrollReset: true })}>
+        <option value="">All topics</option>
+        {VIDEO_TOPICS.map(topic => <option value={topic.id} key={topic.id}>{topic.label}</option>)}
+      </select>
+      <Link to={videoUploadPath(category)} aria-label="Upload video"><Plus size={20} /><span>Upload</span></Link>
+    </div>
     <section ref={rootRef} className="video-topic-scroll" aria-label="Video feed" tabIndex={0} onScroll={onScroll} onKeyDown={event => {
       if (event.target !== event.currentTarget || !['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp'].includes(event.key)) return;
       event.preventDefault(); move(['ArrowDown', 'PageDown'].includes(event.key) ? 1 : -1);
@@ -216,9 +234,11 @@ function VideoFeed({ onOpenSearch, account, user, selected = true }) {
       })}
       {!videos.length && (looking ? <div className="video-topic-preview" aria-busy="true"><span className="feed-view-route-label" role="status">Preparing the video feed</span></div>
         : <div className="video-topic-state">
-          <Video size={28} /><h2>{error ? 'Videos couldn’t load.' : 'No videos to show yet'}</h2>
-          <p>{error ? 'Check your connection and try again.' : 'Upload a video about something you learned. Community videos from every topic appear here.'}</p>
-          {error ? <button type="button" onClick={retryFeed}><RefreshCw size={16} />Try again</button> : <Link to="/create?topic=Video&type=video"><Plus size={17} />Upload a video</Link>}
+          <Video size={28} /><h2>{error ? 'Videos couldn’t load.' : category ? 'No videos in this topic yet' : 'No videos to show yet'}</h2>
+          <p>{error ? 'Check your connection and try again.' : category ? 'Choose another topic or share the first video here.' : 'Upload a video about something you learned. Community videos from every topic appear here.'}</p>
+          {error ? <button type="button" onClick={retryFeed}><RefreshCw size={16} />Try again</button> : category
+            ? <button type="button" onClick={() => navigate(videoFeedPath(), { replace: true })}>Show all videos</button>
+            : <Link to={videoUploadPath()}><Plus size={17} />Upload a video</Link>}
         </div>)}
     </section>
     {videos.length > 0 && activeIndex >= videos.length - 2 && nextCursor && error && <div className="video-topic-tail" role="status">

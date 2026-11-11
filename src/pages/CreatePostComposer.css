@@ -119,3 +119,5 @@
   .composer-success { padding: 12px 0; margin-block: 20px; }
 }
 @media (prefers-reduced-motion: reduce) { .post-composer *, .post-composer *::before { animation: none !important; transition: none !important; } }
+.composer-mode-links { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px 16px; }
+.composer-mode-links > a { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; color: var(--ui-accent-strong); font-size: .875rem; text-decoration: underline; text-underline-offset: 4px; }

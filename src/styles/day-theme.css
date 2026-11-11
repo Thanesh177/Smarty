@@ -228,7 +228,6 @@
 :root[data-app-theme='day'] body .app-shell .content .login-divider::after { background: var(--ui-line); }
 :root[data-app-theme='day'] body .app-shell .content .post-content a:not([class]) { color: var(--ui-accent); }
 :root[data-app-theme='day'] body .library-skeletons :is(span, i) { background: var(--ui-surface-raised); }
-:root[data-app-theme='day'] .app-opening-screen :is(p, small, .app-opening-caption) { color: var(--ui-muted) !important; }
 :root[data-app-theme='day'] .app-opening-wordmark strong { color: var(--ui-text) !important; }
 :root[data-app-theme='day'] .app-opening-wordmark span,
 :root[data-app-theme='day'] .app-opening-status { color: var(--ui-muted) !important; }

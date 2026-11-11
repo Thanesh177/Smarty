@@ -1,4 +1,5 @@
 import { getPostAuthorId, getPostAuthorUsername } from './postAuthor.js';
+import { getPublishedVideoTopic } from '../data/videoTopics.js';
 
 export const getVideoPostId = post => String(post?.reelId || post?.postId || post?.id || '').trim();
 
@@ -90,7 +91,8 @@ export const canWarmVideoFeed = connection => videoFeedWarmPreload(connection) !
 export const isVideoTopic = topic => ['video', 'videos', 'reels'].includes(String(topic || '').trim().toLowerCase());
 export function isVideoTopicPost(post) {
   return [post?.topic, post?.topics, post?.mainTopic, post?.topicDomain, post?.category, post?.categories]
-    .flat().some(topic => typeof topic === 'string' && topic.split(',').some(isVideoTopic));
+    .flat().some(topic => typeof topic === 'string' && topic.split(',')
+      .some(label => isVideoTopic(label) || getPublishedVideoTopic(label)));
 }
 
 export function validateVideoUpload(file) {

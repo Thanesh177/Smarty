@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
@@ -75,6 +75,21 @@ if (!rootElement) {
   throw new Error('Root element not found');
 }
 
+function AppReadySignal() {
+  useEffect(() => {
+    // Commit the React shell before notifying the native host. Do not wait for
+    // the selected page's data, media or secondary features to finish.
+    const frame = requestAnimationFrame(() => {
+      if (window.__SMARTY_APP_MOUNTED__) return;
+      window.__SMARTY_APP_MOUNTED__ = true;
+      window.dispatchEvent(new Event('smarty:mounted'));
+      window.webkit?.messageHandlers?.smartyNative?.postMessage({ action: 'appReady' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return null;
+}
+
 function mountApp() {
   // bootstrap.js restores device storage before importing this module tree,
   // including the authentication SDK (not merely before React rendering).
@@ -86,17 +101,11 @@ function mountApp() {
           <AppearanceProvider>
             <App />
           </AppearanceProvider>
+          <AppReadySignal />
         </BrowserRouter>
       </QueryClientProvider>
     </React.StrictMode>
   );
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      window.__SMARTY_APP_MOUNTED__ = true;
-      window.dispatchEvent(new Event('smarty:mounted'));
-      window.webkit?.messageHandlers?.smartyNative?.postMessage({ action: 'appReady' });
-    });
-  });
 }
 
 mountApp();
