@@ -142,6 +142,23 @@ class LearningCurriculumTests(unittest.TestCase):
         recovered = self.publish("draft-failure")["post"]
         self.assertEqual(recovered["learningOrder"], 1)
 
+    def test_unfit_project_retries_the_same_lesson_without_the_build(self):
+        self.generate.side_effect = [None, self.generate.return_value]
+        with (
+            mock.patch.object(LAMBDA, "MAX_GENERATION_ATTEMPTS", 2),
+            mock.patch.object(LAMBDA, "reserve_generation_topic", return_value="Physics"),
+            mock.patch.object(LAMBDA, "choose_content_angle", return_value=LAMBDA.resolve_content_angle("make_something")),
+        ):
+            post = self.publish("project-did-not-fit")["post"]
+        first, second = self.generate.call_args_list
+        self.assertEqual(first.args[2]["id"], "make_something")
+        self.assertEqual(second.args[2]["id"], "mechanism")
+        self.assertEqual(first.args[:2], second.args[:2])
+        self.assertEqual(first.args[4], second.args[4])
+        self.assertEqual(post["contentAngle"], "mechanism")
+        self.assertEqual(post["learningOrder"], 1)
+        self.assertEqual(LAMBDA.read_learning_path_state("Physics")["nextIndex"], 1)
+
     def test_crash_after_publication_is_reconciled_without_another_model_call(self):
         with mock.patch.object(LAMBDA, "complete_learning_step", side_effect=RuntimeError("progress write failed")):
             with self.assertRaises(RuntimeError): self.publish("interrupted-slot")
@@ -340,7 +357,7 @@ class LearningCurriculumTests(unittest.TestCase):
         target = LAMBDA.learning_target_for_topic("Artificial Intelligence", 6)
         # Exercise the real post builder, not the publishing fixture.
         with mock.patch.object(LAMBDA, "call_bedrock_text", return_value='{"error":"uncertain"}') as model:
-            GENERATE_POST("Artificial Intelligence", target["subTopic"], LAMBDA.CONTENT_ANGLES[0], [], target)
+            GENERATE_POST("Artificial Intelligence", target["subTopic"], LAMBDA.resolve_content_angle("mechanism"), [], target)
         prompt = model.call_args.args[0]
         self.assertIn('"stage": "advanced"', prompt)
         self.assertIn(target["prerequisiteSubject"], prompt)

@@ -7,6 +7,13 @@ ancient, political, economic, diplomatic, colonial and other history subjects.
 
 ## Editorial mix
 
+- Make something: materials, steps, a check and a variation for a safe tabletop
+  project. For example, “How to make a paper bridge that holds more.”
+- Questions hiding in plain sight: start with a familiar detail and explain why
+  it happens. For example, “Why do checkout lines move at different speeds?”
+- A different way to think: reveal an overlooked connection, try a clearly
+  labeled thought experiment, or explain what would help resolve a real open
+  question. For example, “What if maps measured time instead of distance?”
 - Documented history: real events, objects, actors, chronology, consequences and
   the limitations of surviving evidence. No invented dialogue, private motives,
   fictional anecdotes or disputed interpretations presented as settled facts.
@@ -17,6 +24,11 @@ ancient, political, economic, diplomatic, colonial and other history subjects.
   clickbait, conspiracy framing or generic motivational filler.
 - Existing mechanisms, experiments, failure modes, tradeoffs and comparisons
   remain available. Lenses do not replace the assigned curriculum subject/stage.
+
+These three new formats get more turns in the existing rotation. The same
+editorial review checks that each post delivers on its format. If a tabletop
+build doesn't pass review, the final retry can explain the same lesson without
+the build; nothing skips the curriculum step or increases the retry limit.
 
 ## Readable across majors
 

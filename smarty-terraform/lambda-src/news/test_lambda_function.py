@@ -143,6 +143,37 @@ class NewsLambdaTests(unittest.TestCase):
             providers.assert_not_called()
             self.assertNotIn("dailySummary", cached["payload"])
 
+    def test_reports_outage_can_serve_the_same_location_saved_briefing_without_writes(self):
+        location = news.make_location("IN", "Tamil Nadu")
+        summary = {"summaryMode": "editorial", "overview": "Already published for Tamil Nadu."}
+        saved = {"freshUntil": int(news.time.time()) + 300, "payload": summary}
+        def lookup(key):
+            return saved if key.startswith("local-briefing-") else None
+
+        with (patch.object(news, "get_cached", side_effect=lookup),
+              patch.object(news, "generation_lease", return_value=nullcontext()),
+              patch.object(news, "build_reports_payload", side_effect=RuntimeError("Sources unavailable")),
+              patch.object(news, "build_daily_summary") as generate,
+              patch.object(news, "set_cached") as save):
+            result = news.lambda_handler({"queryStringParameters": {"country": "IN", "region": "Tamil Nadu"}}, None)
+            body = json.loads(result["body"])
+            self.assertEqual(result["statusCode"], 200)
+            self.assertEqual(result["headers"]["Cache-Control"], "no-store")
+            self.assertEqual(body["location"]["region"], location["region"])
+            self.assertEqual(body["dailySummary"], summary)
+            self.assertEqual(body["articles"], [])
+            generate.assert_not_called()
+            save.assert_not_called()
+
+    def test_reports_outage_does_not_generate_a_briefing_without_any_reports(self):
+        with (patch.object(news, "get_cached", return_value=None),
+              patch.object(news, "generation_lease", return_value=nullcontext()),
+              patch.object(news, "build_reports_payload", side_effect=RuntimeError("Sources unavailable")),
+              patch.object(news, "build_daily_summary") as generate):
+            result = news.lambda_handler({"queryStringParameters": {"country": "IN", "region": "Tamil Nadu"}}, None)
+            self.assertEqual(result["statusCode"], 503)
+            generate.assert_not_called()
+
     def test_world_edition_is_shared_for_whole_day_and_changes_next_day(self):
         location = news.make_location("GLOBAL", "")
         start = int(news.datetime(2026, 9, 22, 8, tzinfo=news.timezone.utc).timestamp())
@@ -174,7 +205,19 @@ class NewsLambdaTests(unittest.TestCase):
               patch.object(news, "build_daily_summary", return_value={"summaryMode": "extractive"}),
               patch.object(news, "set_cached") as save):
             news.get_world_daily_summary([], news.make_location("GLOBAL", ""))
-            self.assertEqual(save.call_args.kwargs["fresh_until"], start + news.CACHE_TTL_SECONDS)
+            self.assertEqual(save.call_args.kwargs["fresh_until"], start + news.BRIEFING_RETRY_SECONDS)
+
+    def test_combined_fallback_does_not_extend_the_summary_retry_window(self):
+        generated = news.datetime.now(news.timezone.utc).replace(microsecond=0)
+        fallback = {"articles": [], "dailySummary": {"summaryMode": "extractive", "generatedAt": generated.isoformat()}}
+        with (patch.object(news, "get_cached", return_value=None),
+              patch.object(news, "generation_lease", return_value=nullcontext()),
+              patch.object(news, "build_payload", return_value=fallback),
+              patch.object(news, "set_cached") as save):
+            response = news.lambda_handler({}, None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(save.call_args.kwargs["fresh_until"], int(generated.timestamp()) + news.BRIEFING_RETRY_SECONDS)
+        self.assertEqual(response["headers"]["Cache-Control"], "public, max-age=60, must-revalidate")
 
     def test_world_edition_rechecks_storage_after_acquiring_lease(self):
         cached = {"freshUntil": int(news.time.time()) + 600, "payload": {"summaryMode": "editorial"}}
@@ -218,6 +261,19 @@ class NewsLambdaTests(unittest.TestCase):
             self.assertIn("Prefer one reported development per sentence", prompt)
             self.assertIn(headline, prompt)
             self.assertEqual(result["summaryMode"], "editorial")
+
+    def test_small_editions_request_one_supported_takeaway_without_padding(self):
+        headline = "Researchers map a deep ocean habitat before a planned marine survey"
+        article = make_article("one", headline, "Science", "")
+        text = f"OVERVIEW: {headline}.\nTAKEAWAY_1_TITLE: Ocean habitat map\nTAKEAWAY_1_SUMMARY: {headline}.\nSECTION_1_SUMMARY: {headline}."
+        response = {"output": {"message": {"content": [{"text": text}]}}, "stopReason": "end_turn"}
+        with patch.object(news.BEDROCK_RUNTIME, "converse", return_value=response) as model:
+            result = news.generate_editorial_summary([article], news.make_location("IN", "Tamil Nadu"), ["Science"])
+        prompt = model.call_args.kwargs["messages"][0]["content"][0]["text"]
+        self.assertIn("Include 1 takeaway(s)", prompt)
+        self.assertNotIn("TAKEAWAY_2_TITLE", prompt)
+        self.assertEqual(len(result["keyTakeaways"]), 1)
+        self.assertEqual(result["sectionSummaries"]["Science"], headline + ".")
 
     def test_generic_sentence_still_rejects_an_otherwise_supported_overview(self):
         headline = "Researchers map a deep ocean habitat before a planned marine survey"

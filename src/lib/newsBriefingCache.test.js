@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createBriefingPreloader, getCachedNews, getNewsCacheKey, setCachedNews, newsOutlookParagraphs } from './newsBriefingCache.js';
+import { createBriefingPreloader, getCachedNews, getNewsCacheKey, latestSavedBriefing, setCachedNews, newsOutlookParagraphs } from './newsBriefingCache.js';
 
 const clock = Date.parse('2026-10-24T12:00:00Z');
 const storage = () => {
@@ -59,6 +59,17 @@ test('yesterday’s summary is never retained in a new day’s reports', () => {
   const disk = storage(); setCachedNews('GLOBAL', '', briefing, disk, clock);
   const result = setCachedNews('GLOBAL', '', reports, disk, clock + 86400000);
   assert.equal(result.dailySummary, undefined);
+  assert.equal(getCachedNews('GLOBAL', '', disk, clock + 86400000).lastEditorial.editionDate, '2026-10-24');
+  assert.equal(getCachedNews('IN', '', disk, clock + 86400000), null);
+});
+
+test('older responses cannot replace a current briefing or be refreshed into a new day', () => {
+  const disk = storage();
+  const yesterday = { ...briefing, dailySummary: { ...briefing.dailySummary, editionDate: '2026-10-23' } };
+  setCachedNews('GLOBAL', '', briefing, disk, clock);
+  const result = setCachedNews('GLOBAL', '', yesterday, disk, clock + 10000);
+  assert.equal(result.dailySummary.editionDate, '2026-10-24');
+  assert.equal(latestSavedBriefing(clock + 2 * 86400000, briefing.dailySummary, yesterday.dailySummary), null);
 });
 
 test('a summary-only startup response retains the already cached reports', () => {

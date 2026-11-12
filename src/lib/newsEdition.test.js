@@ -1,10 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { briefingParagraphs, normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from './newsEdition.js';
+import { briefingParagraphs, loadNewsEdition, normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from './newsEdition.js';
 
 const report = { id: 'one', title: 'A real report', news_link: 'https://example.com/report', summary: 'Original coverage.', section: 'World' };
 const reports = { location: {countryCode:'IN',region:'Tamil Nadu'}, articles: [report], sections: {World:[report]}, generatedAt:'2026-10-13T12:00:00Z' };
 const summary = { summaryMode:'editorial', overview:'A sourced daily summary.', sectionDigests:[{section:'World',summary:'World context'}] };
+test('reports failing does not block a saved briefing from loading', async () => {
+  const calls = [];
+  const edition = await loadNewsEdition({ load: async view => {
+    calls.push(view);
+    if (view === 'reports') throw new Error('Provider unavailable');
+    return { location: reports.location, dailySummary: summary };
+  } });
+  assert.deepEqual(calls, ['reports', undefined]);
+  assert.equal(edition.dailySummary.overview, summary.overview);
+});
+
+test('reports stay visible even when preparing a briefing fails', async () => {
+  const states = [];
+  const edition = await loadNewsEdition({ load: async view => {
+    if (view === 'reports') return reports;
+    assert.deepEqual(states, ['reports', 'briefing']);
+    throw new Error('Briefing is still being prepared');
+  }, onReports: () => states.push('reports'), onBriefing: () => states.push('briefing') });
+  assert.equal(edition.articles[0].news_link, report.news_link);
+});
+
+test('switching location cancels before requesting a different phase', async () => {
+  const controller = new AbortController();
+  const calls = [];
+  await assert.rejects(loadNewsEdition({ signal: controller.signal, load: async view => {
+    calls.push(view);
+    controller.abort();
+    return reports;
+  } }), { name: 'AbortError' });
+  assert.deepEqual(calls, ['reports']);
+});
 test('the briefing keeps every nonempty paragraph and supports older plain-text editions', () => {
   assert.deepEqual(briefingParagraphs({ overview: 'Short fallback.', overviewParagraphs: ['First.', '', 'Second.', null, 'Third.'] }), ['First.', 'Second.', 'Third.']);
   assert.deepEqual(briefingParagraphs({ overview: 'First.\n\nSecond.', overviewParagraphs: [] }), ['First.', 'Second.']);

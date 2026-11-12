@@ -71,5 +71,32 @@ export function mergeNewsBriefing(reports, value) {
   if (!hasEditorialBriefing(briefing)) return reports;
   // A summary-only or older cached response must not erase the fast report view.
   return { ...briefing, ...reports, dailySummary: briefing.dailySummary,
-    generatedAt: briefing.generatedAt || reports.generatedAt, cacheStatus: briefing.cacheStatus || reports.cacheStatus };
+    generatedAt: reports.generatedAt || briefing.generatedAt, cacheStatus: briefing.cacheStatus || reports.cacheStatus };
+}
+
+export async function loadNewsEdition({ load, signal, onReports, onBriefing }) {
+  let reports = null;
+  try {
+    const received = normalizeNewsEdition(await load('reports'));
+    if (received.articles.length || Object.keys(received.sections).length) reports = received;
+  } catch {
+    // A reports outage must not prevent us from requesting the saved daily edition.
+  }
+  if (signal?.aborted) throw new DOMException('News request cancelled.', 'AbortError');
+  if (reports) onReports?.(reports);
+  onBriefing?.();
+  try {
+    // The combined route shares the reports refresh lock. Start after the fast
+    // route has settled so two cold requests do not compete for that lock.
+    const briefing = normalizeNewsEdition(await load());
+    if (signal?.aborted) throw new DOMException('News request cancelled.', 'AbortError');
+    if (!reports && !hasEditorialBriefing(briefing) && !briefing.articles.length && !Object.keys(briefing.sections).length) {
+      throw new Error('No reports or briefing are available for this edition.');
+    }
+    if (!reports || (reports.cacheStatus === 'browser-fallback' && briefing.articles.length && briefing.cacheStatus !== 'browser-fallback')) return briefing;
+    return mergeNewsBriefing(reports, briefing);
+  } catch (error) {
+    if (!reports || signal?.aborted) throw error;
+    return reports;
+  }
 }

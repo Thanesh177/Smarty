@@ -10,9 +10,9 @@
   --ui-bg: #06070a;
   --ui-bg-deep: #06070a;
   --ui-bg-rgb: 6, 7, 10;
-  --ui-surface: #101720;
-  --ui-surface-rgb: 16, 23, 32;
-  --ui-surface-raised: #17232f;
+  --ui-surface: #0d151e;
+  --ui-surface-rgb: 13, 21, 30;
+  --ui-surface-raised: #13202c;
   --ui-surface-soft: rgba(210, 232, 247, .04);
   --ui-surface-hover: rgba(210, 232, 247, .07);
   --ui-surface-pressed: rgba(210, 232, 247, .11);
@@ -29,10 +29,10 @@
   --ui-primary-hover: #a0ddfb;
   --ui-primary-pressed: #65b8e4;
   --ui-primary-ink: #081b28;
-  --ui-accent: #96d7ff;
-  --ui-accent-strong: #c7ebff;
-  --ui-accent-rgb: 150, 215, 255;
-  --ui-accent-hover: #e0f3ff;
+  --ui-accent: #84c9ee;
+  --ui-accent-strong: #b5e2fa;
+  --ui-accent-rgb: 132, 201, 238;
+  --ui-accent-hover: #d0edfc;
   --ui-accent-ink: #081b28;
   --ui-accent-soft: #172d40;
   --ui-accent-line: #4c7894;

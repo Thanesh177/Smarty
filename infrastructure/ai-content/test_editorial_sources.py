@@ -132,6 +132,21 @@ class EditorialPublicationTests(unittest.TestCase):
         self.assertNotIn("excerpt", post["sources"][0])
         self.assertEqual(post["sourceEvidence"]["sources"][0]["id"], "history-1")
 
+    def test_source_grounded_curiosity_posts_still_require_evidence_review(self):
+        angle = LAMBDA.resolve_content_angle("fresh_perspective")
+        verdict = '{"supported":true,"readerReady":true,"issues":[]}'
+        with (
+            mock.patch.object(LAMBDA, "load_editorial_evidence", return_value=evidence()),
+            mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[json.dumps(self.candidate()), verdict]) as model,
+        ):
+            post = LAMBDA.generate_specific_post(
+                "World History", "how the Suez Canal changed shipping trade", angle, [],
+            )
+        self.assertEqual(post["contentAngle"], angle["id"])
+        self.assertTrue(post["sources"])
+        self.assertIn(angle["review"], model.call_args_list[1].args[0])
+        self.assertIn("retrieved evidence only", model.call_args_list[1].args[0])
+
     def test_unsupported_claim_and_fabricated_citation_stop_publication(self):
         for verdict in ('{"supported":false,"readerReady":true,"issues":["invented motive"]}',
                         '{"supported":"true","readerReady":true,"issues":[]}',

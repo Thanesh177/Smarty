@@ -15,17 +15,17 @@
   /* Neutral ink keeps Day mode crisp without changing its warm paper or pine actions. */
   --ui-text: #000000;
   --ui-secondary: #191919;
-  --ui-muted: #57645b;
-  --ui-faint: #59665c;
-  --ui-label: #3d3d3d;
+  --ui-muted: #3e4b43;
+  --ui-faint: #46534a;
+  --ui-label: #303b34;
   --ui-primary: #214d40;
   --ui-primary-rgb: 33, 77, 64;
   --ui-primary-hover: #2a5d4d;
   --ui-primary-pressed: #17392f;
   --ui-primary-ink: #ffffff;
-  --ui-accent: #325a49;
+  --ui-accent: #264b3d;
   --ui-accent-strong: #234b3d;
-  --ui-accent-rgb: 50, 90, 73;
+  --ui-accent-rgb: 38, 75, 61;
   --ui-accent-hover: #244737;
   --ui-accent-ink: #ffffff;
   --ui-accent-soft: #e8e0f0;

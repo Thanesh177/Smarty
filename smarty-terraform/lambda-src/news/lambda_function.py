@@ -31,6 +31,7 @@ CACHE_VERSION = 22
 # an editorial fix. Old briefing records are retained, not deleted.
 BRIEFING_VERSION = 2
 CACHE_TTL_SECONDS = 20 * 60
+BRIEFING_RETRY_SECONDS = 5 * 60
 STALE_TTL_SECONDS = 48 * 60 * 60
 MAX_ARTICLES = 60
 MIN_ARTICLES = 4
@@ -220,9 +221,15 @@ def json_default(value):
 
 
 def api_response(status_code, body):
+    headers = HEADERS
+    if status_code != 200 or body.get("cacheStatus") == "stale-cache":
+        headers = {**HEADERS, "Cache-Control": "no-store"}
+    elif (body.get("dailySummary") or {}).get("summaryMode") == "extractive":
+        # Let recovered editions reach browsers promptly without discarding the shared retry cooldown.
+        headers = {**HEADERS, "Cache-Control": "public, max-age=60, must-revalidate"}
     return {
         "statusCode": status_code,
-        "headers": HEADERS if status_code == 200 and body.get("cacheStatus") != "stale-cache" else {**HEADERS, "Cache-Control": "no-store"},
+        "headers": headers,
         "body": json.dumps(body, ensure_ascii=False, default=json_default),
     }
 
@@ -998,7 +1005,7 @@ def section_summary_is_grounded(summary, section, articles):
 
 def validate_editorial_summary(data, articles, section_names):
     overview = compact_text(data.get("overview"), 5200)
-    if len(overview) < 80:
+    if len(overview) < (45 if 0 < len(articles) < MIN_ARTICLES else 80):
         raise ValueError("The generated daily overview was incomplete.")
     if not section_summary_is_grounded(overview, "Overview", [
         {**article, "section": "Overview"} for article in articles
@@ -1057,6 +1064,12 @@ def validate_editorial_summary(data, articles, section_names):
 
 
 def generate_editorial_summary(articles, location, section_names):
+    takeaway_count = min(3, len(section_names))
+    takeaway_fields = "\n".join(
+        f"TAKEAWAY_{index}_TITLE: 2 to 6 words\n"
+        f"TAKEAWAY_{index}_SUMMARY: 1 to 2 factual sentences"
+        for index in range(1, takeaway_count + 1)
+    )
     story_lines = []
     for section in section_names:
         story_lines.append(f"\n[SECTION: {section}]")
@@ -1069,7 +1082,7 @@ def generate_editorial_summary(articles, location, section_names):
             )
 
     section_field_instructions = "\n".join(
-        f"SECTION_{index}_SUMMARY: 6 to 9 factual sentences, 120 to 180 words about {section} only; shorter if sources are limited\n"
+        f"SECTION_{index}_SUMMARY: up to 6 to 9 factual sentences about {section} only, one per distinct development; one sentence is enough for a single report\n"
         f"SECTION_{index}_CONTEXT: one sentence explaining a reported consequence or who is affected; leave empty if not stated\n"
         f"SECTION_{index}_NEXT: one sentence about a stated next step or unresolved issue; leave empty if not stated"
         for index, section in enumerate(section_names, start=1)
@@ -1080,13 +1093,8 @@ Edition date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')} UTC. Reporting c
 The reader should understand the main developments without opening another page.
 
 Return exactly these single-line fields, in this order, with no JSON, bullets, markdown, or extra text:
-OVERVIEW: 12 to 18 connected factual sentences, 350 to 450 words total; shorter if sources are limited
-TAKEAWAY_1_TITLE: 2 to 6 words
-TAKEAWAY_1_SUMMARY: two factual sentences
-TAKEAWAY_2_TITLE: 2 to 6 words
-TAKEAWAY_2_SUMMARY: two factual sentences
-TAKEAWAY_3_TITLE: 2 to 6 words
-TAKEAWAY_3_SUMMARY: two factual sentences
+OVERVIEW: a readable synthesis of the reporting, up to 450 words when coverage supports it; use just one or two sentences if only one or two distinct developments are available
+{takeaway_fields}
 {section_field_instructions}
 
 Requirements:
@@ -1097,8 +1105,7 @@ Requirements:
 - Do not imply every world event is covered. Do not describe older events as happening today simply because they were reported today.
 - Synthesize duplicate headlines into one development and cover the most consequential distinct events.
 - The overview must mention at least one concrete development from every supplied section, combining related items where useful.
-- Include exactly 3 takeaways.
-- Choose the 3 takeaways from 3 different sections.
+- Include {takeaway_count} takeaway(s), at most one per supplied section.
 - Include one summary for every section in this list: {json.dumps(section_names, ensure_ascii=False)}.
 - Every section summary must use only headlines carrying that exact section label.
 - Lead each section with the main development, then explain other distinct developments, the people or places affected, and any stated next steps. Include context and significance only when explicitly supported by the supplied headlines.
@@ -1200,7 +1207,7 @@ def build_daily_summary(articles, location):
     editorial_summary = generate_editorial_summary(articles, location, section_names)
     if not editorial_summary:
         editorial_summary = extractive_summary
-    elif len(editorial_summary["keyTakeaways"]) < 3:
+    elif len(editorial_summary["keyTakeaways"]) < min(3, len(section_names)):
         editorial_summary["keyTakeaways"] = extractive_summary["keyTakeaways"]
 
     for digest in section_digests:
@@ -1255,7 +1262,7 @@ def build_daily_summary(articles, location):
     }
 
 
-def get_world_daily_summary(articles, location):
+def get_world_daily_summary(articles, location, *, cached_only=False):
     """Publish a shared UTC edition per place; refreshes never rerun its AI."""
     now = int(time.time())
     edition_date = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%d")
@@ -1267,7 +1274,11 @@ def get_world_daily_summary(articles, location):
     key += f"#briefing-v{BRIEFING_VERSION}"
     cached = get_cached(key)
     if cached and int(cached.get("freshUntil", 0)) > now and cached.get("payload"):
-        return cached["payload"]
+        saved = cached["payload"]
+        if not cached_only or (saved.get("summaryMode") == "editorial" and saved.get("overview")):
+            return saved
+    if cached_only:
+        return None
 
     # Fail closed on database/lease failures rather than generating per visitor.
     with generation_lease(NEWS_CACHE, "date", key, NEWS_LEASE_SECONDS):
@@ -1282,7 +1293,7 @@ def get_world_daily_summary(articles, location):
             "nextEditionAt": datetime.fromtimestamp(next_day, timezone.utc).isoformat(),
         })
         # Temporary AI failures can recover later; never freeze a fallback all day.
-        fresh_until = next_day if summary["summaryMode"] == "editorial" else min(next_day, now + CACHE_TTL_SECONDS)
+        fresh_until = next_day if summary["summaryMode"] == "editorial" else min(next_day, now + BRIEFING_RETRY_SECONDS)
         set_cached(key, summary, fresh_until=fresh_until)
         return summary
 
@@ -1392,7 +1403,7 @@ def build_reports_payload(location):
     }
 
 
-def build_payload(location):
+def get_or_build_reports(location):
     reports_key = make_cache_key(location) + "#reports"
     cached = get_cached(reports_key)
     if cached and int(cached.get("freshUntil", 0)) > int(time.time()) and cached.get("payload"):
@@ -1405,6 +1416,27 @@ def build_payload(location):
             else:
                 payload = build_reports_payload(location)
                 set_cached(reports_key, payload)
+    return payload
+
+
+def build_payload(location):
+    try:
+        payload = get_or_build_reports(location)
+    except (RuntimeError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, ET.ParseError):
+        # Refreshing the rolling reports should not take down an already-published edition.
+        summary = get_world_daily_summary([], location, cached_only=True)
+        if not summary:
+            raise
+        return {
+            "status": 200,
+            "location": {key: value for key, value in location.items() if key != "gdeltCountry"},
+            "dailySummary": summary,
+            "articles": [],
+            "sections": {},
+            "generatedAt": summary.get("generatedAt", ""),
+            "cacheStatus": "stale-cache",
+            "notice": "The daily briefing is available. Latest reports will return when sources reconnect.",
+        }
     payload["dailySummary"] = get_world_daily_summary(payload["articles"], location)
     return payload
 
@@ -1590,7 +1622,14 @@ def lambda_handler(event, context):
             if latest and int(latest.get("freshUntil", 0)) > int(time.time()) and latest.get("payload"):
                 return api_response(200, {**latest["payload"], "cacheStatus": "fresh-cache"})
             payload = build_reports_payload(location) if reports_only else build_payload(location)
-            set_cached(cache_key, payload)
+            if payload.get("cacheStatus") != "stale-cache":
+                summary = payload.get("dailySummary") or {}
+                if summary.get("summaryMode") == "extractive":
+                    # The combined response must not outlive the retry window of its summary.
+                    generated_at = datetime.fromisoformat(summary["generatedAt"]).timestamp()
+                    set_cached(cache_key, payload, fresh_until=int(generated_at) + BRIEFING_RETRY_SECONDS)
+                else:
+                    set_cached(cache_key, payload)
         LOGGER.info(json.dumps({
             "event": "news_refresh_succeeded",
             "country": location["countryCode"],

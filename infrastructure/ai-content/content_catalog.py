@@ -873,7 +873,92 @@ TOPIC_TO_DOMAIN = {
 }
 
 
+# Projects are examples, not substitute lessons. An assigned curriculum step
+# still has to be taught, and a build only runs when a safe tabletop model fits.
+MAKE_PROJECT_EXAMPLES = {
+    "Architecture": "a paper model that shows how a window shade changes where light lands",
+    "Art History": "two paper compositions using the same original shapes",
+    "Education": "fold-over practice cards that separate recall from feedback",
+    "Engineering": "a folded-paper bridge compared with a flat strip of the same paper",
+    "Filmmaking": "a six-panel paper storyboard that changes what the viewer sees first",
+    "Learning": "a paper revision wheel that reveals a question before its answer",
+    "Literature": "two index-card scenes that tell the same event from different viewpoints",
+    "Manufacturing": "a paper template that reveals why slightly different parts stop fitting",
+    "Materials Science": "a folded card that compares how geometry changes stiffness",
+    "Mathematics": "a paper slider that pairs inputs with outputs of a simple rule",
+    "Music Theory": "a beat grid that rearranges the same notes into a different rhythm",
+    "Photography": "a cardstock viewfinder to compare what changes when you move closer",
+    "Physics": "a paper ramp or folded beam that makes a force or motion visible",
+    "Probability": "a paper spinner with unequal areas and a tally card to compare outcomes",
+    "Product Design": "a paper prototype of a control and its feedback",
+    "Statistics": "a tally sheet and paper bar chart to compare a whole sample with a subset",
+    "Transportation": "a tabletop traffic model using paper counters to show how a queue forms",
+}
+if not set(MAKE_PROJECT_EXAMPLES) <= set(BASE_TOPICS):
+    raise RuntimeError("Every hands-on example must belong to a feed topic")
+
+MAKE_PROJECT_RULES = (
+    "Use only low-risk tabletop materials such as paper, card, pencils, blunt scissors, "
+    "tape or clean empty household objects. No heat, mains or batteries, blades, pressure, "
+    "chemical mixing, biological materials or culturing, tasting, medication, weapons, "
+    "or procedures performed on people, animals or live computer systems. "
+    "Never offer a full-size build, safety-critical repair or an industrial recipe."
+)
+
+CURIOSITY_ANGLE_IDS = frozenset({"make_something", "everyday_question", "fresh_perspective"})
+
 CONTENT_ANGLES = (
+    {
+        "id": "make_something",
+        "label": "Make something",
+        "instruction": (
+            "Teach one genuinely makeable small object, model, craft or paper tool that "
+            "demonstrates the assigned idea. Name the materials and the result. Explain why "
+            "one part or design choice works; then give the short ordered steps, an observable "
+            "check of the result, and one variation or common mistake. The reader should be "
+            "able to make it after reading, not just hear how it was made. "
+            + MAKE_PROJECT_RULES
+        ),
+        "review": (
+            "For readerReady, require actual materials, enough ordered steps to complete "
+            "the object, an observable check and a clear link to the assigned concept. "
+            "Reject a task requiring hidden expertise or a missing step. "
+            "Reject any project outside these limits: " + MAKE_PROJECT_RULES
+        ),
+    },
+    {
+        "id": "everyday_question",
+        "label": "Questions hiding in plain sight",
+        "instruction": (
+            "Start with one small thing people actually see, hear, use or experience at "
+            "home, outdoors, on a commute or in a shop. Ask the overlooked why or how "
+            "question in natural language, then answer it. Follow the cause through "
+            "the assigned concept and vary one familiar condition so readers can notice "
+            "when the answer changes. Avoid trivia roundups and made-up universal explanations."
+        ),
+        "review": (
+            "Require a specific familiar observation, an explicit question and a direct "
+            "answer with a causal explanation. Reject a generic fact, a false premise, "
+            "or a question left unanswered just to create suspense."
+        ),
+    },
+    {
+        "id": "fresh_perspective",
+        "label": "A different way to think",
+        "instruction": (
+            "Reveal one overlooked connection, unfamiliar but established idea, or "
+            "a counterfactual that makes a familiar assumption visible. Start with a clear "
+            "question and compare two concrete cases or change one assumption. If a question "
+            "is genuinely unresolved, distinguish what is known, what is uncertain, "
+            "and what observation would help decide. Label thought experiments as hypothetical; "
+            "don't sell speculation as discovery."
+        ),
+        "review": (
+            "Require a specific insight the comparison or changed assumption reveals. "
+            "Reject novelty claimed without evidence. Check that observations, hypotheticals "
+            "and genuinely unresolved claims are kept distinct."
+        ),
+    },
     {
         "id": "documented_history",
         "label": "A moment that changed the world",

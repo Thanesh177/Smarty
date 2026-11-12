@@ -8,10 +8,15 @@ export function hasEditorialBriefing(news) {
   );
 }
 
+export function hasCurrentBriefing(news, now = Date.now()) {
+  return hasEditorialBriefing(news) && (!news.dailySummary.editionDate
+    || news.dailySummary.editionDate === new Date(now).toISOString().slice(0, 10));
+}
+
 export function newsCacheIsFresh(news, timestamp, now = Date.now()) {
   const ttl = hasEditorialBriefing(news) ? 15 * 60 * 1000 : 60 * 1000;
   const edition = news?.dailySummary?.editionDate;
-  return timestamp <= now && now - timestamp < ttl
+  return news?.cacheStatus !== 'stale-cache' && timestamp <= now && now - timestamp < ttl
     && (!edition || edition === new Date(now).toISOString().slice(0, 10));
 }
 

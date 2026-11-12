@@ -32,6 +32,7 @@ test('reading, muted labels, links and primary buttons meet normal-text contrast
     assert.ok(contrast(token('--ui-primary-ink'), token(background)) >= 4.5, 'Action text on ' + background);
   }
   assert.ok(contrast(token('--ui-accent'), token('--ui-accent-soft')) >= 4.5);
+  assert.ok(contrast(token('--ui-accent-strong'), token('--ui-surface-raised')) >= 7);
 });
 
 test('Day mode uses black ink on light surfaces and preserves its pine actions', () => {
@@ -42,7 +43,7 @@ test('Day mode uses black ink on light surfaces and preserves its pine actions',
   assert.equal(day('--ui-primary'), '#214d40');
   assert.equal(day('--ui-accent-soft'), '#e8e0f0');
   for (const surface of ['--ui-bg', '--ui-surface', '--ui-surface-raised', '--ui-accent-soft']) {
-    for (const ink of ['--ui-text', '--ui-secondary', '--ui-label']) {
+    for (const ink of ['--ui-text', '--ui-secondary', '--ui-label', '--ui-muted']) {
       assert.ok(contrast(day(ink), day(surface)) >= 7, ink + ' on ' + surface);
     }
   }

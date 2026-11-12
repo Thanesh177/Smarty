@@ -10,12 +10,12 @@ import {
 import './NewsPage.css';
 import './LibraryNewsTheme.css';
 import { NewsStoryLink, SavedNewsStories } from '../components/NewsStoryLinks';
-import { editorialNewsSections, hasEditorialBriefing } from '../lib/newsAvailability';
-import { getNewsCacheKey as getCacheKey, getCachedNews, setCachedNews, newsOutlookParagraphs } from '../lib/newsBriefingCache';
+import { editorialNewsSections, hasCurrentBriefing } from '../lib/newsAvailability';
+import { getNewsCacheKey as getCacheKey, getCachedNews, latestSavedBriefing, setCachedNews, newsOutlookParagraphs } from '../lib/newsBriefingCache';
 import useNewsPersonalization from '../hooks/useNewsPersonalization';
 import { NewsBriefingChoice, NewsFollowButton, NewsUpdatesShelf } from '../components/NewsPersonalization';
 import { briefingPlace, readNewsPreference } from '../lib/newsPreferences';
-import { briefingParagraphs, normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews } from '../lib/newsEdition';
+import { briefingParagraphs, loadNewsEdition, normalizeSavedNews } from '../lib/newsEdition';
 import { balancedNewsReports, newsPreviewParagraphs, reportBriefingContext, selectNewsReports } from '../lib/newsReader';
 import useNewsReader from '../hooks/useNewsReader';
 import NewsReader from '../components/NewsReader';
@@ -52,6 +52,23 @@ function formatUpdatedAt(value) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(parsed);
+}
+
+function formatBriefingDate(editionDate) {
+  return new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${editionDate}T00:00:00Z`));
+}
+
+function SavedNewsBrief({ summary }) {
+  return (
+    <section className="news-topic-summary news-saved-brief" aria-labelledby="news-saved-brief-title">
+      <div>
+        <span className="news-saved-brief-date">Last available briefing · <time dateTime={summary.editionDate}>{formatBriefingDate(summary.editionDate)}</time></span>
+        <h2 id="news-saved-brief-title">{summary.title || 'Previous daily briefing'}</h2>
+        {briefingParagraphs(summary).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+      </div>
+    </section>
+  );
 }
 
 function readingTime(text) {
@@ -333,6 +350,7 @@ export default function NewsPage({ briefingOnly = false }) {
   const [region, setRegion] = useState(() => briefingOnly ? briefingPlace(readNewsPreference(user?.sub || user?.userId || user?.id || '')).region : initialCountry === 'GLOBAL' ? '' : getSavedRegion(initialCountry));
   const [initialCache] = useState(() => getCachedNews(initialCountry, region));
   const [newsData, setNewsData] = useState(initialCache?.news || null);
+  const [lastEditorial, setLastEditorial] = useState(initialCache?.lastEditorial || null);
   const [search, setSearch] = useState(
     () => new URLSearchParams(location.search).get('search') || ''
   );
@@ -432,6 +450,7 @@ export default function NewsPage({ briefingOnly = false }) {
     setRefreshing(false);
     setBriefingPending(false);
     setVisibleCount(PAGE_SIZE);
+    if (!retainReports || cached?.lastEditorial) setLastEditorial(cached?.lastEditorial || null);
 
     if (cached) {
       loadedLocationRef.current = nextLocation;
@@ -439,7 +458,7 @@ export default function NewsPage({ briefingOnly = false }) {
       setFromCache(!cached.isFresh);
       setLastUpdated(formatUpdatedAt(cached.news.generatedAt || cached.timestamp));
       setLoading(false);
-      if (cached.isFresh && hasEditorialBriefing(cached.news) && !forceRefresh) return;
+      if (cached.isFresh && hasCurrentBriefing(cached.news) && !forceRefresh) return;
     } else {
       setFromCache(false);
       if (!retainReports) {
@@ -453,48 +472,28 @@ export default function NewsPage({ briefingOnly = false }) {
     setRefreshing(Boolean(cached) || forceRefresh);
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
-    try {
-      const data = normalizeNewsEdition(await newsApi.getLatestNews({
-        country: targetCountry,
-        region: targetRegion,
-        lang: 'english',
-        signal: controller.signal,
-        forceRefresh,
-        // Reports have their own shared cache and do not wait for the model.
-        view: 'reports',
-      }));
-
-      if (!mountedRef.current || requestId !== requestIdRef.current) return;
-
-      // A valid same-day briefing stays readable during a manual refresh.
-      // Never blend a previous day's summary into newly collected reports.
-      const retainedBriefing = hasEditorialBriefing(cached?.news)
-        && cached.news.dailySummary.editionDate === new Date().toISOString().slice(0, 10);
-      const fastData = retainedBriefing ? mergeNewsBriefing(data, cached.news) : data;
-      const availableData = setCachedNews(targetCountry, targetRegion, fastData);
-      setNewsData(availableData);
+    const isCurrentRequest = () => mountedRef.current && requestId === requestIdRef.current && !controller.signal.aborted;
+    const showEdition = data => {
+      if (!isCurrentRequest()) return;
+      const news = setCachedNews(targetCountry, targetRegion, data);
+      setNewsData(news);
+      setLastEditorial(previous => latestSavedBriefing(Date.now(), news.dailySummary, previous));
       setLoading(false);
       loadedLocationRef.current = nextLocation;
-      setFromCache(data.cacheStatus === 'stale-cache');
-      setLastUpdated(formatUpdatedAt(data.generatedAt || Date.now()));
-      if (data.notice) setError(data.notice);
-      if (forceRefresh || !hasEditorialBriefing(availableData) || !getCachedNews(targetCountry, targetRegion)?.isFresh) {
-        setBriefingPending(true);
-        setRefreshing(true);
-        try {
-          const briefing = await newsApi.getLatestNews({ country: targetCountry, region: targetRegion, lang: 'english', signal: controller.signal, forceRefresh });
-          if (mountedRef.current && requestId === requestIdRef.current) {
-            const merged = setCachedNews(targetCountry, targetRegion, mergeNewsBriefing(availableData, briefing));
-            setNewsData(merged);
-            setFromCache(merged.cacheStatus === 'stale-cache');
-            setLastUpdated(formatUpdatedAt(merged.generatedAt || Date.now()));
-            if (!hasEditorialBriefing(merged)) setError('The daily summary is unavailable right now. Original reports are ready below.');
-          }
-        } catch {
-          if (!controller.signal.aborted && mountedRef.current && requestId === requestIdRef.current) setError('Reports are ready. The daily summary is taking longer; you can keep reading.');
-        }
-      }
+      setFromCache(news.cacheStatus === 'stale-cache');
+      setLastUpdated(formatUpdatedAt(news.generatedAt || Date.now()));
+    };
+
+    try {
+      let fastReports;
+      const edition = await loadNewsEdition({
+        load: view => newsApi.getLatestNews({ country: targetCountry, region: targetRegion,
+          lang: 'english', signal: controller.signal, forceRefresh, view }),
+        signal: controller.signal,
+        onReports: data => { fastReports = data; showEdition(data); },
+        onBriefing: () => { if (isCurrentRequest()) setBriefingPending(true); },
+      });
+      if (edition !== fastReports) showEdition(edition);
     } catch (fetchError) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
       if (controller.signal.aborted || fetchError?.name === 'AbortError' || fetchError?.code === 'ERR_CANCELED') {
@@ -503,8 +502,8 @@ export default function NewsPage({ briefingOnly = false }) {
 
       setError(
         cached || retainReports
-          ? 'Could not refresh right now. Your latest saved briefing is still available.'
-          : fetchError.message || 'Could not load current news. Please try again.'
+          ? 'Could not refresh right now. Showing what’s already available.'
+          : 'Could not load current news. Please try again.'
       );
     } finally {
       if (mountedRef.current && requestId === requestIdRef.current) {
@@ -514,7 +513,7 @@ export default function NewsPage({ briefingOnly = false }) {
         if (abortControllerRef.current === controller) abortControllerRef.current = null;
       }
     }
-  }, [briefingOnly]);
+  }, []);
 
   useEffect(() => {
     fetchNews(country, region);
@@ -625,12 +624,9 @@ export default function NewsPage({ briefingOnly = false }) {
     [savedLinks, search, selectedSection, shareArticle, toggleSave, visibleArticles, reader.opened, openReport, newsData?.dailySummary]
   );
 
-  const summarySections = useMemo(() => (
-    briefingOnly ? editorialNewsSections(newsData) : Array.isArray(newsData?.dailySummary?.sectionDigests)
-      ? newsData.dailySummary.sectionDigests.filter(digest => digest?.section && typeof digest.summary === 'string' && digest.summary.trim())
-      : []
-  ), [newsData, briefingOnly]);
-  const dailyBriefing = hasEditorialBriefing(newsData) ? newsData.dailySummary : null;
+  const dailyBriefing = hasCurrentBriefing(newsData) ? newsData.dailySummary : null;
+  const summarySections = useMemo(() => dailyBriefing ? editorialNewsSections(newsData) : [], [dailyBriefing, newsData]);
+  const savedBriefing = !dailyBriefing && latestSavedBriefing(Date.now(), lastEditorial);
   const overviewParagraphs = briefingParagraphs(dailyBriefing);
   const visibleSummaries = summarySections.filter(
     digest => selectedSection === 'All' || digest.section === selectedSection
@@ -691,6 +687,13 @@ export default function NewsPage({ briefingOnly = false }) {
     nextReports={nextReports} comfortableText={comfortableText} status={actionStatus} onToggleText={toggleComfortableText}
     onToggleSave={toggleSave} onShare={shareArticle} onOpen={openReport} onClose={closeReport} returnFocusRef={reportsHeadingRef} />;
 
+  const briefingRetry = !dailyBriefing && !loading && !briefingPending && (newsData || savedBriefing) && (
+    <div className="news-briefing-retry">
+      <p role="status">{savedBriefing ? 'Today’s briefing isn’t ready yet. You can read the previous edition below.' : 'Today’s briefing isn’t ready yet. Browse the latest reports below.'}</p>
+      <button type="button" onClick={() => fetchNews(country, region, true)}>Retry briefing</button>
+    </div>
+  );
+
   if (briefingOnly) return (
     <section className={`news-page news-compact news-feed-briefing${comfortableText ? ' news-comfortable-text' : ''}`} aria-label="Daily news feed">
       {readerPanel}
@@ -710,13 +713,16 @@ export default function NewsPage({ briefingOnly = false }) {
         <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
         <NewsUpdatesShelf personal={personal}/>
       </div>
-      {briefingPending && <NewsLoading kind="briefing" inline />}
-      {loading && <NewsLoading kind="briefing" />}
-      {(error || newsData?.notice || fromCache) && <p className="news-inline-notice" role="status">
-        {error || newsData?.notice || 'Showing your latest saved briefing.'}
+      {briefingPending && !loading && !dailyBriefing && !savedBriefing && <NewsLoading kind="briefing" inline />}
+      {loading && !savedBriefing && <NewsLoading kind="briefing" />}
+      {(newsData?.notice || (error && dailyBriefing) || (fromCache && dailyBriefing && !refreshing)) && <p className="news-inline-notice" role="status">
+        {newsData?.notice || error || 'Showing your saved briefing.'}
       </p>}
-      {!loading && !newsData && <div className="news-retry" role="alert">
-        <h2>This daily briefing is unavailable.</h2>
+      {briefingRetry}
+      {savedBriefing && <SavedNewsBrief summary={savedBriefing} />}
+      {!loading && !newsData && !savedBriefing && <div className="news-retry" role="alert">
+        <h2>Couldn’t load the news.</h2>
+        <p>Try again or choose a different edition.</p>
         <button type="button" onClick={() => fetchNews(country, region, true)}>Try again</button>
       </div>}
       {newsData && (
@@ -746,7 +752,7 @@ export default function NewsPage({ briefingOnly = false }) {
             </nav>
           )}
 
-          <div className="news-stream-heading news-summary-heading">
+          {(summarySections.length > 0 || editionArticles.length > 0) && <div className="news-stream-heading news-summary-heading">
             <div>
               <span>{!summarySections.length ? 'Original reporting' : selectedSection === 'All' ? 'Latest summaries' : selectedSection}</span>
               <h2>{!summarySections.length ? 'Latest available reports' : selectedSection === 'All' ? 'The day, section by section' : `${selectedSection} summaries`}</h2>
@@ -757,7 +763,7 @@ export default function NewsPage({ briefingOnly = false }) {
                 <span aria-hidden="true">Aa</span> Larger text
               </button>
             </div>
-          </div>
+          </div>}
 
           {summarySections.length > 0 && selectedSection !== 'All' && <div className="news-summary-search-row">
             <button type="button" className="news-summary-reset"
@@ -785,12 +791,8 @@ export default function NewsPage({ briefingOnly = false }) {
             </div>
           ) : summarySections.length ? (
             <div className="news-status" role="status"><p>Choose another section or show all summaries.</p></div>
-          ) : (
+          ) : editionArticles.length > 0 ? (
             <section className="news-report-fallback" aria-label="Available news reports">
-              <div className="news-status" role="status">
-                <h3>Read the latest reports</h3>
-                <p>The AI section briefing is temporarily unavailable. These are original reports, not an AI-generated daily summary.</p>
-              </div>
               <nav className="section-tabs" aria-label="Available report sections">
                 {sectionNames.map(section => <SectionTab key={section} section={section} active={selectedSection === section} onSelect={setSelectedSection} />)}
               </nav>
@@ -798,7 +800,7 @@ export default function NewsPage({ briefingOnly = false }) {
               {visibleCount < articles.length && <button type="button" className="news-load-more"
                 onClick={() => setVisibleCount(current => Math.min(current + PAGE_SIZE, articles.length))}>Show more reports</button>}
             </section>
-          )}
+          ) : null}
           {visibleSummaries.length > 0 && <footer className="news-summary-end">
             <Globe2 size={22} strokeWidth={1.5} aria-hidden="true" />
             <div><strong>You’ve reached the end of this briefing.</strong><p>AI-written from recent reporting. One shared daily edition, not a live news ticker. Some developments may change after publication.</p></div>
@@ -867,7 +869,7 @@ export default function NewsPage({ briefingOnly = false }) {
       {reportView === 'saved' && <p className="news-reader-note">Saved previews from every edition, kept on this device for your account. Original articles need a connection.</p>}
       {reportView === 'unopened' && <p className="news-reader-note">Reports you haven’t opened in Smarty on this device. Opening a quick read marks it as opened.</p>}
 
-      {(fromCache || newsData?.notice) && !loading && (
+      {(newsData?.notice || (fromCache && dailyBriefing)) && !loading && (
         <p className="cache-note">
           {newsData?.notice || 'Showing your latest saved briefing.'}
         </p>
@@ -891,8 +893,10 @@ export default function NewsPage({ briefingOnly = false }) {
 
       {((!loading && newsData) || reportView === 'saved') && (
         <>
-          {reportView !== 'saved' && briefingPending && <NewsLoading kind="briefing" inline />}
-          {reportView === 'edition' && !search.trim() && dailyBriefing && !briefingPending && <DailyBrief
+          {reportView === 'edition' && !search.trim() && !dailyBriefing && !savedBriefing && briefingPending && <NewsLoading kind="briefing" inline />}
+          {reportView === 'edition' && !search.trim() && briefingRetry}
+          {reportView === 'edition' && !search.trim() && savedBriefing && <SavedNewsBrief summary={savedBriefing} />}
+          {reportView === 'edition' && !search.trim() && dailyBriefing && <DailyBrief
             summary={dailyBriefing}
             locationLabel={locationLabel}
             onSelectSection={handleBriefSectionSelect}
@@ -926,7 +930,7 @@ export default function NewsPage({ briefingOnly = false }) {
               <div className="news-stream-heading">
                 <div>
                   <span>{reportView === 'saved' ? 'Your reading list · On this device' : locationLabel}</span>
-                  <h2 ref={reportsHeadingRef} tabIndex={-1}>{reportView === 'saved' ? 'Saved reports' : reportView === 'unopened' ? 'Still to explore' : selectedSection === 'All' ? 'Today’s reporting' : `${selectedSection} stories`}</h2>
+                  <h2 ref={reportsHeadingRef} tabIndex={-1}>{reportView === 'saved' ? 'Saved reports' : reportView === 'unopened' ? 'Still to explore' : selectedSection === 'All' ? 'Latest reporting' : `${selectedSection} stories`}</h2>
                 </div>
                 <small>{articles.length} {articles.length === 1 ? 'story' : 'stories'}</small>
               </div>

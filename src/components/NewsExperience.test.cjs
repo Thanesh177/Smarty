@@ -15,7 +15,10 @@ test('the briefing keeps section navigation but removes summary search and the e
   assert.match(news, /Daily news sections/);
   assert.match(news, /What this means and what comes next/);
   assert.doesNotMatch(news, /<dt>Why it matters|<dt>What to watch/);
-  assert.match(news, /if \(forceRefresh \|\| !hasEditorialBriefing\(availableData\)/, 'Manual refresh must still update the briefing');
+  assert.match(news, /cached\.isFresh && hasCurrentBriefing\(cached\.news\) && !forceRefresh/);
+  assert.match(news, /getLatestNews\(\{[\s\S]+?forceRefresh, view/);
+  assert.match(news, /Retry briefing/);
+  assert.match(news, /Last available briefing · <time dateTime=\{summary\.editionDate\}/);
 });
 
 test('both News views show the entire briefing without an expander', () => {

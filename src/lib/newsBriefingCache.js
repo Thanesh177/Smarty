@@ -1,9 +1,21 @@
-import { hasEditorialBriefing, newsCacheIsFresh } from './newsAvailability.js';
+import { hasCurrentBriefing, hasEditorialBriefing, newsCacheIsFresh } from './newsAvailability.js';
 import { mergeNewsBriefing, normalizeNewsEdition } from './newsEdition.js';
 
 const PREFIX = 'smarty_location_news_v22_';
 const STALE_TTL = 48 * 60 * 60 * 1000;
 export const getNewsCacheKey = (country, region) => `${PREFIX}${country}_${encodeURIComponent(region || 'all')}`;
+
+export function latestSavedBriefing(now, ...summaries) {
+  return summaries.reduce((latest, summary) => {
+    if (!hasEditorialBriefing({ dailySummary: summary }) || !/^\d{4}-\d{2}-\d{2}$/.test(summary.editionDate || '')) return latest;
+    const editionStart = Date.parse(`${summary.editionDate}T00:00:00Z`);
+    const published = Date.parse(summary.generatedAt);
+    const date = Number.isFinite(published) && published >= editionStart && published < editionStart + 86400000
+      ? published : editionStart;
+    if (!Number.isFinite(date) || date > now || now - date > STALE_TTL) return latest;
+    return !latest || summary.editionDate > latest.editionDate ? summary : latest;
+  }, null);
+}
 
 export function getCachedNews(country, region, storage, now = Date.now()) {
   try {
@@ -13,8 +25,10 @@ export function getCachedNews(country, region, storage, now = Date.now()) {
     if (!Number.isFinite(cached?.timestamp) || cached.timestamp > now) return null;
     if (now - cached.timestamp > STALE_TTL) { storage.removeItem(key); return null; }
     const news = normalizeNewsEdition(cached.news);
-    if (!news.articles.length && !Object.keys(news.sections).length && !hasEditorialBriefing(news)) return null;
-    return { news, timestamp: cached.timestamp, isFresh: newsCacheIsFresh(news, cached.timestamp, now) };
+    const lastEditorial = latestSavedBriefing(now, news.dailySummary,
+      cached.lastEditorial ? normalizeNewsEdition({ articles: [], dailySummary: cached.lastEditorial }).dailySummary : null);
+    if (!news.articles.length && !Object.keys(news.sections).length && !lastEditorial && !hasCurrentBriefing(news, now)) return null;
+    return { news, lastEditorial, timestamp: cached.timestamp, isFresh: newsCacheIsFresh(news, cached.timestamp, now) };
   } catch { return null; }
 }
 
@@ -23,8 +37,9 @@ export function setCachedNews(country, region, value, storage, now = Date.now())
   const existing = getCachedNews(country, region, storage, now);
   // Reports and the startup briefing finish independently. A fast reports
   // response must not erase a briefing that has just finished in the background.
-  const retainBriefing = !hasEditorialBriefing(incoming) && hasEditorialBriefing(existing?.news)
-    && existing.news.dailySummary.editionDate === new Date(now).toISOString().slice(0, 10);
+  const today = new Date(now).toISOString().slice(0, 10);
+  const retainBriefing = (!hasEditorialBriefing(incoming) || (incoming.dailySummary.editionDate && incoming.dailySummary.editionDate < today))
+    && hasEditorialBriefing(existing?.news) && existing.news.dailySummary.editionDate === today;
   const retainReports = hasEditorialBriefing(incoming) && existing
     && !incoming.articles.length && !Object.keys(incoming.sections).length;
   const news = retainBriefing ? mergeNewsBriefing(incoming, existing.news)
@@ -32,7 +47,10 @@ export function setCachedNews(country, region, value, storage, now = Date.now())
   const timestamp = retainBriefing ? existing.timestamp : now;
   try {
     storage = storage === undefined ? globalThis.localStorage : storage;
-    storage.setItem(getNewsCacheKey(country, region), JSON.stringify({ timestamp, news }));
+    const lastEditorial = latestSavedBriefing(now, news.dailySummary, incoming.dailySummary, existing?.lastEditorial);
+    storage.setItem(getNewsCacheKey(country, region), JSON.stringify({ timestamp, news,
+      ...(lastEditorial && lastEditorial !== news.dailySummary ? { lastEditorial } : {}),
+    }));
   }
   catch { /* The in-memory request cache still works when storage is full or disabled. */ }
   return news;
