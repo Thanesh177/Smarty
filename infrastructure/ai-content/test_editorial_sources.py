@@ -32,6 +32,17 @@ class SourceRetrievalTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in result], ["history-2"])
         self.assertIn('intitle%3A%22Suez+Canal%22', download.call_args.args[0])
 
+    def test_named_history_with_of_uses_the_event_instead_of_the_generic_concept(self):
+        excerpt = "The Treaty of Tordesillas divided claims using an agreed boundary. " * 12
+        data = {"query": {"pages": [
+            {"pageid": 1, "title": "Treaty", "fullurl": "https://en.wikipedia.org/wiki/Treaty", "extract": excerpt},
+            {"pageid": 2, "title": "Treaty of Tordesillas", "fullurl": "https://en.wikipedia.org/wiki/Treaty_of_Tordesillas", "extract": excerpt},
+        ]}}
+        with mock.patch.object(sources, "download", return_value=json.dumps(data).encode()) as download:
+            result = sources.historical_sources("how the Treaty of Tordesillas divided claims before maps were accurate", 100)
+        self.assertEqual([item["id"] for item in result], ["history-2"])
+        self.assertIn("intitle%3A%22Treaty+of+Tordesillas%22", download.call_args.args[0])
+
     def test_unavailable_history_is_empty_not_model_memory(self):
         with mock.patch.object(sources, "download", side_effect=OSError("offline")):
             pack = sources.retrieve_sources("World History", "Suez Canal", "History and civilization", "mechanism", 100)
@@ -64,6 +75,32 @@ class SourceRetrievalTests(unittest.TestCase):
                  "extract": "Trade routes connect goods and people across regions. " * 20}]}}
         with mock.patch.object(sources, "download", return_value=json.dumps(data).encode()):
             self.assertEqual(sources.historical_sources("how a trade route connects goods and people", 100), [])
+
+    def test_exact_concept_accepts_only_a_relevant_verified_redirect_destination(self):
+        subject = "how a chartered company's commercial rights became a means of territorial control"
+        excerpt = "Chartered companies received commercial rights and could exercise territorial control. " * 12
+        exact_page = {"pageid": 8, "title": "Royal charter companies",
+                      "fullurl": "https://en.wikipedia.org/wiki/Royal_charter_companies", "extract": excerpt}
+        unrelated_page = {**exact_page, "pageid": 9, "title": "Royal charters"}
+        redirects = [{"from": "Chartered company", "to": exact_page["title"]}]
+        normalized = [{"from": "chartered company", "to": "Chartered company"}]
+        data = {"query": {"normalized": normalized, "redirects": redirects,
+                          "pages": [unrelated_page, exact_page]}}
+        with mock.patch.object(sources, "download", return_value=json.dumps(data).encode()):
+            self.assertEqual([source["id"] for source in sources.historical_sources(subject, 100)], ["history-8"])
+        for pages, links in (
+            ([exact_page], [{"from": "Other concept", "to": exact_page["title"]}]),
+            ([exact_page], [*redirects, {"from": exact_page["title"], "to": "Chartered company"}]),
+            ([exact_page], [{**redirects[0], "tofragment": "Commercial rights"}]),
+            ([{**exact_page, "fullurl": "https://example.org/article"}], redirects),
+            ([{**exact_page, "extract": "Short excerpt"}], redirects),
+            ([{**exact_page, "extract": "A statute defined financial arrangements." * 20}], redirects),
+        ):
+            with (self.subTest(pages=pages[0]["title"], links=links),
+                  mock.patch.object(sources, "download", return_value=json.dumps(
+                      {"query": {"normalized": normalized, "redirects": links, "pages": pages}}
+                  ).encode())):
+                self.assertEqual(sources.historical_sources(subject, 100), [])
 
     def test_bad_links_empty_excerpts_and_unrelated_history_are_rejected(self):
         pages = [{"pageid": 1, "title": "Suez Canal", "fullurl": "https://evil.example/canal", "extract": "canal shipping " * 100},
@@ -116,12 +153,26 @@ class SourceRetrievalTests(unittest.TestCase):
 
 class EditorialPublicationTests(unittest.TestCase):
     def candidate(self):
-        paragraph = ("The Suez Canal connects the Mediterranean and Red seas and changes shipping routes. Ships can avoid travelling around Africa, so a shorter route changes travel time between Europe and Asia. The canal therefore links a geographic shortcut to a commercial decision. That decision also depends on tolls, access and shipping constraints, rather than distance alone. This distinction explains why a canal can alter trade without eliminating every difficulty of a voyage.")
-        return {"title": "How the Suez Canal Changed Shipping Routes", "mechanismParagraph": paragraph, "exampleParagraph": paragraph, "sourceIds": ["history-1"]}
+        mechanism = (
+            "The Suez Canal joins the Mediterranean Sea to the Red Sea. This connection gives ships trading "
+            "between Europe and Asia a route that does not go around Africa. For a ship that can use the "
+            "canal, a shorter voyage can mean fewer days at sea. The change is not simply a new line on a "
+            "map: time spent on one journey is time the ship cannot spend carrying other goods. A route "
+            "that saves time can therefore change how a shipping company plans its voyages."
+        )
+        example = (
+            "Imagine a shipping company comparing two possible voyages with the same ship and cargo. "
+            "It could choose the canal if the time saved is worth more than the toll, the charge for using it. "
+            "But the shorter distance is no help if the ship cannot access the canal. In that case the company "
+            "must evaluate another route even if it expects to spend longer at sea. The shortcut changes "
+            "the choices available; it does not make the same choice best for every voyage."
+        )
+        return {"title": "How the Suez Canal Changed Shipping Routes", "mechanismParagraph": mechanism, "exampleParagraph": example, "sourceIds": ["history-1"]}
 
     def test_history_without_evidence_never_calls_the_model(self):
         with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "history", "sources": []}), mock.patch.object(LAMBDA, "call_bedrock_text") as model:
-            self.assertIsNone(LAMBDA.generate_specific_post("World History", "how the Suez Canal changed shipping trade", LAMBDA.resolve_content_angle("mechanism"), []))
+            with self.assertRaises(LAMBDA.HistoricalEvidenceUnavailable):
+                LAMBDA.generate_specific_post("World History", "how the Suez Canal changed shipping trade", LAMBDA.resolve_content_angle("mechanism"), [])
         model.assert_not_called()
 
     def test_source_grounded_history_is_saved_with_real_citations(self):
@@ -196,6 +247,25 @@ class EditorialPublicationTests(unittest.TestCase):
         self.assertEqual(post["editorialMode"], "current")
         self.assertEqual(post["sources"][0]["publishedAt"], pack["sources"][0]["publishedAt"])
 
+    def test_retry_refreshes_expired_current_evidence(self):
+        pack = evidence("current")
+        now = pack["sources"][0]["publishedAt"]
+        expired = {**pack, "sources": [
+            {**pack["sources"][0], "publishedAt": now - LAMBDA.CURRENT_MAX_AGE - 1},
+        ]}
+        topic, subject = "Engineering", "how the Suez Canal changed shipping trade"
+        memo = {(topic, subject, "current"): expired}
+        with (mock.patch.object(LAMBDA, "load_editorial_evidence", return_value=pack) as load,
+              mock.patch.object(LAMBDA, "time", wraps=LAMBDA.time) as clock,
+              mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[
+                  json.dumps(self.candidate()), '{"supported":true,"readerReady":true,"issues":[]}',
+              ])):
+            clock.time.return_value = now
+            post = LAMBDA.generate_specific_post(topic, subject, LAMBDA.resolve_content_angle("current_connection"),
+                                                [], evidence_cache=memo)
+        load.assert_called_once_with(topic, subject, "current_connection")
+        self.assertEqual(post["sources"][0]["publishedAt"], now)
+
     def test_unretrieved_current_claim_cannot_pass_as_stable_concept(self):
         draft = {**self.candidate(), "sourceIds": [], "exampleParagraph": "Today " + self.candidate()["exampleParagraph"]}
         with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}), mock.patch.object(LAMBDA, "call_bedrock_text", return_value=json.dumps(draft)):
@@ -226,9 +296,13 @@ class EditorialPublicationTests(unittest.TestCase):
         self.assertNotEqual(first, LAMBDA.explanation_source_hash({**source, "sourceEvidence": changed}))
 
     def test_deep_lesson_with_unsupported_details_is_not_stored(self):
-        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[quality.ContentCatalogTests.complete_explanation(), '{"supported":false,"readerReady":true,"issues":["unsupported detail"]}']):
+        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[
+            quality.ContentCatalogTests.complete_explanation(),
+            '{"supported":false,"readerReady":true,"issues":["unsupported detail"]}',
+        ] * 2) as model:
             result = LAMBDA.generate_detailed_explanation("Suez Canal", "Source", "World History", source_evidence=evidence())
         self.assertEqual(result, "")
+        self.assertEqual(model.call_count, 4)
 
     def test_history_lens_only_applies_to_history_and_cannot_choose_live_news(self):
         for _ in range(80):

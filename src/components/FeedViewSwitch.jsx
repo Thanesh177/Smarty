@@ -4,10 +4,12 @@ import { FEED_VIEWS, getFeedView } from '../lib/feedViews';
 import { MAIN_TOPIC_LABELS } from '../data/topicTaxonomy';
 import FeedTopicPicker from './FeedTopicPicker';
 import { VIDEO_FEED_INTENT_EVENT } from '../lib/videoFeed';
+import { NEWS_FEED_INTENT_EVENT } from '../lib/newsBriefingCache';
 import './FeedViewSwitch.css';
 
 const icons = { all: Layers, news: Newspaper, video: Play };
 const prepareVideos = () => window.dispatchEvent(new Event(VIDEO_FEED_INTENT_EVENT));
+const prepareNews = () => window.dispatchEvent(new Event(NEWS_FEED_INTENT_EVENT));
 
 // Mounted once above the route outlet so switching views never resets the pill.
 export default function FeedViewSwitch() {
@@ -27,7 +29,8 @@ export default function FeedViewSwitch() {
       <span className="feed-view-switch-indicator" aria-hidden="true" />
       {FEED_VIEWS.map(view => {
         const Icon = icons[view.id];
-        const prepare = view.id === 'video' && active !== 'video' ? prepareVideos : undefined;
+        const prepare = active === view.id ? undefined
+          : view.id === 'video' ? prepareVideos : view.id === 'news' ? prepareNews : undefined;
         return <Link key={view.id} to={view.to} aria-label={view.label} aria-current={active === view.id ? 'page' : undefined}
           onPointerEnter={prepare} onPointerDown={prepare} onFocus={prepare}>
           <Icon size={15} aria-hidden="true" />

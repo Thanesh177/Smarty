@@ -36,6 +36,28 @@ test('switching location cancels before requesting a different phase', async () 
   } }), { name: 'AbortError' });
   assert.deepEqual(calls, ['reports']);
 });
+
+test('a view never displays reports for a mismatched place and can still load the matching briefing', async () => {
+  const shown = [];
+  const edition = await loadNewsEdition({
+    place: { country: 'IN', region: 'Tamil Nadu' },
+    load: async view => view === 'reports'
+      ? { ...reports, location: { countryCode: 'IN', region: 'Kerala' } }
+      : { ...reports, dailySummary: summary },
+    onReports: data => shown.push(data),
+  });
+  assert.deepEqual(shown, []);
+  assert.equal(edition.location.region, 'Tamil Nadu');
+});
+
+test('a fresh combined edition replaces the stale fast report response', async () => {
+  const old = { ...report, title: 'Previous report' };
+  const edition = await loadNewsEdition({ load: async view => view === 'reports'
+    ? { ...reports, cacheStatus: 'stale-cache', articles: [old], sections: { World: [old] } }
+    : { ...reports, cacheStatus: 'fresh-cache', dailySummary: summary },
+  });
+  assert.equal(edition.articles[0].title, report.title);
+});
 test('the briefing keeps every nonempty paragraph and supports older plain-text editions', () => {
   assert.deepEqual(briefingParagraphs({ overview: 'Short fallback.', overviewParagraphs: ['First.', '', 'Second.', null, 'Third.'] }), ['First.', 'Second.', 'Third.']);
   assert.deepEqual(briefingParagraphs({ overview: 'First.\n\nSecond.', overviewParagraphs: [] }), ['First.', 'Second.']);

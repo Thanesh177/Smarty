@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBriefingPreloader, getCachedNews, getNewsCacheKey, latestSavedBriefing, setCachedNews, newsOutlookParagraphs } from './newsBriefingCache.js';
+import { createNewsRequestCache } from './newsRequestCache.js';
+import { loadNewsEdition } from './newsEdition.js';
 
 const clock = Date.parse('2026-10-24T12:00:00Z');
 const storage = () => {
@@ -12,32 +14,81 @@ const reports = { articles: [article], location: { countryCode: 'GLOBAL', region
 const briefing = { ...reports, dailySummary: { summaryMode: 'editorial', overview: 'A sourced overview.', editionDate: '2026-10-24' } };
 
 test('startup preloading stores the full edition for immediate use on the News screen', async () => {
-  const disk = storage(); let calls = 0;
+  const disk = storage(); const calls = [];
   const warm = createBriefingPreloader({ storage: disk, now: () => clock, load: async options => {
-    calls++; assert.deepEqual(options, { country: 'GLOBAL', region: '', lang: 'english' }); return briefing;
+    calls.push(options);
+    return options.view === 'reports' ? reports : briefing;
   } });
   await warm(); await warm();
-  assert.equal(calls, 1);
+  assert.deepEqual(calls, [
+    { country: 'GLOBAL', region: '', lang: 'english', view: 'reports' },
+    { country: 'GLOBAL', region: '', lang: 'english' },
+  ]);
   assert.equal(getCachedNews('GLOBAL', '', disk, clock).news.dailySummary.overview, briefing.dailySummary.overview);
 });
 
 test('concurrent startup and resume requests share one pending task', async () => {
-  let finish, calls = 0;
-  const warm = createBriefingPreloader({ storage: storage(), now: () => clock,
-    load: () => { calls++; return new Promise(resolve => { finish = resolve; }); } });
+  let finish, calls = 0, startBriefing;
+  const disk = storage();
+  const briefingStarted = new Promise(resolve => { startBriefing = resolve; });
+  const warm = createBriefingPreloader({ storage: disk, now: () => clock,
+    load: ({ view }) => {
+      calls++;
+      if (view === 'reports') return Promise.resolve(reports);
+      startBriefing();
+      return new Promise(resolve => { finish = resolve; });
+    } });
   const one = warm(), two = warm();
   assert.equal(one, two);
-  await Promise.resolve(); finish(briefing);
-  await Promise.all([one, two]); assert.equal(calls, 1);
+  await briefingStarted;
+  const immediate = getCachedNews('GLOBAL', '', disk, clock).news;
+  assert.equal(immediate.articles[0].title, article.title, 'Reports must be ready before the briefing finishes');
+  assert.equal(immediate.dailySummary, undefined);
+  assert.equal(warm(), one, 'An intent to open News joins the original warm-up');
+  finish(briefing);
+  await Promise.all([one, two]); assert.equal(calls, 2);
 });
 
 test('preload errors are not cached and the next attempt can recover', async () => {
   let calls = 0; const disk = storage();
   const warm = createBriefingPreloader({ storage: disk, now: () => clock,
-    load: async () => { if (++calls === 1) throw new Error('Offline'); return briefing; } });
+    load: async ({ view }) => { if (++calls <= 2) throw new Error('Offline'); return view === 'reports' ? reports : briefing; } });
   await assert.rejects(warm(), /Offline/);
   assert.equal(getCachedNews('GLOBAL', '', disk, clock), null);
-  await warm(); assert.equal(calls, 2);
+  await warm(); assert.equal(calls, 4);
+});
+
+test('a failed reports prefetch still warms the saved briefing', async () => {
+  const disk = storage();
+  const warm = createBriefingPreloader({ storage: disk, now: () => clock, load: async ({ view }) => {
+    if (view === 'reports') throw new Error('Reports unavailable');
+    return { ...briefing, articles: [] };
+  } });
+  await warm();
+  assert.equal(getCachedNews('GLOBAL', '', disk, clock).news.dailySummary.overview, briefing.dailySummary.overview);
+});
+
+test('opening News while the briefing warms reuses both network requests', async () => {
+  const disk = storage();
+  const requests = createNewsRequestCache({ now: () => clock });
+  const loaded = [];
+  let resolveBriefing, notifyStarted;
+  const started = new Promise(resolve => { notifyStarted = resolve; });
+  const load = ({ view }) => requests.get(view || 'briefing', () => {
+    loaded.push(view || 'briefing');
+    if (view === 'reports') return reports;
+    notifyStarted();
+    return new Promise(resolve => { resolveBriefing = resolve; });
+  });
+  const warm = createBriefingPreloader({ load, storage: disk, now: () => clock });
+  const background = warm();
+  await started;
+  const local = getCachedNews('GLOBAL', '', disk, clock);
+  assert.equal(local.news.articles[0].news_link, article.news_link);
+  const foreground = loadNewsEdition({ load: view => load({ view }) });
+  resolveBriefing(briefing);
+  await Promise.all([background, foreground]);
+  assert.deepEqual(loaded, ['reports', 'briefing']);
 });
 
 test('a reports-only cache does not prevent preparing the daily briefing', async () => {
@@ -82,7 +133,39 @@ test('a summary-only startup response retains the already cached reports', () =>
 test('updating reports cannot make an expired same-day briefing fresh again', () => {
   const disk = storage(); setCachedNews('GLOBAL', '', briefing, disk, clock);
   setCachedNews('GLOBAL', '', reports, disk, clock + 16 * 60000);
-  assert.equal(getCachedNews('GLOBAL', '', disk, clock + 16 * 60000).isFresh, false);
+  const cached = getCachedNews('GLOBAL', '', disk, clock + 16 * 60000);
+  assert.equal(cached.isFresh, false);
+  assert.equal(cached.isReportsFresh, true);
+});
+
+test('saved or browser fallback reports do not overwrite better cached headlines', () => {
+  const disk = storage();
+  setCachedNews('GLOBAL', '', briefing, disk, clock);
+  for (const cacheStatus of ['stale-cache', 'browser-fallback']) {
+    const fallback = { ...reports, cacheStatus, articles: [{ ...article, title: 'Fallback headline' }] };
+    const result = setCachedNews('GLOBAL', '', fallback, disk, clock + 70000);
+    assert.equal(result.articles[0].title, article.title);
+    assert.equal(result.dailySummary.editionDate, '2026-10-24');
+    assert.equal(getCachedNews('GLOBAL', '', disk, clock + 70000).isReportsFresh, false);
+  }
+});
+
+test('summary-only refresh cannot extend the lifetime of the cached headlines', () => {
+  const disk = storage();
+  setCachedNews('GLOBAL', '', reports, disk, clock);
+  setCachedNews('GLOBAL', '', { ...briefing, articles: [] }, disk, clock + 120000);
+  const cached = getCachedNews('GLOBAL', '', disk, clock + 120000);
+  assert.equal(cached.isFresh, true);
+  assert.equal(cached.isReportsFresh, false);
+  assert.equal(cached.news.articles[0].title, article.title);
+});
+
+test('a response tagged with another region cannot poison the selected location cache', () => {
+  const disk = storage();
+  const otherRegion = { ...briefing, location: { countryCode: 'IN', region: 'Kerala' } };
+  assert.throws(() => setCachedNews('IN', 'Tamil Nadu', otherRegion, disk, clock), /different location/);
+  disk.setItem(getNewsCacheKey('IN', 'Tamil Nadu'), JSON.stringify({ timestamp: clock, news: otherRegion }));
+  assert.equal(getCachedNews('IN', 'Tamil Nadu', disk, clock), null);
 });
 
 test('countries and regions have separate persisted editions', async () => {

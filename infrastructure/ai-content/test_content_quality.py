@@ -202,6 +202,32 @@ class ContentCatalogTests(unittest.TestCase):
         self.assertEqual(next_state["cycle"], 2)
         self.assertEqual(next_state["usedTopics"], [next_topic])
 
+    def test_rotation_alternate_preserves_the_only_unused_topic_for_the_next_run(self):
+        excluded = "World History"
+        used_topics = [topic for topic in LAMBDA.BASE_TOPICS if topic != excluded]
+        state = {
+            "catalogSignature": LAMBDA.CONTENT_CATALOG_SIGNATURE,
+            "schemaVersion": LAMBDA.CONTENT_ROTATION_SCHEMA_VERSION,
+            "rotationVersion": 20,
+            "cycle": 3,
+            "usedTopics": used_topics,
+            "recentTopics": [],
+            "recentDomains": [],
+        }
+        alternate, next_state = LAMBDA.advance_content_rotation_state(state, exclude_topics={excluded})
+        self.assertIn(alternate, used_topics)
+        self.assertEqual(next_state["usedTopics"], used_topics)
+        self.assertEqual(next_state["cycle"], 3)
+        self.assertEqual(next_state["rotationVersion"], 21)
+
+        last, completed = LAMBDA.advance_content_rotation_state(next_state)
+        self.assertEqual(last, excluded)
+        self.assertEqual(completed["cycle"], 3)
+        first, fresh = LAMBDA.advance_content_rotation_state(completed, exclude_topics={excluded})
+        self.assertNotEqual(first, excluded)
+        self.assertEqual(fresh["usedTopics"], [first])
+        self.assertEqual(fresh["cycle"], 4)
+
     def test_selection_avoids_recent_subtopic(self):
         recent = [
             {
@@ -224,18 +250,9 @@ class ContentCatalogTests(unittest.TestCase):
         self.assertNotEqual(topic, "Artificial Intelligence")
 
     def test_quality_gate_accepts_specific_copy(self):
-        filler = (
-            "The cache stores keys and values from each earlier attention step, "
-            "then the decoder reuses those tensors when it predicts the next token. "
-            "Each layer reads the preserved state, adds one new entry, and passes a "
-            "smaller amount of work forward. This avoids recomputing the entire prompt "
-            "while keeping the same causal attention result. The memory footprint grows "
-            "with sequence length, so serving systems must balance speed, batch size, "
-            "precision, and available accelerator memory during every request."
-        )
         post = {
             "title": "How KV Cache Reuses Earlier Tokens During Decoding",
-            "body": f"{filler}\n\n{filler}",
+            "body": f"{self.kv_cache_mechanism}\n\n{self.kv_cache_example}",
         }
         valid, reason = LAMBDA.validate_generated_post(
             post,
@@ -245,16 +262,24 @@ class ContentCatalogTests(unittest.TestCase):
         )
         self.assertTrue(valid, reason)
 
+    kv_cache_mechanism = (
+        "A text model can add a word without rebuilding all the information it learned about the words before it. "
+        "The model processes a token, a piece of text, and creates two records: a key used to match that token "
+        "and a value carrying information the model can retrieve. A key-value (KV) cache stores those records. "
+        "To generate the next token, the model can compare its new query with the stored keys and draw on their "
+        "values without recomputing the earlier records."
+    )
+    kv_cache_example = (
+        "Imagine a writing assistant extending a long paragraph one token at a time. After it adds the next token, "
+        "the earlier token records are still available and only the new records need to be stored. But each active "
+        "document in this example needs its own growing set of records. A server with limited memory can therefore "
+        "fit fewer long sessions than short ones if everything else is equal. The speedup comes from trading memory "
+        "for repeated work; it does not make the cost of a long context disappear."
+    )
+
     def test_regular_posts_are_written_for_non_specialists_without_an_extra_model_pass(self):
-        paragraph = (
-            "A model keeps earlier attention keys and values in a cache. "
-            "This is stored information about earlier tokens it can use again. Each new token adds "
-            "one entry rather than rebuilding earlier entries. A token is one "
-            "piece of text the model handles. Reusing these entries reduces "
-            "repeated work, but keeping them takes memory as the text grows."
-        )
         draft = {"title": "How a KV Cache Saves Earlier Work",
-                 "mechanismParagraph": paragraph, "exampleParagraph": paragraph,
+                 "mechanismParagraph": self.kv_cache_mechanism, "exampleParagraph": self.kv_cache_example,
                  "image_search_query": "computer model memory", "sourceIds": []}
         with (mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
               mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[
@@ -270,7 +295,8 @@ class ContentCatalogTests(unittest.TestCase):
         for instruction in ("no specialist background", "define each immediately", "Expand an acronym", "less accurate", "hypothetical"):
             self.assertIn(instruction, guide)
         self.assertIn("80 to 120 words", prompt)
-        self.assertIn("varied length", prompt)
+        self.assertNotIn(guide, prompt)
+        self.assertNotIn("varied length", prompt)
         self.assertNotIn("4 to 6 short sentences", prompt)
         self.assertNotIn("8 to 18 words", guide)
         self.assertEqual(generation.kwargs["max_tokens"], 850)
@@ -284,12 +310,31 @@ class ContentCatalogTests(unittest.TestCase):
             self.assertIn(instruction, guide)
 
     def test_richer_posts_keep_room_for_detail_without_changing_the_two_paragraph_contract(self):
-        paragraph = "cache earlier tokens " * 40
+        mechanism = (
+            self.kv_cache_mechanism + " This works when appending a token does not change the records for earlier tokens. "
+            "That condition holds in causal attention, where a token can look back but cannot see later tokens."
+        )
+        example = (
+            self.kv_cache_example + " Comparing two prompts on the same server isolates this memory difference better "
+            "than comparing prompts on different machines, where hardware and serving settings can also affect speed."
+        )
+        self.assertGreater(len(mechanism.split()), 110)
+        self.assertGreater(len(example.split()), 110)
         valid, reason = LAMBDA.validate_generated_post(
-            {"title": "How a KV Cache Reuses Earlier Tokens", "body": f"{paragraph.strip()}\n\n{paragraph.strip()}"},
+            {"title": "How a KV Cache Reuses Earlier Tokens", "body": f"{mechanism}\n\n{example}"},
             "Artificial Intelligence", "how a KV cache avoids recomputing earlier tokens", [],
         )
         self.assertTrue(valid, reason)
+
+    def test_quality_gate_rejects_a_repeated_example_even_after_light_edits(self):
+        for example in (self.kv_cache_mechanism, self.kv_cache_mechanism.replace("draw on", "retrieve")):
+            with self.subTest(example=example):
+                valid, reason = LAMBDA.validate_generated_post(
+                    {"title": "How a KV Cache Reuses Earlier Tokens", "body": f"{self.kv_cache_mechanism}\n\n{example}"},
+                    "Artificial Intelligence", "how a KV cache avoids recomputing earlier tokens", [],
+                )
+                self.assertFalse(valid)
+                self.assertIn("repeat", reason)
 
     def test_quality_gate_rejects_generic_title(self):
         paragraph = " ".join(["specific"] * 80)
@@ -335,7 +380,7 @@ class ContentCatalogTests(unittest.TestCase):
             )
 
         self.assertTrue(LAMBDA.is_complete_detailed_explanation(result))
-        self.assertIn("3 to 5 chapters", captured["prompt"])
+        self.assertIn("exactly four chapters", captured["prompt"])
         self.assertIn("unheaded prose", captured["prompt"])
         self.assertIn("Carry one concrete example", captured["prompt"])
         self.assertIn("explicit conceptual bridge", captured["prompt"])

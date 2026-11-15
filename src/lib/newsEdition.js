@@ -23,6 +23,7 @@ export function normalizeSavedNews(value) {
 }
 
 const text = value => typeof value === 'string' ? value : '';
+const regionKey = region => text(region).trim().toLowerCase();
 const paragraphs = value => (Array.isArray(value) ? value : []).filter(value => typeof value === 'string' && value.trim());
 export function briefingParagraphs(summary) {
   const overview = paragraphs(summary?.overviewParagraphs);
@@ -43,8 +44,13 @@ function cleanSummary(summary) {
   };
 }
 
-export function normalizeNewsEdition(value) {
+export function normalizeNewsEdition(value, place) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('The news service returned an invalid response. Please try again.');
+  const countryCode = text(value.location?.countryCode).trim().toUpperCase();
+  if (place && countryCode && (countryCode !== text(place.country).trim().toUpperCase()
+      || regionKey(value.location.region) !== regionKey(place.region))) {
+    throw new Error('The news service returned a different location. Please try again.');
+  }
   if (value.sections != null && (typeof value.sections !== 'object' || Array.isArray(value.sections))) throw new Error('The news service returned invalid sections. Please try again.');
   const sections = Object.fromEntries(Object.entries(value.sections || {}).flatMap(([name, items]) => {
     const reports = cleanReports(items);
@@ -63,7 +69,7 @@ export function normalizeNewsEdition(value) {
 
 export function mergeNewsBriefing(reports, value) {
   const briefing = normalizeNewsEdition(value);
-  const place = news => [String(news?.location?.countryCode || news?.location?.country || '').toUpperCase(), String(news?.location?.region || '')];
+  const place = news => [text(news?.location?.countryCode).trim().toUpperCase(), regionKey(news?.location?.region)];
   const [country, region] = place(reports), [incomingCountry, incomingRegion] = place(briefing);
   if ((country && incomingCountry && country !== incomingCountry) || (country && incomingCountry && region !== incomingRegion)) {
     throw new Error('The daily summary belongs to another edition. Your reports are still available.');
@@ -71,29 +77,40 @@ export function mergeNewsBriefing(reports, value) {
   if (!hasEditorialBriefing(briefing)) return reports;
   // A summary-only or older cached response must not erase the fast report view.
   return { ...briefing, ...reports, dailySummary: briefing.dailySummary,
-    generatedAt: reports.generatedAt || briefing.generatedAt, cacheStatus: briefing.cacheStatus || reports.cacheStatus };
+    generatedAt: reports.generatedAt || briefing.generatedAt, cacheStatus: reports.cacheStatus || briefing.cacheStatus,
+    notice: reports.notice || briefing.notice };
 }
 
-export async function loadNewsEdition({ load, signal, onReports, onBriefing }) {
-  let reports = null;
-  try {
-    const received = normalizeNewsEdition(await load('reports'));
-    if (received.articles.length || Object.keys(received.sections).length) reports = received;
-  } catch {
-    // A reports outage must not prevent us from requesting the saved daily edition.
+export const hasNewsReports = news => Boolean(news?.articles?.length || Object.keys(news?.sections || {}).length);
+
+export const isFallbackNews = news => ['stale-cache', 'browser-fallback'].includes(news?.cacheStatus);
+
+export async function loadNewsEdition({ load, signal, onReports, onBriefing, savedReports, place }) {
+  const checkAbort = () => {
+    if (signal?.aborted) throw new DOMException('News request cancelled.', 'AbortError');
+  };
+  checkAbort();
+  let reports = savedReports ? normalizeNewsEdition(savedReports, place) : null;
+  if (!reports) {
+    try {
+      const received = normalizeNewsEdition(await load('reports'), place);
+      if (hasNewsReports(received)) reports = received;
+    } catch {
+      // A reports outage must not prevent us from requesting the saved daily edition.
+    }
   }
-  if (signal?.aborted) throw new DOMException('News request cancelled.', 'AbortError');
-  if (reports) onReports?.(reports);
+  checkAbort();
+  if (reports) onReports?.(reports, { cached: Boolean(savedReports) });
   onBriefing?.();
   try {
     // The combined route shares the reports refresh lock. Start after the fast
     // route has settled so two cold requests do not compete for that lock.
-    const briefing = normalizeNewsEdition(await load());
-    if (signal?.aborted) throw new DOMException('News request cancelled.', 'AbortError');
-    if (!reports && !hasEditorialBriefing(briefing) && !briefing.articles.length && !Object.keys(briefing.sections).length) {
+    const briefing = normalizeNewsEdition(await load(), place);
+    checkAbort();
+    if (!reports && !hasEditorialBriefing(briefing) && !hasNewsReports(briefing)) {
       throw new Error('No reports or briefing are available for this edition.');
     }
-    if (!reports || (reports.cacheStatus === 'browser-fallback' && briefing.articles.length && briefing.cacheStatus !== 'browser-fallback')) return briefing;
+    if (!reports || (isFallbackNews(reports) && hasNewsReports(briefing) && !isFallbackNews(briefing))) return briefing;
     return mergeNewsBriefing(reports, briefing);
   } catch (error) {
     if (!reports || signal?.aborted) throw error;

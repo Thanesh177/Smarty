@@ -33,6 +33,7 @@ BRIEFING_VERSION = 2
 CACHE_TTL_SECONDS = 20 * 60
 BRIEFING_RETRY_SECONDS = 5 * 60
 STALE_TTL_SECONDS = 48 * 60 * 60
+MAX_EDITION_ARCHIVE_BYTES = 260 * 1024
 MAX_ARTICLES = 60
 MIN_ARTICLES = 4
 # The deployed and declared News Lambda timeout is 28 seconds. Keep this above
@@ -40,6 +41,7 @@ MIN_ARTICLES = 4
 NEWS_LEASE_SECONDS = 90
 MAX_PROVIDER_RESPONSE_BYTES = 3 * 1024 * 1024
 BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-micro-v1:0")
+REPORT_REFRESH_ERRORS = (RuntimeError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, ET.ParseError)
 
 WORLD_SECTORS = {
     "World": "international diplomacy conflict humanitarian",
@@ -281,17 +283,22 @@ def get_cached(cache_key):
         raise
 
 
-def set_cached(cache_key, payload, fresh_until=None):
+def set_cached(cache_key, payload, fresh_until=None, *, edition_archive=None):
     now = int(time.time())
+    item = {
+        "date": cache_key,
+        "cacheVersion": CACHE_VERSION,
+        "payload": payload,
+        "freshUntil": fresh_until if fresh_until is not None else now + CACHE_TTL_SECONDS,
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    if edition_archive is None:
+        item["expiresAt"] = now + STALE_TTL_SECONDS
+    else:
+        # Published editions keep their freshness boundary but never expire from storage.
+        item.update({"recordType": "daily-briefing", "editionArchive": edition_archive})
     try:
-        NEWS_CACHE.put_item(Item={
-            "date": cache_key,
-            "cacheVersion": CACHE_VERSION,
-            "payload": payload,
-            "freshUntil": fresh_until if fresh_until is not None else now + CACHE_TTL_SECONDS,
-            "expiresAt": now + STALE_TTL_SECONDS,
-            "updatedAt": datetime.now(timezone.utc).isoformat(),
-        })
+        NEWS_CACHE.put_item(Item=item)
     except ClientError as error:
         LOGGER.warning(json.dumps({
             "event": "news_cache_write_failed",
@@ -1262,16 +1269,71 @@ def build_daily_summary(articles, location):
     }
 
 
+def daily_briefing_key(location, edition_date):
+    identity = f"{location['countryCode']}|{location['region'].lower()}"
+    suffix = hashlib.sha256(identity.encode()).hexdigest()[:16]
+    key = (f"world-briefing-v{CACHE_VERSION}#{edition_date}#english" if location["countryCode"] == "GLOBAL"
+           else f"local-briefing-v{CACHE_VERSION}#{edition_date}#{suffix}#english")
+    return key + f"#briefing-v{BRIEFING_VERSION}"
+
+
+def edition_archive_for(summary, location, articles):
+    archive = {
+        "location": {key: value for key, value in location.items() if key != "gdeltCountry"},
+        "articles": [],
+    }
+    remaining = MAX_EDITION_ARCHIVE_BYTES - len(json.dumps([summary, archive], ensure_ascii=False).encode("utf-8"))
+    if remaining <= 0:
+        return None
+    for article in articles[:MAX_ARTICLES]:
+        reference = story_reference(article)
+        size = len(json.dumps(reference, ensure_ascii=False).encode("utf-8")) + 2
+        if size <= remaining:
+            archive["articles"].append(reference)
+            remaining -= size
+    return archive
+
+
+def archived_edition_from_item(saved, location, edition_date, now):
+    archive = saved.get("editionArchive") or {}
+    summary = saved.get("payload") or {}
+    place = archive.get("location") or {}
+    expires_at = saved.get("expiresAt")
+    if ((expires_at is not None and int(expires_at) <= now) or saved.get("recordType") != "daily-briefing"
+            or summary.get("summaryMode") != "editorial" or summary.get("editionDate") != edition_date
+            or not summary.get("overview") or place.get("countryCode") != location["countryCode"]
+            or (place.get("region") or "").casefold() != location["region"].casefold()):
+        return None
+    return {"dailySummary": summary, "articles": archive.get("articles", []), "location": place}
+
+
+def read_archived_edition(location, edition_date, now):
+    """Look up one saved public edition. Never fetch reports or call the model."""
+    saved = get_cached(daily_briefing_key(location, edition_date)) or {}
+    return archived_edition_from_item(saved, location, edition_date, now)
+
+
+def read_saved_outage_edition(location, now):
+    day = datetime.fromtimestamp(now, timezone.utc).date()
+    edition_date = day.isoformat()
+    saved = get_cached(daily_briefing_key(location, edition_date)) or {}
+    current = archived_edition_from_item(saved, location, edition_date, now)
+    if current:
+        return current, "Showing the saved daily briefing and its reports while sources reconnect."
+    summary = saved.get("payload") or {}
+    if (int(saved.get("freshUntil", 0)) > now and summary.get("summaryMode") == "editorial"
+            and summary.get("overview") and summary.get("editionDate", edition_date) == edition_date):
+        return {"dailySummary": summary, "articles": []}, "Latest reports will return when sources reconnect."
+    previous = read_archived_edition(location, (day - timedelta(days=1)).isoformat(), now)
+    return previous, "News sources are reconnecting. Showing the previous saved edition."
+
+
 def get_world_daily_summary(articles, location, *, cached_only=False):
     """Publish a shared UTC edition per place; refreshes never rerun its AI."""
     now = int(time.time())
     edition_date = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m-%d")
     next_day = (now // 86400 + 1) * 86400
-    identity = f"{location['countryCode']}|{location['region'].lower()}"
-    suffix = hashlib.sha256(identity.encode()).hexdigest()[:16]
-    key = (f"world-briefing-v{CACHE_VERSION}#{edition_date}#english" if location["countryCode"] == "GLOBAL"
-           else f"local-briefing-v{CACHE_VERSION}#{edition_date}#{suffix}#english")
-    key += f"#briefing-v{BRIEFING_VERSION}"
+    key = daily_briefing_key(location, edition_date)
     cached = get_cached(key)
     if cached and int(cached.get("freshUntil", 0)) > now and cached.get("payload"):
         saved = cached["payload"]
@@ -1294,7 +1356,13 @@ def get_world_daily_summary(articles, location, *, cached_only=False):
         })
         # Temporary AI failures can recover later; never freeze a fallback all day.
         fresh_until = next_day if summary["summaryMode"] == "editorial" else min(next_day, now + BRIEFING_RETRY_SECONDS)
-        set_cached(key, summary, fresh_until=fresh_until)
+        if summary["summaryMode"] == "editorial" and summary.get("overview") and articles:
+            # Keep the exact public reporting inputs as references, not article text.
+            # Cache and archive publish in one write under the existing edition lease.
+            archive = edition_archive_for(summary, location, articles)
+            set_cached(key, summary, fresh_until=fresh_until, edition_archive=archive)
+        else:
+            set_cached(key, summary, fresh_until=fresh_until)
         return summary
 
 
@@ -1407,37 +1475,58 @@ def get_or_build_reports(location):
     reports_key = make_cache_key(location) + "#reports"
     cached = get_cached(reports_key)
     if cached and int(cached.get("freshUntil", 0)) > int(time.time()) and cached.get("payload"):
-        payload = dict(cached["payload"])
-    else:
+        return dict(cached["payload"])
+    try:
         with generation_lease(NEWS_CACHE, "date", reports_key, NEWS_LEASE_SECONDS):
-            cached = get_cached(reports_key)
+            cached = get_cached(reports_key) or cached
             if cached and int(cached.get("freshUntil", 0)) > int(time.time()) and cached.get("payload"):
-                payload = dict(cached["payload"])
-            else:
-                payload = build_reports_payload(location)
-                set_cached(reports_key, payload)
-    return payload
+                return dict(cached["payload"])
+            payload = build_reports_payload(location)
+            set_cached(reports_key, payload)
+            return payload
+    except REPORT_REFRESH_ERRORS:
+        fallback = saved_reports_payload(cached, int(time.time()), "Showing saved reports while sources reconnect.")
+        if fallback:
+            return fallback
+        raise
+
+
+def saved_reports_payload(cached, now, notice):
+    cached = cached or {}
+    payload = cached.get("payload") or {}
+    if not payload.get("articles") or int(cached.get("expiresAt", cached.get("freshUntil", 0))) <= now:
+        return None
+    return {**payload, "cacheStatus": "stale-cache", "notice": notice}
 
 
 def build_payload(location):
     try:
         payload = get_or_build_reports(location)
-    except (RuntimeError, TimeoutError, urllib.error.URLError, json.JSONDecodeError, ET.ParseError):
+    except REPORT_REFRESH_ERRORS:
         # Refreshing the rolling reports should not take down an already-published edition.
-        summary = get_world_daily_summary([], location, cached_only=True)
-        if not summary:
+        saved, notice = read_saved_outage_edition(location, int(time.time()))
+        if not saved:
             raise
+        summary = saved["dailySummary"]
         return {
             "status": 200,
             "location": {key: value for key, value in location.items() if key != "gdeltCountry"},
             "dailySummary": summary,
-            "articles": [],
+            "articles": saved["articles"],
             "sections": {},
             "generatedAt": summary.get("generatedAt", ""),
             "cacheStatus": "stale-cache",
-            "notice": "The daily briefing is available. Latest reports will return when sources reconnect.",
+            "notice": notice,
         }
-    payload["dailySummary"] = get_world_daily_summary(payload["articles"], location)
+    # A pending summary must not make successfully loaded reports disappear.
+    # Never generate a day's edition from reports known to be stale.
+    try:
+        payload["dailySummary"] = get_world_daily_summary(
+            payload["articles"], location, cached_only=payload.get("cacheStatus") == "stale-cache",
+        )
+    except (GenerationBusy, ClientError, BotoCoreError):
+        return {**payload, "dailySummary": None, "cacheStatus": "stale-cache",
+                "notice": payload.get("notice") or "Reports are available now. The daily briefing is temporarily unavailable."}
     return payload
 
 
@@ -1607,7 +1696,7 @@ def lambda_handler(event, context):
     cache_key = make_cache_key(location) + ("#reports" if reports_only else f"#briefing-v{BRIEFING_VERSION}")
     try:
         cached = get_cached(cache_key)
-    except ClientError:
+    except (ClientError, BotoCoreError):
         return api_response(503, {"error": "Saved news is temporarily unavailable. Please retry shortly.", "retryable": True})
     now = int(time.time())
 
@@ -1640,6 +1729,17 @@ def lambda_handler(event, context):
     except GenerationBusy:
         if cached and int(cached.get("expiresAt", 0)) > now and cached.get("payload"):
             return api_response(200, {**cached["payload"], "cacheStatus": "stale-cache", "notice": "Updating this briefing. Showing the latest saved edition."})
+        if not reports_only:
+            try:
+                reports = saved_reports_payload(
+                    get_cached(make_cache_key(location) + "#reports"), now,
+                    "Showing reports while the daily briefing is being prepared.",
+                )
+                if reports:
+                    return api_response(200, reports)
+            except (ClientError, BotoCoreError):
+                # The lock holder still owns the refresh; don't bypass it.
+                pass
         result = api_response(503, {"error": "This briefing is being prepared. Please try again shortly.", "retryable": True})
         result["headers"] = {**result["headers"], "Retry-After": "3"}
         return result

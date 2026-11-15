@@ -94,6 +94,39 @@ class ExplanationDepthTests(unittest.TestCase):
                 self.assertEqual(LAMBDA.generate_detailed_explanation("A mechanism", self.body), "")
             self.assertEqual(model.call_count, 2)
 
+    def test_sourced_lesson_can_rewrite_once_from_the_same_evidence(self):
+        evidence = {"mode": "history", "sources": [{"id": "reference-1", "excerpt": "A source excerpt."}]}
+        rejection = '{"supported":false,"readerReady":true,"issues":["Remove the unsupported date"]}'
+        approval = '{"supported":true,"readerReady":true,"issues":[]}'
+        for verdict, expected in ((rejection, ""), (approval, self.lesson)):
+            with self.subTest(verdict=verdict), mock.patch.object(
+                LAMBDA, "call_bedrock_text", side_effect=[self.lesson, rejection, self.lesson, verdict],
+            ) as model:
+                result = LAMBDA.generate_detailed_explanation(
+                    "Reading a record", self.body,
+                    topic="History", sub_topic="how to assess an old record",
+                    learning_target={"learningLevel": "foundation"}, source_evidence=evidence,
+                )
+                self.assertEqual(result, expected)
+            self.assertEqual(model.call_count, 4)
+            self.assertIn("Remove the unsupported date", model.call_args_list[2].args[0])
+            for call in model.call_args_list:
+                self.assertIn("A source excerpt.", call.args[0])
+            for call in (model.call_args_list[1], model.call_args_list[3]):
+                self.assertIn(LAMBDA.LESSON_REVIEW_GUIDE, call.args[0])
+                self.assertIn("how to assess an old record", call.args[0])
+                self.assertIn('"stage": "foundation"', call.args[0])
+
+    def test_sourced_lesson_with_malformed_verdict_fails_without_rewrite(self):
+        evidence = {"mode": "history", "sources": [{"id": "reference-1", "excerpt": "A source excerpt."}]}
+        with mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[
+            self.lesson, '{"supported":false,"issues":["Incomplete verdict"]}',
+        ]) as model:
+            self.assertEqual(LAMBDA.generate_detailed_explanation(
+                "Reading a record", self.body, source_evidence=evidence,
+            ), "")
+        self.assertEqual(model.call_count, 2)
+
     def test_accuracy_review_requires_strict_positive_complete_verdict(self):
         for verdict in ('{}', 'not JSON', '{"accurate":"true","readerReady":true,"issues":[]}',
                         '{"accurate":true,"readerReady":true,"issues":["wrong premise"]}',

@@ -1,8 +1,9 @@
 import { hasCurrentBriefing, hasEditorialBriefing, newsCacheIsFresh } from './newsAvailability.js';
-import { mergeNewsBriefing, normalizeNewsEdition } from './newsEdition.js';
+import { hasNewsReports, isFallbackNews, loadNewsEdition, mergeNewsBriefing, normalizeNewsEdition } from './newsEdition.js';
 
 const PREFIX = 'smarty_location_news_v22_';
 const STALE_TTL = 48 * 60 * 60 * 1000;
+export const NEWS_FEED_INTENT_EVENT = 'smarty-news-feed-intent';
 export const getNewsCacheKey = (country, region) => `${PREFIX}${country}_${encodeURIComponent(region || 'all')}`;
 
 export function latestSavedBriefing(now, ...summaries) {
@@ -24,31 +25,43 @@ export function getCachedNews(country, region, storage, now = Date.now()) {
     const cached = JSON.parse(storage.getItem(key) || 'null');
     if (!Number.isFinite(cached?.timestamp) || cached.timestamp > now) return null;
     if (now - cached.timestamp > STALE_TTL) { storage.removeItem(key); return null; }
-    const news = normalizeNewsEdition(cached.news);
+    const news = normalizeNewsEdition(cached.news, { country, region });
     const lastEditorial = latestSavedBriefing(now, news.dailySummary,
       cached.lastEditorial ? normalizeNewsEdition({ articles: [], dailySummary: cached.lastEditorial }).dailySummary : null);
     if (!news.articles.length && !Object.keys(news.sections).length && !lastEditorial && !hasCurrentBriefing(news, now)) return null;
-    return { news, lastEditorial, timestamp: cached.timestamp, isFresh: newsCacheIsFresh(news, cached.timestamp, now) };
+    const reportsTimestamp = cached.reportsTimestamp ?? cached.timestamp;
+    return { news, lastEditorial, timestamp: cached.timestamp, reportsTimestamp,
+      isFresh: newsCacheIsFresh(news, cached.timestamp, now),
+      isReportsFresh: hasNewsReports(news) && !isFallbackNews(news) && Number.isFinite(reportsTimestamp)
+        && reportsTimestamp <= now && now - reportsTimestamp < 60000,
+    };
   } catch { return null; }
 }
 
 export function setCachedNews(country, region, value, storage, now = Date.now()) {
-  const incoming = normalizeNewsEdition(value);
+  const incoming = normalizeNewsEdition(value, { country, region });
   const existing = getCachedNews(country, region, storage, now);
   // Reports and the startup briefing finish independently. A fast reports
   // response must not erase a briefing that has just finished in the background.
   const today = new Date(now).toISOString().slice(0, 10);
   const retainBriefing = (!hasEditorialBriefing(incoming) || (incoming.dailySummary.editionDate && incoming.dailySummary.editionDate < today))
     && hasEditorialBriefing(existing?.news) && existing.news.dailySummary.editionDate === today;
-  const retainReports = hasEditorialBriefing(incoming) && existing
-    && !incoming.articles.length && !Object.keys(incoming.sections).length;
-  const news = retainBriefing ? mergeNewsBriefing(incoming, existing.news)
-    : retainReports ? mergeNewsBriefing(existing.news, incoming) : incoming;
-  const timestamp = retainBriefing ? existing.timestamp : now;
+  const retainReports = hasNewsReports(existing?.news) && (!hasNewsReports(incoming)
+    || (isFallbackNews(incoming) && !isFallbackNews(existing.news)));
+  const reportBase = retainReports ? existing.news : incoming;
+  const summaryBase = retainBriefing ? existing.news : incoming;
+  const news = mergeNewsBriefing({ ...reportBase, dailySummary: summaryBase.dailySummary }, summaryBase);
+  // A saved summary can still be valuable during an outage, but a fallback
+  // must not extend either freshness clock or replace better reports.
+  const timestamp = retainBriefing || (retainReports && isFallbackNews(incoming)) ? existing.timestamp : now;
+  const sameReportSnapshot = existing?.news.generatedAt && existing.news.generatedAt === reportBase.generatedAt
+    && isFallbackNews(existing.news) === isFallbackNews(reportBase);
+  const reportsTimestamp = retainReports || sameReportSnapshot ? existing.reportsTimestamp : now;
+  if (retainReports && isFallbackNews(incoming)) news.notice = incoming.notice || reportBase.notice;
   try {
     storage = storage === undefined ? globalThis.localStorage : storage;
     const lastEditorial = latestSavedBriefing(now, news.dailySummary, incoming.dailySummary, existing?.lastEditorial);
-    storage.setItem(getNewsCacheKey(country, region), JSON.stringify({ timestamp, news,
+    storage.setItem(getNewsCacheKey(country, region), JSON.stringify({ timestamp, reportsTimestamp, news,
       ...(lastEditorial && lastEditorial !== news.dailySummary ? { lastEditorial } : {}),
     }));
   }
@@ -63,10 +76,21 @@ export function createBriefingPreloader({ load, storage, now = Date.now } = {}) 
   return function preload({ country = 'GLOBAL', region = '' } = {}) {
     const key = getNewsCacheKey(country, region);
     const cached = getCachedNews(country, region, storage, now());
-    if (cached?.isFresh && hasEditorialBriefing(cached.news)) return Promise.resolve(cached.news);
     if (pending.has(key)) return pending.get(key);
-    const task = Promise.resolve().then(() => load({ country, region, lang: 'english' }))
-      .then(news => setCachedNews(country, region, news, storage, now()))
+    if (cached?.isFresh && hasNewsReports(cached.news) && hasCurrentBriefing(cached.news, now())) return Promise.resolve(cached.news);
+    const freshReports = cached?.isReportsFresh ? cached.news : null;
+    const save = news => setCachedNews(country, region, news, storage, now());
+    let visibleReports;
+    const task = Promise.resolve().then(() => loadNewsEdition({
+      load: view => load({ country, region, lang: 'english', ...(view ? { view } : {}) }),
+      savedReports: freshReports,
+      place: { country, region },
+      onReports: (reports, { cached }) => {
+        visibleReports = reports;
+        if (!cached) save(reports);
+      },
+    }))
+      .then(news => news === visibleReports ? getCachedNews(country, region, storage, now())?.news || news : save(news))
       .finally(() => { if (pending.get(key) === task) pending.delete(key); });
     pending.set(key, task);
     return task;

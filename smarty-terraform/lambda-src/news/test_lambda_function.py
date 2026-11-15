@@ -174,6 +174,150 @@ class NewsLambdaTests(unittest.TestCase):
             self.assertEqual(result["statusCode"], 503)
             generate.assert_not_called()
 
+    def test_daily_edition_failure_keeps_fresh_reports_visible_and_uncached(self):
+        location = news.make_location("IN", "Tamil Nadu")
+        articles = [make_article("one", "Rail service expands", "Local", "")]
+        reports = {"location": location, "articles": articles, "sections": {"Local": articles}}
+        for error in (news.GenerationBusy(), _ClientError(), _BotoCoreError()):
+            with (self.subTest(error=type(error).__name__),
+                  patch.object(news, "get_cached", return_value=None),
+                  patch.object(news, "generation_lease", return_value=nullcontext()),
+                  patch.object(news, "get_or_build_reports", return_value=reports),
+                  patch.object(news, "get_world_daily_summary", side_effect=error),
+                  patch.object(news, "set_cached") as save):
+                result = news.lambda_handler({"queryStringParameters": {"country": "IN", "region": "Tamil Nadu"}}, None)
+                payload = json.loads(result["body"])
+                self.assertEqual(result["statusCode"], 200)
+                self.assertEqual(result["headers"]["Cache-Control"], "no-store")
+                self.assertEqual(payload["articles"], articles)
+                self.assertIsNone(payload["dailySummary"])
+                self.assertEqual(payload["cacheStatus"], "stale-cache")
+                save.assert_not_called()
+
+    def test_stale_rolling_reports_do_not_generate_a_new_briefing(self):
+        now = int(news.time.time())
+        location = news.make_location("IN", "Tamil Nadu")
+        articles = [make_article("one", "Rail service expands", "Local", "")]
+        reports = {"location": location, "articles": articles, "generatedAt": "original-time"}
+        stored = {"payload": reports, "freshUntil": now - 1, "expiresAt": now + 300}
+        with (patch.object(news, "get_cached", side_effect=lambda key: stored if key.endswith("#reports") else None),
+              patch.object(news, "generation_lease", return_value=nullcontext()),
+              patch.object(news, "build_reports_payload", side_effect=RuntimeError("Sources unavailable")),
+              patch.object(news, "build_daily_summary") as generate,
+              patch.object(news, "set_cached") as save):
+            result = news.lambda_handler({"queryStringParameters": {"country": "IN", "region": "Tamil Nadu"}}, None)
+            self.assertEqual(result["statusCode"], 200)
+            self.assertEqual(result["headers"]["Cache-Control"], "no-store")
+            payload = json.loads(result["body"])
+            self.assertEqual(payload["articles"], articles)
+            self.assertEqual(payload["generatedAt"], "original-time")
+            self.assertIsNone(payload["dailySummary"])
+            self.assertNotIn("cacheStatus", reports)
+            generate.assert_not_called()
+            save.assert_not_called()
+
+    def test_busy_cold_briefing_uses_already_loaded_reports(self):
+        now = int(news.time.time())
+        articles = [make_article("one", "Rail service expands", "Local", "")]
+        saved = {"payload": {"articles": articles}, "freshUntil": now + 60}
+        with (patch.object(news, "get_cached", side_effect=lambda key: saved if key.endswith("#reports") else None),
+              patch.object(news, "generation_lease", side_effect=news.GenerationBusy()),
+              patch.object(news, "build_payload") as build):
+            result = news.lambda_handler({}, None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(result["headers"]["Cache-Control"], "no-store")
+        self.assertEqual(json.loads(result["body"])["articles"], articles)
+        build.assert_not_called()
+
+    def test_published_edition_and_public_references_are_archived_in_one_write(self):
+        start = int(news.datetime(2026, 9, 22, 8, tzinfo=news.timezone.utc).timestamp())
+        date = "2026-09-22"
+        location = news.make_location("IN", "Tamil Nadu")
+        article = {**make_article("one", "Marine survey begins", "Science", f"{date}T00:00:00Z"),
+                   "summary": "Provider excerpt", "image_link": "https://example.com/photo"}
+        store = {}
+        def save(Item):
+            store[Item["date"]] = Item
+
+        with (patch.object(news.time, "time", return_value=start),
+              patch.object(news.NEWS_CACHE, "get_item", side_effect=lambda Key, **_: {"Item": store.get(Key["date"])}),
+              patch.object(news.NEWS_CACHE, "put_item", side_effect=save) as write,
+              patch.object(news, "generation_lease", return_value=nullcontext()),
+              patch.object(news, "build_daily_summary", return_value={"summaryMode": "editorial", "overview": "The marine survey began."}) as generate):
+            first = news.get_world_daily_summary([article], location)
+            second = news.get_world_daily_summary([article], location)
+            self.assertEqual(first, second)
+            archived = news.read_archived_edition(location, date, start + 3650 * 86400)
+            self.assertEqual(archived["dailySummary"], first)
+            self.assertEqual(archived["articles"], [news.story_reference(article)])
+            self.assertNotIn("summary", archived["articles"][0])
+            self.assertNotIn("image_link", archived["articles"][0])
+            self.assertIsNone(news.read_archived_edition(news.make_location("IN", "Kerala"), date, start))
+            record = store[news.daily_briefing_key(location, date)]
+            self.assertNotIn("expiresAt", record)
+            self.assertEqual(record["freshUntil"], int(news.datetime(2026, 9, 23, tzinfo=news.timezone.utc).timestamp()))
+            write.assert_called_once()
+            generate.assert_called_once()
+
+    def test_temporary_cache_records_still_expire(self):
+        start = 1700000000
+        with (patch.object(news.time, "time", return_value=start),
+              patch.object(news.NEWS_CACHE, "put_item") as write):
+            news.set_cached("rolling-reports", {"articles": []})
+        item = write.call_args.kwargs["Item"]
+        self.assertEqual(item["expiresAt"], start + news.STALE_TTL_SECONDS)
+        self.assertNotIn("editionArchive", item)
+
+    def test_cold_outage_reuses_yesterdays_archive_without_ai_or_new_writes(self):
+        start = int(news.datetime(2026, 9, 23, 8, tzinfo=news.timezone.utc).timestamp())
+        location = news.make_location("GLOBAL", "")
+        article = make_article("one", "Marine survey begins", "Science", "2026-09-22T00:00:00Z")
+        summary = {"summaryMode": "editorial", "overview": "The marine survey began.", "editionDate": "2026-09-22"}
+        archived = {"recordType": "daily-briefing", "payload": summary,
+                    "editionArchive": news.edition_archive_for(summary, location, [article])}
+        key = news.daily_briefing_key(location, "2026-09-22")
+        with (patch.object(news.time, "time", return_value=start),
+              patch.object(news, "get_cached", side_effect=lambda cache_key: archived if cache_key == key else None),
+              patch.object(news, "generation_lease", return_value=nullcontext()),
+              patch.object(news, "build_reports_payload", side_effect=RuntimeError("Sources unavailable")),
+              patch.object(news, "build_daily_summary") as generate,
+              patch.object(news, "set_cached") as save):
+            result = news.lambda_handler({}, None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(result["headers"]["Cache-Control"], "no-store")
+        self.assertEqual(json.loads(result["body"])["dailySummary"], summary)
+        self.assertEqual(json.loads(result["body"])["articles"], [news.story_reference(article)])
+        generate.assert_not_called()
+        save.assert_not_called()
+
+    def test_cold_outage_restores_todays_archived_articles_with_the_briefing(self):
+        now = int(news.datetime(2026, 9, 23, 8, tzinfo=news.timezone.utc).timestamp())
+        location = news.make_location("IN", "Tamil Nadu")
+        edition_date = "2026-09-23"
+        article = make_article("one", "Marine survey begins", "Science", f"{edition_date}T00:00:00Z")
+        summary = {"summaryMode": "editorial", "overview": "The marine survey began.",
+                   "editionDate": edition_date, "generatedAt": f"{edition_date}T08:00:00Z"}
+        saved = {"recordType": "daily-briefing", "payload": summary, "freshUntil": now + 300,
+                 "editionArchive": news.edition_archive_for(summary, location, [article])}
+        with (patch.object(news.time, "time", return_value=now),
+              patch.object(news, "get_or_build_reports", side_effect=TimeoutError()),
+              patch.object(news, "get_cached", return_value=saved) as cache,
+              patch.object(news, "build_daily_summary") as generate):
+            payload = news.build_payload(location)
+        cache.assert_called_once_with(news.daily_briefing_key(location, edition_date))
+        self.assertEqual(payload["dailySummary"], summary)
+        self.assertEqual(payload["articles"], [news.story_reference(article)])
+        self.assertEqual(payload["generatedAt"], summary["generatedAt"])
+        self.assertEqual(payload["cacheStatus"], "stale-cache")
+        generate.assert_not_called()
+
+    def test_archive_references_stay_inside_the_storage_budget(self):
+        location = news.make_location("GLOBAL", "")
+        article = make_article("one", "Marine survey begins", "Science", "")
+        oversized = {**article, "news_link": "https://example.com/" + "x" * news.MAX_EDITION_ARCHIVE_BYTES}
+        archive = news.edition_archive_for({"overview": "A short briefing."}, location, [oversized, article])
+        self.assertEqual(archive["articles"], [news.story_reference(article)])
+
     def test_world_edition_is_shared_for_whole_day_and_changes_next_day(self):
         location = news.make_location("GLOBAL", "")
         start = int(news.datetime(2026, 9, 22, 8, tzinfo=news.timezone.utc).timestamp())
@@ -206,6 +350,7 @@ class NewsLambdaTests(unittest.TestCase):
               patch.object(news, "set_cached") as save):
             news.get_world_daily_summary([], news.make_location("GLOBAL", ""))
             self.assertEqual(save.call_args.kwargs["fresh_until"], start + news.BRIEFING_RETRY_SECONDS)
+            self.assertNotIn("edition_archive", save.call_args.kwargs)
 
     def test_combined_fallback_does_not_extend_the_summary_retry_window(self):
         generated = news.datetime.now(news.timezone.utc).replace(microsecond=0)

@@ -963,16 +963,19 @@ CONTENT_ANGLES = (
         "id": "documented_history",
         "label": "A moment that changed the world",
         "instruction": "Use a documented event or historical object to trace causes, consequences, and what the surviving evidence does and does not establish. Avoid single-cause myths and invented scenes.",
+        "review": "Check that the draft names the relevant actors or object, grounds case details in the supplied evidence, and distinguishes what happened from why it happened. Chronological order is not proof of cause.",
     },
     {
         "id": "current_connection",
         "label": "In the world now",
         "instruction": "Connect the assigned concept to a dated, retrieved recent report. Attribute reported claims and distinguish proposals, preliminary findings, and confirmed outcomes. If no relevant recent report is available, teach the stable concept without claiming it is current news.",
+        "review": "Require a dated and attributed report that makes the assigned concept clearer. A proposal, forecast, or preliminary result must not be described as a completed or confirmed outcome.",
     },
     {
         "id": "deep_question",
         "label": "Beneath the obvious answer",
         "instruction": "Start with a specific, worthwhile puzzle. Explain the less obvious causal link, evidence, and competing explanations where applicable. Resolve the puzzle without sensationalism, conspiracy framing, or speculation presented as fact.",
+        "review": "Require a specific question and an explanation that goes beyond the obvious answer. For an open question, require a distinction between observations, explanations, and missing evidence.",
     },
     {
         "id": "mechanism",
@@ -983,26 +986,31 @@ CONTENT_ANGLES = (
         "id": "failure_mode",
         "label": "Failure mode",
         "instruction": "Establish normal operation, then trace one broken link and its consequences.",
+        "review": "Require a baseline and the first point where the failure changes what the system does. A symptom alone is not a causal explanation.",
     },
     {
         "id": "experiment",
         "label": "Decisive experiment",
         "instruction": "Explain the setup, the observation, and the conclusion while separating evidence from interpretation.",
+        "review": "Require the variable or contrast that makes the test informative, what was observed or would be measured, and what that result can and cannot show. Do not require procedural details for sensitive experiments.",
     },
     {
         "id": "tradeoff",
         "label": "Hidden tradeoff",
         "instruction": "Show why improving one measurable property makes another property harder to preserve.",
+        "review": "Require both properties and the shared constraint that puts them in tension. Reject a universal tradeoff claim if it only holds under particular conditions.",
     },
     {
         "id": "case_study",
         "label": "Concrete case",
         "instruction": "Use one named object, event, system, or situation to reveal the broader mechanism.",
+        "review": "Require a case that shows how the idea works, not just a mention of it. Real-world case specifics must come from supplied evidence; an invented case must be clearly hypothetical.",
     },
     {
         "id": "comparison",
         "label": "Close comparison",
         "instruction": "Compare two easily confused mechanisms and identify the exact step where they diverge.",
+        "review": "Require two genuinely comparable cases, the point of difference, and how that difference changes the outcome. Two disconnected definitions do not count.",
     },
 )
 

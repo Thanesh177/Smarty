@@ -33,8 +33,8 @@ class LearningCurriculumTests(unittest.TestCase):
             "image_search_query": "model weights training computer",
         }))
 
-    def publish(self, slot):
-        return json.loads(LAMBDA.create_post(publication_id=slot)["body"])
+    def publish(self, slot, context=None):
+        return json.loads(LAMBDA.create_post(publication_id=slot, context=context)["body"])
 
     def test_quiz_examples_extend_paths_without_changing_any_published_position(self):
         for row in FOCUSED_STUDY:
@@ -111,35 +111,357 @@ class LearningCurriculumTests(unittest.TestCase):
         self.assertEqual(self.generate.call_count, 1)
         self.assertEqual(LAMBDA.read_learning_path_state("Artificial Intelligence")["nextIndex"], 1)
 
-    def test_scheduled_post_uses_readability_feedback_without_an_extra_review_pass(self):
-        paragraph = (
+    def test_scheduled_publication_leases_cover_the_invocation_without_a_long_lockout(self):
+        event = {"source": "smarty.learning.schedule", "scheduledTime": "2026-11-12T02:30:00Z"}
+        context = mock.Mock()
+        context.get_remaining_time_in_millis.side_effect = [182701, 182000, 175000, 170000]
+        slot = LAMBDA.scheduled_post_id(event)
+        path = LAMBDA.learning_path_id("Artificial Intelligence")
+        with mock.patch.object(LAMBDA, "generation_lease", wraps=LAMBDA.generation_lease) as lease:
+            self.assertEqual(LAMBDA.lambda_handler(event, context)["statusCode"], 200)
+        self.assertEqual(lease.call_args_list, [
+            mock.call(self.progress, "explanationId", "learning-publication#" + slot, 198),
+            mock.call(self.progress, "explanationId", path, 197),
+        ])
+
+    def test_busy_scheduled_slot_cannot_start_a_second_generation(self):
+        event = {"source": "smarty.learning.schedule", "scheduledTime": "2026-11-12T02:30:00Z"}
+        identity = "learning-publication#" + LAMBDA.scheduled_post_id(event)
+        with LAMBDA.generation_lease(self.progress, "explanationId", identity):
+            with mock.patch.object(self.posts, "put_item", wraps=self.posts.put_item) as write_post:
+                with self.assertRaises(LAMBDA.GenerationBusy):
+                    LAMBDA.lambda_handler(event, None)
+                write_post.assert_not_called()
+        self.generate.assert_not_called()
+        self.details.assert_not_called()
+
+    def test_history_source_failure_publishes_one_reviewed_alternate_for_the_slot(self):
+        primary, alternate = "World History", "Artificial Intelligence"
+        event = {"source": "smarty.learning.schedule", "scheduledTime": "2026-11-12T02:30:00Z"}
+        draft = json.dumps(self.training_draft())
+        approval = '{"accurate":true,"readerReady":true,"issues":[]}'
+        evidence = [
+            {"mode": "history", "sources": []},
+            {"mode": "concept", "sources": []},
+        ]
+        with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
+              mock.patch.object(LAMBDA, "reserve_generation_topic", side_effect=[primary, alternate]) as reserve,
+              mock.patch.object(LAMBDA, "load_editorial_evidence", side_effect=evidence) as sources,
+              mock.patch.object(LAMBDA, "choose_content_angle", return_value=LAMBDA.resolve_content_angle("mechanism")),
+              mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[draft, approval]) as model):
+            first = json.loads(LAMBDA.lambda_handler(event, None)["body"])["post"]
+            replay = json.loads(LAMBDA.lambda_handler(event, None)["body"])["post"]
+        self.assertEqual(first["id"], replay["id"])
+        self.assertEqual(first["topic"], alternate)
+        self.assertEqual(first["learningOrder"], 1)
+        self.assertTrue(first["aiDetailedExplanation"])
+        self.assertEqual(list(self.posts.items), [first["id"]])
+        self.assertEqual(LAMBDA.read_learning_path_state(primary)["nextIndex"], 0)
+        self.assertEqual(LAMBDA.read_learning_path_state(alternate)["nextIndex"], 1)
+        self.assertEqual(reserve.call_args_list, [mock.call(), mock.call(exclude_topics={primary})])
+        self.assertEqual([call.args[0] for call in sources.call_args_list], [primary, alternate])
+        self.assertEqual(model.call_count, 2)  # one writer and one reviewer; no history draft
+
+    def test_exhausted_draft_retries_remain_bound_to_one_alternate(self):
+        primary, alternate = "Artificial Intelligence", "Physics"
+        complete_draft = self.generate.return_value
+        self.generate.side_effect = [None, None, complete_draft]
+        with (mock.patch.object(LAMBDA, "reserve_generation_topic", side_effect=[primary, alternate]) as reserve,
+              mock.patch.object(LAMBDA, "MAX_GENERATION_ATTEMPTS", 1)):
+            with self.assertRaises(LAMBDA.PostDraftsRejected):
+                self.publish("double-rejection")
+            self.assertEqual(self.posts.items, {})
+            post = self.publish("double-rejection")["post"]
+        self.assertEqual(post["topic"], alternate)
+        self.assertEqual(post["learningOrder"], 1)
+        self.assertEqual([call.args[0] for call in self.generate.call_args_list], [primary, alternate, alternate])
+        self.assertEqual(reserve.call_args_list, [mock.call(), mock.call(exclude_topics={primary})])
+        self.assertEqual(LAMBDA.read_learning_path_state(primary)["nextIndex"], 0)
+        self.assertEqual(LAMBDA.read_learning_path_state(alternate)["nextIndex"], 1)
+
+    def test_alternate_is_deferred_to_fresh_invocation_when_time_is_low(self):
+        primary, alternate = "World History", "Artificial Intelligence"
+        context = mock.Mock()
+        context.get_remaining_time_in_millis.return_value = 130000
+        complete_draft = self.generate.return_value
+        self.generate.side_effect = [LAMBDA.HistoricalEvidenceUnavailable("no source"), complete_draft]
+        with mock.patch.object(LAMBDA, "reserve_generation_topic", side_effect=[primary, alternate]) as reserve:
+            with self.assertRaises(RuntimeError):
+                self.publish("deferred-alternate", context)
+            self.assertEqual([call.args[0] for call in self.generate.call_args_list], [primary])
+            self.assertEqual(self.posts.items, {})
+            self.details.assert_not_called()
+            context.get_remaining_time_in_millis.return_value = 183000
+            post = self.publish("deferred-alternate", context)["post"]
+        self.assertEqual([call.args[0] for call in self.generate.call_args_list], [primary, alternate])
+        self.assertEqual(reserve.call_args_list, [mock.call(), mock.call(exclude_topics={primary})])
+        self.assertEqual(post["topic"], alternate)
+        self.assertEqual(LAMBDA.read_learning_path_state(primary)["nextIndex"], 0)
+
+    def test_model_outage_keeps_the_original_scheduled_topic_on_retry(self):
+        primary = "Artificial Intelligence"
+        complete_draft = self.generate.return_value
+        self.generate.side_effect = [LAMBDA.PostModelUnavailable("model offline"), complete_draft]
+        with mock.patch.object(LAMBDA, "reserve_generation_topic", return_value=primary) as reserve:
+            with self.assertRaises(LAMBDA.PostModelUnavailable):
+                self.publish("model-unavailable")
+            self.assertEqual(self.posts.items, {})
+            post = self.publish("model-unavailable")["post"]
+        reserve.assert_called_once_with()
+        self.assertEqual([call.args[0] for call in self.generate.call_args_list], [primary, primary])
+        self.assertEqual(post["topic"], primary)
+        self.assertEqual(post["learningOrder"], 1)
+
+    def test_recovery_after_alternate_post_write_never_rebinds_to_primary(self):
+        primary, alternate = "World History", "Artificial Intelligence"
+        complete_draft = self.generate.return_value
+        self.generate.side_effect = [
+            LAMBDA.HistoricalEvidenceUnavailable("no source"),
+            complete_draft,
+            {**complete_draft, "title": "How Trade Routes Connect Goods and Ideas"},
+        ]
+        with mock.patch.object(LAMBDA, "reserve_generation_topic",
+                               side_effect=[primary, alternate, primary]) as reserve:
+            with mock.patch.object(LAMBDA, "complete_learning_step",
+                                   side_effect=RuntimeError("progress write failed")):
+                with self.assertRaisesRegex(RuntimeError, "progress write failed"):
+                    self.publish("alternate-crash")
+            self.assertEqual(len(self.posts.items), 1)
+            alternate_post_id = next(iter(self.posts.items))
+            self.assertEqual(LAMBDA.read_learning_path_state(alternate)["nextIndex"], 0)
+
+            # The former primary can independently publish in another slot.
+            self.assertEqual(self.publish("separate-slot")["post"]["topic"], primary)
+            replay = self.publish("alternate-crash")["post"]
+
+        self.assertEqual(replay["id"], alternate_post_id)
+        self.assertEqual(replay["topic"], alternate)
+        self.assertEqual(len(self.posts.items), 2)
+        self.assertEqual(reserve.call_count, 3)
+        self.assertEqual(self.generate.call_count, 3)
+        self.assertEqual(LAMBDA.read_learning_path_state(primary)["nextIndex"], 1)
+        self.assertEqual(LAMBDA.read_learning_path_state(alternate)["nextIndex"], 1)
+
+    def test_completed_alternate_is_not_replaced_on_replay(self):
+        primary, alternate = "World History", "Physics"
+        state = LAMBDA.read_learning_path_state(alternate)
+        completed_index = len(LAMBDA.topic_learning_path(alternate))
+        self.progress.put_item(Item={**state, "nextIndex": completed_index, "progressionVersion": completed_index})
+        self.generate.side_effect = LAMBDA.HistoricalEvidenceUnavailable("no source")
+        with mock.patch.object(LAMBDA, "reserve_generation_topic", side_effect=[primary, alternate]) as reserve:
+            first = self.publish("complete-fallback")
+            replay = self.publish("complete-fallback")
+        self.assertEqual(first, replay)
+        self.assertEqual(first["topic"], alternate)
+        self.assertIn("complete", first["message"])
+        self.assertEqual(reserve.call_count, 2)
+        self.assertEqual(self.generate.call_count, 1)
+        self.assertEqual(self.posts.items, {})
+        self.assertEqual(LAMBDA.read_learning_path_state(primary)["nextIndex"], 0)
+
+    @staticmethod
+    def training_draft():
+        mechanism = (
             "Imagine a model gives a bad estimate. During training it compares the estimate "
             "with a target, then changes internal numbers called weights to reduce its error. "
             "At inference, when it makes a new estimate, it uses those saved weights rather "
             "than learning them again. The new estimate can still be wrong if the example "
             "differs greatly from the examples the model trained on."
         )
-        draft = json.dumps({"title": "Why AI Training Changes How a Model Answers",
-                            "mechanismParagraph": paragraph, "exampleParagraph": paragraph,
-                            "sourceIds": []})
+        example = (
+            "Consider a toy model that predicts how long a bus ride takes. During training, "
+            "it compares its guesses with recorded trips and adjusts the weights that shape "
+            "those guesses. Later a rider asks about a trip, and inference uses those saved "
+            "weights to produce an estimate without changing them. If the road is closed "
+            "and the training data never included a detour, the estimate may still be wrong. "
+            "A prediction is not a new training example."
+        )
+        return {"title": "Why AI Training Changes How a Model Answers",
+                "mechanismParagraph": mechanism, "exampleParagraph": example, "sourceIds": []}
+
+    def test_scheduled_post_uses_readability_feedback_without_an_extra_review_pass(self):
+        draft = self.training_draft()
+        unclear = {**draft, "mechanismParagraph": draft["mechanismParagraph"].replace(
+            "At inference, when it makes a new estimate, it", "At inference it",
+        )}
         barrier = '{"accurate":true,"readerReady":false,"issues":["Explain inference when it first appears"]}'
         approval = '{"accurate":true,"readerReady":true,"issues":[]}'
         with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
-              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
-              mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[draft, barrier, draft, approval]) as model):
+              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}) as evidence,
+              mock.patch.object(LAMBDA, "choose_content_angle", return_value=LAMBDA.resolve_content_angle("mechanism")),
+              mock.patch.object(LAMBDA, "call_bedrock_text",
+                                side_effect=[json.dumps(unclear), barrier, json.dumps(draft), approval]) as model):
             post = self.publish("readable-draft")["post"]
         self.assertEqual(post["learningOrder"], 1)
         self.assertEqual(model.call_count, 4)
+        evidence.assert_called_once_with("Artificial Intelligence", post["subTopic"], "mechanism")
         self.assertNotIn("Explain inference when it first appears", model.call_args_list[0].args[0])
         self.assertIn("Explain inference when it first appears", model.call_args_list[2].args[0])
 
+    def test_history_retries_reuse_evidence_across_a_lens_change(self):
+        topic = "World History"
+        target = LAMBDA.learning_target_for_topic(topic, 0)
+        post_id = LAMBDA.learning_post_id(target["learningPathId"], target["learningOrder"])
+        pack = {"mode": "history", "sources": [{
+            "id": "primary-1",
+            "excerpt": "Distinct evidence for the upcoming history lesson.",
+        }]}
+        with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
+              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value=pack) as evidence,
+              mock.patch.object(LAMBDA, "MAX_GENERATION_ATTEMPTS", 2),
+              mock.patch.object(LAMBDA, "choose_content_angle", return_value=LAMBDA.resolve_content_angle("tradeoff")),
+              mock.patch.object(LAMBDA, "call_bedrock_text", return_value='{"error":"uncertain"}') as model):
+            with self.assertRaises(LAMBDA.PostDraftsRejected):
+                LAMBDA.prepare_learning_source(topic, target, post_id)
+        evidence.assert_called_once()
+        self.assertEqual(evidence.call_args.args[:2], (topic, target["subTopic"]))
+        self.assertEqual(model.call_count, 2)
+        self.assertIn("Hidden tradeoff", model.call_args_list[0].args[0])
+        self.assertIn("Inside the mechanism", model.call_args_list[1].args[0])
+        for call in model.call_args_list:
+            self.assertIn(pack["sources"][0]["excerpt"], call.args[0])
+        self.assertEqual(self.progress.items, {})
+
+    def test_scheduled_post_retries_repeated_paragraphs_without_spending_a_review_call(self):
+        draft = self.training_draft()
+        repeated = {**draft, "exampleParagraph": draft["mechanismParagraph"]}
+        approval = '{"accurate":true,"readerReady":true,"issues":[]}'
+        with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
+              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
+              mock.patch.object(LAMBDA, "choose_content_angle", return_value=LAMBDA.resolve_content_angle("mechanism")),
+              mock.patch.object(LAMBDA, "call_bedrock_text",
+                                side_effect=[json.dumps(repeated), json.dumps(draft), approval]) as model):
+            post = self.publish("repeated-draft")["post"]
+        self.assertEqual(post["learningOrder"], 1)
+        self.assertEqual(model.call_count, 3)
+        self.assertIn("Make paragraph two add a worked example", model.call_args_list[1].args[0])
+        review = model.call_args_list[2].args[0]
+        self.assertIn(LAMBDA.learning_target_for_topic("Artificial Intelligence", 0)["subTopic"], review)
+        self.assertIn('"stage": "foundation"', review)
+        self.assertIn(LAMBDA.POST_PUBLICATION_SAFETY, review)
+
+    def test_scheduled_post_retries_bad_length_with_exact_counts_and_same_lesson(self):
+        draft = self.training_draft()
+        wrong_lengths = {**draft, "mechanismParagraph": "This is too short.",
+                         "exampleParagraph": draft["exampleParagraph"] + (" extra" * 135)}
+        approval = '{"accurate":true,"readerReady":true,"issues":[]}'
+        with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
+              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
+              mock.patch.object(LAMBDA, "choose_content_angle", return_value=LAMBDA.resolve_content_angle("mechanism")),
+              mock.patch.object(LAMBDA, "call_bedrock_text",
+                                side_effect=[json.dumps(wrong_lengths), json.dumps(draft), approval]) as model):
+            post = self.publish("length-retry")["post"]
+        self.assertEqual(post["learningOrder"], 1)
+        self.assertEqual(model.call_count, 3)
+        retry = model.call_args_list[1].args[0]
+        self.assertIn("paragraph 1: 4 words", retry)
+        self.assertIn(f'paragraph 2: {len(wrong_lengths["exampleParagraph"].split())} words', retry)
+        self.assertIn("accepted: 55-135 words each", retry)
+        self.assertIn(LAMBDA.learning_target_for_topic("Artificial Intelligence", 0)["subTopic"], retry)
+
+    def test_scheduled_os_post_gets_title_specific_feedback_before_review(self):
+        topic = "Operating Systems"
+        assigned = LAMBDA.learning_target_for_topic(topic, 0)["subTopic"]
+        draft = {
+            "title": "Why Launching an App Is Different From Opening a File",
+            "mechanismParagraph": (
+                "Opening a notes app gives the operating system two different objects to deal with. "
+                "The program stored on disk is a set of instructions and data, rather like a recipe "
+                "that nobody is following yet. A process is the running instance: it has its own state, "
+                "access to memory, and a record of what it was doing when the operating system last paused it. "
+                "The disk file can stay unchanged while that running state changes."
+            ),
+            "exampleParagraph": (
+                "Imagine launching the same simple editor twice in an operating system that starts a separate "
+                "process for each launch. You can type different words in the two windows because each process "
+                "has its own state. If one exits, its state is released without removing the program from the disk "
+                "or stopping the other process. This is not a promise that every pair of windows belongs to "
+                "separate processes; an editor can manage two windows inside one process."
+            ),
+            "sourceIds": [],
+        }
+        corrected = {**draft, "title": "Why Running a Program Creates a Process"}
+        approval = '{"accurate":true,"readerReady":true,"issues":[]}'
+        with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
+              mock.patch.object(LAMBDA, "reserve_generation_topic", return_value=topic),
+              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
+              mock.patch.object(LAMBDA, "choose_content_angle", return_value=LAMBDA.resolve_content_angle("mechanism")),
+              mock.patch.object(LAMBDA, "review_concept_text", wraps=LAMBDA.review_concept_text) as editor,
+              mock.patch.object(LAMBDA, "call_bedrock_text",
+                                side_effect=[json.dumps(draft), json.dumps(corrected), approval]) as model):
+            post = self.publish("os-title-retry")["post"]
+        self.assertEqual(model.call_count, 3)
+        editor.assert_called_once()
+        initial, retry, review = model.call_args_list
+        for prompt in (initial.args[0], retry.args[0]):
+            self.assertIn(assigned, prompt)
+            self.assertIn("at least 3 distinct", prompt)
+            self.assertIn("process", prompt)
+            self.assertIn("program", prompt)
+        self.assertIn("Title matched 0 assignment terms; use at least 1", retry.args[0])
+        self.assertIn(corrected["title"], review.args[0])
+        self.assertNotIn(draft["title"], review.args[0])
+        self.assertEqual(post["learningOrder"], 1)
+        self.assertEqual(post["subTopic"], assigned)
+        self.assertEqual(post["title"], corrected["title"])
+
+    def test_invalid_model_json_logs_a_reason_without_logging_the_draft(self):
+        raw = "Unparseable private draft text that must not reach logs."
+        with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
+              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
+              mock.patch.object(LAMBDA, "choose_content_angle", return_value=LAMBDA.resolve_content_angle("mechanism")),
+              mock.patch.object(LAMBDA, "call_bedrock_text", return_value=raw),
+              mock.patch.object(LAMBDA, "MAX_GENERATION_ATTEMPTS", 1),
+              self.assertLogs(LAMBDA.logger, level="INFO") as captured):
+            with self.assertRaises(LAMBDA.PostDraftsRejected):
+                LAMBDA.create_post()
+        logs = "\n".join(captured.output)
+        self.assertIn("POST DRAFT REJECTED", logs)
+        self.assertIn("reason=invalid_json", logs)
+        self.assertNotIn(raw, logs)
+        self.assertEqual(self.posts.items, {})
+
+    def test_missing_history_sources_are_not_retried_in_same_invocation(self):
+        topic = "World History"
+        event = {"source": "smarty.learning.schedule", "scheduledTime": "2026-11-12T14:30:00Z"}
+        context = mock.Mock()
+        context.get_remaining_time_in_millis.return_value = 130000
+        with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
+              mock.patch.object(LAMBDA, "reserve_generation_topic", return_value=topic),
+              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "history", "sources": []}) as source,
+              mock.patch.object(LAMBDA, "call_bedrock_text") as model):
+            with self.assertRaises(RuntimeError):
+                LAMBDA.lambda_handler(event, context)
+            source.assert_called_once()
+            result = LAMBDA.lambda_handler({}, None)
+        self.assertEqual(source.call_count, 2)
+        model.assert_not_called()
+        self.assertEqual(result["statusCode"], 503)
+        self.assertEqual(result["headers"]["Retry-After"], "60")
+        self.assertEqual(json.loads(result["body"])["code"], "historical_evidence_unavailable")
+        self.assertEqual(self.posts.items, {})
+        self.assertEqual(LAMBDA.read_learning_path_state(topic)["nextIndex"], 0)
+
+    def test_model_service_failure_does_not_consume_draft_retries(self):
+        error = LAMBDA.BotoCoreError()
+        with (mock.patch.object(LAMBDA, "generate_specific_post", GENERATE_POST),
+              mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
+              mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=error) as model):
+            result = LAMBDA.lambda_handler({}, None)
+        model.assert_called_once()
+        self.assertEqual(result["statusCode"], 503)
+        self.assertEqual(json.loads(result["body"])["code"], "post_model_unavailable")
+        self.assertEqual(self.posts.items, {})
+        self.assertEqual(LAMBDA.read_learning_path_state("Artificial Intelligence")["nextIndex"], 0)
+
     def test_failed_draft_does_not_skip_the_missing_lesson(self):
         self.generate.return_value = None
-        with self.assertRaises(RuntimeError): self.publish("draft-failure")
+        with self.assertRaises(LAMBDA.PostDraftsRejected):
+            LAMBDA.create_post()
         self.assertEqual(self.posts.items, {})
         self.assertEqual(LAMBDA.read_learning_path_state("Artificial Intelligence")["nextIndex"], 0)
         self.generate.return_value = {"title": "Training changes weights", "body": "Mechanism.\n\nExample."}
-        recovered = self.publish("draft-failure")["post"]
+        recovered = json.loads(LAMBDA.create_post()["body"])["post"]
         self.assertEqual(recovered["learningOrder"], 1)
 
     def test_unfit_project_retries_the_same_lesson_without_the_build(self):
@@ -158,6 +480,27 @@ class LearningCurriculumTests(unittest.TestCase):
         self.assertEqual(post["contentAngle"], "mechanism")
         self.assertEqual(post["learningOrder"], 1)
         self.assertEqual(LAMBDA.read_learning_path_state("Physics")["nextIndex"], 1)
+
+    def test_final_plain_lesson_attempt_retains_editorial_feedback(self):
+        complete_draft = self.generate.return_value
+
+        def draft_with_feedback(_topic, _subtopic, lens, _recent, _target, *, revision_notes, feedback, **_kwargs):
+            if lens["id"] == "tradeoff":
+                feedback.append("Distinguish training updates from predictions.")
+                return None
+            self.assertEqual(revision_notes, ["Distinguish training updates from predictions."])
+            return complete_draft
+
+        self.generate.side_effect = draft_with_feedback
+        with (mock.patch.object(LAMBDA, "MAX_GENERATION_ATTEMPTS", 2),
+              mock.patch.object(LAMBDA, "choose_content_angle", return_value=LAMBDA.resolve_content_angle("tradeoff"))):
+            post = self.publish("same-topic-plain-lesson")["post"]
+        first, second = self.generate.call_args_list
+        self.assertEqual([first.args[2]["id"], second.args[2]["id"]], ["tradeoff", "mechanism"])
+        self.assertEqual(first.args[:2], second.args[:2])
+        self.assertEqual(first.args[4], second.args[4])
+        self.assertEqual(post["learningOrder"], 1)
+        self.assertEqual(post["contentAngle"], "mechanism")
 
     def test_crash_after_publication_is_reconciled_without_another_model_call(self):
         with mock.patch.object(LAMBDA, "complete_learning_step", side_effect=RuntimeError("progress write failed")):
@@ -231,6 +574,31 @@ class LearningCurriculumTests(unittest.TestCase):
         LAMBDA.create_post(publication_id='deferred', context=context)
         self.assertEqual(self.generate.call_count, 1)
         self.assertEqual(self.details.call_count, 1)
+
+    def test_ready_lesson_uses_default_image_when_illustration_would_risk_timeout(self):
+        context = mock.Mock()
+        context.get_remaining_time_in_millis.return_value = 180000
+        lesson = self.details.return_value
+
+        def finish_lesson(*_args, **_kwargs):
+            context.get_remaining_time_in_millis.return_value = 74000
+            return lesson
+
+        self.details.side_effect = finish_lesson
+        with (mock.patch.object(LAMBDA, "fetch_pexels_image", return_value=None) as lookup,
+              mock.patch.object(LAMBDA, "upload_image_to_s3", return_value=None) as upload,
+              mock.patch.object(LAMBDA, "get_cached_image", return_value=None) as scan,
+              mock.patch.object(LAMBDA, "get_fallback_image", return_value="default/stock.jpg") as default):
+            post = self.publish("optional-image-timeout", context)["post"]
+        lookup.assert_not_called()
+        upload.assert_not_called()
+        scan.assert_not_called()
+        default.assert_called_once()
+        self.assertEqual(post["imageKey"], "default/stock.jpg")
+        self.assertEqual(post["thumbKey"], "default/stock.jpg")
+        self.assertEqual(post["aiDetailedExplanation"], lesson)
+        self.assertEqual(list(self.posts.items), [post["id"]])
+        self.assertEqual(LAMBDA.read_learning_path_state(post["topic"])["nextIndex"], 1)
 
     def test_draft_database_failure_does_not_call_the_lesson_model(self):
         write = self.progress.put_item

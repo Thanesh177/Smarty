@@ -19,6 +19,7 @@ FEEDS = (
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml", {"www.bbc.com", "www.bbc.co.uk", "bbc.com", "bbc.co.uk"}),
 )
 FETCH_HOSTS = {"en.wikipedia.org", "www.nasa.gov", "feeds.bbci.co.uk"}
+HISTORY_NAME = re.compile(r"\b[A-Z][a-z]+(?:(?:-|\s+(?:of(?:\s+the)?\s+)?)[A-Z][a-z]+)+\b")
 
 
 def words(text):
@@ -56,10 +57,39 @@ def download(url):
     return raw
 
 
+def _redirected_concept_title(query, anchor):
+    """Follow only explicit MediaWiki title mappings from the requested concept."""
+    links = {}
+    for kind in ("normalized", "redirects"):
+        mappings = query.get(kind, [])
+        if not isinstance(mappings, list) or len(mappings) > 8:
+            return ""
+        for entry in mappings:
+            if not isinstance(entry, dict):
+                continue
+            original, destination = entry.get("from"), entry.get("to")
+            if not all(isinstance(title, str) and 0 < len(title) <= 180 for title in (original, destination)):
+                continue
+            edge = (destination, kind == "redirects", bool(entry.get("tofragment")))
+            if original in links and links[original] != edge:
+                return ""
+            links[original] = edge
+    current, redirected, seen = anchor, False, set()
+    while current in links:
+        if current in seen or len(seen) >= 8:
+            return ""
+        seen.add(current)
+        current, is_redirect, has_fragment = links[current]
+        if has_fragment:
+            return ""  # An intro extract does not establish what a target section says.
+        redirected = redirected or is_redirect
+    return current if redirected else ""
+
+
 def historical_sources(subject, now):
     # Use only retrieved pages. Never let the model invent a bibliography.
     terms = [word for word in re.findall(r"[A-Za-z]{3,}", subject) if word.lower() not in STOP]
-    names = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", subject)
+    names = HISTORY_NAME.findall(subject)
     anchor = max(names, key=len) if names else ""
     # Introductory history lessons have a central concept rather than an event
     # name. Search that concept instead of AND-ing a whole causal question.
@@ -78,14 +108,17 @@ def historical_sources(subject, now):
             params.pop(key)
         params.update({"titles": anchor, "redirects": "1"})
     data = json.loads(download("https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode(params)))
+    result = data.get("query", {})
+    redirected_title = _redirected_concept_title(result, anchor) if concept_anchor else ""
     sources = []
-    for page in data.get("query", {}).get("pages", []):
+    for page in result.get("pages", []):
         if not isinstance(page, dict):
             continue
         title, excerpt = plain(page.get("title"), 180), plain(page.get("extract"))
         url = page.get("fullurl", "")
         if anchor and anchor.casefold() not in title.casefold():
-            continue
+            if not redirected_title or title.casefold() != redirected_title.casefold():
+                continue
         if len(excerpt.split()) < 80 or len(words(subject) & words(title + " " + excerpt)) < 2 or not safe_url(url, {"en.wikipedia.org"}):
             continue
         sources.append({"id": "history-" + str(page["pageid"]), "label": title + " · Wikipedia", "url": url, "publisher": "Wikipedia", "kind": "reference", "excerpt": excerpt, "retrievedAt": int(now)})
