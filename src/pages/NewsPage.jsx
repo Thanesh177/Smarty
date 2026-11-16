@@ -498,6 +498,7 @@ export default function NewsPage({ briefingOnly = false }) {
       let fastReports;
       const edition = await loadNewsEdition({
         place: { country: targetCountry, region: targetRegion },
+        preferBriefing: briefingOnly,
         savedReports: !forceRefresh && cached?.isReportsFresh ? cached.news : undefined,
         load: view => newsApi.getLatestNews({ country: targetCountry, region: targetRegion,
           lang: 'english', signal: controller.signal, forceRefresh, view }),
@@ -528,7 +529,7 @@ export default function NewsPage({ briefingOnly = false }) {
         if (abortControllerRef.current === controller) abortControllerRef.current = null;
       }
     }
-  }, []);
+  }, [briefingOnly]);
 
   useEffect(() => {
     fetchNews(country, region);
@@ -708,7 +709,7 @@ export default function NewsPage({ briefingOnly = false }) {
 
   const briefingRetry = !dailyBriefing && !loading && !refreshing && !briefingPending && (newsData || savedBriefing) && (
     <div className="news-briefing-retry">
-      <p role="status">{savedBriefing ? 'Today’s briefing isn’t ready yet. You can read the previous edition below.' : 'Today’s briefing isn’t ready yet. Browse the latest reports below.'}</p>
+      <p role="status">{savedBriefing ? 'Today’s briefing isn’t ready yet. You can read the previous edition below.' : 'Today’s briefing isn’t ready yet. You can still browse the available reports.'}</p>
       <button type="button" onClick={() => fetchNews(country, region, true)}>Retry briefing</button>
     </div>
   );

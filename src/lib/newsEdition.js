@@ -85,12 +85,32 @@ export const hasNewsReports = news => Boolean(news?.articles?.length || Object.k
 
 export const isFallbackNews = news => ['stale-cache', 'browser-fallback'].includes(news?.cacheStatus);
 
-export async function loadNewsEdition({ load, signal, onReports, onBriefing, savedReports, place }) {
+export async function loadNewsEdition({ load, signal, onReports, onBriefing, savedReports, place, preferBriefing = false }) {
   const checkAbort = () => {
     if (signal?.aborted) throw new DOMException('News request cancelled.', 'AbortError');
   };
   checkAbort();
   let reports = savedReports ? normalizeNewsEdition(savedReports, place) : null;
+  const requestEdition = async (view) => {
+    const edition = normalizeNewsEdition(await load(view), place);
+    checkAbort();
+    if (!hasNewsReports(edition) && !hasEditorialBriefing(edition)) {
+      throw new Error('No reports or briefing are available for this edition.');
+    }
+    return edition;
+  };
+  if (!reports && preferBriefing) {
+    // The combined endpoint already includes reports. In the briefing tab,
+    // don't make readers wait for a separate report refresh before asking.
+    onBriefing?.();
+    try {
+      return await requestEdition();
+    } catch (briefingError) {
+      checkAbort();
+      try { return await requestEdition('reports'); }
+      catch { checkAbort(); throw briefingError; }
+    }
+  }
   if (!reports) {
     try {
       const received = normalizeNewsEdition(await load('reports'), place);
@@ -105,11 +125,7 @@ export async function loadNewsEdition({ load, signal, onReports, onBriefing, sav
   try {
     // The combined route shares the reports refresh lock. Start after the fast
     // route has settled so two cold requests do not compete for that lock.
-    const briefing = normalizeNewsEdition(await load(), place);
-    checkAbort();
-    if (!reports && !hasEditorialBriefing(briefing) && !hasNewsReports(briefing)) {
-      throw new Error('No reports or briefing are available for this edition.');
-    }
+    const briefing = await requestEdition();
     if (!reports || (isFallbackNews(reports) && hasNewsReports(briefing) && !isFallbackNews(briefing))) return briefing;
     return mergeNewsBriefing(reports, briefing);
   } catch (error) {

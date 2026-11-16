@@ -84,6 +84,7 @@ export function createBriefingPreloader({ load, storage, now = Date.now } = {}) 
     const task = Promise.resolve().then(() => loadNewsEdition({
       load: view => load({ country, region, lang: 'english', ...(view ? { view } : {}) }),
       savedReports: freshReports,
+      preferBriefing: true,
       place: { country, region },
       onReports: (reports, { cached }) => {
         visibleReports = reports;

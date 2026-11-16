@@ -5,6 +5,44 @@ import { briefingParagraphs, loadNewsEdition, normalizeNewsEdition, mergeNewsBri
 const report = { id: 'one', title: 'A real report', news_link: 'https://example.com/report', summary: 'Original coverage.', section: 'World' };
 const reports = { location: {countryCode:'IN',region:'Tamil Nadu'}, articles: [report], sections: {World:[report]}, generatedAt:'2026-10-13T12:00:00Z' };
 const summary = { summaryMode:'editorial', overview:'A sourced daily summary.', sectionDigests:[{section:'World',summary:'World context'}] };
+test('the briefing-first view needs only one request when its combined edition is available', async () => {
+  const calls = [];
+  const edition = await loadNewsEdition({ preferBriefing: true, place: { country: 'IN', region: 'Tamil Nadu' },
+    load: async view => { calls.push(view); return { ...reports, dailySummary: summary }; },
+  });
+  assert.deepEqual(calls, [undefined]);
+  assert.equal(edition.dailySummary.overview, summary.overview);
+  assert.equal(edition.articles[0].news_link, report.news_link);
+});
+
+test('a failed, empty, or wrong-place briefing falls back to matching reports', async () => {
+  for (const response of [null, { articles: [] }, { ...reports, location: { countryCode: 'IN', region: 'Kerala' }, dailySummary: summary }]) {
+    const calls = [];
+    const edition = await loadNewsEdition({ preferBriefing: true, place: { country: 'IN', region: 'Tamil Nadu' },
+      load: async view => {
+        calls.push(view);
+        if (view === 'reports') return reports;
+        if (response === null) throw new Error('Briefing unavailable');
+        return response;
+      },
+    });
+    assert.deepEqual(calls, [undefined, 'reports']);
+    assert.equal(edition.location.region, 'Tamil Nadu');
+    assert.equal(edition.dailySummary, undefined);
+  }
+});
+
+test('switching place during a briefing-first request does not trigger a reports fallback', async () => {
+  const controller = new AbortController();
+  const calls = [];
+  await assert.rejects(loadNewsEdition({ preferBriefing: true, signal: controller.signal, load: async view => {
+    calls.push(view);
+    controller.abort();
+    return { ...reports, dailySummary: summary };
+  } }), { name: 'AbortError' });
+  assert.deepEqual(calls, [undefined]);
+});
+
 test('reports failing does not block a saved briefing from loading', async () => {
   const calls = [];
   const edition = await loadNewsEdition({ load: async view => {

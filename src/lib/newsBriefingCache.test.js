@@ -21,7 +21,6 @@ test('startup preloading stores the full edition for immediate use on the News s
   } });
   await warm(); await warm();
   assert.deepEqual(calls, [
-    { country: 'GLOBAL', region: '', lang: 'english', view: 'reports' },
     { country: 'GLOBAL', region: '', lang: 'english' },
   ]);
   assert.equal(getCachedNews('GLOBAL', '', disk, clock).news.dailySummary.overview, briefing.dailySummary.overview);
@@ -34,19 +33,17 @@ test('concurrent startup and resume requests share one pending task', async () =
   const warm = createBriefingPreloader({ storage: disk, now: () => clock,
     load: ({ view }) => {
       calls++;
-      if (view === 'reports') return Promise.resolve(reports);
+      assert.equal(view, undefined);
       startBriefing();
       return new Promise(resolve => { finish = resolve; });
     } });
   const one = warm(), two = warm();
   assert.equal(one, two);
   await briefingStarted;
-  const immediate = getCachedNews('GLOBAL', '', disk, clock).news;
-  assert.equal(immediate.articles[0].title, article.title, 'Reports must be ready before the briefing finishes');
-  assert.equal(immediate.dailySummary, undefined);
+  assert.equal(getCachedNews('GLOBAL', '', disk, clock), null);
   assert.equal(warm(), one, 'An intent to open News joins the original warm-up');
   finish(briefing);
-  await Promise.all([one, two]); assert.equal(calls, 2);
+  await Promise.all([one, two]); assert.equal(calls, 1);
 });
 
 test('preload errors are not cached and the next attempt can recover', async () => {
@@ -55,10 +52,10 @@ test('preload errors are not cached and the next attempt can recover', async () 
     load: async ({ view }) => { if (++calls <= 2) throw new Error('Offline'); return view === 'reports' ? reports : briefing; } });
   await assert.rejects(warm(), /Offline/);
   assert.equal(getCachedNews('GLOBAL', '', disk, clock), null);
-  await warm(); assert.equal(calls, 4);
+  await warm(); assert.equal(calls, 3);
 });
 
-test('a failed reports prefetch still warms the saved briefing', async () => {
+test('a summary-only edition can be preloaded without fetching reports first', async () => {
   const disk = storage();
   const warm = createBriefingPreloader({ storage: disk, now: () => clock, load: async ({ view }) => {
     if (view === 'reports') throw new Error('Reports unavailable');
@@ -68,7 +65,7 @@ test('a failed reports prefetch still warms the saved briefing', async () => {
   assert.equal(getCachedNews('GLOBAL', '', disk, clock).news.dailySummary.overview, briefing.dailySummary.overview);
 });
 
-test('opening News while the briefing warms reuses both network requests', async () => {
+test('opening the News tab while the briefing warms joins the same single request', async () => {
   const disk = storage();
   const requests = createNewsRequestCache({ now: () => clock });
   const loaded = [];
@@ -83,12 +80,10 @@ test('opening News while the briefing warms reuses both network requests', async
   const warm = createBriefingPreloader({ load, storage: disk, now: () => clock });
   const background = warm();
   await started;
-  const local = getCachedNews('GLOBAL', '', disk, clock);
-  assert.equal(local.news.articles[0].news_link, article.news_link);
-  const foreground = loadNewsEdition({ load: view => load({ view }) });
+  const foreground = loadNewsEdition({ preferBriefing: true, load: view => load({ view }) });
   resolveBriefing(briefing);
   await Promise.all([background, foreground]);
-  assert.deepEqual(loaded, ['reports', 'briefing']);
+  assert.deepEqual(loaded, ['briefing']);
 });
 
 test('a reports-only cache does not prevent preparing the daily briefing', async () => {

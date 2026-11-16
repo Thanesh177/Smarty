@@ -750,14 +750,13 @@ export const newsApi = {
       label: region || (country === 'GLOBAL' ? 'Worldwide' : country),
     };
     const sources = new Set(articles.map((article) => article.source).filter(Boolean));
-    const fallbackSummary = buildClientDailySummary(articles, location);
     const dailySummary = primaryPayload?.dailySummary && !usedBrowserFallback
       ? {
           ...primaryPayload.dailySummary,
           storyCount: primaryPayload.dailySummary.storyCount ?? articles.length,
           sourceCount: primaryPayload.dailySummary.sourceCount ?? sources.size,
         }
-      : fallbackSummary;
+      : buildClientDailySummary(articles, location);
     const sourceList = primaryPayload?.sources?.length && !usedBrowserFallback
       ? primaryPayload.sources
       : browserFallbackSources;
