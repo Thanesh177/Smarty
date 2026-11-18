@@ -2078,8 +2078,6 @@ useEffect(() => {
     setTranslations(pruneByRenderedPosts);
     setShowTranslated(pruneByRenderedPosts);
     setTranslating(pruneByRenderedPosts);
-    setSimpleExplanations(pruneByRenderedPosts);
-    setExplaining(pruneByRenderedPosts);
     setSavedPostIds(pruneByRenderedPosts);
   }, [renderedPostIdSet]);
 

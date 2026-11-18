@@ -22,6 +22,10 @@ test('feed keeps heading, complete body, and reading actions in document order',
   assert.doesNotMatch(body, /line-clamp|substring|slice\(/);
 });
 
+test('opening the feed does not call retired Simplify state setters', () => {
+  assert.doesNotMatch(source, /\b(?:setSimpleExplanations|setExplaining)\b/);
+});
+
 test('desktop separates context and explanation without changing mobile document flow', () => {
   assert.ok(desktop);
   assert.match(desktopValue('.app-shell .content .has-inner-feed .snap-feed .snap-post .post-content', 'grid-template-columns'), /minmax\(250px/);
