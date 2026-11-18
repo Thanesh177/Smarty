@@ -13,7 +13,12 @@ test('feed keeps heading, complete body, and reading actions in document order',
   const body = source.slice(source.indexOf('className="post-story-body"'), source.indexOf('export default function FeedPage'));
   assert.match(body, /isTranslated && translatedText \? translatedText : post.body/);
   assert.match(body, /className="post-actions"/);
-  assert.match(body, /className="simple-explanation"/);
+  assert.match(body, /onSave\(postId, isSaved\)/);
+  assert.match(body, /aria-label="Comments"/);
+  assert.match(body, /aria-label="Translate this post"/);
+  assert.match(body, /<span>Go deeper<\/span>/);
+  assert.doesNotMatch(body, /Simplif(?:y|ying)|simple-explanation/);
+  assert.doesNotMatch(source, /onExplain|postApi\.explainPost/);
   assert.doesNotMatch(body, /line-clamp|substring|slice\(/);
 });
 

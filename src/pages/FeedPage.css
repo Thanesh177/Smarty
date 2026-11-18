@@ -272,12 +272,11 @@
 }
 
 /* =========================
-   AI / TRANSLATE / EXPLAIN BOXES
+   TRANSLATION STATES
 ========================= */
 
 .ai-loading-box,
-.translated-box,
-.simple-explanation {
+.translated-box {
   margin-top: 14px;
   padding: 14px 16px;
   border-radius: 18px;
@@ -341,22 +340,6 @@
   display: block;
   margin-bottom: 6px;
   color: #4ade80;
-}
-
-.simple-explanation {
-  background: rgba(56, 189, 248, 0.12);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-}
-
-.simple-explanation strong {
-  display: block;
-  margin-bottom: 6px;
-  color: #38bdf8;
-}
-
-.simple-explanation p {
-  margin: 0;
-  line-height: 1.6;
 }
 
 /* =========================

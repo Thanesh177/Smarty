@@ -113,6 +113,40 @@ test('failed prefetched pages can be retried with the same cursor', async () => 
   assert.equal(app.render().posts[0].id, 'recovered');
 });
 
+test('a failed next page stops automatic pagination until an explicit retry', async () => {
+  const app = harness(); app.render();
+  app.requests[0].resolve({ items: [{ id: 'already-reading' }], nextCursor: 'page-two' }); await tick();
+  const automatic = app.render().loadMore({ automatic: true });
+  app.requests[1].reject(new Error('Offline')); await automatic;
+
+  const blocked = app.render();
+  assert.equal(blocked.error, '', 'A later failure must not make the entire feed look unavailable');
+  assert.match(blocked.paginationError, /load more/i);
+  assert.equal(blocked.posts[0].id, 'already-reading');
+  assert.equal(blocked.nextCursor, 'page-two');
+  await blocked.loadMore({ automatic: true });
+  assert.equal(app.requests.length, 2, 'A visible sentinel must not continuously retry a failed request');
+
+  const retry = blocked.loadMore();
+  assert.equal(app.requests[2].cursor, 'page-two');
+  app.requests[2].resolve({ items: [{ id: 'recovered' }], nextCursor: null }); await retry;
+  const recovered = app.render();
+  assert.equal(recovered.paginationError, '');
+  assert.equal(recovered.posts.map(post => post.id).join(','), 'already-reading,recovered');
+});
+
+test('all-post pagination keeps new posts but stops revisiting a cursor cycle', async () => {
+  const app = harness(); app.render();
+  app.requests[0].resolve({ items: [{ id: 'first' }], nextCursor: 'a' }); await tick();
+  const firstBatch = app.render().loadMore({ automatic: true });
+  app.requests[1].resolve({ items: [], nextCursor: 'b' }); await firstBatch;
+  const nextBatch = app.render().loadMore({ automatic: true });
+  app.requests[2].resolve({ items: [{ id: 'last' }], nextCursor: 'a' }); await nextBatch;
+  assert.equal(app.render().posts.map(post => post.id).join(','), 'first,last');
+  assert.equal(app.render().nextCursor, null);
+  assert.equal(app.requests.length, 3, 'Do not prefetch a cursor already consumed in this feed');
+});
+
 test('switching accounts discards in-flight content from the previous account', async () => {
   const app = harness(); app.render(); app.setUser({ userId: 'two' }); app.render();
   app.requests[1].resolve({ items: [{ id: 'account-two' }], nextCursor: null }); await tick();

@@ -6,26 +6,12 @@ import FeedHeader from './FeedHeader';
 import RouteSkeleton from './RouteSkeleton';
 import RouteErrorBoundary from './RouteErrorBoundary';
 import { canWarmVideoFeed, isVideoTopic, VIDEO_FEED_INTENT_EVENT } from '../lib/videoFeed';
-import { hasSeenLanding, rememberLanding } from '../lib/initialVisit';
+import { rememberLanding } from '../lib/initialVisit';
+import { feedLaunchTarget } from '../lib/feedViews';
 import { scheduleStartupIdle } from '../lib/startupIdle';
 import { useAuth } from '../contexts/AuthContext';
 
-const SmartyLanding = lazy(() => import('./landing/SmartyLanding'));
 const VideoTopicPage = lazy(() => import('../pages/VideoTopicPage'));
-
-function InitialVisit({ onOpenSearch }) {
-  const navigate = useNavigate();
-  // Keep this visit stable after saving. Navigation away unmounts this gate.
-  const [showLanding] = useState(() => !hasSeenLanding());
-  useEffect(() => { if (showLanding) rememberLanding(); }, [showLanding]);
-  if (!showLanding) return <Navigate to="/feed?topic=All" replace />;
-  return (
-    <main className="snap-feed-page has-smarty-landing">
-      <SmartyLanding onOpenSearch={onOpenSearch}
-        onSelect={topic => navigate(`/feed?topic=${encodeURIComponent(topic)}`)} />
-    </main>
-  );
-}
 
 function NewsFeed({ onOpenSearch }) {
   const navigate = useNavigate();
@@ -52,7 +38,7 @@ export default function FeedEntry({ onOpenSearch }) {
   const hasTopic = Boolean(topic.trim());
   const selectedVideo = isVideoTopic(topic);
   const [keepVideoFeed, setKeepVideoFeed] = useState(false);
-  // Returning native installations can already open the feed directly.
+  // Keep existing devices' welcome-tour history while the feed opens directly.
   useEffect(() => { if (hasTopic) rememberLanding(); }, [hasTopic]);
   useEffect(() => {
     if (keepVideoFeed) return undefined;
@@ -70,7 +56,7 @@ export default function FeedEntry({ onOpenSearch }) {
       window.removeEventListener(VIDEO_FEED_INTENT_EVENT, warm);
     };
   }, [authLoading, hasTopic, keepVideoFeed, selectedVideo]);
-  if (!hasTopic) return <InitialVisit onOpenSearch={onOpenSearch} />;
+  if (!hasTopic) return <Navigate to={feedLaunchTarget(location)} replace />;
   // Don't fetch or display another account's feed during session restoration.
   if (authLoading) return <RouteSkeleton />;
   return <>

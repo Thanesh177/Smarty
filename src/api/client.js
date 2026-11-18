@@ -2234,11 +2234,6 @@ async getPostDetails(payload) {
   }
 },
 
-async explainPost(payload) {
-  const { data } = await api.post('/posts/explain', payload);
-  return parseApiBody(data);
-},
-
 async askPostDoubt(payload) {
   const { data } = await api.post('/posts/ask-doubt', payload);
   return parseApiBody(data);

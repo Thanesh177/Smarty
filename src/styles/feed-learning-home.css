@@ -71,9 +71,9 @@
 .app-shell .content .has-inner-feed .snap-post .post-safety-menu { color: var(--ui-text); background: var(--ui-surface); border-color: var(--ui-line-strong); }
 .app-shell .content .has-inner-feed .snap-post .post-safety-menu button { color: var(--ui-secondary); }
 .app-shell .content .has-inner-feed .snap-post .post-safety-menu button.danger { color: var(--ui-danger); }
-.app-shell .content .has-inner-feed .snap-post :is(.translated-box, .simple-explanation, .ai-loading-box) p,
+.app-shell .content .has-inner-feed .snap-post :is(.translated-box, .ai-loading-box) p,
 .app-shell .content .has-inner-feed .feed-inner-state > p { color: var(--ui-secondary); }
-.app-shell .content .has-inner-feed .snap-post :is(.translated-box, .simple-explanation) strong,
+.app-shell .content .has-inner-feed .snap-post .translated-box strong,
 .app-shell .content .has-inner-feed .feed-inner-state :is(.feed-inner-state-icon, .feed-inner-state-kicker) { color: var(--ui-accent-strong); }
 @media (min-width: 601px) {
   .app-shell .content .has-inner-feed .snap-post .post-reading-actions .translate-dropdown { color: var(--ui-secondary); }

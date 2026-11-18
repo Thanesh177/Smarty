@@ -28,7 +28,10 @@ for (const key of entry.dynamicImports || []) {
     throw new Error('Startup shell is no longer preloaded alongside session storage restoration');
   }
 }
-for (const screen of ['LoginPage', 'ProfilePage', 'SmartyLanding', 'UniversalSearch', 'VideoTopicPage']) {
+if (Object.keys(manifest).some(key => key.endsWith('/SmartyLanding.jsx'))) {
+  throw new Error('The retired first-visit landing page is still bundled');
+}
+for (const screen of ['LoginPage', 'ProfilePage', 'UniversalSearch', 'VideoTopicPage']) {
   const key = Object.keys(manifest).find(key => key.endsWith(`/${screen}.jsx`));
   if (!key || !manifest[key].isDynamicEntry || loaded.has(key)) throw new Error(`${screen} is no longer deferred`);
 }

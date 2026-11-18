@@ -39,7 +39,7 @@ test('private storage does not block the tour or undo a dismissal in this sessio
   assert.equal(first.shouldOfferWelcomeTour(false, storage), false);
 });
 
-test('the tour leaves the first landing, sign-in, and deep links alone', () => {
+test('the tour leaves entry redirects, sign-in, and deep links alone', () => {
   assert.equal(isWelcomeTourEntry({ pathname: '/feed', search: '?topic=All' }), true);
   for (const path of ['/login', '/register', '/rooms/invite/a', '/news', '/feed?topic=Video', '/feed', '/feed/Physics']) {
     assert.equal(isWelcomeTourEntry(new URL(path, 'https://example.test')), false);

@@ -392,6 +392,101 @@ class NewsLambdaTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "grounded"):
             news.validate_editorial_summary({"overview": "Parliament approved an enormous tax increase affecting every household in the entire country this morning."}, articles, ["Science"])
 
+    def test_overlapping_names_do_not_ground_an_invented_or_combined_figure(self):
+        articles = [
+            make_article("buses", "Transit agency approves 15 electric buses for downtown routes", "Local", ""),
+            make_article("depots", "Transit agency approves electric bus depot work at 8 sites", "Local", ""),
+        ]
+        accepted = "The transit agency approved 15 electric buses for downtown routes."
+        self.assertEqual(
+            news.validate_editorial_summary({"overview": accepted}, articles, ["Local"])["overview"],
+            accepted,
+        )
+        for claim in (
+            "The transit agency approved 500 electric buses for downtown routes.",
+            "The transit agency approved 15 electric buses for downtown routes at 8 sites.",
+            accepted + " 8 people died.",
+        ):
+            with self.subTest(claim=claim), self.assertRaisesRegex(ValueError, "grounded"):
+                news.validate_editorial_summary({"overview": claim}, articles, ["Local"])
+
+    def test_one_shared_topic_word_does_not_ground_a_new_development(self):
+        articles = [make_article("mars", "NASA launches a Mars rover to study ancient riverbeds", "Science", "")]
+        invented = "Parliament approved a major tax package affecting commercial activity on Mars."
+        with self.assertRaisesRegex(ValueError, "grounded"):
+            news.validate_editorial_summary({"overview": invented}, articles, ["Science"])
+
+    def test_takeaways_keep_supported_claims_and_omit_unsupported_clauses(self):
+        articles = [
+            make_article("buses", "Transit agency approves 15 electric buses for downtown routes", "Local", ""),
+            make_article("riverbeds", "NASA launches a Mars rover to study ancient riverbeds", "Science", ""),
+        ]
+        result = news.validate_editorial_summary({
+            "overview": "The transit agency approved 15 electric buses for downtown routes. NASA launched a Mars rover to study ancient riverbeds.",
+            "takeaways": [
+                {
+                    "title": "Electric buses approved",
+                    "summary": "The transit agency approved 15 electric buses for downtown routes.",
+                },
+                {
+                    "title": "Mars rover launches",
+                    "summary": "The Mars rover will study ancient riverbeds. Parliament approved a tax increase for the mission.",
+                },
+                {
+                    "title": "Parliament approved tax increases",
+                    "summary": "NASA launched a Mars rover to study ancient riverbeds.",
+                },
+            ],
+        }, articles, ["Local", "Science"])
+        self.assertEqual(len(result["keyTakeaways"]), 1)
+        self.assertEqual([story["id"] for story in result["keyTakeaways"][0]["stories"]], ["buses"])
+
+    def test_partial_editorial_takeaways_are_kept_in_the_daily_briefing(self):
+        articles = [
+            make_article("buses", "Transit agency approves 15 electric buses for downtown routes", "Local", ""),
+            make_article("riverbeds", "NASA launches a Mars rover to study ancient riverbeds", "Science", ""),
+        ]
+        accepted = {"title": "Electric bus approval", "summary": articles[0]["title"], "stories": [news.story_reference(articles[0])]}
+        with patch.object(news, "generate_editorial_summary", return_value={
+            "overview": articles[0]["title"],
+            "summaryMode": "editorial",
+            "keyTakeaways": [accepted],
+            "sectionSummaries": {},
+        }):
+            result = news.build_daily_summary(articles, news.make_location("GLOBAL", ""))
+        self.assertIn(accepted, result["keyTakeaways"])
+
+    def test_non_completed_model_responses_do_not_publish_valid_looking_text(self):
+        headline = "Researchers map a deep ocean habitat before a planned marine survey"
+        article = make_article("one", headline, "Science", "")
+        output = {"message": {"content": [{"text": f"OVERVIEW: {headline}."}]}}
+        for stop in ("max_tokens", "content_filtered", "guardrail_intervened", "tool_use", None):
+            with self.subTest(stop=stop), patch.object(news.BEDROCK_RUNTIME, "converse", return_value={
+                "output": output, "stopReason": stop,
+            }) as model:
+                result = news.generate_editorial_summary([article], news.make_location("GLOBAL", ""), ["Science"])
+                self.assertIsNone(result)
+                model.assert_called_once()
+
+    def test_duplicate_reporting_only_enters_the_prompt_once(self):
+        headline = "Researchers map a deep ocean habitat before a planned marine survey"
+        first = make_article("one", headline, "Science", "")
+        duplicate = make_article("two", headline.upper() + ".", "Science", "", source="Test Wire Two")
+        extra = make_article("three", "Astronomers discover a new planet around a nearby star", "Science", "")
+        response = {"output": {"message": {"content": [{"text": f"OVERVIEW: {headline}."}]}}, "stopReason": "end_turn"}
+        location = news.make_location("GLOBAL", "")
+        with patch.object(news.BEDROCK_RUNTIME, "converse", return_value=response) as model:
+            self.assertIsNotNone(news.generate_editorial_summary([first, duplicate], location, ["Science"]))
+            initial = model.call_args.kwargs
+            self.assertEqual(initial["messages"][0]["content"][0]["text"].casefold().count(headline.casefold()), 1)
+            news.generate_editorial_summary([first, duplicate, extra], location, ["Science"])
+            self.assertLess(initial["inferenceConfig"]["maxTokens"], model.call_args.kwargs["inferenceConfig"]["maxTokens"])
+
+    def test_empty_evidence_does_not_call_the_model(self):
+        with patch.object(news.BEDROCK_RUNTIME, "converse") as model:
+            self.assertIsNone(news.generate_editorial_summary([], news.make_location("GLOBAL", ""), []))
+            model.assert_not_called()
+
     def test_briefing_prompt_keeps_concrete_reporting_without_generic_transitions(self):
         headline = "Researchers map a deep ocean habitat before a planned marine survey"
         article = make_article("one", headline, "Science", "")
@@ -419,6 +514,16 @@ class NewsLambdaTests(unittest.TestCase):
         self.assertNotIn("TAKEAWAY_2_TITLE", prompt)
         self.assertEqual(len(result["keyTakeaways"]), 1)
         self.assertEqual(result["sectionSummaries"]["Science"], headline + ".")
+
+    def test_numeric_matching_preserves_units_and_uses_only_shown_headlines(self):
+        headline = "City transit agency plans to add 1,000 buses to existing downtown routes"
+        article = make_article("one", headline + (" overflow" * 25) + " for 20 years", "Local", "")
+        evidence = news.BriefingEvidence([article])
+        self.assertTrue(evidence.score("City transit agency plans to add 1000 buses to downtown routes"))
+        self.assertFalse(evidence.score("City transit agency plans to add 1000 million buses to downtown routes"))
+        self.assertFalse(evidence.score("City transit agency plans to add 1000 buses to downtown routes for 20 years"))
+        self.assertEqual(news.reported_figures("a 15 percent increase"), {"15%"})
+        self.assertNotEqual(news.reported_figures("$15"), news.reported_figures("15"))
 
     def test_generic_sentence_still_rejects_an_otherwise_supported_overview(self):
         headline = "Researchers map a deep ocean habitat before a planned marine survey"

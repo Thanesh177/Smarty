@@ -11,13 +11,14 @@ import {
   setupAndroidPushTokenListener,
 } from './firebase';
 import AuthRedirectHandler from './components/AuthRedirectHandler';
-import { clearAuthDestination, isAuthenticationPath, readAuthDestination } from './lib/authNavigation';
+import OAuthCompletionPage from './components/OAuthCompletionPage';
+import { isAuthenticationPath } from './lib/authNavigation';
 import InstallPrompt from './components/InstallPrompt';
 import PageTransition from './components/PageTransition';
 import FeedViewSwitch from './components/FeedViewSwitch';
 import FeedViewSwipe from './components/FeedViewSwipe';
 import { NewsUpdateNotifier } from './components/NewsPersonalization';
-import { getFeedView } from './lib/feedViews';
+import { feedLaunchTarget, getFeedView } from './lib/feedViews';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import ConnectionStatus from './components/ConnectionStatus';
 import ReminderPopup from './components/ReminderPopup';
@@ -125,58 +126,6 @@ function PageLoader() {
       </div>
     </div>
   );
-}
-
-function OAuthCompletionPage() {
-  const { user, loading, authError, restoreSession } = useAuth();
-  const navigate = useNavigate();
-  const [timedOut, setTimedOut] = useState(false);
-  const retriedRef = useRef(false);
-  const destinationRef = useRef(null);
-
-  if (!destinationRef.current) {
-    destinationRef.current = readAuthDestination('/feed?topic=All');
-  }
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setTimedOut(true), 9000);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (loading || user || retriedRef.current) return;
-
-    retriedRef.current = true;
-    restoreSession({ attempts: 8 }).catch((error) => {
-      console.warn('OAuth session recovery is temporarily unavailable.');
-    });
-  }, [loading, restoreSession, user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    clearAuthDestination();
-    try { sessionStorage.removeItem('smarty-auth-redirecting'); } catch { /* restricted storage */ }
-    navigate(destinationRef.current, { replace: true });
-  }, [navigate, user]);
-
-  if (!user && (authError || timedOut)) {
-    return (
-      <div className="app-page-loader" role="alert">
-        <div className="app-page-loader-card">
-          <div>
-            <strong>Sign-in could not finish</strong>
-            <p>{authError || 'Please try again. Your account was not changed.'}</p>
-          </div>
-          <button type="button" onClick={() => navigate('/login', { replace: true })}>
-            Back to sign in
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return <PageLoader />;
 }
 
 function TopicRoomsRouteWrapper() {
@@ -1019,7 +968,7 @@ useEffect(() => {
 
       {!isAuthPage && <InstallPrompt />}
 
-      <div className={`app-shell ${showNavigationRail ? 'has-overlay-navigation' : ''} ${feedView ? 'has-feed-view-switch' : ''} ${location.pathname === '/feed' && !new URLSearchParams(location.search).get('topic') ? 'is-smarty-landing' : ''}`}>
+      <div className={`app-shell ${showNavigationRail ? 'has-overlay-navigation' : ''} ${feedView ? 'has-feed-view-switch' : ''}`}>
           {showNavigationRail && <header className="topbar glass-topbar">
           <div className="topbar-row">
             <NavLink
@@ -1140,9 +1089,9 @@ useEffect(() => {
                 <Route
                   path="/"
                   element={
-                    location.search.includes('code=')
-                      ? <OAuthCompletionPage />
-                      : <Navigate to="/feed" replace />
+                    new URLSearchParams(location.search).has('code')
+                      ? <OAuthCompletionPage><PageLoader /></OAuthCompletionPage>
+                      : <Navigate to={feedLaunchTarget(location)} replace />
                   }
                 />
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { getUserScopedStorageKey } from '../lib/userScopedStorage';
-import { getVideoPosts, unseenVideoCursor, videoCursorKey } from '../lib/videoFeed';
+import { getVideoPosts, unseenVideoCursor as unseenFeedCursor, videoCursorKey as cursorIdentity } from '../lib/videoFeed';
 
 const FEED_CACHE_KEY = 'smarty_cached_feed_v2';
 const FEED_CURSOR_KEY = 'smarty_cached_feed_cursor_v2';
@@ -74,7 +74,8 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
   const lastFetchedScopeRef = useRef('');
   const preloadedPageRef = useRef(null);
   const generationRef = useRef(0);
-  const visitedVideoCursors = useRef(new Set());
+  const visitedCursors = useRef(new Set());
+  const paginationBlocked = useRef(false);
   const loadRequestRef = useRef(null);
   const activeCacheScopeRef = useRef(userId);
 
@@ -98,6 +99,7 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
   const [refreshing, setRefreshing] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState('');
+  const [paginationError, setPaginationError] = useState('');
 
   const readBlockedCreatorIds = useCallback(() => {
     try {
@@ -172,7 +174,8 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
     hiddenPostIdsRef.current = new Set();
     hasFetched.current = false;
     generationRef.current += 1;
-    visitedVideoCursors.current.clear();
+    visitedCursors.current.clear();
+    paginationBlocked.current = false;
     preloadedPageRef.current = null;
     loadRequestRef.current = null;
 
@@ -194,6 +197,7 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
     setLoadingMore(false);
     setRefreshing(true);
     setError('');
+    setPaginationError('');
   }, [
     feedCacheKey,
     feedCursorKey,
@@ -231,11 +235,13 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
 
   const refreshFeed = useCallback(async (fresh = false) => {
     const generation = ++generationRef.current;
-    visitedVideoCursors.current.clear();
+    visitedCursors.current.clear();
+    paginationBlocked.current = false;
     preloadedPageRef.current = null;
     loadRequestRef.current = null;
     setLoadingMore(false);
     setRefreshing(true);
+    setPaginationError('');
     try {
       setError('');
       setLoading(posts.length === 0);
@@ -265,24 +271,27 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
     videoOnly,
   ]);
 
-  const loadMore = useCallback(async () => {
-    if (refreshing || loadingMore || !nextCursor || loadRequestRef.current) return;
+  const loadMore = useCallback(async ({ automatic = false } = {}) => {
+    if (refreshing || loadingMore || !nextCursor || loadRequestRef.current
+      || (automatic && paginationBlocked.current)) return;
+    const key = cursorIdentity(nextCursor);
+    if (visitedCursors.current.has(key)) return;
     const request = { generation: generationRef.current };
     loadRequestRef.current = request;
 
     try {
       setError('');
+      paginationBlocked.current = false;
+      setPaginationError('');
       setLoadingMore(true);
 
       const prefetched = preloadedPageRef.current;
-      const page = await (prefetched?.key === JSON.stringify(nextCursor) && prefetched.generation === request.generation
+      const page = await (prefetched?.key === key && prefetched.generation === request.generation
         ? prefetched.promise : fetchPage(nextCursor));
       if (request.generation !== generationRef.current || activeCacheScopeRef.current !== userId) return;
 
-      if (videoOnly) visitedVideoCursors.current.add(videoCursorKey(nextCursor));
-      const mergedCursor = videoOnly
-        ? unseenVideoCursor(page.nextCursor, visitedVideoCursors.current)
-        : page.nextCursor || null;
+      visitedCursors.current.add(key);
+      const mergedCursor = unseenFeedCursor(page.nextCursor, visitedCursors.current);
 
       setPosts((current) => {
         const items = [...current, ...(page.items || [])];
@@ -298,7 +307,10 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
 
       preloadNextPage(mergedCursor);
     } catch (err) {
-      if (request.generation === generationRef.current) setError('Failed to load more posts.');
+      if (request.generation === generationRef.current) {
+        paginationBlocked.current = true;
+        setPaginationError('Failed to load more posts.');
+      }
     } finally {
       if (loadRequestRef.current === request) { loadRequestRef.current = null; setLoadingMore(false); }
     }
@@ -475,7 +487,8 @@ export default function useFeed({ pageSize = 10, videoOnly = false } = {}) {
     loading,
     refreshing,
     loadingMore,
-    error,
+    error: videoOnly ? error || paginationError : error,
+    paginationError,
     nextCursor,
     loadMore,
     refreshFeed,

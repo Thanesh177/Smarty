@@ -1,4 +1,4 @@
-import { lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { responsiveImage } from '../lib/imageDelivery';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -7,7 +7,6 @@ import {
   Languages,
   Bookmark,
   MessageCircle,
-  Bot,
   Loader2,
   Sparkles,
   Globe2,
@@ -52,7 +51,6 @@ import {
 } from '../data/topicTaxonomy';
 import './FeedPage.css';
 import './FeedPageFinal.css';
-const SmartyLanding = lazy(() => import('../components/landing/SmartyLanding'));
 
 const normalizeTopic = (value) =>
   String(value || '')
@@ -164,21 +162,6 @@ const MODERATION_REASONS = [
   'Spam or scam',
   'Other objectionable content',
 ];
-
-const getCachedExplanation = (post) => {
-  const value =
-    post?.aiExplanation ||
-    post?.simpleExplanation ||
-    post?.explanation ||
-    post?.explainText ||
-    post?.simplifiedText ||
-    '';
-
-  const text = String(value || '').trim();
-  return text && text.toLowerCase() !== 'null' && text.toLowerCase() !== 'undefined'
-    ? text
-    : '';
-};
 
 const TOPIC_DESCRIPTIONS = {
   all: 'Explore every idea, story, and discovery across Smarty.',
@@ -553,13 +536,10 @@ const FeedPostCard = memo(function FeedPostCard({
   translatedText,
   isTranslated,
   isTranslating,
-  isExplaining,
-  explanation,
   onTopicClick,
   onSave,
   onOpenPost,
   onComments,
-  onExplain,
   onTranslateChange,
   onModerate,
   canModerate,
@@ -716,23 +696,6 @@ const FeedPostCard = memo(function FeedPostCard({
               <MessageCircle size={16} strokeWidth={2.25} />
             </button>
 
-            <button
-              type="button"
-              className="icon-action-btn"
-              title="Simplify"
-              aria-label="Simplify"
-              onClick={(event) => {
-                event.stopPropagation();
-                onExplain(post);
-              }}
-              disabled={isExplaining}
-            >
-              {isExplaining ? (
-                <Loader2 size={16} strokeWidth={2.25} className="spin-icon" />
-              ) : (
-                <Bot size={16} strokeWidth={2.25} />
-              )}
-            </button>
           </div>
 
           <div className="post-reading-actions" role="group" aria-label="Explore this post">
@@ -791,20 +754,6 @@ const FeedPostCard = memo(function FeedPostCard({
           <div className="translated-box">
             <strong>Translation ready</strong>
             <p>Select the translated language again to view it, or choose Original to go back.</p>
-          </div>
-        )}
-
-        {isExplaining && (
-          <div className="ai-loading-box">
-            <span className="ai-loader-dot"></span>
-            <p>Simplifying...</p>
-          </div>
-        )}
-
-        {explanation && !isExplaining && (
-          <div className="simple-explanation">
-            <strong>Simplify</strong>
-            <p>{explanation}</p>
           </div>
         )}
 
@@ -877,8 +826,10 @@ const previousTopicCanvasLayoutRef = useRef({
   const {
     posts,
     loading,
+    refreshing,
     loadingMore,
     error,
+    paginationError,
     nextCursor,
     loadMore,
     refreshFeed,
@@ -905,11 +856,6 @@ const topicCanvasRef = useRef(null);
 const topicCardMetricsRef = useRef([]);
 const feedRef = useRef(null);
 const postFeedRef = useRef(null);
-const topicSearchLoadRef = useRef({
-  topic: '',
-  cursors: new Set(),
-  loading: false,
-});
 
 const canvasDragRef = useRef({
   pointerId: null,
@@ -925,7 +871,9 @@ const suppressTopicClickRef = useRef(false);
   const [translations, setTranslations] = useState({});
   const [translating, setTranslating] = useState({});
   const [showTranslated, setShowTranslated] = useState({});
-  const [selectedTopic, setSelectedTopic] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState(() =>
+    normalizeTopic(routeTopic) === 'all' ? 'All' : getMainTopicDefinition(routeTopic)?.label || routeTopic || 'All'
+  );
   const [canvasViewportWidth, setCanvasViewportWidth] = useState(
     () =>
       typeof window === 'undefined'
@@ -940,8 +888,6 @@ const suppressTopicClickRef = useRef(false);
       ) !== 'true'
   );
   const [toast, setToast] = useState('');
-  const [simpleExplanations, setSimpleExplanations] = useState({});
-  const [explaining, setExplaining] = useState({});
   const [savedPostIds, setSavedPostIds] = useState({});
   const [creatorProfiles, setCreatorProfiles] = useState({});
   const [renderLimit, setRenderLimit] = useState(
@@ -1865,86 +1811,31 @@ const filteredPosts = useMemo(() => {
 }, [selectedTopic, visiblePosts]);
 
 useEffect(() => {
-  const normalizedSelectedTopic =
-    getCanonicalTopic(selectedTopic);
-
+  const normalizedSelectedTopic = getCanonicalTopic(selectedTopic);
   if (
     !normalizedSelectedTopic ||
-    normalizedSelectedTopic === 'all'
-  ) {
-    topicSearchLoadRef.current = {
-      topic: normalizedSelectedTopic,
-      cursors: new Set(),
-      loading: false,
-    };
-
-    return;
-  }
-
-  if (
-    topicSearchLoadRef.current.topic !==
-    normalizedSelectedTopic
-  ) {
-    topicSearchLoadRef.current = {
-      topic: normalizedSelectedTopic,
-      cursors: new Set(),
-      loading: false,
-    };
-  }
-
-  if (
+    normalizedSelectedTopic === 'all' ||
     filteredPosts.length > 0 ||
     !nextCursor ||
     loading ||
+    refreshing ||
     loadingMore ||
-    topicSearchLoadRef.current.loading
+    error ||
+    paginationError
   ) {
     return;
   }
-
-  const cursorKey =
-    typeof nextCursor === 'string'
-      ? nextCursor
-      : JSON.stringify(nextCursor);
-
-  if (
-    topicSearchLoadRef.current.cursors.has(cursorKey)
-  ) {
-    console.warn(
-      'Stopped repeated topic cursor:',
-      cursorKey
-    );
-
-    return;
-  }
-
-  topicSearchLoadRef.current.cursors.add(cursorKey);
-  topicSearchLoadRef.current.loading = true;
-
-  const requestedTopic = normalizedSelectedTopic;
-
-  Promise.resolve(loadMore())
-    .catch((loadError) => {
-      console.error(
-        'Could not load more posts for topic:',
-        selectedTopic,
-        loadError
-      );
-    })
-    .finally(() => {
-      if (
-        topicSearchLoadRef.current.topic ===
-        requestedTopic
-      ) {
-        topicSearchLoadRef.current.loading = false;
-      }
-    });
+  // The shared loader coalesces concurrent calls and stops on cursor cycles.
+  void loadMore({ automatic: true });
 }, [
   selectedTopic,
   filteredPosts.length,
   nextCursor,
   loading,
+  refreshing,
   loadingMore,
+  error,
+  paginationError,
   loadMore,
 ]);
 
@@ -2231,8 +2122,8 @@ useEffect(() => {
         /*
          * After all current posts are rendered, request the next API page.
          */
-        if (nextCursor) {
-          await loadMore();
+        if (nextCursor && !refreshing && !error && !paginationError) {
+          await loadMore({ automatic: true });
         }
       } catch (loadError) {
         console.error(
@@ -2262,6 +2153,9 @@ useEffect(() => {
   nextCursor,
   loadingMore,
   loading,
+  refreshing,
+  error,
+  paginationError,
   loadMore,
   renderLimit,
   filteredPosts.length,
@@ -2471,7 +2365,7 @@ useEffect(() => {
     // Post feeds already use native momentum plus vertical scroll snapping.
     // Adding a second scroll interpolator makes the two systems fight and can
     // leave short topic feeds parked between snap points.
-    if (!page || selectedTopic || page.classList.contains('has-smarty-landing')) return undefined;
+    if (!page || selectedTopic) return undefined;
 
     const scroller = page;
     const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)');
@@ -2681,61 +2575,6 @@ return () => {
     }
   }, [savePost, sendToLoginForBookmark, showToast, user]);
 
-  const handleExplain = useCallback(async (post) => {
-    const postId = getPostId(post);
-    if (!postId || explaining[postId]) return;
-
-    if (simpleExplanations[postId]) {
-      setSimpleExplanations((prev) => {
-        const next = { ...prev };
-        delete next[postId];
-        return next;
-      });
-      return;
-    }
-
-    const cachedExplanation = getCachedExplanation(post);
-
-    if (cachedExplanation) {
-      setSimpleExplanations((prev) => ({
-        ...prev,
-        [postId]: cachedExplanation,
-      }));
-      return;
-    }
-
-    try {
-      setExplaining((prev) => ({ ...prev, [postId]: true }));
-
-      const data = await postApi.explainPost({
-        postId,
-        title: post.title,
-        body: post.body,
-      });
-      if (!mountedRef.current) return;
-
-      const explanationText =
-        data?.explanation ||
-        data?.aiExplanation ||
-        data?.simpleExplanation ||
-        data?.item?.aiExplanation ||
-        data?.post?.aiExplanation ||
-        'Could not simplify this post.';
-
-      setSimpleExplanations((prev) => ({
-        ...prev,
-        [postId]: explanationText,
-      }));
-    } catch (err) {
-      console.error('Simplify failed:', err);
-      showToast('Could not simplify right now');
-    } finally {
-      if (mountedRef.current) {
-        setExplaining((prev) => ({ ...prev, [postId]: false }));
-      }
-    }
-  }, [explaining, simpleExplanations, showToast]);
-  
 const selectTopic = useCallback(
   (item, source = 'topic-pill') => {
     const requestedTopic =
@@ -2755,12 +2594,6 @@ const selectTopic = useCallback(
       selectedTopic,
       nextTopic
     );
-
-    topicSearchLoadRef.current = {
-      topic: canonicalNextTopic,
-      cursors: new Set(),
-      loading: false,
-    };
 
     restoredFeedPositionRef.current = true;
 
@@ -2808,21 +2641,6 @@ const handleTopicSelect = useCallback(
     selectTopic(item, 'topic-card');
   },
   [selectTopic]
-);
-
-const handleStoryTopicSelect = useCallback(
-  (item) => {
-    selectTopic(item, 'topic-story');
-
-    if (
-      areTopicsEquivalent(getTopicValue(item), 'All') &&
-      !loading &&
-      visiblePosts.length === 0
-    ) {
-      refreshFeed();
-    }
-  },
-  [loading, refreshFeed, selectTopic, visiblePosts.length]
 );
 
 const handleTopicCardPointerIntent = useCallback(() => {
@@ -3101,9 +2919,6 @@ const handleTopicCanvasScroll =
               post.savedByCurrentUser
           );
 
-      // const cachedExplanation = getCachedExplanation(post); // Removed unused line
-      const visibleExplanation = simpleExplanations[postId] || '';
-
       return (
 <FeedPostCard
   key={`${postId}-${post.createdAtMs || post.updatedAtMs || post.createdAt || post.updatedAt || ''}`}
@@ -3117,13 +2932,10 @@ const handleTopicCanvasScroll =
   translatedText={translations[postId]}
   isTranslated={Boolean(showTranslated[postId])}
   isTranslating={Boolean(translating[postId])}
-  isExplaining={Boolean(explaining[postId])}
-  explanation={visibleExplanation}
   onTopicClick={handleTopicClick}
   onSave={handleSave}
   onOpenPost={handleOpenPost}
   onComments={handleComments}
-  onExplain={handleExplain}
   onTranslateChange={handleTranslateChange}
   onModerate={openModerationDialog}
   canModerate={
@@ -3136,18 +2948,15 @@ const handleTopicCanvasScroll =
     [
       savedPostIds,
       creatorProfiles,
-      explaining,
       renderedFeedPosts,
 handleOpenPost,
 handleComments,
       currentUserId,
-      handleExplain,
       handleSave,
       handleTopicClick,
       handleTranslateChange,
       openModerationDialog,
       showTranslated,
-      simpleExplanations,
       translating,
       translations,
     ]
@@ -3156,9 +2965,7 @@ handleComments,
   return (
     <main
       ref={feedRef}
-      className={`snap-feed-page ${
-        selectedTopic ? `has-inner-feed ${selectedTopic === 'All' ? 'is-learning-home' : ''}` : 'has-smarty-landing'
-      }`}
+      className={`snap-feed-page has-inner-feed ${selectedTopic === 'All' ? 'is-learning-home' : ''}`}
       style={{ overscrollBehaviorY: 'auto' }}
     >
 
@@ -3263,13 +3070,6 @@ handleComments,
           </section>
         </div>
       )}
-
-{!selectedTopic && (
-  <SmartyLanding
-    onSelect={handleStoryTopicSelect}
-    onOpenSearch={onOpenSearch}
-  />
-)}
 
 {false && !selectedTopic && (
   <section
@@ -3489,6 +3289,7 @@ style={topicCanvasSurfaceStyle}
   selectedTopic !== 'All' &&
   !loading &&
   !error &&
+  !paginationError &&
   filteredPosts.length === 0 &&
   nextCursor && (
     <p className="feed-status feed-inner-status">
@@ -3502,9 +3303,14 @@ style={topicCanvasSurfaceStyle}
       <div className="feed-discovery-heading" id="feed-discovery-heading"><h2>Latest ideas</h2><span>Read · understand · explore</span></div>
       {loading && !filteredPosts.length && <div className="feed-home-loading" role="status">Finding fresh ideas…<FeedSkeleton /></div>}
       {error && <div className="feed-home-status" role="status"><p>Posts couldn’t load right now. Please try again.</p><button type="button" onClick={handleFeedRetry}>Try again</button></div>}
-      {!loading && !error && !filteredPosts.length && <div className="feed-home-status"><p>No posts to show yet. Explore a lesson or share something you’ve learned.</p><Link to="/learn">Explore lessons <ArrowRight size={15} /></Link><Link to="/create">Share an idea <ArrowRight size={15} /></Link></div>}
+      {!loading && !error && !nextCursor && !filteredPosts.length && <div className="feed-home-status"><p>No posts to show yet. Explore a lesson or share something you’ve learned.</p><Link to="/learn">Explore lessons <ArrowRight size={15} /></Link><Link to="/create">Share an idea <ArrowRight size={15} /></Link></div>}
     </>}
     {renderedPosts}
+
+    {paginationError && nextCursor && !loadingMore && <div className="feed-home-status" role="status">
+      <p>{filteredPosts.length ? 'More posts couldn’t load. You can keep reading what’s here.' : 'We couldn’t finish loading posts.'}</p>
+      <button type="button" onClick={() => void loadMore()}>Retry loading posts</button>
+    </div>}
 
     <div
       ref={loadMoreRef}

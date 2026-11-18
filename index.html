@@ -50,6 +50,11 @@
       .boot-loader-card strong { font-size: 25px; font-weight: 550; line-height: 1.2; letter-spacing: -.055em; }
       .boot-loader-card > span { font-size: 13px; line-height: 1.6; color: #a1a5ad; }
       .boot-loader-card .boot-loader-status { margin-top: 24px; color: #a1a5ad; font-size: 12px; }
+      .boot-error-card { box-sizing: border-box; width: min(100%, 420px); margin: 0 auto; gap: 12px; }
+      .boot-error-card h1 { margin: 0; font-size: 24px; line-height: 1.25; letter-spacing: -.035em; }
+      .boot-error-card p { margin: 0; color: #b7c1ce; font-size: 15px; line-height: 1.6; }
+      .boot-error-card button { min-height: 44px; margin-top: 6px; padding: 8px 16px; border: 0; border-radius: 10px; color: #081b28; background: #a8ddfa; font: inherit; font-weight: 600; cursor: pointer; }
+      .boot-error-card button:focus-visible { outline: 2px solid currentColor; outline-offset: -4px; }
       .boot-loader-line { position: relative; width: 96px; height: 2px; margin-top: 9px; overflow: hidden; border-radius: 2px; background: #252a31; }
       .boot-loader-line::after { content: ""; position: absolute; inset: 0; background: #79c9f3; animation: bootReadingLine 1.8s ease-in-out infinite; transform-origin: left; }
       @keyframes bootReadingLine { 0% { transform: translateX(-100%) scaleX(.45); } 100% { transform: translateX(100%) scaleX(.45); } }
@@ -60,6 +65,8 @@
       html[data-app-theme='day'] .boot-loader-card > span { color: #57645b; }
       html[data-app-theme='day'] .boot-loader-line { background: #e8e0f0; }
       html[data-app-theme='day'] .boot-loader-line::after { background: #214d40; }
+      html[data-app-theme='day'] .boot-error-card p { color: #3c4e44; }
+      html[data-app-theme='day'] .boot-error-card button { color: #fff; background: #214d40; }
     </style>
   </head>
 
@@ -76,6 +83,17 @@
       </div>
     </div>
 
+    <template id="smarty-boot-error-template">
+      <main class="boot-loader">
+        <div class="boot-loader-card boot-error-card">
+          <div class="boot-loader-orb" aria-hidden="true"></div>
+          <h1>Smarty couldn’t open</h1>
+          <p role="status">Please reload Smarty to try again.</p>
+          <button type="button">Reload Smarty</button>
+        </div>
+      </main>
+    </template>
+
     <noscript>
       <div
         style="
@@ -89,7 +107,7 @@
       </div>
     </noscript>
 
-<script>
+<script id="smarty-startup-recovery">
   (function () {
     var userAgent = navigator.userAgent || "";
     var urlParams = new URLSearchParams(window.location.search);
@@ -110,78 +128,6 @@
     window.__SMARTY_IS_NATIVE_APP__ = isSmartyNativeApp;
     window.__SMARTY_IS_BLOCKED_BROWSER__ = isBlockedInAppBrowser;
     window.__SMARTY_APP_MOUNTED__ = false;
-    window.__SMARTY_BOOT_STARTED__ = Date.now();
-    window.__SMARTY_BOOT_ERROR__ = "";
-
-    console.log("[Smarty] environment", {
-      nativeApp: isSmartyNativeApp,
-      blockedBrowser: isBlockedInAppBrowser,
-      userAgent: userAgent,
-      url: window.location.href,
-    });
-
-    function getRoot() {
-      return document.getElementById("root");
-    }
-
-function hasReactMounted() {
-  return window.__SMARTY_APP_MOUNTED__ === true;
-}
-
-function markSmartyMounted() {
-  window.__SMARTY_APP_MOUNTED__ = true;
-
-  console.log("[Smarty] React mounted");
-}
-
-    function escapeHtml(value) {
-      return String(value || "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-
-    function recordError(value) {
-      var message = String(value || "Unknown JavaScript error");
-
-      window.__SMARTY_BOOT_ERROR__ = message;
-
-      console.error("[Smarty] startup error:", message);
-    }
-
-    window.addEventListener("DOMContentLoaded", function () {
-      console.log("[Smarty] DOMContentLoaded");
-    });
-
-    window.addEventListener("load", function () {
-      console.log("[Smarty] window loaded");
-    });
-
-    window.addEventListener("smarty:mounted", function () {
-      markSmartyMounted();
-    });
-
-    window.addEventListener("error", function (event) {
-      var message =
-        event && event.message
-          ? event.message
-          : event && event.error
-            ? String(event.error)
-            : "Unknown window error";
-
-      recordError(message);
-    });
-
-    window.addEventListener("unhandledrejection", function (event) {
-      var reason =
-        event && event.reason
-          ? event.reason.stack || event.reason.message || String(event.reason)
-          : "Unhandled promise rejection";
-
-      recordError(reason);
-    });
 
     if ("serviceWorker" in navigator && isBlockedInAppBrowser) {
       navigator.serviceWorker
@@ -195,64 +141,35 @@ function markSmartyMounted() {
     }
 
 
-    window.__SMARTY_SHOW_BOOT_ERROR__ = function () {
-      var root = getRoot();
+    var recoveryShown = false;
+    window.__SMARTY_SHOW_BOOT_ERROR__ = function (reason) {
+      var root = document.getElementById("root");
+      var template = document.getElementById("smarty-boot-error-template");
+      if (window.__SMARTY_APP_MOUNTED__ || recoveryShown || !root || !template) return;
 
-if (window.__SMARTY_APP_MOUNTED__ || !root) {
-  return;
-}
-
-      var currentUrl = window.location.href;
-      var encodedUrl = escapeHtml(currentUrl);
-      var errorMessage = escapeHtml(
-        window.__SMARTY_BOOT_ERROR__ ||
-          "The React application did not mount before the startup timeout."
-      );
-
-      var description = isSmartyNativeApp
-        ? "Smarty loaded inside the iOS app, but React did not finish starting."
-        : isBlockedInAppBrowser
-          ? "This browser may be blocking part of the Smarty application."
-          : "Smarty could not finish loading its application bundle.";
-
-      root.innerHTML =
-        '<div style="min-height:100vh;display:grid;place-items:center;background:#020617;color:white;font-family:Inter,system-ui;padding:24px;text-align:center;">' +
-        '<div style="max-width:390px;width:100%;padding:26px 20px;border-radius:28px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.025));box-shadow:0 20px 70px rgba(0,0,0,.45)">' +
-        '<div style="width:54px;height:54px;border-radius:999px;margin:0 auto 18px;background:conic-gradient(from 0deg,transparent 0 55%,#22d3ee 72%,transparent 88% 100%);box-shadow:0 0 38px rgba(34,211,238,.32)"></div>' +
-        '<h2 style="margin:0 0 10px;font-size:1.1rem;">Smarty could not fully open</h2>' +
-        '<p style="margin:0 0 14px;color:rgba(226,232,240,.72);line-height:1.6;font-size:.9rem;">' +
-        escapeHtml(description) +
-        "</p>" +
-        '<pre style="margin:0 0 16px;padding:12px;text-align:left;white-space:pre-wrap;word-break:break-word;border-radius:14px;background:rgba(239,68,68,.08);border:1px solid rgba(248,113,113,.18);color:#fecaca;font-size:.72rem;line-height:1.45;">' +
-        errorMessage +
-        "</pre>" +
-        '<button id="smarty-reload-btn" style="width:100%;border:0;background:#22d3ee;color:#020617;padding:12px 18px;border-radius:999px;font-weight:850;cursor:pointer;">Reload Smarty</button>' +
-        '<p style="margin:12px 0 0;color:rgba(148,163,184,.7);font-size:.7rem;word-break:break-all;">' +
-        encodedUrl +
-        "</p>" +
-        "</div>" +
-        "</div>";
-
-      var reloadButton = document.getElementById("smarty-reload-btn");
-
-      if (reloadButton) {
-        reloadButton.onclick = function () {
-          window.location.reload();
-        };
+      var content = template.content.cloneNode(true);
+      var description = content.querySelector("p");
+      var offlineMessage = "Reconnect to the internet, then reload Smarty.";
+      if (reason === "saved-session") {
+        description.textContent = "Unlock your device and reload Smarty. Your saved sign-in has not been removed.";
+      } else if (navigator.onLine === false) {
+        description.textContent = offlineMessage;
+      } else if (isBlockedInAppBrowser) {
+        description.textContent = "Try opening Smarty in your browser instead of this app’s built-in browser.";
       }
+      content.querySelector("button").onclick = function () {
+        if (navigator.onLine === false) {
+          description.textContent = offlineMessage;
+          return;
+        }
+        window.location.reload();
+      };
+      recoveryShown = true;
+      root.textContent = "";
+      root.appendChild(content);
     };
 
-setTimeout(function () {
-  console.log("[Smarty] boot check", {
-    native: isSmartyNativeApp,
-    mounted: window.__SMARTY_APP_MOUNTED__,
-    error: window.__SMARTY_BOOT_ERROR__,
-  });
-
-  if (!window.__SMARTY_APP_MOUNTED__) {
-    window.__SMARTY_SHOW_BOOT_ERROR__();
-  }
-}, isSmartyNativeApp ? 15000 : 6500);
+    setTimeout(function () { window.__SMARTY_SHOW_BOOT_ERROR__(); }, isSmartyNativeApp ? 15000 : 6500);
   })();
 </script>
 
@@ -261,8 +178,7 @@ setTimeout(function () {
   type="module"
   crossorigin
   src="/src/bootstrap.js"
-  onload="console.log('[Smarty] main module downloaded')"
-  onerror="window.__SMARTY_BOOT_ERROR__ = 'The main JavaScript module could not be downloaded.'; console.error('[Smarty] main module failed'); window.__SMARTY_SHOW_BOOT_ERROR__();"
+  onerror="window.__SMARTY_SHOW_BOOT_ERROR__();"
 ></script>
   </body>
 </html>

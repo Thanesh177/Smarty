@@ -8,8 +8,11 @@ const compiled = transformSync(fs.readFileSync(__dirname + '/RouteErrorBoundary.
   loader: 'jsx', jsx: 'automatic', format: 'cjs',
 }).code;
 const moduleScope = { exports: {} };
+const navigator = { onLine: true };
+let reloads = 0;
 vm.runInNewContext(compiled, {
   module: moduleScope, exports: moduleScope.exports, console,
+  window: { location: { reload() { reloads++; } } }, navigator,
   require: name => name.endsWith('.css') ? {} : require(name),
 });
 const Boundary = moduleScope.exports.default;
@@ -48,4 +51,22 @@ test('retry remounts only the failed page without reloading the app', () => {
   const recovered = instance.render();
   assert.equal(recovered.props.children, 'page');
   assert.equal(recovered.key, '1');
+});
+
+test('a rejected route import offers an explicit reload instead of retrying a rejected lazy import', () => {
+  const instance = boundary({ resetKey: '/quiz' });
+  instance.setState(Boundary.getDerivedStateFromError(new Error('Failed to fetch dynamically imported module: /old-quiz.js')));
+  const retry = instance.render().props.children.at(-1).props.children[0];
+  const before = reloads;
+  assert.equal(retry.props.children, 'Reload Smarty');
+  assert.equal(reloads, before, 'the route must not reload on its own');
+  navigator.onLine = false;
+  try {
+    retry.props.onClick();
+    assert.equal(reloads, before);
+    assert.match(instance.render().props.children[2].props.children, /Reconnect/);
+  } finally { navigator.onLine = true; }
+  retry.props.onClick();
+  assert.equal(reloads, before + 1);
+  assert.equal(instance.state.attempt, 0);
 });

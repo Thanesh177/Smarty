@@ -7,14 +7,12 @@ async function start() {
   try {
     await initializeNativeSessionStorage();
   } catch {
-    window.__SMARTY_BOOT_ERROR__ = 'Your saved sign-in could not be restored yet. Unlock your device and reload Smarty. Your session has not been removed.';
-    window.__SMARTY_SHOW_BOOT_ERROR__?.();
+    window.__SMARTY_SHOW_BOOT_ERROR__?.('saved-session');
     return;
   }
   try {
     await import('./main.jsx');
   } catch {
-    window.__SMARTY_BOOT_ERROR__ = 'Smarty could not finish opening. Please reload. Your saved sign-in has not been removed.';
     window.__SMARTY_SHOW_BOOT_ERROR__?.();
   }
 }

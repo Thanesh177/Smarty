@@ -375,7 +375,7 @@ input, select, textarea { accent-color: var(--ui-accent); }
 .app-shell .content .post-author { color: var(--ui-muted); }
 .app-shell .content .post-actions .icon-action-btn { color: var(--ui-secondary) !important; background: transparent !important; border: 1px solid var(--ui-line) !important; border-radius: 8px !important; box-shadow: none !important; }
 .app-shell .content .post-actions .icon-action-btn.saved { color: var(--ui-accent) !important; background: var(--ui-accent-soft) !important; border-color: var(--ui-accent-line) !important; }
-.app-shell .content :is(.translate-dropdown, .translated-box, .simple-explanation, .ai-loading-box, .feed-inner-state) { color: var(--ui-text); background: var(--ui-surface) !important; border-color: var(--ui-line) !important; box-shadow: none !important; border-radius: 10px; }
+.app-shell .content :is(.translate-dropdown, .translated-box, .ai-loading-box, .feed-inner-state) { color: var(--ui-text); background: var(--ui-surface) !important; border-color: var(--ui-line) !important; box-shadow: none !important; border-radius: 10px; }
 
 /* Learning, explanations, quizzes and progress share the same accents. */
 .app-shell .content .learn-page { --learn-accent: var(--ui-accent); }

@@ -9,6 +9,9 @@ const storage = () => {
 test('only missing application chunks trigger automatic recovery', () => {
   assert.equal(isChunkLoadFailure(new Error('Failed to fetch dynamically imported module: /old-chunk.js')), true);
   assert.equal(isChunkLoadFailure('Loading chunk 42 failed'), true);
+  assert.equal(isChunkLoadFailure('Importing a module script failed.'), true);
+  assert.equal(isChunkLoadFailure('error loading dynamically imported module: /old-chunk.js'), true);
+  assert.equal(isChunkLoadFailure('Unable to preload CSS for /old-style.css'), true);
   assert.equal(isChunkLoadFailure(new Error('Feed failed to load')), false);
   assert.equal(isChunkLoadFailure('Network Error'), false);
 });

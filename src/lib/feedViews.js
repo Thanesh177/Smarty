@@ -4,11 +4,17 @@ export const FEED_VIEWS = [
   { id: 'video', label: 'Videos', compactLabel: 'Videos', to: '/feed?topic=Video' },
 ];
 
+export function feedLaunchTarget({ search = '', hash = '' } = {}) {
+  const params = new URLSearchParams(search);
+  if (!params.get('topic')?.trim()) params.set('topic', 'All');
+  return { pathname: '/feed', search: `?${params}`, hash };
+}
+
 export function getFeedView({ pathname = '', search = '' } = {}) {
   if (pathname !== '/feed' && !pathname.startsWith('/feed/')) return null;
   const pathTopic = pathname.startsWith('/feed/') ? pathname.slice(6) : '';
   const topic = (new URLSearchParams(search).get('topic') || pathTopic).trim().toLowerCase();
-  // The first-visit landing and unrelated routes retain their own navigation.
+  // The bare feed URL redirects before displaying a feed view.
   if (!topic) return null;
   if (topic === 'news') return 'news';
   if (['video', 'videos', 'reels'].includes(topic)) return 'video';
