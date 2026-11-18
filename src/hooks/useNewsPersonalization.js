@@ -2,13 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { newsApi } from '../api/client';
-import { readNewsPreference, writeNewsPreference, newsPreferenceKey } from '../lib/newsPreferences';
+import { normalizeNewsPreference, readNewsPreference, writeNewsPreference, newsPreferenceKey } from '../lib/newsPreferences';
+import { createNewsPreferenceSync } from '../lib/newsPreferenceSync';
+
+const syncNewsPreference = createNewsPreferenceSync();
 
 export default function useNewsPersonalization({ poll = false } = {}) {
-  const { user } = useAuth();
+  const { user, loggingOut } = useAuth();
   const account = String(user?.sub || user?.userId || user?.id || '');
   const activeAccount = useRef(account);
-  activeAccount.current = account;
+  activeAccount.current = loggingOut ? '' : account;
+  const mounted = useRef(true);
   const client = useQueryClient(), key = ['news-personalization', account];
   const [local, setLocal] = useState(() => ({ account, value: readNewsPreference(account) }));
   const [syncWarning, setSyncWarning] = useState('');
@@ -16,10 +20,15 @@ export default function useNewsPersonalization({ poll = false } = {}) {
     staleTime: 60000, retry: false, refetchInterval: poll ? 120000 : false, refetchIntervalInBackground: false });
   const preferences = local.account === account && local.value ? local.value : state.data?.preferences || readNewsPreference(account);
   useEffect(() => {
+    mounted.current = true;
     setLocal({ account, value: readNewsPreference(account) }); setSyncWarning('');
-    const changed = event => { if (event.key === newsPreferenceKey(account) || event.detail === account) setLocal({ account, value: readNewsPreference(account) }); };
+    const changed = event => {
+      if (event.key === newsPreferenceKey(account) || event.detail === account) {
+        setLocal({ account, value: readNewsPreference(account) }); setSyncWarning('');
+      }
+    };
     window.addEventListener('storage', changed); window.addEventListener('smarty-news-place-changed', changed);
-    return () => { window.removeEventListener('storage', changed); window.removeEventListener('smarty-news-place-changed', changed); };
+    return () => { mounted.current = false; window.removeEventListener('storage', changed); window.removeEventListener('smarty-news-place-changed', changed); };
   }, [account]);
   useEffect(() => {
     if (state.data?.preferences && !readNewsPreference(account)) {
@@ -29,16 +38,24 @@ export default function useNewsPersonalization({ poll = false } = {}) {
     }
   }, [account, state.data?.preferences]);
   const savePreference = useCallback(async value => {
-    const preference = writeNewsPreference(account, value);
+    const normalized = normalizeNewsPreference(value);
+    if (!normalized) throw new Error('Choose a valid news edition.');
+    const preference = writeNewsPreference(account, normalized);
     setLocal({ account, value: preference }); setSyncWarning('');
     window.dispatchEvent(new CustomEvent('smarty-news-place-changed', { detail: account }));
     if (!account) return;
-    try {
-      await client.cancelQueries({ queryKey: key });
-      const result = await newsApi.saveNewsPreferences(preference);
-      client.setQueryData(key, previous => ({ ...previous, preferences: result.preferences }));
-    } catch {
-      if (activeAccount.current === account) setSyncWarning('Your place is saved on this device. Account sync is temporarily unavailable.');
+    const isCurrent = () => mounted.current && activeAccount.current === account;
+    const result = await syncNewsPreference(account, async () => {
+      if (!isCurrent()) return null;
+      await client.cancelQueries({ queryKey: key, exact: true });
+      if (!isCurrent()) return null;
+      return newsApi.saveNewsPreferences(preference);
+    });
+    if (!isCurrent()) return;
+    if (result.status === 'synced' && result.value) {
+      client.setQueryData(key, previous => ({ ...previous, preferences: result.value.preferences }));
+    } else if (result.status === 'failed') {
+      setSyncWarning('Your place is saved on this device. Account sync is temporarily unavailable.');
     }
   }, [account, client]);
   const mutation = useMutation({ mutationFn: ({ owner, payload }) => {

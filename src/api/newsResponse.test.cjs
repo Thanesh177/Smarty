@@ -4,11 +4,14 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { transformSync } = require('esbuild');
 
-function client(payload) {
+function client(payload, browserArticles = []) {
   let fallbackCalls = 0;
   let reads = 0;
   const instance = { interceptors: { request: { use() {} }, response: { use() {} } } };
-  const axios = { create: () => instance, get: async () => { reads++; return { data: payload }; } };
+  const axios = { create: () => instance, get: async (_url, options) => {
+    reads++;
+    return { data: typeof payload === 'function' ? payload(options.params) : payload };
+  } };
   const scope = { exports: {} };
   vm.runInNewContext(transformSync(fs.readFileSync(__dirname + '/client.js', 'utf8'), {
     format: 'cjs', define: { 'import.meta.env': JSON.stringify({DEV:false,PROD:true,VITE_API_BASE_URL:'https://fixture.example'}) },
@@ -24,7 +27,7 @@ function client(payload) {
     },
   });
   const api = scope.exports.newsApi;
-  api.getHackerNews = async () => { fallbackCalls++; return []; };
+  api.getHackerNews = async () => { fallbackCalls++; return browserArticles; };
   api.getSpaceflightNews = async () => { fallbackCalls++; return []; };
   return { api, reads: () => reads, fallbackCalls: () => fallbackCalls };
 }
@@ -48,6 +51,38 @@ test('empty sections still allow valid top-level reports', async () => {
 test('a genuinely empty provider response offers an error, never a false briefing', async () => {
   const fixture = client({status:200,articles:[],sections:{}});
   await assert.rejects(fixture.api.loadLatestNews({country:'IN'}),/temporarily unavailable/);
+});
+
+test('a failed world briefing falls back to official reports before contacting alternative providers', async () => {
+  const { loadNewsEdition } = await import('../lib/newsEdition.js');
+  const official = {title:'A current official report',news_link:'https://example.com/report',section:'World'};
+  const fixture = client(({ view }) => {
+    if (view === 'reports') return {status:200,articles:[official]};
+    throw new Error('Combined endpoint unavailable');
+  });
+  const result = await loadNewsEdition({
+    place: { country: 'GLOBAL', region: '' },
+    preferBriefing: true,
+    load: view => fixture.api.getLatestNews({ country: 'GLOBAL', view }),
+  });
+  assert.equal(result.articles[0].title, official.title);
+  assert.equal(fixture.reads(), 2);
+  assert.equal(fixture.fallbackCalls(), 0);
+});
+
+test('if both world requests fail, alternative reports are tried once and remain readable', async () => {
+  const { loadNewsEdition } = await import('../lib/newsEdition.js');
+  const browserReport = {title:'Alternate science report',news_link:'https://example.com/science'};
+  const fixture = client(() => { throw new Error('Public news unavailable'); }, [browserReport]);
+  const result = await loadNewsEdition({
+    place: { country: 'GLOBAL', region: '' },
+    preferBriefing: true,
+    load: view => fixture.api.getLatestNews({ country: 'GLOBAL', view }),
+  });
+  assert.equal(result.articles[0].title, browserReport.title);
+  assert.equal(result.cacheStatus, 'browser-fallback');
+  assert.equal(fixture.reads(), 2);
+  assert.equal(fixture.fallbackCalls(), 2, 'each alternative provider is called just once');
 });
 
 test('manual story refresh bypasses the read cache without duplicating normal reads', async () => {

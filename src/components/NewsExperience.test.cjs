@@ -10,15 +10,27 @@ test('the briefing keeps section navigation but removes summary search and the e
   const [briefing, newsroom] = news.split('className="news-page news-compact news-newsroom"');
   assert.doesNotMatch(briefing, /type="search"/);
   assert.doesNotMatch(briefing, /news-edition-footer|news-summary-sources|news-briefing-takeaways/);
-  assert.match(briefing, /to="\/news">All reports/);
+  assert.match(briefing, /to="\/news" aria-label="All reports"/);
   assert.match(newsroom, /type="search"[\s\S]+?'Search reports'/);
   assert.match(news, /Daily news sections/);
   assert.match(news, /What this means and what comes next/);
   assert.doesNotMatch(news, /<dt>Why it matters|<dt>What to watch/);
   assert.match(news, /cached\.isFresh && hasCurrentBriefing\(cached\.news\) && !forceRefresh/);
-  assert.match(news, /getLatestNews\(\{[\s\S]+?forceRefresh, view/);
+  assert.match(news, /getLatestNews\(\{[\s\S]+?forceRefresh: forceRefresh \|\| retry, view/);
   assert.match(news, /Retry briefing/);
   assert.match(news, /Last available briefing · <time dateTime=\{summary\.editionDate\}/);
+});
+
+test('the single-row edition controls never wait for account sync', () => {
+  const chooser = read('components/NewsPersonalization.jsx').split('export function NewsFollowButton')[0];
+  const css = read('pages/NewsCompact.css');
+  const news = read('pages/NewsPage.jsx');
+  assert.match(chooser, /className="news-command-row"[\s\S]+\{heading\}[\s\S]+\{actions\}[\s\S]+editing && <form/);
+  assert.ok(chooser.indexOf('onChange?.(next)') < chooser.indexOf('savePreference(preference)'));
+  assert.doesNotMatch(chooser, /await savePreference|disabled=\{saving\}/);
+  assert.match(css, /\.news-command-row \{\s*display: grid; grid-template-columns: minmax\(0, 1fr\) auto auto/);
+  assert.match(news, /preferBriefing: briefingOnly \|\| forceRefresh \|\| switchingEdition/);
+  assert.match(news, /clearTimeout\(deadline\)/);
 });
 
 test('both News views show the entire briefing without an expander', () => {

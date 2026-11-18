@@ -1,53 +1,75 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Bell, BellOff, Globe2, MapPin, X } from 'lucide-react';
 import useNewsPersonalization from '../hooks/useNewsPersonalization';
 import { NEWS_COUNTRIES, NEWS_REGIONS, getDefaultNewsCountry } from '../data/newsLocations';
 import { cleanStoryQuery, storyQuery } from '../lib/newsStories';
+import { briefingPlace, normalizeNewsPreference } from '../lib/newsPreferences';
 import './NewsPersonalization.css';
 
-export function NewsBriefingChoice({ personal, activePlace, onChange }) {
+export function NewsBriefingChoice({ personal, activePlace, onChange, heading, actions }) {
   const { preferences, savePreference, syncWarning } = personal;
-  const [editing, setEditing] = useState(false), [country, setCountry] = useState(preferences?.country || getDefaultNewsCountry());
-  const [region, setRegion] = useState(preferences?.region || ''), [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false), [country, setCountry] = useState('GLOBAL');
+  const [region, setRegion] = useState('');
   const [error, setError] = useState('');
-  const actionRef = useRef(null), mountedRef = useRef(true);
+  const actionRef = useRef(null), editorToggleRef = useRef(null);
+  const editorId = useId();
   useEffect(() => {
-    mountedRef.current = true;
-    actionRef.current = null; setSaving(false); setError('');
-    return () => { mountedRef.current = false; actionRef.current = null; };
+    setEditing(false); setError('');
+    return () => { actionRef.current = null; };
   }, [personal.account]);
-  useEffect(() => { setCountry(preferences?.country || (activePlace?.country !== 'GLOBAL' && activePlace?.country) || getDefaultNewsCountry()); setRegion(preferences?.region || activePlace?.region || ''); }, [preferences?.country, preferences?.region, activePlace?.country, activePlace?.region]);
-  const apply = async mode => {
-    if (actionRef.current) return;
-    const action = {};
-    actionRef.current = action;
-    setSaving(true); setError('');
-    try {
-      await savePreference({ chosen: true, country, region, mode });
-      if (!mountedRef.current || actionRef.current !== action) return;
-      onChange?.({ country: mode === 'world' ? 'GLOBAL' : country, region: mode === 'world' ? '' : region });
-      setEditing(false);
-    } catch { if (mountedRef.current) setError('Could not save this place. Please try again.'); }
-    finally { if (actionRef.current === action) { actionRef.current = null; if (mountedRef.current) setSaving(false); } }
-  };
-  const localCountry = activePlace?.country !== 'GLOBAL' && activePlace?.country || preferences?.country;
-  const label = (activePlace?.country !== 'GLOBAL' ? activePlace?.region : '') || preferences?.region || NEWS_COUNTRIES.find(item => item.code === localCountry)?.name || 'Your place';
+  const local = activePlace?.country && activePlace.country !== 'GLOBAL' ? activePlace : preferences;
+  const localCountry = local?.country;
+  const localRegion = local?.region || '';
+  const label = localRegion || NEWS_COUNTRIES.find(item => item.code === localCountry)?.name || 'Your place';
   const hasLocal = localCountry && localCountry !== 'GLOBAL';
   const mode = activePlace ? activePlace.country === 'GLOBAL' ? 'world' : 'local' : preferences?.mode || 'world';
+  const closeEditor = () => { setEditing(false); editorToggleRef.current?.focus(); };
+  const apply = (mode, fromEditor = false) => {
+    const preference = normalizeNewsPreference({ chosen: true, mode,
+      country: fromEditor ? country : localCountry || 'GLOBAL', region: fromEditor ? region : localRegion });
+    const next = briefingPlace(preference);
+    const alreadySelected = next.country === activePlace?.country && next.region === (activePlace?.region || '');
+    setError('');
+    if (fromEditor) closeEditor();
+    else setEditing(false);
+    // Opening an edition is a local action. Account sync must not lock the row
+    // or change the visible edition after a newer selection has been made.
+    onChange?.(next);
+    if (!fromEditor && alreadySelected) return;
+    const action = {};
+    actionRef.current = action;
+    void savePreference(preference).catch(() => {
+      if (actionRef.current === action) setError('Could not save this place. You can still read this edition.');
+    });
+  };
+  const placeAction = preferences || hasLocal ? 'Change place' : 'Choose place';
   return <section className="news-place-choice" aria-label="Daily briefing location">
-    {!editing ? <div className="news-place-switch">
-      <div role="group" aria-label="Briefing edition"><button type="button" aria-pressed={mode === 'world'} disabled={saving} onClick={() => apply('world')}><Globe2 size={15}/>World</button>
-        {hasLocal && <button type="button" aria-pressed={mode === 'local'} disabled={saving} onClick={() => apply('local')}><MapPin size={15}/>{label}</button>}</div>
-      <button type="button" disabled={saving} onClick={() => setEditing(true)}><MapPin size={14}/>{preferences || hasLocal ? 'Change place' : 'Choose place'}</button>
-    </div> : <form onSubmit={event => { event.preventDefault(); void apply('local'); }}>
+    <div className="news-command-row">
+      {heading}
+      <div className="news-place-switch">
+        <div role="group" aria-label="Briefing edition">
+          <button type="button" aria-pressed={mode === 'world'} onClick={() => apply('world')}><Globe2 size={15} aria-hidden="true" />World</button>
+          {hasLocal && <button type="button" aria-label={label} title={label} aria-pressed={mode === 'local'} onClick={() => apply('local')}>
+            <span className="news-edition-local-label">{label}</span><span className="news-edition-local-short" aria-hidden="true">Local</span>
+          </button>}
+        </div>
+        <button type="button" ref={editorToggleRef} className="news-edit-place" title={placeAction} aria-label={placeAction}
+          aria-expanded={editing} aria-controls={editing ? editorId : undefined} onClick={() => {
+            if (editing) { closeEditor(); return; }
+            setCountry(hasLocal ? localCountry : getDefaultNewsCountry()); setRegion(localRegion); setEditing(true);
+          }}><MapPin size={16} aria-hidden="true" /><span>{placeAction}</span></button>
+      </div>
+      {actions}
+    </div>
+    {editing && <form id={editorId} onSubmit={event => { event.preventDefault(); apply('local', true); }}>
       <header><div><h2>Your briefing, your place.</h2><p>Choose a country and region. Switch back to World anytime.</p></div>
-        <button type="button" aria-label="Close location settings" disabled={saving} onClick={() => setEditing(false)}><X size={18}/></button></header>
-      <div className="news-place-fields"><label>Country<select aria-label="Briefing country" value={country} disabled={saving} onChange={event => { setCountry(event.target.value); setRegion(''); }}>
+        <button type="button" aria-label="Close location settings" onClick={closeEditor}><X size={18}/></button></header>
+      <div className="news-place-fields"><label>Country<select aria-label="Briefing country" value={country} onChange={event => { setCountry(event.target.value); setRegion(''); }}>
         {NEWS_COUNTRIES.map(item => <option value={item.code} key={item.code}>{item.name}</option>)}</select></label>
-        <label>State or region<select aria-label="Briefing state or region" value={region} disabled={saving || !NEWS_REGIONS[country]?.length} onChange={event => setRegion(event.target.value)}>
+        <label>State or region<select aria-label="Briefing state or region" value={region} disabled={!NEWS_REGIONS[country]?.length} onChange={event => setRegion(event.target.value)}>
           <option value="">Countrywide</option>{(NEWS_REGIONS[country] || []).map(item => <option key={item}>{item}</option>)}</select></label></div>
-      <footer><button type="submit" disabled={saving}>{saving ? 'Saving…' : country === 'GLOBAL' ? 'Use world briefing' : 'Use my place'}</button><button type="button" disabled={saving} onClick={() => apply('world')}>Keep world briefing</button></footer>
+      <footer><button type="submit">{country === 'GLOBAL' ? 'Use world briefing' : 'Use my place'}</button><button type="button" onClick={() => apply('world', true)}>Keep world briefing</button></footer>
     </form>}
     {syncWarning && <p role="status" className="news-personal-note">{syncWarning}</p>}
     {error && <p role="alert" className="news-personal-note">{error}</p>}

@@ -19,6 +19,11 @@ test('fallback reports are rechecked shortly instead of hiding AI recovery for f
   assert.equal(newsCacheIsFresh(editorial, now + 1, now), false);
   assert.equal(newsCacheIsFresh({...editorial,dailySummary:{...editorial.dailySummary,editionDate:'2026-10-05'}}, now-1, now), false);
 });
+test('third-party preview reports are usable but never suppress an official recovery request', () => {
+  for (const cacheStatus of ['browser-fallback', 'stale-cache']) {
+    assert.equal(newsCacheIsFresh({ cacheStatus }, now, now), false);
+  }
+});
 test('editorial sectors exclude malformed or headline-only summaries', () => {
   const sections = [{section:'Science',summary:'Science context',summaryMode:'editorial'},
     {section:'World',summary:'Headlines only',summaryMode:'extractive'},null,{section:'Sports',summary:[]},{section:'Health',summary:''}];

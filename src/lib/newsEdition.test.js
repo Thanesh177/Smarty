@@ -1,10 +1,58 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { briefingParagraphs, loadNewsEdition, normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from './newsEdition.js';
+import { briefingParagraphs, loadNewsEdition, loadNewsEditionForReader, normalizeNewsEdition, mergeNewsBriefing, normalizeSavedNews, safeNewsUrl } from './newsEdition.js';
 
 const report = { id: 'one', title: 'A real report', news_link: 'https://example.com/report', summary: 'Original coverage.', section: 'World' };
 const reports = { location: {countryCode:'IN',region:'Tamil Nadu'}, articles: [report], sections: {World:[report]}, generatedAt:'2026-10-13T12:00:00Z' };
 const summary = { summaryMode:'editorial', overview:'A sourced daily summary.', sectionDigests:[{section:'World',summary:'World context'}] };
+
+test('a new edition that is being prepared shows its reports before retrying the briefing', async () => {
+  const calls = [], visible = [];
+  const result = await loadNewsEditionForReader({
+    place: { country: 'IN', region: 'Tamil Nadu' }, preferBriefing: true,
+    onReports: data => visible.push(data),
+    wait: async () => assert.equal(visible[0].articles[0].title, report.title),
+    load: async (view, retry) => {
+      calls.push([view, retry]);
+      if (retry) return { ...reports, articles: [], sections: {}, dailySummary: summary };
+      if (view === 'reports') return reports;
+      throw new Error('This briefing is being prepared. Please try again shortly.');
+    },
+  });
+  assert.deepEqual(calls, [[undefined, undefined], ['reports', undefined], [undefined, true]]);
+  assert.equal(result.dailySummary.overview, summary.overview);
+  assert.equal(result.articles[0].news_link, report.news_link);
+});
+
+test('a successful retry removes the preparing notice without dropping reports', async () => {
+  const result = await loadNewsEditionForReader({ preferBriefing: true, wait: async () => {},
+    load: async (_view, retry) => retry ? { ...reports, dailySummary: summary }
+      : { ...reports, notice: 'Showing reports while the daily briefing is being prepared.' },
+  });
+  assert.equal(result.notice, '');
+  assert.equal(result.articles[0].title, report.title);
+  assert.equal(result.dailySummary.overview, summary.overview);
+});
+
+test('changing place during a briefing wait cancels its queued retry', async () => {
+  const controller = new AbortController();
+  let reads = 0;
+  await assert.rejects(loadNewsEditionForReader({ preferBriefing: true, signal: controller.signal,
+    wait: async () => controller.abort(),
+    load: async () => { reads++; return { ...reports, notice: 'The briefing is being prepared.' }; },
+  }), { name: 'AbortError' });
+  assert.equal(reads, 1);
+});
+
+test('an ordinary reports response does not start a polling loop', async () => {
+  let reads = 0;
+  const result = await loadNewsEditionForReader({ preferBriefing: true,
+    wait: async () => assert.fail('Only a preparing edition should retry automatically'),
+    load: async () => { reads++; return reports; },
+  });
+  assert.equal(result.articles.length, 1);
+  assert.equal(reads, 1);
+});
 test('the briefing-first view needs only one request when its combined edition is available', async () => {
   const calls = [];
   const edition = await loadNewsEdition({ preferBriefing: true, place: { country: 'IN', region: 'Tamil Nadu' },
@@ -29,6 +77,43 @@ test('a failed, empty, or wrong-place briefing falls back to matching reports', 
     assert.deepEqual(calls, [undefined, 'reports']);
     assert.equal(edition.location.region, 'Tamil Nadu');
     assert.equal(edition.dailySummary, undefined);
+  }
+});
+
+test('a cached briefing stays visible while fresh official reports replace its old headlines', async () => {
+  const old = { ...report, title: 'Saved report' };
+  const saved = { ...reports, cacheStatus: 'stale-cache', articles: [old], sections: { World: [old] }, dailySummary: summary };
+  const preview = [];
+  const result = await loadNewsEdition({
+    preferBriefing: true,
+    onReports: data => preview.push(data),
+    load: async view => {
+      if (!view) return saved;
+      assert.equal(preview[0]?.articles[0]?.title, 'Saved report');
+      return { ...reports, cacheStatus: 'fresh-cache' };
+    },
+  });
+  assert.equal(result.articles[0].title, report.title);
+  assert.equal(result.dailySummary.overview, summary.overview);
+  assert.equal(result.cacheStatus, 'fresh-cache');
+});
+
+test('a usable saved preview stays available when official reports also fail or return unrelated alternative coverage', async () => {
+  const saved = { ...reports, cacheStatus: 'stale-cache', dailySummary: summary };
+  for (const alternative of [null, { ...reports, cacheStatus: 'browser-fallback' }]) {
+    const shown = [];
+    const result = await loadNewsEdition({
+      preferBriefing: true,
+      onReports: data => shown.push(data),
+      load: async view => {
+        if (!view) return saved;
+        if (!alternative) throw new Error('Reports unavailable');
+        return alternative;
+      },
+    });
+    assert.equal(result, shown[0]);
+    assert.equal(result.cacheStatus, 'stale-cache');
+    assert.equal(result.dailySummary.overview, summary.overview);
   }
 });
 

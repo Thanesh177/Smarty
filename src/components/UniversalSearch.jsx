@@ -670,6 +670,7 @@ export default function UniversalSearch({ open, onClose, user }) {
         () => newsApi.getLatestNews({
           ...getNewsSearchLocation(),
           lang: 'english',
+          view: 'reports',
           signal: controller.signal,
         }),
         (value) => {

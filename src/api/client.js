@@ -688,7 +688,10 @@ export const newsApi = {
     }
 
     const summaryOnly = primaryPayload && hasEditorialBriefing(primaryPayload);
-    if (!Object.keys(sections).length && !summaryOnly && country === 'GLOBAL' && !normalizedOptions.signal?.aborted) {
+    // A combined request's failure must not hide an available first-party
+    // reports edition. Try alternative sources only from the reports path.
+    if (!Object.keys(sections).length && !summaryOnly && country === 'GLOBAL'
+        && normalizedOptions.view === 'reports' && !normalizedOptions.signal?.aborted) {
       const [hackerResult, spaceResult] = await Promise.allSettled([
         newsApi.getHackerNews(10, { signal: normalizedOptions.signal }),
         newsApi.getSpaceflightNews(10, { signal: normalizedOptions.signal }),

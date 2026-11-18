@@ -15,7 +15,7 @@ import { getNewsCacheKey as getCacheKey, getCachedNews, latestSavedBriefing, set
 import useNewsPersonalization from '../hooks/useNewsPersonalization';
 import { NewsBriefingChoice, NewsFollowButton, NewsUpdatesShelf } from '../components/NewsPersonalization';
 import { briefingPlace, readNewsPreference } from '../lib/newsPreferences';
-import { briefingParagraphs, loadNewsEdition, normalizeSavedNews } from '../lib/newsEdition';
+import { briefingParagraphs, loadNewsEditionForReader, normalizeSavedNews } from '../lib/newsEdition';
 import { balancedNewsReports, newsPreviewParagraphs, reportBriefingContext, selectNewsReports } from '../lib/newsReader';
 import useNewsReader from '../hooks/useNewsReader';
 import NewsReader from '../components/NewsReader';
@@ -23,6 +23,7 @@ import NewsLoading from '../components/NewsLoading';
 import './NewsCompact.css';
 
 const PAGE_SIZE = 9;
+const NEWS_EDITION_DEADLINE = 35000;
 const SECTION_ICONS = {
   world: Globe2, business: BriefcaseBusiness, technology: Cpu, science: FlaskConical,
   health: HeartPulse, politics: Landmark, environment: Leaf, sports: Trophy,
@@ -386,6 +387,7 @@ export default function NewsPage({ briefingOnly = false }) {
   const newsStoriesRef = useRef(null);
   const reportsHeadingRef = useRef(null);
   const requestIdRef = useRef(0);
+  const requestedLocationRef = useRef(requestLocation);
   const mountedRef = useRef(true);
   const abortControllerRef = useRef(null);
   const loadedLocationRef = useRef(initialCache ? getCacheKey(initialCountry, region) : '');
@@ -450,7 +452,10 @@ export default function NewsPage({ briefingOnly = false }) {
 
   const fetchNews = useCallback(async (targetCountry, targetRegion, forceRefresh = false) => {
     abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     const nextLocation = getCacheKey(targetCountry, targetRegion);
+    const switchingEdition = requestedLocationRef.current !== nextLocation;
+    requestedLocationRef.current = nextLocation;
     const retainReports = forceRefresh && loadedLocationRef.current === nextLocation;
     const cached = getCachedNews(targetCountry, targetRegion);
     const requestId = requestIdRef.current + 1;
@@ -459,7 +464,7 @@ export default function NewsPage({ briefingOnly = false }) {
     setError('');
     setRefreshing(false);
     setBriefingPending(false);
-    setVisibleCount(PAGE_SIZE);
+    if (!retainReports) setVisibleCount(PAGE_SIZE);
     if (!retainReports || cached?.lastEditorial) setLastEditorial(cached?.lastEditorial || null);
 
     if (cached) {
@@ -483,9 +488,16 @@ export default function NewsPage({ briefingOnly = false }) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
     const isCurrentRequest = () => mountedRef.current && requestId === requestIdRef.current && !controller.signal.aborted;
+    let timedOut = false;
+    let hasVisibleEdition = Boolean(cached || retainReports);
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, NEWS_EDITION_DEADLINE);
     const showEdition = data => {
       if (!isCurrentRequest()) return;
       const news = setCachedNews(targetCountry, targetRegion, data);
+      hasVisibleEdition = true;
       setNewsData(news);
       setLastEditorial(previous => latestSavedBriefing(Date.now(), news.dailySummary, previous));
       setLoading(false);
@@ -496,12 +508,14 @@ export default function NewsPage({ briefingOnly = false }) {
 
     try {
       let fastReports;
-      const edition = await loadNewsEdition({
+      const edition = await loadNewsEditionForReader({
         place: { country: targetCountry, region: targetRegion },
-        preferBriefing: briefingOnly,
+        // Edition selection also warms this combined request in the background.
+        // Join it instead of competing for that edition's reports refresh.
+        preferBriefing: briefingOnly || forceRefresh || switchingEdition,
         savedReports: !forceRefresh && cached?.isReportsFresh ? cached.news : undefined,
-        load: view => newsApi.getLatestNews({ country: targetCountry, region: targetRegion,
-          lang: 'english', signal: controller.signal, forceRefresh, view }),
+        load: (view, retry = false) => newsApi.getLatestNews({ country: targetCountry, region: targetRegion,
+          lang: 'english', signal: controller.signal, forceRefresh: forceRefresh || retry, view }),
         signal: controller.signal,
         onReports: (data, metadata) => {
           fastReports = data;
@@ -512,16 +526,17 @@ export default function NewsPage({ briefingOnly = false }) {
       if (edition !== fastReports) showEdition(edition);
     } catch (fetchError) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
-      if (controller.signal.aborted || fetchError?.name === 'AbortError' || fetchError?.code === 'ERR_CANCELED') {
+      if (!timedOut && (controller.signal.aborted || fetchError?.name === 'AbortError' || fetchError?.code === 'ERR_CANCELED')) {
         return;
       }
 
       setError(
-        cached || retainReports
+        hasVisibleEdition
           ? 'Could not refresh right now. Showing what’s already available.'
           : 'Could not load current news. Please try again.'
       );
     } finally {
+      clearTimeout(deadline);
       if (mountedRef.current && requestId === requestIdRef.current) {
         setLoading(false);
         setRefreshing(false);
@@ -678,10 +693,14 @@ export default function NewsPage({ briefingOnly = false }) {
   }, [articles.length, loading, selectedSection, search, visibleCount, reportView]);
 
   const handlePlaceChange = useCallback(place => {
+    if (place.country === country && place.region === region) {
+      if (!abortControllerRef.current) void fetchNews(country, region, true);
+      return;
+    }
     setCountry(place.country); setRegion(place.region);
     setReportView('edition');
     setSelectedSection('All'); setSearch('');
-  }, []);
+  }, [country, region, fetchNews]);
 
   const handleBriefSectionSelect = useCallback((section) => {
     setReportView('edition');
@@ -715,24 +734,31 @@ export default function NewsPage({ briefingOnly = false }) {
   );
   const showNewsroomBriefing = reportView === 'edition' && !search.trim();
   const hasVisibleNewsroomBriefing = showNewsroomBriefing && Boolean(dailyBriefing || savedBriefing);
+  const updateLabel = briefingOnly && dailyBriefing?.generatedAt
+    ? `Published ${formatUpdatedAt(dailyBriefing.generatedAt)}`
+    : lastUpdated ? `Updated ${lastUpdated}` : '';
+  const editionToolbar = <NewsBriefingChoice personal={personal} activePlace={{ country, region }} onChange={handlePlaceChange}
+    heading={<div className="news-command-heading">
+      <h1>{briefingOnly ? 'Briefing' : 'News'}</h1>
+      {updateLabel && <span className="news-command-time" title={updateLabel}>{updateLabel}</span>}
+    </div>}
+    actions={<div className="news-command-actions">
+      {briefingOnly
+        ? <Link to="/news" aria-label="All reports" title="All reports"><span>All reports</span> <ArrowUpRight size={16} aria-hidden="true" /></Link>
+        : <Link to="/feed?topic=News" aria-label="Daily briefing" title="Daily briefing"><span>Daily briefing</span> <ArrowUpRight size={16} aria-hidden="true" /></Link>}
+      <button type="button" className="refresh-news-btn" disabled={loading || refreshing}
+        aria-label={briefingOnly ? 'Refresh daily briefing' : 'Refresh current news'}
+        title={briefingOnly ? 'Refresh daily briefing' : 'Refresh current news'} onClick={() => fetchNews(country, region, true)}>
+        <RefreshCw size={16} aria-hidden="true" className={refreshing ? 'news-refreshing' : ''}/>
+      </button>
+    </div>} />;
 
   if (briefingOnly) return (
     <section className={`news-page news-compact news-feed-briefing${comfortableText ? ' news-comfortable-text' : ''}`} aria-label="Daily news feed">
       {readerPanel}
       {actionStatus && <p className="news-action-status" role="status" aria-live="polite">{actionStatus}</p>}
-      <div className="news-feed-toolbar">
-        <div className="news-feed-heading">
-          <span className="news-kicker">{country === 'GLOBAL' ? 'Your world briefing' : `Your ${locationLabel} briefing`}</span>
-          <strong>{dailyBriefing?.generatedAt ? `Published ${formatUpdatedAt(dailyBriefing.generatedAt)}` : lastUpdated ? `Updated ${lastUpdated}` : 'The world today, explained clearly.'}</strong>
-        </div>
-        <div className="news-feed-actions">
-          <Link to="/news">All reports <ArrowUpRight size={14} aria-hidden="true" /></Link>
-          <button type="button" className="refresh-news-btn" disabled={loading || refreshing}
-            aria-label="Refresh daily briefing" title="Refresh daily briefing" onClick={() => fetchNews(country, region, true)}><RefreshCw size={16} aria-hidden="true" className={refreshing ? 'news-refreshing' : ''}/></button>
-        </div>
-      </div>
+      {editionToolbar}
       <div className="news-edition-controls">
-        <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
         <NewsUpdatesShelf personal={personal}/>
       </div>
       {briefingPending && !loading && !dailyBriefing && !savedBriefing && <NewsLoading kind="briefing" inline />}
@@ -840,28 +866,8 @@ export default function NewsPage({ briefingOnly = false }) {
           {actionStatus}
         </p>
       )}
-      <div className="news-hero">
-        <div>
-          <h1>News<span className="news-heading-place">{locationLabel}</span></h1>
-          {lastUpdated && (
-            <span className="last-updated">Updated {lastUpdated}</span>
-          )}
-        </div>
-
-        <div className="news-header-actions"><Link className="news-feed-link" to="/feed?topic=News">Daily briefing <ArrowUpRight size={14} aria-hidden="true" /></Link><button
-          type="button"
-          className="refresh-news-btn"
-          onClick={() => fetchNews(country, region, true)}
-          disabled={loading || refreshing}
-          aria-label="Refresh current news"
-          title="Refresh current news"
-        >
-          <RefreshCw size={16} aria-hidden="true" className={refreshing ? 'news-refreshing' : ''}/>
-        </button></div>
-      </div>
-
+      {editionToolbar}
       <div className="news-edition-controls">
-        <NewsBriefingChoice personal={personal} activePlace={{country, region}} onChange={handlePlaceChange}/>
         <NewsUpdatesShelf personal={personal}/>
         <SavedNewsStories collapsed />
       </div>

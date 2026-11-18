@@ -16,9 +16,11 @@ export function hasCurrentBriefing(news, now = Date.now()) {
 export function newsCacheIsFresh(news, timestamp, now = Date.now()) {
   const ttl = hasEditorialBriefing(news) ? 15 * 60 * 1000 : 60 * 1000;
   const edition = news?.dailySummary?.editionDate;
-  return news?.cacheStatus !== 'stale-cache' && timestamp <= now && now - timestamp < ttl
+  return !isFallbackNews(news) && timestamp <= now && now - timestamp < ttl
     && (!edition || edition === new Date(now).toISOString().slice(0, 10));
 }
+
+export const isFallbackNews = news => ['stale-cache', 'browser-fallback'].includes(news?.cacheStatus);
 
 export function editorialNewsSections(news) {
   if (!hasEditorialBriefing(news)) return [];

@@ -1,4 +1,6 @@
-import { hasEditorialBriefing } from './newsAvailability.js';
+import { hasCurrentBriefing, hasEditorialBriefing, isFallbackNews } from './newsAvailability.js';
+
+export { isFallbackNews };
 
 export function safeNewsUrl(value) {
   try {
@@ -83,8 +85,6 @@ export function mergeNewsBriefing(reports, value) {
 
 export const hasNewsReports = news => Boolean(news?.articles?.length || Object.keys(news?.sections || {}).length);
 
-export const isFallbackNews = news => ['stale-cache', 'browser-fallback'].includes(news?.cacheStatus);
-
 export async function loadNewsEdition({ load, signal, onReports, onBriefing, savedReports, place, preferBriefing = false }) {
   const checkAbort = () => {
     if (signal?.aborted) throw new DOMException('News request cancelled.', 'AbortError');
@@ -103,12 +103,30 @@ export async function loadNewsEdition({ load, signal, onReports, onBriefing, sav
     // The combined endpoint already includes reports. In the briefing tab,
     // don't make readers wait for a separate report refresh before asking.
     onBriefing?.();
+    let edition;
+    let briefingError;
     try {
-      return await requestEdition();
-    } catch (briefingError) {
+      edition = await requestEdition();
+    } catch (error) {
       checkAbort();
-      try { return await requestEdition('reports'); }
-      catch { checkAbort(); throw briefingError; }
+      briefingError = error;
+    }
+    if (edition && !isFallbackNews(edition)) return edition;
+    // Show a usable saved preview immediately while checking the official
+    // reports. Never replace it with weaker coverage or erase its briefing.
+    if (edition) onReports?.(edition, { cached: false });
+    try {
+      const fallback = await requestEdition('reports');
+      if (!edition) return fallback;
+      if (hasNewsReports(fallback) && (!isFallbackNews(fallback) || !hasNewsReports(edition)
+          || (edition.cacheStatus === 'browser-fallback' && fallback.cacheStatus === 'stale-cache'))) {
+        return mergeNewsBriefing(fallback, edition);
+      }
+      return edition;
+    } catch (error) {
+      checkAbort();
+      if (edition) return edition;
+      throw briefingError ?? error;
     }
   }
   if (!reports) {
@@ -131,5 +149,63 @@ export async function loadNewsEdition({ load, signal, onReports, onBriefing, sav
   } catch (error) {
     if (!reports || signal?.aborted) throw error;
     return reports;
+  }
+}
+
+function waitForBriefingRetry(signal) {
+  return new Promise((resolve, reject) => {
+    const cancel = () => {
+      clearTimeout(timer);
+      reject(new DOMException('News request cancelled.', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', cancel);
+      resolve();
+    }, 3500);
+    if (signal?.aborted) cancel();
+    else signal?.addEventListener('abort', cancel, { once: true });
+  });
+}
+
+const briefingIsPreparing = value => /briefing (?:is )?being prepared|updating this briefing/i.test(value?.notice || value?.message || '');
+
+export async function loadNewsEditionForReader({ load, signal, onReports, wait = waitForBriefingRetry, ...options }) {
+  let preparing = false;
+  let shown;
+  const publishReports = (reports, metadata) => { shown = reports; onReports?.(reports, metadata); };
+  const trackedLoad = async view => {
+    try {
+      const edition = await load(view);
+      if (!view) preparing = briefingIsPreparing(edition);
+      return edition;
+    } catch (error) {
+      if (!view) preparing = briefingIsPreparing(error);
+      throw error;
+    }
+  };
+
+  let edition, initialError;
+  try { edition = await loadNewsEdition({ ...options, load: trackedLoad, signal, onReports: publishReports }); }
+  catch (error) {
+    if (!preparing || signal?.aborted) throw error;
+    initialError = error;
+  }
+  if (!preparing || hasCurrentBriefing(edition)) return edition;
+  if (edition && shown !== edition) publishReports(edition, { cached: false });
+  try {
+    await wait(signal);
+    if (signal?.aborted) throw new DOMException('News request cancelled.', 'AbortError');
+    // Retry a server-side 'preparing' response once, bypassing the client cache.
+    const next = normalizeNewsEdition(await load(undefined, true), options.place);
+    if (signal?.aborted) throw new DOMException('News request cancelled.', 'AbortError');
+    if (edition && hasCurrentBriefing(next) && hasNewsReports(edition) && !isFallbackNews(edition)) {
+      return mergeNewsBriefing({ ...edition, notice: briefingIsPreparing(edition) ? '' : edition.notice }, next);
+    }
+    if (hasCurrentBriefing(next) || (!edition && hasNewsReports(next))) return next;
+    if (edition) return edition;
+    throw initialError || new Error('The briefing is still being prepared.');
+  } catch (error) {
+    if (!edition || signal?.aborted) throw error;
+    return edition;
   }
 }

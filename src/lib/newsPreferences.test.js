@@ -17,3 +17,19 @@ test('places persist per account without exposing another member’s choices', (
   store.setItem(newsPreferenceKey('broken'), 'not json'); assert.equal(readNewsPreference('broken', store), null);
   assert.equal(readNewsPreference('one', { getItem() { throw new Error('blocked'); } }), null);
 });
+
+test('blocking access to browser storage still preserves the latest choice for its account', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('blocked'); } });
+  try {
+    const first = { chosen: true, country: 'CA', region: 'Ontario', mode: 'local' };
+    const latest = { chosen: true, country: 'IN', region: 'Tamil Nadu', mode: 'local' };
+    writeNewsPreference('blocked-reader', first);
+    writeNewsPreference('blocked-reader', latest);
+    assert.deepEqual(readNewsPreference('blocked-reader'), latest);
+    assert.equal(readNewsPreference('other-reader'), null);
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    else delete globalThis.localStorage;
+  }
+});
