@@ -484,6 +484,7 @@ test('API requests prefer the signed-in native account over stale SDK tokens', a
       if (name === 'aws-amplify/auth') return { fetchAuthSession: async () => { sdkReads++; return { tokens: { idToken: { toString: () => jwt('older-user') } } }; } };
       if (name.includes('requestCache')) return { createRequestCache: () => ({ clear() {} }) };
       if (name.includes('newsRequestCache')) return { createNewsRequestCache: () => ({ get() {} }) };
+      if (name.includes('postVocabularyPublishing')) return { createVocabularyPublisher: () => ({}) };
       return {};
     } });
   assert.equal(await module.exports.testGetAuthToken(), current);
@@ -515,6 +516,7 @@ test('API requests refresh an expired native session without switching accounts'
       if (name === 'aws-amplify/auth') return { fetchAuthSession: async () => { sdkReads++; return {}; } };
       if (name.includes('requestCache')) return { createRequestCache: () => ({ clear() {} }) };
       if (name.includes('newsRequestCache')) return { createNewsRequestCache: () => ({ get() {} }) };
+      if (name.includes('postVocabularyPublishing')) return { createVocabularyPublisher: () => ({}) };
       if (name.includes('cognito')) return {
         hasNativeRefreshSession: subject => subject === 'remembered-user',
         refreshNativeSession: async () => {

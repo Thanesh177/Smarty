@@ -9,6 +9,7 @@ import { normalizePersonalNews } from '../lib/newsPersonalization';
 import { normalizeStoryTimeline } from '../lib/newsStories';
 import { getLearningGuide } from '../data/learningGuides';
 import { getPostAuthorId } from '../lib/postAuthor';
+import { createVocabularyPublisher } from '../lib/postVocabularyPublishing';
 import { discoverVideoPage, VIDEO_PAGE_SIZE } from '../lib/videoFeed';
 import { DETAILED_EXPLANATION_VERSION, detailedExplanationFromResponse } from '../lib/explanationFormat';
 import { fetchAuthSession } from 'aws-amplify/auth';
@@ -2282,6 +2283,7 @@ async editComment(payload) {
 
     const { data } = await api.post(endpoints.posts.create, payload);
     if (payload?.videoUrl || payload?.videoKey) videoFeedCache.clear();
+    postVocabularyPublisher.submit(data, payload);
     return data;
   },
 
@@ -2292,6 +2294,7 @@ async editComment(payload) {
     }
 
     const { data } = await api.post(endpoints.posts.update, payload);
+    postVocabularyPublisher.submit(data, payload);
     return data;
   },
 
@@ -2447,6 +2450,21 @@ async getSingleReel(reelId) {
   return data?.item ?? data?.reel ?? data;
 },
 };
+
+export const postVocabularyPublisher = createVocabularyPublisher({
+  enqueue: async postId => parseApiBody((await api.post('/posts/glossary', { postId }, { timeout: 8000 })).data),
+  readStatus: async postId => parseApiBody((await api.get('/posts/glossary', { params: { postId }, timeout: 8000 })).data),
+  storage: typeof window === 'undefined' ? undefined : {
+    getItem: key => window.localStorage.getItem(key),
+    setItem: (key, value) => window.localStorage.setItem(key, value),
+    removeItem: key => window.localStorage.removeItem(key),
+  },
+  canRun: () => typeof document !== 'undefined' && document.visibilityState !== 'hidden' && navigator.onLine !== false,
+  onReady: detail => {
+    readCache.clear();
+    window.dispatchEvent(new CustomEvent('smarty-post-vocabulary-ready', { detail }));
+  },
+});
 
 export const userApi = {
   checkEmailExists: async (email) => {

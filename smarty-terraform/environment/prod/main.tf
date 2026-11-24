@@ -758,7 +758,8 @@ module "amplify" {
 module "http_api" {
   source = "../../modules/http-api"
 
-  api_name = "smarty"
+  api_name                       = "smarty"
+  post_glossary_api_function_arn = var.post_glossary_api_function_arn
 
   cors_configuration = {
     allow_origins = [

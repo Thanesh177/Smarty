@@ -88,6 +88,7 @@ class CuriosityPostTests(unittest.TestCase):
                 "matters too. A stronger paper bridge does not have to use more paper."
             ),
             "sourceIds": [],
+            "wordMeanings": [],
         }
         approval = '{"accurate":true,"readerReady":true,"issues":[]}'
         rejection = '{"accurate":true,"readerReady":false,"issues":["Specify a safe observable check"]}'

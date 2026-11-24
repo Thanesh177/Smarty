@@ -280,7 +280,7 @@ class ContentCatalogTests(unittest.TestCase):
     def test_regular_posts_are_written_for_non_specialists_without_an_extra_model_pass(self):
         draft = {"title": "How a KV Cache Saves Earlier Work",
                  "mechanismParagraph": self.kv_cache_mechanism, "exampleParagraph": self.kv_cache_example,
-                 "image_search_query": "computer model memory", "sourceIds": []}
+                 "image_search_query": "computer model memory", "sourceIds": [], "wordMeanings": []}
         with (mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "concept", "sources": []}),
               mock.patch.object(LAMBDA, "call_bedrock_text", side_effect=[
                   json.dumps(draft), '{"accurate":true,"readerReady":true,"issues":[]}',
@@ -299,7 +299,7 @@ class ContentCatalogTests(unittest.TestCase):
         self.assertNotIn("varied length", prompt)
         self.assertNotIn("4 to 6 short sentences", prompt)
         self.assertNotIn("8 to 18 words", guide)
-        self.assertEqual(generation.kwargs["max_tokens"], 850)
+        self.assertEqual(generation.kwargs["max_tokens"], 3200)
         self.assertIn("sourceIds", prompt)
         self.assertIn("a student from a different major", guide)
         self.assertIn("what transfers and what does not", guide)

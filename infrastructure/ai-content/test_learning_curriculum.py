@@ -111,6 +111,30 @@ class LearningCurriculumTests(unittest.TestCase):
         self.assertEqual(self.generate.call_count, 1)
         self.assertEqual(LAMBDA.read_learning_path_state("Artificial Intelligence")["nextIndex"], 1)
 
+    def test_word_meanings_are_saved_with_the_post_before_it_is_published(self):
+        from post_glossary import make_glossary, source_hash
+        draft = self.generate.return_value
+        entries = [{"term": "model", "meaning": "A computer system that learns patterns to make estimates from new inputs."}]
+        draft["postGlossary"] = make_glossary(draft, entries)
+        first = self.publish("glossary-slot")["post"]
+        replay = self.publish("glossary-slot")["post"]
+        self.assertEqual(first["postGlossary"]["terms"], entries)
+        self.assertEqual(first["postGlossary"]["sourceHash"], source_hash(first))
+        self.assertEqual(self.posts.items[first["id"]]["postGlossary"], first["postGlossary"])
+        self.assertEqual(replay["postGlossary"], first["postGlossary"])
+        self.assertEqual(self.generate.call_count, 1)
+
+    def test_pending_legacy_draft_gets_word_meanings_before_publication(self):
+        self.details.side_effect = RuntimeError("Lesson preparation interrupted")
+        with self.assertRaises(RuntimeError):
+            self.publish("pending-legacy")
+        draft = next(item for item in self.progress.items.values() if item.get("entryType") == "learningDraft")
+        draft["aiPost"].pop("postGlossary")
+        self.details.side_effect = None
+        post = self.publish("pending-legacy")["post"]
+        self.assertEqual(post["postGlossary"]["version"], 1)
+        self.assertEqual(self.generate.call_count, 2)
+
     def test_scheduled_publication_leases_cover_the_invocation_without_a_long_lockout(self):
         event = {"source": "smarty.learning.schedule", "scheduledTime": "2026-11-12T02:30:00Z"}
         context = mock.Mock()
@@ -277,7 +301,7 @@ class LearningCurriculumTests(unittest.TestCase):
             "A prediction is not a new training example."
         )
         return {"title": "Why AI Training Changes How a Model Answers",
-                "mechanismParagraph": mechanism, "exampleParagraph": example, "sourceIds": []}
+                "mechanismParagraph": mechanism, "exampleParagraph": example, "sourceIds": [], "wordMeanings": []}
 
     def test_scheduled_post_uses_readability_feedback_without_an_extra_review_pass(self):
         draft = self.training_draft()
@@ -379,6 +403,7 @@ class LearningCurriculumTests(unittest.TestCase):
                 "separate processes; an editor can manage two windows inside one process."
             ),
             "sourceIds": [],
+            "wordMeanings": [],
         }
         corrected = {**draft, "title": "Why Running a Program Creates a Process"}
         approval = '{"accurate":true,"readerReady":true,"issues":[]}'

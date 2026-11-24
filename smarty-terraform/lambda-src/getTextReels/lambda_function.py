@@ -36,6 +36,7 @@ VIDEO_FIELDS = (
 FEED_FIELDS = VIDEO_FIELDS + (
     "photoUrl", "thumbnail", "coverImage", "mediaUrl", "aiExplanation", "simpleExplanation",
     "aiExplanationSourceHash", "aiExplanationUpdatedAt",
+    "postGlossary",
 )
 
 dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)

@@ -1,0 +1,260 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Isolated durable Smarty post word meanings with bounded AI work
+Parameters:
+  ExistingPostsTable:
+    Type: String
+    Default: TextReels
+    AllowedPattern: '[A-Za-z0-9_.-]{3,255}'
+  ExistingStateTable:
+    Type: String
+    Default: SmartyExplanations
+    AllowedPattern: '[A-Za-z0-9_.-]{3,255}'
+  AllowedOrigin:
+    Type: String
+    Default: https://smarty.wiki
+    AllowedPattern: 'https://[A-Za-z0-9.-]+'
+  WorkerEnabled:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+Conditions:
+  EnableWorker: !Equals [!Ref WorkerEnabled, 'true']
+Resources:
+  Failures:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-failures.fifo'
+      FifoQueue: true
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600
+  Work:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-work.fifo'
+      FifoQueue: true
+      ContentBasedDeduplication: false
+      SqsManagedSseEnabled: true
+      ReceiveMessageWaitTimeSeconds: 20
+      VisibilityTimeout: 720
+      MessageRetentionPeriod: 604800
+      MaximumMessageSize: 1024
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt Failures.Arn
+        maxReceiveCount: 5
+  QueueTransport:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref Work]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: RequireEncryptedTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 'sqs:*'
+            Resource: !GetAtt Work.Arn
+            Condition:
+              Bool: { 'aws:SecureTransport': 'false' }
+  FailuresTransport:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref Failures]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: RequireEncryptedTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 'sqs:*'
+            Resource: !GetAtt Failures.Arn
+            Condition:
+              Bool: { 'aws:SecureTransport': 'false' }
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-api'
+      RetentionInDays: 30
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-worker'
+      RetentionInDays: 30
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ReadOwnedPostsAndQueueWords
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:GetItem
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingPostsTable}'
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem]
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingStateTable}'
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys: ['post-vocabulary#v1#*', 'post-vocabulary-budget#*']
+                  'Null': { 'dynamodb:LeadingKeys': 'false' }
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt Work.Arn
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt ApiLogs.Arn
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: GenerateBoundedOwnedPostWords
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:UpdateItem]
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingPostsTable}'
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem]
+                Resource: !Sub 'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ExistingStateTable}'
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys: ['post-vocabulary#v1#*']
+                  'Null': { 'dynamodb:LeadingKeys': 'false' }
+              - Effect: Allow
+                Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
+                Resource: !GetAtt Work.Arn
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-6'
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-4-6'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-4-6'
+                Condition:
+                  StringEquals:
+                    bedrock:InferenceProfileArn: !Sub 'arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.anthropic.claude-sonnet-4-6'
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !GetAtt WorkerLogs.Arn
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: ApiLogs
+    Metadata: { BuildMethod: makefile }
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-api'
+      CodeUri: ./
+      Handler: api.lambda_handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      MemorySize: 128
+      Timeout: 10
+      Role: !GetAtt ApiRole.Arn
+      Environment:
+        Variables:
+          POSTS_TABLE: !Ref ExistingPostsTable
+          STATE_TABLE: !Ref ExistingStateTable
+          QUEUE_URL: !Ref Work
+          ALLOWED_ORIGIN: !Ref AllowedOrigin
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    DependsOn: WorkerLogs
+    Metadata: { BuildMethod: makefile }
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-worker'
+      CodeUri: ./
+      Handler: worker.lambda_handler
+      Runtime: python3.12
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 120
+      Role: !GetAtt WorkerRole.Arn
+      Environment:
+        Variables:
+          POSTS_TABLE: !Ref ExistingPostsTable
+          STATE_TABLE: !Ref ExistingStateTable
+          QUEUE_ARN: !GetAtt Work.Arn
+  WorkerMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt Work.Arn
+      FunctionName: !Ref WorkerFunction
+      Enabled: !If [EnableWorker, true, false]
+      BatchSize: 1
+      FunctionResponseTypes: [ReportBatchItemFailures]
+      ScalingConfig: { MaximumConcurrency: 2 }
+  DeadLettersAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Vocabulary work needs review before manual replay
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{ Name: QueueName, Value: !GetAtt Failures.QueueName }]
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+  QueueAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Vocabulary jobs are waiting longer than expected
+      Namespace: AWS/SQS
+      MetricName: ApproximateAgeOfOldestMessage
+      Dimensions: [{ Name: QueueName, Value: !GetAtt Work.QueueName }]
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1800
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+  WorkerErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Vocabulary worker execution errors need review
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref WorkerFunction }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+Outputs:
+  GlossaryApiArn:
+    Description: Integration target for existing JWT-protected POST and GET posts/glossary routes
+    Value: !GetAtt ApiFunction.Arn
+  WorkerMappingId:
+    Description: Disabled until isolated release smoke checks pass
+    Value: !Ref WorkerMapping
+  WorkQueueUrl:
+    Description: Durable FIFO preparation queue; encrypted and retained on stack removal
+    Value: !Ref Work
+  FailuresQueueUrl:
+    Description: Retained failures to inspect before replaying jobs
+    Value: !Ref Failures

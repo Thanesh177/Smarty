@@ -38,6 +38,8 @@ import { postApi, creatorApi, chatApi } from '../api/client';
 import FeedSkeleton from '../components/FeedSkeleton';
 import FeedHeader from '../components/FeedHeader';
 import PostAuthor from '../components/PostAuthor';
+import PostVocabulary from '../components/PostVocabulary';
+import usePostVocabulary from '../hooks/usePostVocabulary';
 import useFeed from '../hooks/useFeed';
 import { isVideoTopicPost } from '../lib/videoFeed';
 import { getPostAuthorId as getPostCreatorId, getPostAuthorUsername as getDisplayUsername, isSystemPostAuthor as isSystemGeneratedPost } from '../lib/postAuthor';
@@ -544,6 +546,7 @@ const FeedPostCard = memo(function FeedPostCard({
   onModerate,
   canModerate,
 }) {
+  const vocabulary = usePostVocabulary(post);
   const [imageFailed, setImageFailed] = useState(false);
   useEffect(() => setImageFailed(false), [post.imageUrl]);
   const hasMedia = Boolean(post.videoUrl || (post.imageUrl && !imageFailed));
@@ -555,15 +558,6 @@ const FeedPostCard = memo(function FeedPostCard({
       id={`post-${postId}`}
       className={`snap-post ${!hasMedia ? 'no-media' : ''} ${hasMedia && !post.videoUrl ? 'has-feed-image' : ''}`}
       onClick={() => onOpenPost(post, creatorName)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onOpenPost(post, creatorName);
-        }
-      }}
     >
       {hasMedia && (
         <div className="mini-media">
@@ -661,10 +655,10 @@ const FeedPostCard = memo(function FeedPostCard({
         </div>
 
         {getLearningLevelLabel(post) && <span className="post-learning-stage">{getLearningLevelLabel(post)}{Number.isInteger(Number(post.learningOrder)) && Number(post.learningOrder) > 0 ? ` · Lesson ${post.learningOrder}` : ''}</span>}
-        <h1>{post.title}</h1>
+        <h1><PostVocabulary text={post.title} terms={vocabulary}/></h1>
         </div>
         <div className="post-story-body">
-        <p>{isTranslated && translatedText ? translatedText : post.body}</p>
+        <p>{isTranslated && translatedText ? translatedText : <PostVocabulary text={post.body} terms={vocabulary}/>}</p>
 
         <div className="post-actions">
           <div className="post-quick-actions" role="group" aria-label="Post actions">

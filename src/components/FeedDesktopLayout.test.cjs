@@ -11,7 +11,7 @@ const desktopValue = (selector, property) => desktop.nodes.find(node => node.sel
 test('feed keeps heading, complete body, and reading actions in document order', () => {
   assert.ok(source.indexOf('className="post-story-heading"') < source.indexOf('className="post-story-body"'));
   const body = source.slice(source.indexOf('className="post-story-body"'), source.indexOf('export default function FeedPage'));
-  assert.match(body, /isTranslated && translatedText \? translatedText : post.body/);
+  assert.match(body, /isTranslated && translatedText \? translatedText : <PostVocabulary text=\{post.body\} terms=\{vocabulary\}/);
   assert.match(body, /className="post-actions"/);
   assert.match(body, /onSave\(postId, isSaved\)/);
   assert.match(body, /aria-label="Comments"/);

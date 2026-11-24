@@ -2,6 +2,16 @@ variable "api_name" {
   type = string
 }
 
+variable "post_glossary_api_function_arn" {
+  description = "API function ARN from the isolated post-vocabulary stack. Empty keeps the new routes disabled."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.post_glossary_api_function_arn == "" || can(regex("^arn:aws[a-z-]*:lambda:[a-z0-9-]+:[0-9]{12}:function:[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$", var.post_glossary_api_function_arn))
+    error_message = "Provide a Lambda function ARN from the post-vocabulary stack, or leave empty."
+  }
+}
+
 variable "cors_configuration" {
   description = "CORS configuration for the HTTP API"
 

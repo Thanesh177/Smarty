@@ -167,7 +167,7 @@ class EditorialPublicationTests(unittest.TestCase):
             "must evaluate another route even if it expects to spend longer at sea. The shortcut changes "
             "the choices available; it does not make the same choice best for every voyage."
         )
-        return {"title": "How the Suez Canal Changed Shipping Routes", "mechanismParagraph": mechanism, "exampleParagraph": example, "sourceIds": ["history-1"]}
+        return {"title": "How the Suez Canal Changed Shipping Routes", "mechanismParagraph": mechanism, "exampleParagraph": example, "sourceIds": ["history-1"], "wordMeanings": []}
 
     def test_history_without_evidence_never_calls_the_model(self):
         with mock.patch.object(LAMBDA, "load_editorial_evidence", return_value={"mode": "history", "sources": []}), mock.patch.object(LAMBDA, "call_bedrock_text") as model:

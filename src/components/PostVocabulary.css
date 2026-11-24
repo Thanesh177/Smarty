@@ -1,0 +1,29 @@
+.app-shell .content button.post-vocabulary-word {
+  display: inline; margin: 0; padding: 0; min-width: 0; min-height: 0;
+  border: 0; border-radius: 2px; background: transparent; color: inherit;
+  font: inherit; line-height: inherit; letter-spacing: inherit; text-align: inherit;
+  text-decoration: underline dotted; text-decoration-color: var(--ui-muted, #9ba9ba);
+  text-underline-offset: .18em; text-decoration-thickness: 1px; cursor: help;
+  touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.app-shell .content button.post-vocabulary-word:hover { background: var(--ui-accent-soft, #92cafa14); }
+.app-shell .content button.post-vocabulary-word:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.post-vocabulary-layer { position: fixed; inset: 0; z-index: 60000; background: transparent; overscroll-behavior: contain; }
+.post-vocabulary-meaning {
+  position: fixed; box-sizing: border-box; max-height: calc(100dvh - 32px); overflow: auto;
+  padding: 16px 18px; border: 1px solid var(--ui-line-strong, #ffffff20); border-radius: 12px;
+  background: var(--ui-surface, #11151b); color: var(--ui-text, #f3f6fa);
+  box-shadow: 0 12px 38px #0003; font-family: inherit;
+  overscroll-behavior: contain; touch-action: pan-y pinch-zoom;
+}
+.post-vocabulary-meaning:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }
+.post-vocabulary-meaning header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.post-vocabulary-meaning strong { font-size: 17px; line-height: 1.35; font-weight: 600; overflow-wrap: anywhere; }
+.post-vocabulary-meaning button { display: grid; place-items: center; flex: none; min-width: 44px; min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--ui-secondary, #dce5f0); font-size: 24px; cursor: pointer; }
+.post-vocabulary-meaning button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: -3px; }
+.post-vocabulary-meaning p { margin: 8px 0 14px; font-size: 15px; line-height: 1.7; color: var(--ui-secondary, #dce5f0); overflow-wrap: anywhere; }
+.post-vocabulary-meaning small { color: var(--ui-muted, #9ba9ba); font-size: 11px; line-height: 1.5; }
+@media (prefers-reduced-motion: no-preference) {
+  .post-vocabulary-meaning { animation: post-word-reveal 140ms ease-out; }
+  @keyframes post-word-reveal { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+}

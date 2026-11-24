@@ -155,6 +155,13 @@ class FeedPaginationTests(unittest.TestCase):
         key = {"id": "post", "feedType": "GLOBAL", "createdAt": 1794182400000}
         self.assertEqual(handler.decode_cursor(handler.encode_cursor(key)), key)
 
+    def test_feed_projection_includes_saved_word_meanings(self):
+        glossary = {"version": 1, "sourceHash": "a" * 64, "terms": [{"term": "token", "meaning": "A piece of text processed as one unit."}]}
+        with patch.object(handler, "table", FakeIndex([row(1, postGlossary=glossary)])):
+            page = self.call()
+        self.assertEqual(page["items"][0]["postGlossary"], glossary)
+        self.assertIn("postGlossary", handler.FEED_FIELDS)
+
 
 if __name__ == "__main__":
     unittest.main()

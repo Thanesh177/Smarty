@@ -5,6 +5,8 @@ import { postApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import LearningJourneyPanel from '../components/learning/LearningJourneyPanel';
 import PostAuthor from '../components/PostAuthor';
+import PostVocabulary from '../components/PostVocabulary';
+import usePostVocabulary from '../hooks/usePostVocabulary';
 import { getPostAuthorUsername } from '../lib/postAuthor';
 import { normalizePostResponse } from '../lib/postResponse';
 import { postReadingStats } from '../lib/postDraft';
@@ -22,6 +24,7 @@ function SinglePost({ reelId, user }) {
   const [attempt, setAttempt] = useState(0), [comments, setComments] = useState([]), [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsError, setCommentsError] = useState(''), [comment, setComment] = useState(''), [status, setStatus] = useState('');
   const [busy, setBusy] = useState({}), [mediaError, setMediaError] = useState(false);
+  const vocabulary = usePostVocabulary(post);
   const loadComments = useCallback(async () => {
     const version = ++commentsVersion.current;
     setCommentsLoading(true); setCommentsError('');
@@ -96,9 +99,9 @@ function SinglePost({ reelId, user }) {
   return <main className="reel-detail-page single-post-page" aria-labelledby="single-post-title">
     <nav className="single-post-nav" aria-label="Post navigation"><Link to="/feed?topic=All"><Layers size={16}/>Feed</Link><Link to="/feed?topic=All" className="single-post-brand">Smarty</Link><Link to="/saved" aria-label="Saved posts"><Bookmark size={17}/></Link></nav>
     {loading ? <div className="single-post-skeleton" role="status" aria-label="Loading post"><i/><i/><i/><i/></div> : loadError ? <section className="single-post-state" role="alert"><h1 id="single-post-title">An idea worth coming back to.</h1><p>{loadError}</p><button type="button" onClick={() => setAttempt(value => value + 1)}><RefreshCw size={16}/>Try again</button></section> : <>
-      <header className="single-post-heading"><Link className="single-post-topic" to={'/feed?topic=' + encodeURIComponent(topic)}>{topic}</Link><h1 id="single-post-title">{post.title || 'An idea to explore'}</h1><div className="reel-author-row"><PostAuthor post={post}/><span>{minutes} min read</span>{post.visibility === 'private' && <span>Private post</span>}</div></header>
+      <header className="single-post-heading"><Link className="single-post-topic" to={'/feed?topic=' + encodeURIComponent(topic)}>{topic}</Link><h1 id="single-post-title"><PostVocabulary text={post.title || 'An idea to explore'} terms={vocabulary}/></h1><div className="reel-author-row"><PostAuthor post={post}/><span>{minutes} min read</span>{post.visibility === 'private' && <span>Private post</span>}</div></header>
       <div className={'single-post-layout' + (hasMedia ? ' has-media' : '')}>
-        <article className="single-post-reading" aria-label="Post content">{String(post.body || post.description || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index) => <p key={index}>{paragraph}</p>)}</article>
+        <article className="single-post-reading" aria-label="Post content">{String(post.body || post.description || '').split(/\n\s*\n/).filter(Boolean).map((paragraph,index) => <p key={index}><PostVocabulary text={paragraph} terms={vocabulary}/></p>)}</article>
         {hasMedia && <aside className="single-post-media" aria-label="Post attachment">{mediaError ? <p>The attachment is unavailable. You can still read the post.</p> : video ? <video ref={media} src={video} poster={getPostVideoUrl({ videoUrl: post.thumbUrl || image }) || undefined} controls playsInline preload="metadata" onError={() => setMediaError(true)}/> : <img src={image} alt={post.title || 'Post attachment'} decoding="async" onError={() => setMediaError(true)}/>}</aside>}
       </div>
       <div className="single-post-actions" role="group" aria-label="Post actions"><button type="button" aria-label={post.liked ? 'Unlike post' : 'Like post'} aria-pressed={Boolean(post.liked)} disabled={busy.like} onClick={toggleLike}><Heart size={18} fill={post.liked ? 'currentColor' : 'none'}/>{Number(post.likes || 0)}<span>Likes</span></button><button type="button" aria-pressed={Boolean(post.saved)} disabled={busy.save} onClick={toggleSave}><Bookmark size={18} fill={post.saved ? 'currentColor' : 'none'}/>{post.saved ? 'Saved' : 'Save'}</button><button type="button" onClick={share}><Share2 size={17}/>Share</button><Link to={'/comments/' + encodeURIComponent(reelId)} state={{ post }}><MessageCircle size={17}/>Discuss</Link></div>

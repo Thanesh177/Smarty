@@ -29,6 +29,7 @@ import useDailyReminder from './hooks/useDailyReminder';
 import useNativePush from './hooks/useNativePush';
 import useNewsPushPreferences from './hooks/useNewsPushPreferences';
 import useBriefingPreload from './hooks/useBriefingPreload';
+import useVocabularyPreparation from './hooks/useVocabularyPreparation';
 import { nativeNotificationRequest, supportsNativeReminders } from './lib/nativeNotifications';
 import { ActionConfirmationProvider } from './components/ActionConfirmation';
 import {
@@ -1741,7 +1742,8 @@ body,
 }
 
 function AppExperience() {
-  const { loading } = useAuth();
+  const { user, loading } = useAuth();
+  useVocabularyPreparation(user, loading);
   const location = useLocation();
   const [tourPending, setTourPending] = useState(() => shouldOfferWelcomeTour(hasSeenLanding()));
   const [replayTour, setReplayTour] = useState(false);
