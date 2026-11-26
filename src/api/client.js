@@ -2092,7 +2092,7 @@ export const readBooksApi = {
 
 export const postApi = {
 async generateLearningQuiz(payload, { signal } = {}) {
-  const { data } = await api.post('/quiz/generate', payload, { signal });
+  const { data } = await api.post('/quiz/generate', payload, { signal, timeout: 28000 });
   return parseApiBody(data);
 },
 async saveLearningQuiz(payload) {

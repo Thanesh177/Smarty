@@ -248,6 +248,8 @@ const CONNECTION_STOP_WORDS = new Set([
   'where', 'which', 'while', 'with', 'without', 'would', 'your', 'topic',
   'lesson', 'idea', 'ideas', 'system', 'works', 'work', 'shows', 'learn',
   'change', 'changes', 'changed', 'understand', 'understanding', 'example',
+  'physics', 'chemistry', 'biology', 'history', 'finance', 'technology',
+  'science', 'mathematics', 'engineering', 'psychology', 'people',
 ]);
 
 function getConnectionTerms(value) {
@@ -340,29 +342,31 @@ export function selectNextLessons(posts, context, library = [], limit = 3) {
     const candidateKey = lessonKey(candidate.slug || candidate.postId);
     const explicitNext = authoredNext.has(candidateKey) || candidate.postId === context.nextLearningPostId ||
       Boolean(samePath && candidate.learningOrder === context.learningOrder + 1);
+    // Sharing a broad subject is not evidence of a learning connection. Keep
+    // authored sequences, otherwise require a meaningful concept-level overlap.
+    const specificOverlap = sharedFocusTerms.length > 0
+      && (overlap >= 2 || (sameTopic && sharedFocusTerms.some(word => word.length >= 7)));
+    if (!explicitNext && !specificOverlap) return [];
+    const levels = { foundation: 0, intermediate: 1, advanced: 2 };
+    if (!explicitNext && context.learningLevel && candidate.learningLevel
+      && levels[candidate.learningLevel] > levels[context.learningLevel] + 1) return [];
     const preview = getLessonOutcome(candidate);
-    const pathType = explicitNext ? 'sequence' : sameTopic && overlap ? 'deepen' : sameTopic ? 'compare' : 'transfer';
+    const pathType = explicitNext ? 'sequence' : sameTopic ? 'deepen' : 'transfer';
     const reason = pathType === 'sequence'
       ? 'Recommended next step'
       : pathType === 'deepen'
         ? `Deepen ${termLabel}`
-        : pathType === 'compare'
-          ? `Compare within ${context.topic}`
-          : `Transfer into ${candidate.topic}`;
+        : `Connect to ${candidate.topic}`;
     const connection = pathType === 'sequence'
-      ? `${context.focus} gives you the foundation for ${candidate.focus}. The next lesson turns that foundation into a new ability: ${lowerFirst(preview)}`
+      ? `Next in this learning path: ${candidate.focus}. ${preview}`
       : pathType === 'deepen'
-        ? `The hinge between these lessons is ${termLabel}. You used it to reason about ${context.focus}; next you will see exactly what it changes inside ${candidate.focus}.`
-        : pathType === 'compare'
-          ? `These ideas answer different questions inside ${context.topic}. Put them side by side to separate the general rule from details that apply only to ${context.focus}.`
-          : `This is a transfer step. Carry the reasoning from ${context.focus} into ${candidate.topic}, then test which parts still explain ${candidate.focus} and which parts need a new model.`;
+        ? `Both lessons examine ${termLabel}. Continue with ${candidate.focus}: ${lowerFirst(preview)}`
+        : `${termLabel} appears in both lessons. Explore ${candidate.focus} in ${candidate.topic}: ${lowerFirst(preview)}`;
     const question = pathType === 'sequence'
       ? `Before opening it: what part of ${context.focus} do you expect ${candidate.focus} to build on?`
       : pathType === 'deepen'
         ? `Looking at ${candidate.focus}, what might behave differently when ${termLabel} changes?`
-        : pathType === 'compare'
-          ? `What should stay true across both ${context.focus} and ${candidate.focus}?`
-          : `Which assumption from ${context.focus} might stop working in ${candidate.focus}?`;
+        : `Which assumption from ${context.focus} might stop working in ${candidate.focus}?`;
     return [{
       post,
       score: (explicitNext ? 40 : 0) + (sameTopic ? 12 : 3) + sharedFocusTerms.length * 6 + overlap * 2,

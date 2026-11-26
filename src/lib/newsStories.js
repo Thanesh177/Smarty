@@ -69,15 +69,61 @@ export function reportKey(article) {
   return String(article.id || article.news_link || '');
 }
 
-// Group only identical headlines on the same UTC day, not inferred events.
-export function groupStoryReports(articles) {
-  const groups = new Map();
-  for (const article of articles) {
-    const key = `${new Date(article.published_at).toISOString().slice(0, 10)}|${article.title.trim().toLocaleLowerCase().replace(/\s+/g, ' ')}`;
-    if (groups.has(key)) groups.get(key).reports.push(article);
-    else groups.set(key, { ...article, groupId: key, reports: [article] });
+const EVENT_STOP = new Set([...OMIT, ...'today yesterday report reports reporting reportedly officials official according told also during been was were it not'.split(' ')]);
+const EVENT_VERBS = new Map([
+  ...['approve', 'approves', 'approved', 'approval', 'backs'].map(word => [word, 'approve']),
+  ...['reject', 'rejects', 'rejected', 'rejection'].map(word => [word, 'reject']),
+  ...['resume', 'resumes', 'resumed', 'restart', 'restarts'].map(word => [word, 'resume']),
+  ...['launch', 'launches', 'launched', 'launching'].map(word => [word, 'launch']),
+  ...['halt', 'halts', 'halted', 'suspend', 'suspends', 'suspended'].map(word => [word, 'halt']),
+  ...['rise', 'rises', 'rose', 'rising', 'increase', 'increases', 'increased'].map(word => [word, 'increase']),
+  ...['fall', 'falls', 'fell', 'falling', 'decrease', 'decreases', 'decreased'].map(word => [word, 'decrease']),
+  ...['win', 'wins', 'won'].map(word => [word, 'win']),
+  ...['lose', 'loses', 'lost'].map(word => [word, 'lose']),
+]);
+function eventSignature(article) {
+  const title = article.title.normalize('NFKC');
+  const words = title.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  const tokens = new Set(words.filter(word => word.length > 2 && !EVENT_STOP.has(word)).map(word => EVENT_VERBS.get(word) || word));
+  const entities = new Set((title.match(/\b[A-Z][a-z]+\b|\b[A-Z]{2,}\b/g) || [])
+    .map(word => word.toLowerCase()).filter(word => tokens.has(word) && !EVENT_VERBS.has(word)));
+  return { tokens, entities, numbers: (title.match(/\d+(?:[.,]\d+)*/g) || []).join('|'),
+    negative: /\b(not|no|denies|denied|false|without)\b/i.test(title),
+    tentative: /\b(may|might|could|expected|proposed|potential|likely|considering|considers|planning|plans)\b/i.test(title),
+    day: new Date(article.published_at).toISOString().slice(0, 10),
+    exact: title.toLocaleLowerCase().replace(/\s+/g, ' ').trim() };
+}
+function sameReportedEvent(left, right) {
+  if (left.day !== right.day) return false;
+  if (left.exact === right.exact) return true;
+  if (left.numbers !== right.numbers || left.negative !== right.negative || left.tentative !== right.tentative
+    || Math.min(left.tokens.size, right.tokens.size) < 5) return false;
+  // Names/actions must not change merely because the rest of a headline looks
+  // similar. Ambiguous matches remain separate instead of inventing a timeline.
+  for (const word of left.entities) if (!right.tokens.has(word)) return false;
+  for (const word of right.entities) if (!left.tokens.has(word)) return false;
+  for (const word of ['approve', 'reject', 'resume', 'launch', 'halt', 'increase', 'decrease', 'win', 'lose']) {
+    if (left.tokens.has(word) !== right.tokens.has(word)) return false;
   }
-  return [...groups.values()];
+  const shared = [...left.tokens].filter(word => right.tokens.has(word)).length;
+  return shared >= 5 && shared / Math.min(left.tokens.size, right.tokens.size) >= .8
+    && shared / Math.max(left.tokens.size, right.tokens.size) >= .68;
+}
+
+// Conservative same-day reporting clusters, not verified factual event chains.
+// Complete-link matching prevents A~B~C from merging unrelated A and C reports.
+export function groupStoryReports(articles) {
+  const groups = [];
+  for (const article of Array.isArray(articles) ? articles.slice(0, 1000) : []) {
+    if (typeof article?.title !== 'string' || !article.title.trim() || !Number.isFinite(Date.parse(article.published_at))) continue;
+    const signature = eventSignature(article);
+    const group = groups.find(group => group.signatures.length < 16
+      && group.signatures.every(prior => sameReportedEvent(prior, signature)));
+    if (group) { group.reports.push(article); group.signatures.push(signature); }
+    else groups.push({ ...article, groupId: `${signature.day}|${signature.exact}|${groups.length}`, reports: [article], signatures: [signature] });
+  }
+  return groups.map(({ signatures, ...group }) => ({ ...group,
+    matchMethod: signatures.every(item => item.exact === signatures[0].exact) ? 'same-headline' : 'similar-reporting' }));
 }
 
 export function filterStoryReports(groups, { text = '', publisher = '', unopened = false } = {}, opened = new Set()) {

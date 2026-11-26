@@ -17,6 +17,7 @@ import {
   clearActiveQuiz,
   filterUnseenQuestions,
   getQuestionFingerprint,
+  getQuestionPromptKey,
   getQuizContextKey,
   getRecentQuestionFingerprints,
   getRecentQuestionPrompts,
@@ -34,7 +35,15 @@ import { getQuizChapters, getQuizLessons, getQuizLesson, getRelatedQuizLessons, 
 import { getLessonTopicQuestions } from '../data/quizLessonQuestions.js';
 import { selectLessonQuestions, selectBalancedLessonSet, hasBroadLessonCoverage, getLessonQuestionStyle, summarizeLessonCoverage, summarizeLessonSkills } from '../lib/quizLessonPractice.js';
 import QuizLessonLibrary from '../components/QuizLessonLibrary';
+import QuizExamLibrary from '../components/QuizExamLibrary';
+import QuizRepairCheck from '../components/QuizRepairCheck';
+import QuizPremiumDialog from '../components/QuizPremiumDialog';
+import { getUserGroups } from '../lib/adminAccess';
+import { hasPremiumQuizMembership, isPremiumQuizLevel, filterQuizQuestionsForAccess } from '../../infrastructure/shared/quizAccess.mjs';
+import { getExamStarterQuestions } from '../data/examPractice.js';
+import { answerRepair, normalizeRepairQuestion } from '../../infrastructure/shared/quizQuestionQuality.mjs';
 import './QuizLessons.css';
+import './QuizExam.css';
 import { checkAchievements } from "../components/achievements/achievementEngine";
 import useSoundFeedback from "../components/audio/useSoundFeedback";
 import QuizSubjectArt from '../components/QuizSubjectArt';
@@ -365,6 +374,7 @@ const ReviewItem = memo(function ReviewItem({ answer, answerIndex }) {
     <article className={answer.isCorrect ? "review-item correct" : "review-item wrong"}>
       <div>
         <strong>Q{answerIndex + 1}. {answer.q}</strong>
+        {answer.passage && <details className="quiz-reading-passage"><summary>Original practice passage</summary><p>{answer.passage}</p></details>}
         <p>Your answer: {answer.selected}</p>
         {!answer.isCorrect && <p>Correct answer: {answer.correctAnswer}</p>}
         {answer.confidence === 'unsure' && <p className="quiz-review-tag">Marked unsure · revisit this idea</p>}
@@ -589,7 +599,15 @@ function QuizSession() {
 const navigate = useNavigate();
 const location = useLocation();
 const { user } = useAuth();
+// Presentation only. The quiz service independently checks verified claims.
+const premiumAccess = hasPremiumQuizMembership({sub:user?.sub || user?.userId || user?.id || '', 'cognito:groups':getUserGroups(user)});
+const [premiumDialogOpen, setPremiumDialogOpen] = useState(false);
+const showPremium = useCallback(() => setPremiumDialogOpen(true), []);
+const closePremium = useCallback(() => setPremiumDialogOpen(false), []);
 const selectedLibrarySubject = useMemo(() => SUBJECT_BY_ID.get(new URLSearchParams(location.search).get('subject')) || null, [location.search]);
+const examView = new URLSearchParams(location.search).get('view') === 'exams';
+const selectedExamId = new URLSearchParams(location.search).get('exam') || '';
+const openExam = useCallback(id => navigate('/quiz?view=exams' + (id ? '&exam=' + encodeURIComponent(id) : '')), [navigate]);
 const openSubject = useCallback(item => navigate('/quiz?subject=' + encodeURIComponent(item.id)), [navigate]);
 const openProgress = useCallback(() => navigate('/game-profile'), [navigate]);
 const [comboCount, setComboCount] = useState(1);
@@ -701,6 +719,20 @@ const focusedLearningTopic = useMemo(() => {
   const [topicProgressMap, setTopicProgressMap] = useState(() => getProgress(quizUserId));
 
 useEffect(() => {
+  if (premiumAccess) { setPremiumDialogOpen(false); return; }
+  setPracticeLevel(level => isPremiumQuizLevel(level) ? 'Medium' : level);
+  if (!topic || (!isPremiumQuizLevel(topic.difficultyPreference) && !topic.challengeMode
+    && !(aiQuestions[topic.id] || []).some(question => isPremiumQuizLevel(question.difficulty)))) return;
+  questionRequestRef.current.id += 1;
+  questionRequestRef.current.controller?.abort();
+  setTopic(null);
+  setAiQuestions({});
+  setBossMode(false);
+  setLoadingAI(false);
+  showPremium();
+}, [premiumAccess, topic, aiQuestions, showPremium]);
+
+useEffect(() => {
   setTopicProgressMap(getProgress(quizUserId));
 }, [quizUserId]);
 
@@ -799,14 +831,19 @@ const renderedReviewItems = useMemo(
     let selectedTopic = topicDetails || TOPICS.find((item) => item.id === topicId) || { id: topicId };
     const wholeLesson = Boolean(selectedTopic.lessonId && !selectedTopic.conceptId);
     const candidateCount = wholeLesson ? 8 : 5;
-    const chooseQuestions = questions => wholeLesson
-      ? selectBalancedLessonSet(selectedTopic, questions, 6).map(question => ({ ...question, options: shuffleItems(question.options) }))
-      : questions;
+    const chooseQuestions = questions => filterQuizQuestionsForAccess(wholeLesson ? selectBalancedLessonSet(selectedTopic, questions, 6) : questions, premiumAccess)
+      .map(question => ({ ...question, options: shuffleItems(question.options) }));
     const reference = getLessonStudyReference(selectedTopic);
     const challengeProfile = { ...getChallengeProfile(topicId, topicProgressMap),
       ...(selectedTopic.difficultyPreference ? { difficulty: selectedTopic.difficultyPreference,
         minimumDifficulty: selectedTopic.difficultyPreference,
         depth: { Easy: 'Foundation', Medium: 'Application', Hard: 'Challenge' }[selectedTopic.difficultyPreference] } : {}) };
+    if (isPremiumQuizLevel(challengeProfile.difficulty) && !premiumAccess) {
+      setLoadingAI(false);
+      setTopic(null);
+      showPremium();
+      return;
+    }
     const seen = [...new Set([...getRecentQuestionFingerprints(quizUserId, topicId),
       ...(selectedTopic.baseTopicId ? getRecentQuestionFingerprints(quizUserId, selectedTopic.baseTopicId, 500) : [])])];
     const recentPrompts = [...new Set([...getRecentQuestionPrompts(quizUserId, topicId),
@@ -817,12 +854,15 @@ const renderedReviewItems = useMemo(
       includeApplication: wholeLesson && !selectedTopic.difficultyPreference,
       limit: wholeLesson ? 6 : 5,
     }).map(question => ({ ...question, options: shuffleItems(question.options) })) : [];
+    const examQuestions = selectedTopic.examId ? getExamStarterQuestions(selectedTopic, {
+      seen: selectedTopic.reviewQuestions ? [] : seen, difficulty: challengeProfile.difficulty,
+    }).map(question => ({ ...question, options: shuffleItems(question.options) })) : [];
     setLoadingAI(true);
     setAiQuestions((prev) => ({ ...prev, [topicId]: [] }));
 
     const useLocalQuestions = () => {
       if (!isCurrent()) return;
-      const questions = selectedTopic.lessonId ? lessonQuestions : guide
+      const questions = selectedTopic.examId ? examQuestions : selectedTopic.lessonId ? lessonQuestions : guide
         ? filterUnseenQuestions(getGuideQuestions(guide.id), selectedTopic.reviewQuestions ? [] : seen)
             .map((question) => ({ ...question, source: selectedTopic.reviewQuestions ? 'review' : question.source,
               options: shuffleItems(question.options), fingerprint: getQuestionFingerprint(question) }))
@@ -833,11 +873,14 @@ const renderedReviewItems = useMemo(
               .filter((question) => question.difficulty === selectedTopic.difficultyPreference)).slice(0, 5)
               .map((question) => ({ ...question, options: shuffleItems(question.options) }))
             : getAdaptiveQuestions(topicId, topicProgressMap, seen);
-      setAiQuestions((prev) => ({ ...prev, [topicId]: questions }));
-      setQuizNotice(questions.length
+      const accessibleQuestions = filterQuizQuestionsForAccess(questions, premiumAccess);
+      setAiQuestions((prev) => ({ ...prev, [topicId]: accessibleQuestions }));
+      setQuizNotice(accessibleQuestions.length
         ? (selectedTopic.reviewQuestions ? 'Review practice · no new XP or exam-readiness score'
-          : selectedTopic.lessonId ? `${questions.length} built-in questions with worked explanations`
+          : selectedTopic.examId ? `${accessibleQuestions.length} original starter questions · selected practice areas only, not a full exam or predicted score`
+          : selectedTopic.lessonId ? `${accessibleQuestions.length} built-in questions with worked explanations`
             : guide ? 'Guide check · concepts, examples, and limits' : 'Original practice bank · general preparation, not a complete exam syllabus')
+        : selectedTopic.examId ? 'No unseen starter questions remain at this level. Reconnect for a fresh set, select another area or difficulty, or review the starter questions.'
         : selectedTopic.lessonId
           ? (getLessonTopicQuestions(selectedTopic).length
             ? 'No unseen built-in questions remain at this level. Try a fresh online set, choose another level, or review this lesson’s built-in questions.'
@@ -850,12 +893,13 @@ const renderedReviewItems = useMemo(
 
     let timeout;
     try {
-      if (guide || selectedTopic.reviewQuestions || !CAN_USE_REMOTE_QUIZ_API
+      if (guide || selectedTopic.reviewQuestions || !CAN_USE_REMOTE_QUIZ_API || (typeof navigator !== 'undefined' && navigator.onLine === false)
+        || examQuestions.length >= 3
         || (wholeLesson ? hasBroadLessonCoverage(selectedTopic, lessonQuestions) : lessonQuestions.length >= 3)) {
         useLocalQuestions();
         return;
       }
-      timeout = window.setTimeout(() => controller.abort(), 25000);
+      timeout = window.setTimeout(() => controller.abort(), 29000);
       if (selectedTopic.postId && !selectedTopic.sourceBody) {
         const post = await postApi.getSingleReel(selectedTopic.postId);
         if (!isCurrent()) return;
@@ -872,6 +916,7 @@ const renderedReviewItems = useMemo(
           fallbackDifficulty: challengeProfile.difficulty,
           requiredDifficulty: selectedTopic.lessonId ? challengeProfile.difficulty : selectedTopic.difficultyPreference || '',
           excludedPrompts: recentPrompts,
+          requireQuality: Boolean(selectedTopic.examId), passageRequired: Boolean(selectedTopic.passageRequired),
           limit: candidateCount,
         });
         if (questions.length) {
@@ -883,7 +928,7 @@ const renderedReviewItems = useMemo(
       }
       const collected = [];
       const excluded = new Set(seen);
-      for (let attempt = 0; attempt < 2 && collected.length < (wholeLesson ? 3 : 5); attempt += 1) {
+      for (let attempt = 0; attempt < 2 && collected.length < 3; attempt += 1) {
         const data = await postApi.generateLearningQuiz({
           userId: quizUserId, topicId, topicTitle: selectedTopic.title || topicId,
           parentTopic: selectedTopic.topic || selectedTopic.title || topicId,
@@ -894,6 +939,7 @@ const renderedReviewItems = useMemo(
           difficulty: challengeProfile.difficulty, minimumDifficulty: challengeProfile.minimumDifficulty,
           difficultySelection: selectedTopic.difficultyPreference ? 'manual' : 'adaptive',
           studyTrack: selectedTopic.studyTrack || 'college', examTarget: selectedTopic.examTarget || '',
+          examId: selectedTopic.examId || '', examDomain: selectedTopic.examDomain || '',
           subjectAreas: selectedTopic.subjects || [],
           learnerLevel: challengeProfile.level, learnerDepth: challengeProfile.depth,
           questionStyle: selectedTopic.lessonId
@@ -909,10 +955,13 @@ const renderedReviewItems = useMemo(
           excludeQuestions: [...recentPrompts, ...collected.map(question => question.q)].slice(-40),
         }, { signal: controller.signal });
         if (!isCurrent()) return;
+        if (selectedTopic.examId && (data?.examId !== selectedTopic.examId || data?.examVersion !== selectedTopic.examVersion
+          || (data?.examDomain || '') !== (selectedTopic.examDomain || ''))) throw new Error('The server does not support this exam practice version.');
         const batch = normalizeGeneratedQuestions(data, topicId, {
           excludedFingerprints: [...excluded], fallbackDifficulty: challengeProfile.difficulty, limit: candidateCount - collected.length,
           requiredDifficulty: selectedTopic.lessonId ? challengeProfile.difficulty : selectedTopic.difficultyPreference || '',
           excludedPrompts: [...recentPrompts, ...collected.map(question => question.q)],
+          requireQuality: Boolean(selectedTopic.examId), passageRequired: Boolean(selectedTopic.passageRequired),
         }).filter((question) => !selectedTopic.postId || !/which title|what exact concept|name of (the|this) (post|lesson)/i.test(question.q));
         batch.forEach((question) => { collected.push(question); excluded.add(question.fingerprint); });
       }
@@ -922,12 +971,17 @@ const renderedReviewItems = useMemo(
       setAiQuestions((prev) => ({ ...prev, [topicId]: questions }));
       setQuizNotice(challengeProfile.depth + ' · ' + questions.length + ' AI practice questions · check important facts against your study material');
     } catch (error) {
-      if (isCurrent()) useLocalQuestions();
+      if (isCurrent()) {
+        if (error?.response?.status === 403 && error.response.data?.code === 'premium_required') {
+          setTopic(null);
+          showPremium();
+        } else useLocalQuestions();
+      }
     } finally {
       if (timeout) window.clearTimeout(timeout);
       if (isCurrent()) setLoadingAI(false);
     }
-  }, [quizUserId, topicProgressMap]);
+  }, [quizUserId, topicProgressMap, premiumAccess, showPremium]);
 
   const startQuiz = useCallback((item, format = item?.format ?? sessionMode) => {
     // Keep historic topic-specific reviews, but start fresh practice at lesson level.
@@ -936,9 +990,14 @@ const renderedReviewItems = useMemo(
       const lesson = getQuizLesson(item.baseTopicId, item.lessonId);
       if (subject && lesson) item = { ...item, ...makeLessonQuizTopic(subject, lesson) };
     }
-    quizAttemptRef.current = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-    const isFocusedLesson = Boolean(item?.lessonId || item?.postId || item?.learningContext?.postId);
+    const isFocusedLesson = Boolean(item?.lessonId || item?.postId || item?.learningContext?.postId || item?.examId);
     const shouldStartBoss = !isFocusedLesson && bossRequested;
+    if (!premiumAccess && (isPremiumQuizLevel(item.nextDifficulty || item.difficultyPreference || difficultyPreference)
+      || item.challengeMode || challengeMode || shouldStartBoss)) {
+      showPremium();
+      return;
+    }
+    quizAttemptRef.current = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 
     setBossMode(shouldStartBoss);
 
@@ -947,7 +1006,8 @@ const renderedReviewItems = useMemo(
       setBossRequested(false);
     }
 
-    const sessionTopic = { ...item, format: !isFocusedLesson && getSubjectGameSteps(item.id).length ? format : 'practice', studyTrack, examTarget: examTarget.trim().slice(0, 120),
+    const sessionTopic = { ...item, format: !isFocusedLesson && getSubjectGameSteps(item.id).length ? format : 'practice',
+      studyTrack: item.examId ? item.studyTrack : studyTrack, examTarget: item.examId ? item.examTarget : examTarget.trim().slice(0, 120),
       challengeMode: !item.reviewQuestions && !item.nextDifficulty && (item.challengeMode ?? challengeMode),
       difficultyPreference: item.nextDifficulty || item.difficultyPreference || difficultyPreference };
     setTopic(sessionTopic);
@@ -967,7 +1027,7 @@ const renderedReviewItems = useMemo(
     setConfidence('unmarked');
     setReviewFilter('all');
     loadAIQuestions(item.id, sessionTopic);
-  }, [loadAIQuestions, studyTrack, examTarget, difficultyPreference, challengeMode, bossRequested, sessionMode]);
+  }, [loadAIQuestions, studyTrack, examTarget, difficultyPreference, challengeMode, bossRequested, sessionMode, premiumAccess, showPremium]);
 
   const startFeaturedChallenge = useCallback((id) => {
     const subject = SUBJECT_BY_ID.get(id);
@@ -1230,6 +1290,10 @@ const submitAnswer = useCallback(() => {
       options: currentOptions,
       confidence, topicTitle: topic.title, postId: topic.postId, learningContext: topic.learningContext,
       kind: current.kind, concepts: current.concepts, baseTopicId: topic.baseTopicId, lessonId: topic.lessonId, conceptId: topic.conceptId,
+      explanationSteps: current.explanationSteps, misconception: current.misconception,
+      distractorExplanations: current.distractorExplanations, reasoningKind: current.reasoningKind,
+      passage: current.passage, evidence: current.evidence, repairQuestion: current.repairQuestion,
+      referenceEvidence: current.referenceEvidence,
     };
 
   if (needsQuizReview(answerRecord)) {
@@ -1255,8 +1319,21 @@ const submitAnswer = useCallback(() => {
     confidence,
     nextScore,
     nextAnswers,
+    repair: answerRepair(current, selected),
+    repairQuestion: !isCorrect ? (() => {
+      const seen = [...getRecentQuestionFingerprints(quizUserId, topic.id),
+        ...(topic.baseTopicId ? getRecentQuestionFingerprints(quizUserId, topic.baseTopicId) : [])];
+      const reserved = mixedSteps.map(getQuestionFingerprint);
+      const generated = normalizeRepairQuestion(current.repairQuestion, current.q);
+      const pastPrompts = new Set([...getRecentQuestionPrompts(quizUserId, topic.id),
+        ...(topic.baseTopicId ? getRecentQuestionPrompts(quizUserId, topic.baseTopicId) : []),
+        ...mixedSteps.map(question => question.q)].map(getQuestionPromptKey));
+      if (generated && !pastPrompts.has(getQuestionPromptKey(generated.q)) && filterUnseenQuestions([generated], [...seen, ...reserved]).length)
+        return { ...generated, options: shuffleItems(generated.options), passage: current.passage || generated.passage };
+      return null;
+    })() : null,
   });
-}, [answers, comboCount, current, currentOptions, locked, quizUserId, score, selected, sounds, topic, confidence, reviewMode]);
+}, [answers, comboCount, current, currentOptions, locked, quizUserId, score, selected, sounds, topic, confidence, reviewMode, mixedSteps]);
 
 const advanceAfterAnswer = useCallback(() => {
   if (!answerFeedback || transitionLockRef.current === "advancing") return;
@@ -1404,6 +1481,8 @@ const nextLearningMove = useMemo(() => {
 
 const startReview = useCallback((reviewTopic, records) => {
   if (!reviewTopic || records.length === 0) return;
+  if (!premiumAccess && (isPremiumQuizLevel(reviewTopic.difficultyPreference)
+    || records.some(record => isPremiumQuizLevel(record.difficulty)))) { showPremium(); return; }
   questionRequestRef.current.id += 1;
   questionRequestRef.current.controller?.abort();
   setLoadingAI(false);
@@ -1415,6 +1494,10 @@ const startReview = useCallback((reviewTopic, records) => {
     options: shuffleItems(answer.options),
     answer: answer.correctAnswer || answer.answer,
     explanation: answer.explanation,
+    explanationSteps: answer.explanationSteps, misconception: answer.misconception,
+    distractorExplanations: answer.distractorExplanations, reasoningKind: answer.reasoningKind,
+    passage: answer.passage, evidence: answer.evidence, repairQuestion: answer.repairQuestion,
+    referenceEvidence: answer.referenceEvidence,
     kind: answer.kind,
     concepts: answer.concepts,
     difficulty: answer.difficulty || "Adaptive",
@@ -1443,7 +1526,7 @@ const startReview = useCallback((reviewTopic, records) => {
   setConfidence('unmarked');
   setReviewFilter('all');
   transitionLockRef.current = false;
-}, []);
+}, [premiumAccess, showPremium]);
 
 const startMistakeReview = useCallback(() => startReview(topic, missedQuestions), [startReview, topic, missedQuestions]);
 const relatedLessonOptions = useMemo(() => topic?.lessonId ? getRelatedQuizLessons(topic.baseTopicId, topic.lessonId) : [], [topic?.baseTopicId, topic?.lessonId]);
@@ -1533,9 +1616,9 @@ const handleGameComplete = useCallback((result) => {
   }
 }, [answers, current, index, mixedSteps.length, saveQuizProgress, score, sounds, topic]);
 
-const progressAction = <button type="button" className="arcade-console-control" onClick={openProgress}>
+const progressAction = <><button type="button" className="arcade-console-control" onClick={openProgress}>
   <ChartNoAxesColumnIncreasing size={16} aria-hidden="true" /> Progress
-</button>;
+</button>{premiumDialogOpen && <QuizPremiumDialog onClose={closePremium} />}</>;
 
 if (topic && bossMode && !finished) {
   return (
@@ -1549,7 +1632,7 @@ if (topic && bossMode && !finished) {
 
   if (topic && !currentTopicHasAIQuestions && !finished) {
     return (
-      <ArcadeShell backLabel={topic.lessonId ? 'Lessons' : 'Subjects'} onBack={restart} actions={progressAction}>
+      <ArcadeShell backLabel={topic.examId ? 'Practice areas' : topic.lessonId ? 'Lessons' : 'Subjects'} onBack={restart} actions={progressAction}>
         <section className="arcade-screen arcade-waiting">
           <div className="ai-loading-card" role="status">
             {loadingAI && <div className="quiz-loading-lines" aria-hidden="true"><span /><span /><span /></div>}
@@ -1564,7 +1647,7 @@ if (topic && bossMode && !finished) {
                 Try Again
               </button>
             )}
-            {!loadingAI && (getLearningGuide(topic?.postId) || QUESTIONS[topic.id]?.length > 0 || getLessonTopicQuestions(topic).length > 0) && <button type="button" className="submit-answer-btn" onClick={() => startQuiz({ ...topic, reviewQuestions: true })}>Review available questions</button>}
+            {!loadingAI && (topic.examId || getLearningGuide(topic?.postId) || QUESTIONS[topic.id]?.length > 0 || getLessonTopicQuestions(topic).length > 0) && <button type="button" className="submit-answer-btn" onClick={() => startQuiz({ ...topic, reviewQuestions: true })}>Review available questions</button>}
             {!loadingAI && topic?.postId && <button type="button" className="arcade-console-control" onClick={returnToFocusedLesson}>Return to the lesson</button>}
           </div>
         </section>
@@ -1575,21 +1658,26 @@ if (topic && bossMode && !finished) {
 
     return (
 
-<ArcadeShell wide backLabel={selectedLibrarySubject ? 'All subjects' : 'Feed'}
-  onBack={() => navigate(selectedLibrarySubject ? '/quiz' : '/feed?topic=All')} actions={progressAction}>
-  {!selectedLibrarySubject && <ArcadeLobby onChoose={startFeaturedChallenge} />}
+<ArcadeShell wide backLabel={examView && selectedExamId ? 'Exam tracks' : selectedLibrarySubject ? 'All subjects' : 'Feed'}
+  onBack={() => navigate(examView && selectedExamId ? '/quiz?view=exams' : selectedLibrarySubject ? '/quiz' : '/feed?topic=All')} actions={progressAction}>
+  <div className="quiz-library-switch" role="group" aria-label="Practice library">
+      <button type="button" aria-pressed={!examView} onClick={() => navigate('/quiz')}>Subjects & lessons</button>
+      <button type="button" aria-pressed={examView} onClick={() => openExam('')}>Exam practice</button>
+  </div>
+  {!selectedLibrarySubject && !examView && <ArcadeLobby onChoose={startFeaturedChallenge} />}
   <div className="quiz-library-layout">
     <details className="quiz-study-sidebar arcade-settings">
       <summary><SlidersHorizontal size={16} aria-hidden="true" /><span>Play settings</span>
-        <small>{practiceLevel} <span aria-hidden="true">/</span> {sessionMode === 'mixed' ? 'Games' : 'Questions'}</small><ChevronDown size={15} aria-hidden="true" />
+        <small>{practiceLevel} <span aria-hidden="true">/</span> {!examView && sessionMode === 'mixed' ? 'Games' : 'Questions'}</small><ChevronDown size={15} aria-hidden="true" />
       </summary>
       <div className="arcade-settings-body">
-        <QuizPracticeControls level={practiceLevel} onLevel={setPracticeLevel} mode={sessionMode} onMode={setSessionMode} sound={soundEnabled} onSound={setSoundEnabled} />
-        <p className="quiz-prep-note">Lessons are questions only. Subject challenges mix questions and games where available.</p>
+        <QuizPracticeControls level={practiceLevel} onLevel={setPracticeLevel} mode={sessionMode} onMode={setSessionMode} sound={soundEnabled} onSound={setSoundEnabled} questionsOnly={examView}
+          premiumAccess={premiumAccess} onPremiumRequired={showPremium} />
+        <p className="quiz-prep-note">{examView ? 'Exam tracks use questions only. Easy builds foundations, Medium applies them, and Hard combines evidence or multiple steps. Difficulty does not predict an official exam score.' : 'Lessons are questions only. Subject challenges mix questions and games where available.'}</p>
       </div>
     </details>
     <div className="quiz-library-main">
-      {selectedLibrarySubject ? <QuizLessonLibrary key={selectedLibrarySubject.id} subject={selectedLibrarySubject} progress={topicProgressMap}
+      {examView ? <QuizExamLibrary examId={selectedExamId} onChoose={openExam} onStart={startQuiz} /> : selectedLibrarySubject ? <QuizLessonLibrary key={selectedLibrarySubject.id} subject={selectedLibrarySubject} progress={topicProgressMap}
         initialView={lessonLibraryView?.subjectId === selectedLibrarySubject.id ? lessonLibraryView : undefined}
         onStart={(item, view) => { setLessonLibraryView({ ...view, subjectId: selectedLibrarySubject.id }); startQuiz(item); }}
         onMixedStart={bossRequested || sessionMode === 'mixed' ? () => startQuiz(selectedLibrarySubject) : undefined}
@@ -1614,18 +1702,19 @@ if (topic && bossMode && !finished) {
 
   if (finished) {
     const canAdvanceDifficulty = !reviewMode && result.total >= 3 && percentage >= 80 && activeChallengeProfile.difficulty !== 'Hard';
+    const nextLevelLabel = activeChallengeProfile.difficulty === 'Medium' && !premiumAccess ? 'Hard · Premium' : 'Try the next level';
     const increaseDifficulty = () => startQuiz({ ...topic, reviewQuestions: false,
       nextDifficulty: activeChallengeProfile.difficulty === 'Easy' ? 'Medium' : 'Hard' });
-    const exploreNext = topic.lessonId ? restart : () => navigate(`/learn?topic=${encodeURIComponent(focusedLearningTopic?.topic || topic.topic || topic.title)}`);
-    const exploreLabel = topic.lessonId ? 'Explore more lessons' : 'Explore this subject';
+    const exploreNext = topic.lessonId || topic.examId ? restart : () => navigate(`/learn?topic=${encodeURIComponent(focusedLearningTopic?.topic || topic.topic || topic.title)}`);
+    const exploreLabel = topic.examId ? 'Choose another practice area' : topic.lessonId ? 'Explore more lessons' : 'Explore this subject';
     return (
-      <ArcadeShell backLabel={topic.lessonId ? 'Lessons' : 'Subjects'} onBack={restart} actions={progressAction}>
+      <ArcadeShell backLabel={topic.examId ? 'Practice areas' : topic.lessonId ? 'Lessons' : 'Subjects'} onBack={restart} actions={progressAction}>
         <section className="arcade-screen arcade-results" aria-labelledby="arcade-results-title">
           <header className="arcade-scoreboard">
             <div>
               <p>{topic.title}</p>
               <h1 id="arcade-results-title" ref={resultHeadingRef} tabIndex={-1}>{reviewMode ? 'Review results' : 'Quiz results'}</h1>
-              <p>{getGradeMessage(percentage)}</p>
+              <p>{topic.examId ? 'Practice accuracy for this set only. Not an official score, band or readiness assessment.' : getGradeMessage(percentage)}</p>
             </div>
             <div className="arcade-score"><strong>{percentage}%</strong><span>{finalScore} of {result.total} correct</span></div>
           </header>
@@ -1653,10 +1742,10 @@ if (topic && bossMode && !finished) {
             <div className="quiz-next-actions">
               <button type="button" className="quiz-next-primary" onClick={missedQuestions.length > 0
                 ? startMistakeReview : canAdvanceDifficulty ? increaseDifficulty : exploreNext}>
-                {missedQuestions.length > 0 ? 'Practice missed & unsure' : canAdvanceDifficulty ? 'Try the next level' : exploreLabel} <ArrowRight size={15} aria-hidden="true" />
+                {missedQuestions.length > 0 ? 'Practice missed & unsure' : canAdvanceDifficulty ? nextLevelLabel : exploreLabel} <ArrowRight size={15} aria-hidden="true" />
               </button>
               {canAdvanceDifficulty && (missedQuestions.length > 0
-                ? <button type="button" className="quiz-next-secondary" onClick={increaseDifficulty}>Try the next level</button>
+                ? <button type="button" className="quiz-next-secondary" onClick={increaseDifficulty}>{nextLevelLabel}</button>
                 : <button type="button" className="quiz-next-secondary" onClick={exploreNext}>{exploreLabel}</button>)}
               {focusedLearningTopic?.postId && <button type="button" className="quiz-next-secondary" onClick={returnToFocusedLesson}>Revisit the explanation</button>}
             </div>
@@ -1704,7 +1793,7 @@ if (topic && bossMode && !finished) {
             <button type="button" onClick={() => startQuiz({ ...topic, reviewQuestions: false, nextDifficulty: '' })}>{topic.conceptId ? 'Start whole lesson quiz' : 'New question set'}</button>
 
             <button type="button" onClick={restart} className="secondary-btn">
-              {topic.lessonId ? 'Choose another lesson' : 'Choose another topic'}
+              {topic.examId ? 'Choose another practice area' : topic.lessonId ? 'Choose another lesson' : 'Choose another topic'}
             </button>
 
             {focusedLearningTopic?.topic && (
@@ -1736,7 +1825,7 @@ if (topic && bossMode && !finished) {
   
 
   return (
-    <ArcadeShell backLabel={topic.lessonId ? 'Lessons' : 'Subjects'} onBack={restart} actions={progressAction}>
+    <ArcadeShell backLabel={topic.examId ? 'Practice areas' : topic.lessonId ? 'Lessons' : 'Subjects'} onBack={restart} actions={progressAction}>
       <section className="arcade-screen arcade-question">
         <div className="arcade-round-header">
           <div><span>{topic.lessonId ? topic.topic : reviewMode ? 'Review practice' : 'Question round'}</span><h1>{topic.title}</h1></div>
@@ -1758,6 +1847,7 @@ if (topic && bossMode && !finished) {
 
         <div key={current?.id || `${topic?.id}-${index}`} className="quiz-question-stage">
           {current?.kind && <span className="quiz-question-kind">{current.kind}</span>}
+          {current?.passage && <details className="quiz-reading-passage" open><summary>Original practice passage</summary><p>{current.passage}</p></details>}
           <h2 ref={questionHeadingRef} tabIndex={-1}>{current?.q || "Challenge question"}</h2>
 
 <div className="option-list">
@@ -1804,7 +1894,22 @@ if (topic && bossMode && !finished) {
     <div className="answer-explanation">
       <span>Why this works</span>
       <p>{answerFeedback.explanation}</p>
+      {current.evidence && <p><strong>Evidence from the passage:</strong> “{current.evidence}”</p>}
+      {current.referenceEvidence && <p><strong>From the study notes:</strong> {current.referenceEvidence}</p>}
     </div>
+    {answerFeedback.repair && (answerFeedback.repair.reason || answerFeedback.repair.misconception) && <div className="quiz-misconception">
+      <strong>The distinction to keep</strong>
+      {answerFeedback.repair.reason && <p>{answerFeedback.repair.reason}</p>}
+      {answerFeedback.repair.misconception && <p>{answerFeedback.repair.misconception}</p>}
+      {answerFeedback.repair.steps.length > 1 && <details className="quiz-reasoning-steps"><summary>Work through the reasoning</summary><ol>{answerFeedback.repair.steps.map((step, stepIndex) => <li key={stepIndex}>{step}</li>)}</ol></details>}
+    </div>}
+    {answerFeedback.repairQuestion && <QuizRepairCheck key={current.id} question={answerFeedback.repairQuestion} onAnswered={result => {
+      try {
+        const records = [{ ...result, fingerprint: getQuestionFingerprint(result), kind: 'repair' }];
+        recordQuestionHistory(quizUserId, topic.id, records);
+        if (topic.baseTopicId) recordQuestionHistory(quizUserId, topic.baseTopicId, records);
+      } catch { /* Optional repair never affects the scored round. */ }
+    }} />}
     {answerFeedback.confidence === 'unsure' && <p className="quiz-review-tag">{answerFeedback.isCorrect ? 'Saved for review, even though your answer was correct.' : 'Saved for another practice, with the explanation.'}</p>}
   </div>
 )}
@@ -1834,6 +1939,7 @@ if (topic && bossMode && !finished) {
         {(quizNotice || topic.lessonId || focusedLearningTopic) && <details className="quiz-study-notes arcade-round-notes">
           <summary>{topic.lessonId && !topic.conceptId && !topic.challengeMode ? 'Study notes' : 'About this round'}</summary>
           {quizNotice && <p className="quiz-source-notice">{quizNotice}</p>}
+          {topic.examId && <p>{topic.coverage}</p>}
           {focusedLearningTopic && <p>Focused practice: {focusedLearningTopic.topic}</p>}
           {topic.lessonId && <p>{topic.conceptId ? topic.lessonTitle : topic.desc}</p>}
           {topic.lessonId && !topic.conceptId && !topic.challengeMode && <>

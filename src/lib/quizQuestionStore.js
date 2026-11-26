@@ -57,6 +57,7 @@ export function getQuizContextKey(topic = {}) {
     topic.sourceBody,
     topic.studyTrack,
     topic.examTarget,
+    ...(topic.examId ? [topic.examId, topic.examVersion, topic.examDomain, 'teaching-quality-2'] : []),
     ...(topic.lessonId ? [topic.lessonId, topic.lessonVersion, topic.conceptId,
       Array.isArray(topic.objectives) ? topic.objectives.join(' ') : ''] : []),
   ].map(value => String(value || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim()).join("|");

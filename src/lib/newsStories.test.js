@@ -67,3 +67,35 @@ test('timeline data is bounded, safe to render and specific to the requested sub
   assert.throws(() => normalizeStoryTimeline({ kind: 'story-timeline', query: 'Unrelated', articles: [] }, 'SpaceX'), /different story/);
   assert.throws(() => normalizeStoryTimeline({ articles: [] }), /temporarily unavailable/);
 });
+
+const dated = (title, id = title) => ({title,id,source:'Publisher',published_at:'2026-11-25T10:00:00Z'});
+test('near-identical same-day event headlines group without losing source reports', () => {
+  const groups = groupStoryReports([
+    dated('Council approves coastal flood defence funding after public review','a'),
+    dated('Council approved coastal flood defence funding following public review','b'),
+  ]);
+  assert.equal(groups.length,1); assert.equal(groups[0].reports.length,2);
+  assert.equal(groups[0].matchMethod,'similar-reporting'); assert.equal('signatures' in groups[0],false);
+});
+test('changed people, quantities, negation, actions and dates remain separate', () => {
+  for (const [a,b] of [
+    ['Council approves coastal flood defence funding after public review','Council rejects coastal flood defence funding after public review'],
+    ['Mayor Arun approves coastal flood defence funding after public review','Mayor Ravi approves coastal flood defence funding after public review'],
+    ['Council approves 12 coastal flood defence projects after public review','Council approves 13 coastal flood defence projects after public review'],
+    ['Council approves coastal flood defence funding after public review','Council does not approve coastal flood defence funding after public review'],
+    ['Council may approve coastal flood defence funding after public review','Council approves coastal flood defence funding after public review'],
+    ['Rescue team reports 10 missing and 20 injured after coastal flood','Rescue team reports 20 missing and 10 injured after coastal flood'],
+    ['Council approves 3.5 million for coastal flood defence funding','Council approves 5.3 million for coastal flood defence funding'],
+  ]) assert.equal(groupStoryReports([dated(a),dated(b)]).length,2,a);
+  const article = dated('Council approves coastal flood defence funding after public review');
+  assert.equal(groupStoryReports([article,{...article,published_at:'2026-11-24T10:00:00Z'}]).length,2);
+});
+test('transitive headline similarities cannot merge incompatible endpoints', () => {
+  const groups = groupStoryReports([
+    dated('council coastal flood defence funding harbour repairs'),
+    dated('council coastal flood defence funding harbour repairs bridge access'),
+    dated('council coastal flood defence funding bridge access'),
+  ]);
+  assert.equal(groups.length,2);
+  assert.equal(groups.flatMap(group => group.reports).length,3);
+});

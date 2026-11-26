@@ -215,7 +215,7 @@ export default function NewsStoryPage() {
         <time dateTime={article.published_at}>{dateLabel(article.published_at)}</time>
         <article><span>{article.source || 'Original report'}</span><h2><a href={article.news_link} target="_blank" rel="noopener noreferrer" onClick={() => markOpened(article)} onAuxClick={event => { if (event.button === 1) markOpened(article); }}>{article.title}<ArrowUpRight size={17} aria-hidden="true" /></a></h2>
           <small>{article.reports.some(report => opened.has(reportKey(report))) && <span className="news-story-opened"><Check size={13} aria-hidden="true" />Opened · </span>}Read original reporting · Opens publisher website</small>
-          {article.reports.length > 1 && <details className="news-story-other-sources"><summary>{article.reports.length - 1} more {article.reports.length === 2 ? 'report' : 'reports'} with this headline</summary>
+          {article.reports.length > 1 && <details className="news-story-other-sources"><summary>{article.reports.length - 1} more {article.reports.length === 2 ? 'report' : 'reports'} · {article.matchMethod === 'same-headline' ? 'same headline' : 'closely related reporting'}</summary>
             <ul>{article.reports.slice(1).map(report => <li key={report.news_link}><a href={report.news_link} target="_blank" rel="noopener noreferrer" onClick={() => markOpened(report)}>{report.source || 'Original publisher'}<ArrowUpRight size={13} aria-hidden="true" /></a></li>)}</ul>
           </details>}</article>
       </li>)}</ol> : <div className="news-story-empty"><h2>{articles.length ? 'No headlines match these filters.' : 'No reports found for this period.'}</h2>

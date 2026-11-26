@@ -387,3 +387,9 @@
   .app-shell .content .learning-journey .learning-journey-steps small { white-space: normal; font-size: .6875rem; line-height: 1.5; }
   .app-shell .content .learning-journey .learning-journey-steps::before { display: none; }
 }
+.learning-background-help { margin: 12px 0 18px; color: var(--ui-secondary); }
+.learning-background-help summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-size: 14px; }
+.learning-background-help > div { max-width: 70ch; padding: 8px 0 12px; }
+.learning-background-help h3 { margin: 0 0 8px; color: var(--ui-text); font-size: 16px; }
+.learning-background-help p { margin: 0 0 10px; line-height: 1.7; font-size: 14px; }
+.learning-background-help summary:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 3px; }

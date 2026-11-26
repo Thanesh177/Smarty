@@ -11,6 +11,7 @@ import { getLearningContext, getRelatedLearningTopics, getLearningNextStep, getL
   markLearningProgress, readLearningProgress, rememberLearningLesson,
   selectNextLessons } from '../../lib/learningJourney';
 import './LearningJourneyPanel.css';
+import { getPrerequisiteHelp } from '../../lib/learningFoundations';
 
 const STAGES = [
   { id: 'read', label: 'Discover', helper: 'Read the source', icon: BookOpen },
@@ -29,6 +30,7 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId,
   const navigate = useNavigate();
   const titleId = useId();
   const context = useMemo(() => getLearningContext(post, postId), [post, postId]);
+  const prerequisite = useMemo(() => getPrerequisiteHelp({ ...post, ...context }), [post, context]);
   const relatedTopics = useMemo(() => getRelatedLearningTopics(post), [post]);
   const [progress, setProgress] = useState(() => readLearningProgress(context.postId, userId));
   const [notice, setNotice] = useState('');
@@ -81,7 +83,13 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId,
       {getLearningLevelLabel(context) && <div className="learning-journey-head">
         <span className="learning-path-meta">{getLearningLevelLabel(context)}{context.learningOrder > 0 && ` · Lesson ${context.learningOrder}${context.learningTotalSteps ? ` of ${context.learningTotalSteps}` : ''}`}</span>
       </div>}
-      {sequencePosts.data?.previous && <Link className="learning-prerequisite-link" to={'/post-ai/' + encodeURIComponent(context.previousLearningPostId)} state={{ post: sequencePosts.data.previous }}>Revisit the previous idea <ChevronRight size={13} /></Link>}
+      <details className="learning-background-help">
+        <summary><CircleHelp size={15} aria-hidden="true" />Need the basics first?</summary>
+        <div><h3>{prerequisite.title}</h3><p>{prerequisite.explanation}</p>
+          {prerequisite.subject && <p><strong>Background for this lesson:</strong> {prerequisite.subject}</p>}
+          {sequencePosts.data?.previous && <Link className="learning-prerequisite-link" to={'/post-ai/' + encodeURIComponent(context.previousLearningPostId)} state={{ post: sequencePosts.data.previous }}>Read the previous idea: {getLearningContext(sequencePosts.data.previous).title}<ChevronRight size={13} /></Link>}
+        </div>
+      </details>
 
       {!progress.read && <button type="button" className="learning-secondary-action" onClick={() => completeStep('read')}><Check size={16} /> I’ve read the source</button>}
       {notice && <p className="learning-save-notice" role="status">{notice}</p>}
@@ -95,7 +103,7 @@ function LessonJourney({ post, postId, stage = 'read', creatorName = '', userId,
       <div className="learning-next-lessons">
         <span className="learning-journey-kicker">Follow your curiosity</span>
         <h3>One idea leads to another.</h3>
-        <p className="learning-next-intro">A related read, with the connection explained. Pick it up when you’re ready.</p>
+        <p className="learning-next-intro">Build on a specific idea from this lesson, when you’re ready.</p>
         {nextLessons.length > 0 && <div className="learning-next-foundation">
           <span>The idea you’re exploring</span>
           <p>{nextLessons[0].foundation}</p>

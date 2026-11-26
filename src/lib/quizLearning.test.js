@@ -5,6 +5,7 @@ import { getQuestionFingerprint, getQuizContextKey, clearActiveQuiz, loadActiveQ
 import { getProgressUserId, saveWrongQuestion, getWrongQuestions, removeWrongQuestion } from './progressStore.js';
 import { QUIZ_SUBJECTS, SUBJECT_QUESTIONS } from '../data/quizSubjects.js';
 import { MAIN_TOPICS } from '../data/topicTaxonomy.js';
+import { EXAM_STARTER_QUESTIONS } from '../data/examPractice.js';
 
 const row = { q: 'Which option answers this test question?', options: ['One', 'Two', 'Three', 'Four'], answer: 0,
   explanation: 'One is the specified correct option in this validation fixture.' };
@@ -16,6 +17,7 @@ test('answers support zero-based indexes, letters and text without shifting choi
 });
 test('malformed or ambiguous questions are rejected, not scored with a shifted answer', () => {
   for (const change of [{ options: ['One', '', 'Three', 'Four'] }, { options: ['One', 'one', 'Three', 'Four'] },
+    {options:['a','b','c','d'],answer:'a'},
     { answer: 9 }, { answer: 'Unknown' }, { explanation: '' }, { q: 'Hi' }, { options: ['One', 'Two'] }]) {
     assert.deepEqual(normalizeGeneratedQuestions([{ ...row, ...change }], 'topic'), []);
   }
@@ -82,4 +84,16 @@ test('blocked browser storage does not crash guest practice or cache cleanup', (
     assert.equal(loadActiveQuiz({ userId: 'test', topicId: 'topic' }), null);
     assert.doesNotThrow(() => saveWrongQuestion('topic', row, 'test'));
   } finally { delete globalThis.window; }
+});
+
+test('saved reading mistakes retain the passage, evidence and specific teaching for later review', () => {
+  const entries = new Map(); globalThis.window = {localStorage:{getItem:key => entries.get(key) || null,setItem:(key,value) => entries.set(key,value)}};
+  try {
+    const question = EXAM_STARTER_QUESTIONS.find(question => question.passage);
+    saveWrongQuestion('exam', {...question,isCorrect:false},'reader');
+    const saved = getWrongQuestions('reader').exam[0];
+    assert.equal(saved.passage,question.passage); assert.equal(saved.evidence,question.evidence);
+    assert.deepEqual(saved.distractorExplanations,question.distractorExplanations);
+    assert.deepEqual(getWrongQuestions('another-reader'),{});
+  } finally {delete globalThis.window;}
 });

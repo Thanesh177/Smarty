@@ -1,4 +1,5 @@
 import { filterUnseenQuestions, getQuestionFingerprint, getQuestionPromptKey } from './quizQuestionStore.js';
+import { normalizeTeachingQuality } from '../../infrastructure/shared/quizQuestionQuality.mjs';
 
 const cleanOption = (value) => String(value?.text ?? value?.label ?? value ?? '')
   .replace(/^\s*[A-D][.):\-]\s*/i, '').trim();
@@ -14,6 +15,7 @@ export function clearQuizFlag(key) {
 // Numeric answer indexes are zero-based; letter answer keys are A–D.
 export function normalizeGeneratedQuestions(payload, topicId, {
   excludedFingerprints = [], excludedPrompts = [], fallbackDifficulty = 'Adaptive', requiredDifficulty = '', limit = 5,
+  requireQuality = false, passageRequired = false,
 } = {}) {
   let parsed = payload;
   if (typeof parsed?.body === 'string') {
@@ -43,8 +45,10 @@ export function normalizeGeneratedQuestions(payload, topicId, {
     const difficulty = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }[label] ?? fallbackDifficulty;
     if (requiredDifficulty && difficulty !== requiredDifficulty) return [];
     if (excluded.has(getQuestionPromptKey(q))) return [];
+    const teaching = normalizeTeachingQuality(row, { options, answer, difficulty, required: requireQuality, passageRequired });
+    if (!teaching) return [];
     const question = { id: row?.id || `generated-${topicId}-${index + 1}`, q, options, answer,
-      explanation, difficulty, source: 'generated',
+      explanation, difficulty, source: 'generated', ...teaching,
       ...(typeof row?.concept === 'string' && row.concept.trim() ? { concept: row.concept.trim().slice(0, 100) } : {}) };
     return [{ ...question, fingerprint: getQuestionFingerprint(question) }];
   });

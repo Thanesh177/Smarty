@@ -15,6 +15,9 @@ zip -j "$release_dir/AIcontent.zip" \
   "$project_dir/infrastructure/ai-content/post_glossary.py" \
   "$project_dir/infrastructure/shared/generation_cache.py"
 zip -j "$release_dir/generateQuizQuestions.zip" \
-  "$project_dir/smarty-terraform/lambda-src/generateQuizQuestions/index.mjs"
+  "$project_dir/smarty-terraform/lambda-src/generateQuizQuestions/index.mjs" \
+  "$project_dir/infrastructure/shared/examBlueprints.mjs" \
+  "$project_dir/infrastructure/shared/quizQuestionQuality.mjs" \
+  "$project_dir/infrastructure/shared/quizAccess.mjs"
 
 printf '\nRelease packages: %s\n' "$release_dir"

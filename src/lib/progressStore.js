@@ -1,4 +1,5 @@
 import { getUserScopedStorageKey } from "./userScopedStorage.js";
+import { normalizeTeachingQuality } from '../../infrastructure/shared/quizQuestionQuality.mjs';
 
 const PROGRESS_KEY = "smarty-topic-progress-v2";
 const WRONG_KEY = "smarty-wrong-questions-v2";
@@ -138,6 +139,8 @@ export function saveWrongQuestion(topicId, question, userOrId) {
         selected: question.selected,
         answer: question.answer || question.correctAnswer,
         explanation: question.explanation,
+        ...normalizeTeachingQuality(question, { options: Array.isArray(question.options) ? question.options : [],
+          answer: question.answer || question.correctAnswer, difficulty: question.difficulty }),
         difficulty: question.difficulty,
         options: Array.isArray(question.options) ? question.options : [],
         confidence: question.confidence,

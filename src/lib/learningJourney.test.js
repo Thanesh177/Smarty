@@ -4,6 +4,7 @@ import { getLearningLibrary, getLearningProgressKey, readLearningProgress, remem
   markLearningProgress, saveLearningReflection, recordLearningQuiz, selectNextLessons,
   getLearningContext, getLearningLevelLabel } from './learningJourney.js';
 import { LEARNING_GUIDES } from '../data/learningGuides.js';
+import { getPrerequisiteHelp } from './learningFoundations.js';
 
 const storage = new Map();
 globalThis.localStorage = { getItem: (key) => storage.get(key) ?? null,
@@ -126,4 +127,20 @@ test('older posts get no invented difficulty and malformed order stays safe', ()
 test('unpublished next step cannot create a broken recommendation', () => {
   const current = getLearningContext({ id: 'step-1', topic: 'Physics', learningPathId: 'physics-v1', learningOrder: 1, nextLearningPostId: 'not-published' });
   assert.deepEqual(selectNextLessons([{ id: 'step-4', topic: 'Physics', subTopic: 'more physics', learningPathId: 'physics-v1', learningOrder: 4 }], current), []);
+});
+
+test('background help is optional, safe and explains stable foundational ideas', () => {
+  assert.match(getPrerequisiteHelp({topic:'History'}).explanation,/evidence/);
+  assert.equal(getPrerequisiteHelp({topic:'Physics',prerequisiteSubject:'net force'}).subject,'net force');
+  assert.equal(getPrerequisiteHelp({prerequisiteSubject:{invalid:true}}).subject,'');
+  assert.ok(getPrerequisiteHelp({topic:'unknown'}).explanation);
+});
+test('sharing a broad category is not enough to recommend an unrelated next step', () => {
+  const current = {id:'one',topic:'Physics',focus:'Particle scattering',title:'How light scatters',learningLevel:'foundation'};
+  const candidates = [
+    {id:'two',topic:'Physics',focus:'Nuclear binding',title:'What holds a nucleus together'},
+    {id:'three',topic:'Physics',focus:'Scattering cross sections',title:'Quantum scattering methods',learningLevel:'advanced'},
+    {id:'four',topic:'Physics',focus:'Particle scattering and wavelength',title:'How wavelength changes scattering',learningLevel:'intermediate',body:'See how the wavelength of light affects its scattering.'},
+  ];
+  assert.deepEqual(selectNextLessons(candidates,current).map(item => item.post.id),['four']);
 });
